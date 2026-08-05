@@ -159,10 +159,277 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/scopes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Els àmbits que veu qui pregunta */
+        get: operations["listScopes"];
+        put?: never;
+        /**
+         * Crear un àmbit
+         * @description Individual o col·lectiu (brief línia 44). L'`id` el pot posar el client: és un
+         *     UUIDv7 nu (D4) i crear offline no ha de necessitar cap resposta.
+         */
+        post: operations["createScope"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Projectes, filtrables per àmbit */
+        get: operations["listProjects"];
+        put?: never;
+        /** Crear un projecte dins d'un àmbit */
+        post: operations["createProject"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Tasques amb filtres */
+        get: operations["listTasks"];
+        put?: never;
+        /**
+         * Crear una tasca
+         * @description **`scope_id` és obligatori.** És la invariant central del producte: pot ser que
+         *     un àmbit tingui una tasca sense projecte, però mai una tasca sense àmbit
+         *     (docs/01 §4). L'`id` i la `position` els pot posar el client (D3, D4).
+         */
+        post: operations["createTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tasks/{id}/move": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Moure una tasca de columna o de posició
+         * @description Existeix a part de `PATCH` perquè moure és l'operació més freqüent del producte,
+         *     la que més s'ha de fusionar offline, i la que necessita la seva pròpia semàntica
+         *     de conflicte (docs/05 §4).
+         *
+         *     S'accepta `position` directament —el camí normal, calculada al client (D3)— o
+         *     `{before_id, after_id}` perquè el servidor la calculi, per a clients simples.
+         */
+        post: operations["moveTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tasks/{id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Completar una tasca
+         * @description Aplica la cascada i genera la següent instància si es repeteix (docs/05 §4).
+         */
+        post: operations["completeTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/board": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Les quatre columnes en una crida
+         * @description Existeix perquè pintar el tauler amb quatre peticions paral·lelitzades dona
+         *     quatre estats de càrrega i quatre punts de fallada per a una sola pantalla
+         *     (docs/05 §4).
+         */
+        get: operations["getBoard"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        Scope: {
+            id: string;
+            name: string;
+            /** @enum {string} */
+            kind: "individual" | "collective";
+            /** @description Token CSS o hex. Els tres inicials fan servir la tríada de Plou. */
+            color: string;
+            icon?: string | null;
+            ai_instructions?: string | null;
+            ai_description?: string | null;
+            position: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            version: number;
+        };
+        ScopeInput: {
+            /** @description UUIDv7 nu. El pot posar el client (D4). */
+            id?: string;
+            name: string;
+            /**
+             * @default individual
+             * @enum {string}
+             */
+            kind: "individual" | "collective";
+            color: string;
+            icon?: string;
+            ai_instructions?: string;
+            ai_description?: string;
+            position?: string;
+        };
+        Project: {
+            id: string;
+            scope_id: string;
+            name: string;
+            ai_instructions?: string | null;
+            ai_description?: string | null;
+            position: string;
+            /** Format: date-time */
+            archived_at?: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            version: number;
+        };
+        ProjectInput: {
+            id?: string;
+            scope_id: string;
+            name: string;
+            ai_instructions?: string;
+            ai_description?: string;
+            position?: string;
+        };
+        Task: {
+            id: string;
+            scope_id: string;
+            project_id?: string | null;
+            title: string;
+            description?: string | null;
+            /**
+             * @description La columna. Es diu `status`, no `column` (D2).
+             * @enum {string}
+             */
+            status: "inbox" | "todo" | "doing" | "done";
+            /** @description Índex fraccional. Ordenat amb collation binària (D3). */
+            position: string;
+            /** @description YYYY-MM-DD, sense fus. Una data de tot el dia no té instant. */
+            due_date?: string | null;
+            due_time?: string | null;
+            /** Format: date-time */
+            deadline?: string | null;
+            /** Format: date-time */
+            completed_at?: string | null;
+            /** @enum {string} */
+            view_mode: "card" | "simple";
+            /**
+             * @description Delegar no és assignar (D5).
+             * @enum {string}
+             */
+            ai_mode: "manual" | "assisted" | "delegated";
+            delegate_agent_id?: string | null;
+            /** @description Persones. El brief demana "persona o persones". */
+            assignee_ids?: string[];
+            created_by?: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            version: number;
+        };
+        TaskInput: {
+            id?: string;
+            /** @description Obligatori. Mai una tasca sense àmbit (docs/01 §4). */
+            scope_id: string;
+            project_id?: string;
+            title: string;
+            description?: string;
+            /**
+             * @default inbox
+             * @enum {string}
+             */
+            status: "inbox" | "todo" | "doing" | "done";
+            position?: string;
+            due_date?: string;
+            due_time?: string;
+            assignee_ids?: string[];
+        };
+        MoveInput: {
+            /** @enum {string} */
+            status?: "inbox" | "todo" | "doing" | "done";
+            /** @description El camí normal. La calcula el client (D3). */
+            position?: string;
+            /** @description Per a clients simples, perquè el servidor calculi la posició. */
+            before_id?: string | null;
+            after_id?: string | null;
+        };
+        TaskPage: {
+            data: components["schemas"]["Task"][];
+            next_cursor?: string | null;
+            has_more: boolean;
+        };
+        BoardColumn: {
+            /** @enum {string} */
+            status: "inbox" | "todo" | "doing" | "done";
+            /** @description Agrupades per àmbit, com les pinta la interfície (docs/02 §4). */
+            groups: components["schemas"]["BoardGroup"][];
+        };
+        BoardGroup: {
+            scope_id: string;
+            tasks: components["schemas"]["Task"][];
+        };
+        Board: {
+            /** @description Sempre les QUATRE, encara que alguna sigui buida. */
+            columns: components["schemas"]["BoardColumn"][];
+        };
         LoginRequest: {
             /** Format: email */
             email: string;
@@ -267,7 +534,38 @@ export interface components {
             instance?: string;
         };
     };
-    responses: never;
+    responses: {
+        /** @description Cal autenticar-se. */
+        Unauthenticated: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /**
+         * @description Sense permís. El cos diu QUINS àmbits veu el token i ON és el que s'ha demanat:
+         *     un 403 mut fa que un agent reintenti en bucle (docs/05 §2).
+         */
+        Forbidden: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description No existeix, o no és visible per a qui pregunta. */
+        NotFound: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+    };
     parameters: never;
     requestBodies: never;
     headers: never;
@@ -473,6 +771,263 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+        };
+    };
+    listScopes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Àmbits accessibles. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Scope"][];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    createScope: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScopeInput"];
+            };
+        };
+        responses: {
+            /** @description Ja existia amb aquest `id`. Idempotència (docs/05 §3). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Scope"];
+                };
+            };
+            /** @description Creat. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Scope"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    listProjects: {
+        parameters: {
+            query?: {
+                scope_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Projectes accessibles. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Project"][];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    createProject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectInput"];
+            };
+        };
+        responses: {
+            /** @description Creat. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Project"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    listTasks: {
+        parameters: {
+            query?: {
+                scope_id?: string;
+                project_id?: string;
+                /** @description Valors múltiples separats per comes. */
+                status?: string;
+                limit?: number;
+                /** @description Cursor opac. El client no l'ha d'interpretar mai. */
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pàgina de tasques. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskPage"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    createTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskInput"];
+            };
+        };
+        responses: {
+            /** @description Ja existia amb aquest `id`. Idempotència. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Task"];
+                };
+            };
+            /** @description Creada. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Task"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            /** @description Falta l'àmbit, o no és vàlid. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    moveTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MoveInput"];
+            };
+        };
+        responses: {
+            /** @description Moguda. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Task"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    completeTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Completada. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Task"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getBoard: {
+        parameters: {
+            query?: {
+                /** @description Àmbits actius, separats per comes. Sense això, tots els visibles. */
+                scope_ids?: string;
+                project_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description El tauler. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Board"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
         };
     };
 }

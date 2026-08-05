@@ -13,6 +13,16 @@
 
 export type { paths, components, operations } from './generated/api.js';
 
+export {
+  ALPHABET,
+  InvalidPositionError,
+  comparePositions,
+  generatePosition,
+  generatePositions,
+  midpoint,
+} from './position.js';
+export type { RandomSource } from './position.js';
+
 /** Els valors canònics de `status`. `column` no existeix (D2). */
 export const TASK_STATUSES = ['inbox', 'todo', 'doing', 'done'] as const;
 export type TaskStatus = (typeof TASK_STATUSES)[number];

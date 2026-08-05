@@ -55,6 +55,18 @@ export interface AuditContext {
   tx: MigrationDb;
   /** Registra un canvi. Les entrades s'escriuen al final, dins de la transacció. */
   record: (entry: AuditEntry) => void;
+  /**
+   * Declara que aquesta transacció no ha canviat res i per tant no ha de deixar rastre.
+   *
+   * L'únic cas legítim és la **reenviada idempotent**: amb identificadors generats pel
+   * client (D4), el mateix `id` pot arribar dues vegades —una reconnexió, un reintent de
+   * la cua de sortida— i la segona no és cap canvi d'estat. Registrar-la ompliria
+   * l'historial d'entrades que l'usuari no ha fet.
+   *
+   * S'ha de DIR explícitament. Si no es diu i no hi ha cap entrada, la transacció
+   * llança: oblidar-se de registrar ha de petar, no passar desapercebut.
+   */
+  noChange: () => void;
   /** L'instant únic de tota la transacció, perquè les entrades no es desordenin. */
   now: string;
 }
@@ -84,15 +96,19 @@ export async function auditedTransaction<T>(
 
   return db.transaction().execute(async (tx) => {
     const entries: AuditEntry[] = [];
+    let declaredNoChange = false;
 
     const result = await work({
       tx,
       record: (entry) => entries.push(entry),
+      noChange: () => {
+        declaredNoChange = true;
+      },
       now,
     });
 
     if (entries.length === 0) {
-      if (options.readOnly === true) return result;
+      if (options.readOnly === true || declaredNoChange) return result;
       throw new Error(
         "Regla 4: una transacció d'escriptura ha acabat sense cap entrada a activity_log. " +
           "Si aquest camí no ha de deixar rastre, marca'l com a readOnly explícitament.",
