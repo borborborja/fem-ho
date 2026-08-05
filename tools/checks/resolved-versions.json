@@ -114,12 +114,18 @@
     "kysely-codegen": {
       "version": "0.20.0",
       "checkedAt": "2026-08-05"
+    },
+    "@node-rs/argon2": {
+      "version": "2.0.2",
+      "checkedAt": "2026-08-05"
+    },
+    "uuid": {
+      "version": "14.0.1",
+      "checkedAt": "2026-08-05"
     }
   },
   "verifiedAvailableForLaterMilestones": {
     "$comment": "Existència comprovada al registre el 2026-08-05. Es fixaran a la seva fita, amb el mateix procediment.",
-    "@node-rs/argon2": "2.0.2",
-    "uuid": "14.0.1",
     "saxes": "6.0.0",
     "ical.js": "2.2.1",
     "@modelcontextprotocol/sdk": "1.30.0",
