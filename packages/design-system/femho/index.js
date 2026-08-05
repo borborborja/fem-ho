@@ -16,3 +16,4 @@ export { KanbanColumn, KanbanGroup, ScopeGroupHeader } from './KanbanColumn.jsx'
 export { EmptyState } from './EmptyState.jsx';
 export { ScopeChip } from './ScopeChip.jsx';
 export { QuickAddInput } from './QuickAddInput.jsx';
+export { MonthView, WeekView, DayView, monthCells, mondayIndex } from './CalendarGrid.jsx';

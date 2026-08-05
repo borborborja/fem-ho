@@ -159,6 +159,10 @@ export function DraggableCard({
       ref={setNodeRef}
       data-testid={testId}
       data-draggable-id={id}
+      // Marca que aquest node l'injecta l'amfitrió pel punt d'extensió `wrapCard`, i
+      // que per tant NO és part del que renderitza el component compartit. La prova de
+      // P4 el salta per poder comparar només el que InboxRail pinta.
+      data-host-wrapper="true"
       style={{
         transform:
           transform === null ? undefined : `translate3d(${transform.x}px, ${transform.y}px, 0)`,

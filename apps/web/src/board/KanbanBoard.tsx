@@ -18,6 +18,7 @@ import {
   TaskCard,
 } from '@fem-ho/design-system/femho';
 import { BoardDnd, DraggableCard, DroppableColumn } from './dnd.js';
+import { InboxRail } from './InboxRail.js';
 
 export interface BoardTask {
   id: string;
@@ -80,7 +81,6 @@ export function KanbanBoard({
 
   const renderColumn = (column: (typeof COLUMNS)[number]) => {
     const ofColumn = tasks.filter((task) => task.status === column.status);
-    const isInbox = column.status === 'inbox';
 
     const cardFor = (task: BoardTask) => (
       <DraggableCard key={task.id} id={task.id} testId={`task-${task.id}`}>
@@ -104,15 +104,9 @@ export function KanbanBoard({
           done={task.status === 'done'}
           onOpen={() => onOpen?.(task.id)}
           onToggleDone={() => onToggleDone?.(task.id)}
-          quickActions={
-            // Accions ràpides NOMÉS a l'Inbox (docs/02 §4).
-            isInbox
-              ? [
-                  { label: t('board.card.toTodo'), onClick: () => onMove?.(task.id, 'todo') },
-                  { label: t('board.card.toDoing'), onClick: () => onMove?.(task.id, 'doing') },
-                ]
-              : []
-          }
+          // Accions ràpides NOMÉS a l'Inbox (docs/02 §4). L'Inbox el pinta InboxRail,
+          // o sigui que aquí mai n'hi ha.
+          quickActions={[]}
         />
       </DraggableCard>
     );
@@ -151,8 +145,8 @@ export function KanbanBoard({
             data-drop-target={over ? 'true' : 'false'}
             label={t(column.labelKey)}
             count={ofColumn.length}
-            variant={isInbox ? 'inbox' : 'grouped'}
-            divider={column.status !== 'inbox' && column.status !== 'todo'}
+            variant="grouped"
+            divider={column.status !== 'todo'}
             dropIndicator={over}
             headerActions={column.status === 'done' ? doneHeaderActions : undefined}
           >
@@ -163,7 +157,8 @@ export function KanbanBoard({
     );
   };
 
-  const [inbox, ...rest] = COLUMNS;
+  const [, ...rest] = COLUMNS;
+  const inboxTasks = tasks.filter((task) => task.status === 'inbox');
 
   const titleOf = (taskId: string): string => tasks.find((task) => task.id === taskId)?.title ?? '';
   const labelOf = (status: TaskStatus): string =>
@@ -193,7 +188,33 @@ export function KanbanBoard({
           alignItems: 'start',
         }}
       >
-        {inbox === undefined ? null : renderColumn(inbox)}
+        {/*
+          L'Inbox NO es pinta aquí: es delega a InboxRail, que és el MATEIX component
+          que fa servir el calendari. P4: "és literalment la mateixa instància de
+          component". Si el kanban en tingués una versió pròpia, divergirien i es
+          notaria.
+        */}
+        <DroppableColumn status="inbox">
+          {() => (
+            <InboxRail
+              tasks={inboxTasks}
+              scopes={scopes}
+              placement="column"
+              collapsed={Object.fromEntries(
+                scopes.map((scope) => [scope.id, collapsed[`inbox:${scope.id}`] === true]),
+              )}
+              onToggleGroup={(scopeId) => onToggleGroup?.('inbox', scopeId)}
+              onMove={(taskId, status) => onMove?.(taskId, status)}
+              onOpen={onOpen}
+              onToggleDone={onToggleDone}
+              wrapCard={(task, card) => (
+                <DraggableCard key={task.id} id={task.id} testId={`task-${task.id}`}>
+                  {card}
+                </DraggableCard>
+              )}
+            />
+          )}
+        </DroppableColumn>
         <KanbanGroup>{rest.map(renderColumn)}</KanbanGroup>
       </div>
     </BoardDnd>

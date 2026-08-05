@@ -55,5 +55,16 @@
   "ai.mode.manual": "Individual",
   "ai.mode.assisted": "Amb ajuda",
   "ai.mode.delegated": "IA",
-  "board.quickAdd.revert": "Tornar «{label}» a text"
+  "board.quickAdd.revert": "Tornar «{label}» a text",
+  "calendar.month": "Mensual",
+  "calendar.week": "Setmanal",
+  "calendar.day": "Diari",
+  "calendar.prevMonth": "Mes anterior",
+  "calendar.nextMonth": "Mes següent",
+  "calendar.weekdays": "dl,dt,dc,dj,dv,ds,dg",
+  "calendar.months": "gener,febrer,març,abril,maig,juny,juliol,agost,setembre,octubre,novembre,desembre",
+  "calendar.empty.week": "Sense res",
+  "calendar.empty.day": "Sense esdeveniments ni tasques aquest dia.",
+  "calendar.noDate": "SENSE DIA",
+  "calendar.selectedDay": "{day} de {month}"
 }

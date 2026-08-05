@@ -8,3 +8,13 @@ export { ScopeChip } from './ScopeChip.js';
 export type { ScopeChipProps } from './ScopeChip.js';
 export { QuickAddInput } from './QuickAddInput.js';
 export type { QuickAddInputProps, QuickAddChip, QuickAddSuggestion } from './QuickAddInput.js';
+export { MonthView, WeekView, DayView, monthCells, mondayIndex } from './CalendarGrid.js';
+export type {
+  MonthViewProps,
+  WeekViewProps,
+  DayViewProps,
+  MonthCell,
+  WeekDay,
+  DayItem,
+  WeekdayLabels,
+} from './CalendarGrid.js';
