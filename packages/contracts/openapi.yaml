@@ -23,6 +23,10 @@ tags:
     description: Identitat i salut de la instància. Públic i sense autenticar.
   - name: scopes
     description: Àmbits i projectes. Una tasca sempre té àmbit; el projecte és opcional.
+  - name: events
+    description: |
+      Esdeveniments i calendaris. Un esdeveniment NO és una tasca amb hores (D8) i no
+      surt mai al kanban.
   - name: tasks
     description: |
       Tasques i el tauler. La columna es diu `status` amb valors anglesos (D2), i
@@ -469,8 +473,258 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthenticated'
 
+  /events:
+    get:
+      tags: [events]
+      operationId: listEvents
+      summary: Esdeveniments en una finestra
+      description: |
+        **Requereix `from` i `to`**: sense finestra no es poden expandir repeticions
+        (docs/05 §4). Una RRULE sense COUNT ni UNTIL és infinita.
+
+        Torna OCURRÈNCIES, no files: una sèrie setmanal dins d'un mes surt quatre
+        vegades, cadascuna amb el seu `recurrence_id`.
+
+        **Els esdeveniments no surten mai al kanban** (D8). Aquesta és l'única manera
+        de demanar-los.
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date-time }
+        - name: scope_ids
+          in: query
+          description: Àmbits actius, separats per comes.
+          schema: { type: string }
+      responses:
+        '200':
+          description: Ocurrències dins de la finestra, ordenades per inici.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EventOccurrence'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '422':
+          description: Falta la finestra, o no és vàlida.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+    post:
+      tags: [events]
+      operationId: createEvent
+      summary: Crear un esdeveniment
+      description: |
+        Un esdeveniment **no és una tasca amb hores** (D8): té els seus propis `status`
+        —TENTATIVE, CONFIRMED, CANCELLED—, té `transparency`, i un calendari extern
+        subscrit només en pot produir d'aquests.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EventInput'
+      responses:
+        '201':
+          description: Creat.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Event'
+        '200':
+          description: Ja existia amb aquest `id`. Idempotència.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Event'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /events/{id}:
+    patch:
+      tags: [events]
+      operationId: updateEvent
+      summary: Modificar un esdeveniment o una sèrie
+      description: |
+        `series_mode` resol "aquest esdeveniment, aquest i els següents, o tota la
+        sèrie" (docs/05 §4):
+
+        - `single` crea una instància modificada, una fila germana amb el seu
+          `RECURRENCE-ID` (D8).
+        - `future` **parteix la sèrie**: posa `UNTIL` al mestre i en crea un de nou.
+          **No emet mai `RANGE=THISANDFUTURE`.**
+        - `all` toca el mestre.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: series_mode
+          in: query
+          schema:
+            type: string
+            enum: [single, future, all]
+            default: single
+        - name: occurrence
+          in: query
+          description: L'ocurrència afectada, per als modes `single` i `future`.
+          schema: { type: string, format: date-time }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EventInput'
+      responses:
+        '200':
+          description: Modificat.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Event'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          description: Falta l'ocurrència per al mode demanat.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+
+  /calendars:
+    get:
+      tags: [events]
+      operationId: listCalendars
+      summary: Els calendaris que veu qui pregunta
+      description: |
+        Cada àmbit i cada projecte que es publiqui genera **DUES** col·leccions (D9):
+        una `events` i una `todos`. RFC 4791 §5.2 prohibeix recursos de components
+        mixtos, DAVx⁵ classifica una col·lecció només per
+        `supported-calendar-component-set`, i el CalDAV de Google no accepta VTODO.
+      responses:
+        '200':
+          description: Calendaris accessibles.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Calendar'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+
 components:
   schemas:
+    Calendar:
+      type: object
+      additionalProperties: false
+      required: [id, scope_id, name, kind, origin]
+      properties:
+        id: { type: string }
+        scope_id: { type: string }
+        project_id: { type: [string, 'null'] }
+        name: { type: string }
+        color: { type: [string, 'null'] }
+        kind:
+          type: string
+          enum: [events, todos]
+          description: Obligatori i únic per col·lecció (D9).
+        origin:
+          type: string
+          enum: [local, subscription]
+          description: Les subscripcions són de només lectura a la capa de repositori.
+
+    Event:
+      type: object
+      additionalProperties: false
+      required: [id, calendar_id, uid, summary, starts_at, all_day, version]
+      properties:
+        id: { type: string }
+        calendar_id: { type: string }
+        uid: { type: string, description: UID d'iCalendar. }
+        recurrence_id:
+          type: [string, 'null']
+          description: Nul al mestre. Amb valor, és una instància modificada (D8).
+        summary: { type: string }
+        description: { type: [string, 'null'] }
+        location: { type: [string, 'null'] }
+        starts_at: { type: string, format: date-time }
+        ends_at: { type: [string, 'null'], format: date-time }
+        all_day:
+          type: boolean
+          description: |
+            VALUE=DATE és tot el dia i NO té fus. Convertir-lo a mitjanit UTC és l'error
+            que fa que els aniversaris apareguin el dia abans a mig món (docs/07 §8).
+        timezone: { type: [string, 'null'] }
+        status:
+          type: string
+          enum: [TENTATIVE, CONFIRMED, CANCELLED]
+          description: Els de VEVENT. Els de VTODO són uns altres (D8).
+        transparency:
+          type: string
+          enum: [OPAQUE, TRANSPARENT]
+          description: Si ocupa temps. VTODO no en té equivalent.
+        rrule: { type: [string, 'null'] }
+        version: { type: integer }
+
+    EventInput:
+      type: object
+      additionalProperties: false
+      properties:
+        id: { type: string }
+        calendar_id: { type: string }
+        summary: { type: string, minLength: 1 }
+        description: { type: string }
+        location: { type: string }
+        starts_at: { type: string, format: date-time }
+        ends_at: { type: string, format: date-time }
+        all_day: { type: boolean }
+        timezone: { type: string }
+        status:
+          type: string
+          enum: [TENTATIVE, CONFIRMED, CANCELLED]
+        transparency:
+          type: string
+          enum: [OPAQUE, TRANSPARENT]
+        rrule: { type: string }
+
+    EventOccurrence:
+      type: object
+      additionalProperties: false
+      required: [event_id, uid, summary, starts_at, ends_at, all_day, scope_id]
+      properties:
+        event_id: { type: string }
+        uid: { type: string }
+        recurrence_id:
+          type: [string, 'null']
+          description: L'inici que li tocaria segons la regla, encara que s'hagi mogut.
+        summary: { type: string }
+        location: { type: [string, 'null'] }
+        starts_at: { type: string, format: date-time }
+        ends_at: { type: string, format: date-time }
+        all_day: { type: boolean }
+        scope_id: { type: string }
+        calendar_id: { type: string }
+        status:
+          type: string
+          enum: [TENTATIVE, CONFIRMED, CANCELLED]
+        is_override:
+          type: boolean
+          description: Cert si aquesta ocurrència ve d'una instància modificada.
+
     Scope:
       type: object
       additionalProperties: false

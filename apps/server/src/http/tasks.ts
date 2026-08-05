@@ -13,6 +13,14 @@ import { auditedTransaction } from '../audit/audited-transaction.js';
 import { PolicyError, unauthenticated } from '../policy/errors.js';
 import type { Principal } from '../policy/principal.js';
 import { createProject, createScope, listProjects, listScopes } from '../services/scopes.js';
+import {
+  createEvent,
+  listCalendars,
+  listEventOccurrences,
+  updateEvent,
+  type CreateEventInput,
+  type SeriesMode,
+} from '../services/events.js';
 import { completeTask, createTask, getBoard, listTasks, moveTask } from '../services/tasks.js';
 import { principalOf } from './auth.js';
 
@@ -184,6 +192,61 @@ export function registerTaskRoutes(app: FastifyInstance): void {
         scopeIds: parseIds(query.scope_ids),
         projectId: typeof query.project_id === 'string' ? query.project_id : undefined,
       });
+    }),
+  );
+}
+
+/**
+ * Rutes d'esdeveniments i calendaris.
+ *
+ * Viuen al mateix fitxer que les de tasques perquè comparteixen l'embolcall `handle`,
+ * però són coses diferents: **un esdeveniment no és una tasca** (D8) i no surt mai al
+ * kanban.
+ */
+export function registerEventRoutes(app: FastifyInstance): void {
+  app.get('/api/v1/calendars', async (request, reply) =>
+    handle(app, request, reply, async (principal) => listCalendars(app.connection!.db, principal)),
+  );
+
+  app.get('/api/v1/events', async (request, reply) =>
+    handle(app, request, reply, async (principal) => {
+      const query = request.query as Record<string, unknown>;
+      return listEventOccurrences(app.connection!.db, principal, {
+        from: typeof query.from === 'string' ? query.from : '',
+        to: typeof query.to === 'string' ? query.to : '',
+        scopeIds: parseIds(query.scope_ids),
+      });
+    }),
+  );
+
+  app.post('/api/v1/events', async (request, reply) =>
+    handle(app, request, reply, async (principal) => {
+      const body = (request.body ?? {}) as Record<string, unknown>;
+      const result = await auditedTransaction(app.connection!.db, principal, (ctx) =>
+        createEvent(ctx, principal, body as CreateEventInput),
+      );
+      void reply.code(result.created ? 201 : 200);
+      return result.event;
+    }),
+  );
+
+  app.patch<{ Params: { id: string } }>('/api/v1/events/:id', async (request, reply) =>
+    handle(app, request, reply, async (principal) => {
+      const query = request.query as Record<string, unknown>;
+      const mode =
+        query.series_mode === 'future' || query.series_mode === 'all'
+          ? (query.series_mode as SeriesMode)
+          : 'single';
+      return auditedTransaction(app.connection!.db, principal, (ctx) =>
+        updateEvent(
+          ctx,
+          principal,
+          request.params.id,
+          mode,
+          typeof query.occurrence === 'string' ? query.occurrence : undefined,
+          (request.body ?? {}) as CreateEventInput,
+        ),
+      );
     }),
   );
 }

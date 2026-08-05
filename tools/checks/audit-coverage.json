@@ -17,7 +17,9 @@
     "createProject": "apps/server/src/services/scopes.ts · createProject registra 'created'; cobert per la creació d'àmbits i projectes a tasks.test.ts",
     "createTask": "apps/server/src/http/tasks.test.ts · \"a un àmbit individual s'assignen soles al propietari\"",
     "moveTask": "apps/server/src/http/tasks.test.ts · \"moure deixa rastre amb el valor anterior i el nou\"",
-    "completeTask": "apps/server/src/http/tasks.test.ts · \"marca la tasca i les seves subtasques\""
+    "completeTask": "apps/server/src/http/tasks.test.ts · \"marca la tasca i les seves subtasques\"",
+    "createEvent": "apps/server/src/http/events.test.ts · \"crea un esdeveniment i deixa rastre\"",
+    "updateEvent": "apps/server/src/http/events.test.ts · \"partir la sèrie deixa rastre dels dos costats\""
   },
   "exempt": {
     "refresh": "Rotar un token de refresc no és un canvi d'estat del producte: no toca cap tasca, cap àmbit ni cap dada de l'usuari. La sessió ja va quedar registrada al login, i registrar cada refresc ofegaria la taula amb una entrada cada quinze minuts per dispositiu. La reutilització d'un token gastat SÍ que es registra, però al log del servidor i com a avís, perquè és un incident de seguretat i no una acció de ningú."

@@ -13,7 +13,7 @@ import type { Config } from './config.js';
 import type { Connection } from './db/connection.js';
 import { registerAuthRoutes } from './http/auth.js';
 import { registerInstanceRoutes } from './http/instance.js';
-import { registerTaskRoutes } from './http/tasks.js';
+import { registerEventRoutes, registerTaskRoutes } from './http/tasks.js';
 
 export interface BuildOptions {
   /**
@@ -48,6 +48,7 @@ export function buildApp(config: Config, options: BuildOptions = {}): FastifyIns
   registerInstanceRoutes(app);
   registerAuthRoutes(app);
   registerTaskRoutes(app);
+  registerEventRoutes(app);
 
   return app;
 }

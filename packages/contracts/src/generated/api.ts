@@ -289,10 +289,180 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Esdeveniments en una finestra
+         * @description **Requereix `from` i `to`**: sense finestra no es poden expandir repeticions
+         *     (docs/05 §4). Una RRULE sense COUNT ni UNTIL és infinita.
+         *
+         *     Torna OCURRÈNCIES, no files: una sèrie setmanal dins d'un mes surt quatre
+         *     vegades, cadascuna amb el seu `recurrence_id`.
+         *
+         *     **Els esdeveniments no surten mai al kanban** (D8). Aquesta és l'única manera
+         *     de demanar-los.
+         */
+        get: operations["listEvents"];
+        put?: never;
+        /**
+         * Crear un esdeveniment
+         * @description Un esdeveniment **no és una tasca amb hores** (D8): té els seus propis `status`
+         *     —TENTATIVE, CONFIRMED, CANCELLED—, té `transparency`, i un calendari extern
+         *     subscrit només en pot produir d'aquests.
+         */
+        post: operations["createEvent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/events/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Modificar un esdeveniment o una sèrie
+         * @description `series_mode` resol "aquest esdeveniment, aquest i els següents, o tota la
+         *     sèrie" (docs/05 §4):
+         *
+         *     - `single` crea una instància modificada, una fila germana amb el seu
+         *       `RECURRENCE-ID` (D8).
+         *     - `future` **parteix la sèrie**: posa `UNTIL` al mestre i en crea un de nou.
+         *       **No emet mai `RANGE=THISANDFUTURE`.**
+         *     - `all` toca el mestre.
+         */
+        patch: operations["updateEvent"];
+        trace?: never;
+    };
+    "/calendars": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Els calendaris que veu qui pregunta
+         * @description Cada àmbit i cada projecte que es publiqui genera **DUES** col·leccions (D9):
+         *     una `events` i una `todos`. RFC 4791 §5.2 prohibeix recursos de components
+         *     mixtos, DAVx⁵ classifica una col·lecció només per
+         *     `supported-calendar-component-set`, i el CalDAV de Google no accepta VTODO.
+         */
+        get: operations["listCalendars"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        Calendar: {
+            id: string;
+            scope_id: string;
+            project_id?: string | null;
+            name: string;
+            color?: string | null;
+            /**
+             * @description Obligatori i únic per col·lecció (D9).
+             * @enum {string}
+             */
+            kind: "events" | "todos";
+            /**
+             * @description Les subscripcions són de només lectura a la capa de repositori.
+             * @enum {string}
+             */
+            origin: "local" | "subscription";
+        };
+        Event: {
+            id: string;
+            calendar_id: string;
+            /** @description UID d'iCalendar. */
+            uid: string;
+            /** @description Nul al mestre. Amb valor, és una instància modificada (D8). */
+            recurrence_id?: string | null;
+            summary: string;
+            description?: string | null;
+            location?: string | null;
+            /** Format: date-time */
+            starts_at: string;
+            /** Format: date-time */
+            ends_at?: string | null;
+            /**
+             * @description VALUE=DATE és tot el dia i NO té fus. Convertir-lo a mitjanit UTC és l'error
+             *     que fa que els aniversaris apareguin el dia abans a mig món (docs/07 §8).
+             */
+            all_day: boolean;
+            timezone?: string | null;
+            /**
+             * @description Els de VEVENT. Els de VTODO són uns altres (D8).
+             * @enum {string}
+             */
+            status?: "TENTATIVE" | "CONFIRMED" | "CANCELLED";
+            /**
+             * @description Si ocupa temps. VTODO no en té equivalent.
+             * @enum {string}
+             */
+            transparency?: "OPAQUE" | "TRANSPARENT";
+            rrule?: string | null;
+            version: number;
+        };
+        EventInput: {
+            id?: string;
+            calendar_id?: string;
+            summary?: string;
+            description?: string;
+            location?: string;
+            /** Format: date-time */
+            starts_at?: string;
+            /** Format: date-time */
+            ends_at?: string;
+            all_day?: boolean;
+            timezone?: string;
+            /** @enum {string} */
+            status?: "TENTATIVE" | "CONFIRMED" | "CANCELLED";
+            /** @enum {string} */
+            transparency?: "OPAQUE" | "TRANSPARENT";
+            rrule?: string;
+        };
+        EventOccurrence: {
+            event_id: string;
+            uid: string;
+            /** @description L'inici que li tocaria segons la regla, encara que s'hagi mogut. */
+            recurrence_id?: string | null;
+            summary: string;
+            location?: string | null;
+            /** Format: date-time */
+            starts_at: string;
+            /** Format: date-time */
+            ends_at: string;
+            all_day: boolean;
+            scope_id: string;
+            calendar_id?: string;
+            /** @enum {string} */
+            status?: "TENTATIVE" | "CONFIRMED" | "CANCELLED";
+            /** @description Cert si aquesta ocurrència ve d'una instància modificada. */
+            is_override?: boolean;
+        };
         Scope: {
             id: string;
             name: string;
@@ -1025,6 +1195,139 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Board"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    listEvents: {
+        parameters: {
+            query: {
+                from: string;
+                to: string;
+                /** @description Àmbits actius, separats per comes. */
+                scope_ids?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Ocurrències dins de la finestra, ordenades per inici. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EventOccurrence"][];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            /** @description Falta la finestra, o no és vàlida. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    createEvent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EventInput"];
+            };
+        };
+        responses: {
+            /** @description Ja existia amb aquest `id`. Idempotència. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Event"];
+                };
+            };
+            /** @description Creat. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Event"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    updateEvent: {
+        parameters: {
+            query?: {
+                series_mode?: "single" | "future" | "all";
+                /** @description L'ocurrència afectada, per als modes `single` i `future`. */
+                occurrence?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EventInput"];
+            };
+        };
+        responses: {
+            /** @description Modificat. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Event"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description Falta l'ocurrència per al mode demanat. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listCalendars: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Calendaris accessibles. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Calendar"][];
                 };
             };
             401: components["responses"]["Unauthenticated"];
