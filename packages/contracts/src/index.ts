@@ -24,6 +24,15 @@ export {
 export type { RandomSource } from './position.js';
 
 export { MESSAGES, messageKeys, t } from './i18n.js';
+export { parseQuickAdd, revertToken } from './quickadd.js';
+export type {
+  QuickAddContext,
+  QuickAddErrorCode,
+  QuickAddPerson,
+  QuickAddResult,
+  QuickAddScope,
+  QuickAddToken,
+} from './quickadd.js';
 export type { MessageKey, TranslateOptions } from './i18n.js';
 
 /** Els valors canònics de `status`. `column` no existeix (D2). */

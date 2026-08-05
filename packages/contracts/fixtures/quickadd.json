@@ -1,0 +1,305 @@
+{
+  "$comment": [
+    "Fixtures del parser d'afegida rapida, COMPARTITS entre TypeScript i Kotlin.",
+    "",
+    "docs/03 §1: 'El parser d'afegida rapida te els mateixos casos de prova en TypeScript",
+    "i en Kotlin, verificats a CI. Sense aixo, les dues implementacions divergeixen i",
+    "ningu se n'adona fins que un usuari escriu #Feina/Client Salt amb un espai.'",
+    "",
+    "La comprovacio permanent `parser-parity` executa aquests casos contra les dues",
+    "implementacions i compara. Afegir un cas aqui obliga les dues a passar-lo."
+  ],
+  "context": {
+    "scopes": [
+      {
+        "id": "scope-personal",
+        "name": "Personal",
+        "projects": [
+          {
+            "id": "proj-casa",
+            "name": "Casa"
+          }
+        ]
+      },
+      {
+        "id": "scope-feina",
+        "name": "Feina",
+        "projects": [
+          {
+            "id": "proj-client",
+            "name": "Client"
+          },
+          {
+            "id": "proj-client-salt",
+            "name": "Client Salt"
+          }
+        ]
+      },
+      {
+        "id": "scope-familia",
+        "name": "Família",
+        "projects": []
+      }
+    ],
+    "people": [
+      {
+        "id": "user-alba",
+        "name": "Alba"
+      },
+      {
+        "id": "user-borja",
+        "name": "Borja"
+      },
+      {
+        "id": "user-anna-maria",
+        "name": "Anna Maria"
+      }
+    ],
+    "activeScopeIds": ["scope-personal", "scope-feina", "scope-familia"]
+  },
+  "cases": [
+    {
+      "name": "el cas de docs/13: ambit, projecte amb espai, persona i titol net",
+      "input": "#Feina/Client Salt Enviar proposta @Alba",
+      "expect": {
+        "title": "Enviar proposta",
+        "scopeId": "scope-feina",
+        "projectId": "proj-client-salt",
+        "assigneeIds": ["user-alba"],
+        "aiMode": "manual",
+        "error": null
+      }
+    },
+    {
+      "name": "tria el projecte MES LLARG quan un es prefix de l'altre",
+      "input": "#Feina/Client Salt Revisar",
+      "expect": {
+        "projectId": "proj-client-salt",
+        "title": "Revisar",
+        "error": null
+      }
+    },
+    {
+      "name": "i el curt quan no hi ha res mes",
+      "input": "#Feina/Client Revisar",
+      "expect": {
+        "projectId": "proj-client",
+        "title": "Revisar",
+        "error": null
+      }
+    },
+    {
+      "name": "nomes ambit, sense projecte",
+      "input": "#Personal Comprar pa",
+      "expect": {
+        "title": "Comprar pa",
+        "scopeId": "scope-personal",
+        "projectId": null,
+        "error": null
+      }
+    },
+    {
+      "name": "l'ambit pot anar al final",
+      "input": "Comprar pa #Personal",
+      "expect": {
+        "title": "Comprar pa",
+        "scopeId": "scope-personal",
+        "error": null
+      }
+    },
+    {
+      "name": "i al mig",
+      "input": "Comprar #Personal pa",
+      "expect": {
+        "title": "Comprar pa",
+        "scopeId": "scope-personal",
+        "error": null
+      }
+    },
+    {
+      "name": "persona amb dues paraules",
+      "input": "#Familia Trucar @Anna Maria",
+      "expect": {
+        "title": "Trucar",
+        "scopeId": "scope-familia",
+        "assigneeIds": ["user-anna-maria"],
+        "error": null
+      }
+    },
+    {
+      "name": "dues persones",
+      "input": "#Feina Reunio @Alba @Borja",
+      "expect": {
+        "assigneeIds": ["user-alba", "user-borja"],
+        "title": "Reunio",
+        "error": null
+      }
+    },
+    {
+      "name": "la mateixa persona dues vegades no es duplica",
+      "input": "#Feina Reunio @Alba @Alba",
+      "expect": {
+        "assigneeIds": ["user-alba"],
+        "error": null
+      }
+    },
+    {
+      "name": "els accents no compten: Familia troba Família",
+      "input": "#Familia Netejar",
+      "expect": {
+        "scopeId": "scope-familia",
+        "error": null
+      }
+    },
+    {
+      "name": "les majuscules tampoc",
+      "input": "#FEINA Informe",
+      "expect": {
+        "scopeId": "scope-feina",
+        "error": null
+      }
+    },
+    {
+      "name": "un ambit que no existeix no es reconeix i queda al titol",
+      "input": "#Inventat Fer alguna cosa",
+      "expect": {
+        "scopeId": null,
+        "title": "#Inventat Fer alguna cosa",
+        "error": "scope-required"
+      }
+    },
+    {
+      "name": "una persona que no existeix tampoc",
+      "input": "#Feina Parlar amb @Ningu",
+      "expect": {
+        "assigneeIds": [],
+        "title": "Parlar amb @Ningu",
+        "error": null
+      }
+    },
+    {
+      "name": "un prefix incomplet no coincideix",
+      "input": "#Fein Alguna cosa",
+      "expect": {
+        "scopeId": null,
+        "error": "scope-required"
+      }
+    },
+    {
+      "name": "els espais sobrants es col·lapsen",
+      "input": "#Personal    Comprar     pa   ",
+      "expect": {
+        "title": "Comprar pa",
+        "error": null
+      }
+    },
+    {
+      "name": "sense titol es rebutja",
+      "input": "#Personal",
+      "expect": {
+        "title": "",
+        "scopeId": "scope-personal",
+        "error": "empty-title"
+      }
+    },
+    {
+      "name": "!ia sol vol dir delegada",
+      "input": "#Feina Migrar el servidor !ia",
+      "expect": {
+        "aiMode": "delegated",
+        "title": "Migrar el servidor",
+        "error": null
+      }
+    },
+    {
+      "name": "!ia:ajuda vol dir amb ajuda",
+      "input": "#Feina Preparar la reunio !ia:ajuda",
+      "expect": {
+        "aiMode": "assisted",
+        "error": null
+      }
+    },
+    {
+      "name": "!ia:delegada tambe",
+      "input": "#Feina Fer-ho tot !ia:delegada",
+      "expect": {
+        "aiMode": "delegated",
+        "error": null
+      }
+    },
+    {
+      "name": "sense sigil, tota tasca neix manual",
+      "input": "#Feina Una tasca normal",
+      "expect": {
+        "aiMode": "manual",
+        "error": null
+      }
+    },
+    {
+      "name": "text buit",
+      "input": "",
+      "expect": {
+        "title": "",
+        "scopeId": null,
+        "error": "scope-required"
+      }
+    },
+    {
+      "name": "nomes espais",
+      "input": "     ",
+      "expect": {
+        "title": "",
+        "error": "scope-required"
+      }
+    },
+    {
+      "name": "un coixinet sol no trenca res",
+      "input": "#Personal Comprar # pa",
+      "expect": {
+        "title": "Comprar # pa",
+        "scopeId": "scope-personal",
+        "error": null
+      }
+    },
+    {
+      "name": "una arrova sola tampoc",
+      "input": "#Personal Escriure a l'@ de correu",
+      "expect": {
+        "scopeId": "scope-personal",
+        "error": null
+      }
+    },
+    {
+      "name": "el projecte d'un altre ambit no es reconeix",
+      "input": "#Personal/Client Salt Alguna cosa",
+      "expect": {
+        "scopeId": "scope-personal",
+        "projectId": null,
+        "error": null
+      }
+    }
+  ],
+  "singleActiveScope": {
+    "$comment": "Amb UN sol ambit actiu, s'agafa aquell sense necessitat de #.",
+    "activeScopeIds": ["scope-feina"],
+    "cases": [
+      {
+        "name": "sense # s'agafa l'unic ambit actiu",
+        "input": "Enviar la proposta",
+        "expect": {
+          "scopeId": "scope-feina",
+          "title": "Enviar la proposta",
+          "error": null
+        }
+      },
+      {
+        "name": "pero el # explicit mana per damunt",
+        "input": "#Personal Comprar pa",
+        "expect": {
+          "scopeId": "scope-personal",
+          "error": null
+        }
+      }
+    ]
+  }
+}

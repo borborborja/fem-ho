@@ -23,6 +23,7 @@
     "check:no-hardcoded-colors": "node tools/checks/no-hardcoded-colors.mjs",
     "check:no-pinned-from-research": "node tools/checks/no-pinned-from-research.mjs",
     "check:openapi-diff": "node tools/checks/openapi-diff.mjs",
+    "check:parser-parity": "node tools/checks/parser-parity.mjs",
     "check:vocab-lint": "node tools/checks/vocab-lint.mjs",
     "contracts:generate": "npm run generate -w @fem-ho/contracts",
     "contracts:validate": "npm run validate -w @fem-ho/contracts",

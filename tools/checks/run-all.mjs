@@ -21,11 +21,7 @@ const CHECKS = [
   { name: 'no-pinned-from-research', script: 'no-pinned-from-research.mjs' },
   { name: 'contrast-check', script: 'contrast-check.mjs' },
   { name: 'audit-coverage', script: 'audit-coverage.mjs' },
-  {
-    name: 'parser-parity',
-    pending: 'M6 (TS) i M13 (Kotlin)',
-    why: 'necessita els fixtures del parser i les dues implementacions',
-  },
+  { name: 'parser-parity', script: 'parser-parity.mjs' },
 ];
 
 const results = [];
