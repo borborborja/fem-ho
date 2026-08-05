@@ -1,0 +1,15 @@
+<!-- @dsCard group="Elevation" viewport="700x150" name="Blur & translucency" subtitle="Glass = blur + translucent fill + hairline border" -->
+<!DOCTYPE html><html data-theme="light"><head><meta charset="utf-8"><link rel="stylesheet" href="../styles.css"><style>
+body{margin:0;font-family:var(--font-sans);color:var(--ink);background:var(--card-bg);padding:18px;box-sizing:border-box}
+a{color:var(--plou-blue-ink)}a:hover{color:var(--plou-orange-ink)}
+.g{display:grid;gap:10px}.r{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.sw{height:52px;border-radius:14px;border:1px solid var(--card-border)}
+.n{font-size:10.5px;margin-top:5px;color:var(--ink-soft);font-weight:500}
+.v{font-size:9.5px;color:var(--ink-faint);font-family:ui-monospace,monospace}
+code{font-family:ui-monospace,monospace;font-size:10px;background:var(--code-bg);padding:2px 5px;border-radius:5px}
+</style></head><body><div style="position:relative;height:96px;border-radius:18px;overflow:hidden;background:var(--gradient-alert)">
+<div style="position:absolute;left:16px;top:20px;width:200px;height:56px;border-radius:22px;background:var(--switcher-bg);backdrop-filter:var(--blur-switcher);border:1px solid var(--switcher-border);box-shadow:var(--switcher-shadow)"></div>
+<div style="position:absolute;left:236px;top:20px;width:200px;height:56px;border-radius:22px;background:var(--glass-bg);backdrop-filter:var(--blur-glass);border:1px solid var(--glass-border)"></div>
+<div style="position:absolute;left:456px;top:20px;width:200px;height:56px;border-radius:22px;background:var(--sidebar-bg);backdrop-filter:var(--blur-sidebar);border:1px solid var(--card-border)"></div>
+<div style="position:absolute;bottom:8px;left:16px;font-size:9.5px;color:#fff;font-family:ui-monospace,monospace">--blur-switcher 16px · --blur-glass 10px · --blur-sidebar 14px</div>
+</div></body></html>

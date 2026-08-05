@@ -1,0 +1,43 @@
+:root{
+  --space-1:4px;
+  --space-2:6px;
+  --space-3:8px;
+  --space-4:10px;
+  --space-5:12px;
+  --space-6:14px;
+  --space-7:16px;
+  --space-8:18px;
+  --space-9:20px;
+  --space-10:22px;
+  --space-12:26px;
+  --space-14:32px;
+  --space-16:40px;
+
+  /* Component padding, taken verbatim from the source screens */
+  --pad-card:22px;        /* desktop card */
+  --pad-card-mobile:18px; /* mobile card */
+  --pad-card-tight:16px;  /* sidebar card, glass sheet */
+  --pad-tile:12px;        /* stat tile, mobile */
+  --pad-tile-lg:14px;     /* stat tile, desktop */
+  --pad-btn:12px 20px;
+  --pad-btn-mobile:12px 16px;
+  --pad-btn-sm:8px 14px;
+  --pad-tag:6px 13px;
+  --pad-tag-sm:5px 12px;
+  --pad-input:10px 14px;
+  --pad-seg-opt:9px 16px;
+
+  /* Gaps */
+  --gap-dense:8px;
+  --gap-stack:18px;
+  --gap-section:22px;
+  --gap-grid:16px;
+
+  /* Fixed chrome */
+  --sidebar-width:248px;
+  --content-max:1360px;
+  --switcher-height:64px;
+  --switcher-inset:18px;
+  --icon-btn:38px;
+  --tab-hit:52px;
+}

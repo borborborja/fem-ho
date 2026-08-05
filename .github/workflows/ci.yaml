@@ -1,0 +1,50 @@
+name: CI
+
+# La comprovació de la fita M1 és `build + lint + typecheck + openapi-diff`
+# (docs/13). Les vuit comprovacions permanents van a cada canvi proposat, no només
+# a la seva fita.
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      # `npm ci` i no `npm install`: instal·la exactament el que diu el lockfile i
+      # falla si el manifest i el lockfile no quadren. Les versions es van congelar a
+      # M1 i no han de derivar (regla 2).
+      - name: Instal·lar
+        run: npm ci
+
+      - name: Formatació
+        run: npm run format:check
+
+      - name: Linter
+        run: npm run lint
+
+      - name: Tipus
+        run: npm run typecheck
+
+      - name: Construcció
+        run: npm run build
+
+      - name: Proves
+        run: npm test
+
+      # Inclou openapi-diff, que és el que fa fallar CI si algú toca un handler sense
+      # actualitzar el contracte (regla 5).
+      - name: Comprovacions permanents
+        run: npm run check

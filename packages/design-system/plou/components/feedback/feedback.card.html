@@ -1,0 +1,26 @@
+<!-- @dsCard group="Components" viewport="700x400" name="Feedback — Dialog, AlertScreen, GlassBar" subtitle="Modal, full-bleed rain alert, glass over map" -->
+<!DOCTYPE html><html data-theme="light"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../../styles.css">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+<style>body{margin:0;font-family:var(--font-sans);background:var(--page-bg);color:var(--ink);padding:18px;box-sizing:border-box}a{color:var(--plou-blue-ink)}a:hover{color:var(--plou-orange-ink)}.row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.col{display:flex;flex-direction:column;gap:14px}.lbl{font-size:9.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint)}</style></head><body><div id="root"></div>
+<script type="text/babel">
+const { Dialog, AlertScreen, Button, TextField, SegmentedControl, Slider } = window.PlouDesignSystem_093e07;
+function Demo(){return <div className="row" style={{gap:18,alignItems:'stretch',height:364}}>
+ <div style={{position:'relative',flex:1,borderRadius:'var(--radius-panel)',overflow:'hidden',background:'var(--app-bg)',border:'1px solid var(--card-border)'}}>
+  <Dialog title="Editar alarma" width={340} footer={<><Button variant="ghost" block>Cancelar</Button><Button block>Guardar</Button></>}>
+   <TextField label="Nombre de la ubicación" defaultValue="Cornellà del Terri"/>
+   <Slider label="Radio de vigilancia" valueLabel="20 km" min={5} max={50} value={20}/>
+   <div><div style={{fontSize:'var(--text-tag)',color:'var(--ink-soft)',marginBottom:5}}>Intensidad mínima</div>
+    <SegmentedControl block options={['Débil','Moderada','Fuerte']} value="Débil"/></div>
+  </Dialog>
+ </div>
+ <div style={{position:'relative',width:250,borderRadius:'var(--radius-panel)',overflow:'hidden'}}>
+  <AlertScreen place="Navata" headline="Lluvia moderada en 12 min" detail="Procedente del suroeste" time="12:00"
+   actions={<><Button variant="glass" block size="md">Posponer</Button><Button variant="onAlert" block size="md">Silenciar</Button></>}/>
+ </div>
+</div>}
+ReactDOM.createRoot(document.getElementById('root')).render(<Demo/>);
+</script></body></html>

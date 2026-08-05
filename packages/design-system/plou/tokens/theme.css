@@ -1,0 +1,94 @@
+/* Every surface colour is theme-scoped. Always set data-theme on the root container
+   of a Plou screen: <div data-theme="light"> … </div> */
+:root,[data-theme="light"]{
+  --ink:#14151a;
+  --ink-soft:rgba(20,22,30,0.55);
+  --ink-faint:rgba(20,22,30,0.42);
+
+  --page-bg:linear-gradient(135deg,#eef3ff 0%,#fdf3ee 55%,#fdeef4 100%); /* @kind color */
+  --app-bg:linear-gradient(160deg,#f8f9fd 0%,#fbf6f4 50%,#fdf3f6 100%); /* @kind color */
+  --outer-bg:linear-gradient(135deg,#eef3ff 0%,#fdf3ee 55%,#fdeef4 100%); /* @kind color */
+  --panel-bg:#ffffff;
+  --sidebar-bg:rgba(255,255,255,0.7);
+
+  --card-bg:#ffffff;
+  --card-border:rgba(20,22,30,0.07);
+  --card-shadow:0 6px 20px rgba(30,30,50,0.06);
+
+  --ghost-bg:rgba(20,22,30,0.06);
+  --ghost-text:#14151a;
+  --tag-bg:rgba(20,22,30,0.06);
+  --tag-text:#3a3d46;
+  --fab-bg:rgba(20,22,30,0.06);
+  --fab-text:#14151a;
+  --seg-bg:rgba(20,22,30,0.05);
+  --seg-text:rgba(20,22,30,0.55);
+  --nav-idle:rgba(20,22,30,0.55);
+
+  --switcher-bg:rgba(255,255,255,0.85);
+  --switcher-border:rgba(20,22,30,0.06);
+  --switcher-shadow:0 14px 34px rgba(30,30,50,0.18);
+
+  --input-bg:rgba(20,22,30,0.05);
+  --input-border:rgba(20,22,30,0.1);
+  --divider:rgba(20,22,30,0.08);
+  --divider-soft:rgba(20,22,30,0.06);
+  --track-off:rgba(20,22,30,0.12);
+  --range-track:rgba(20,22,30,0.12);
+  --code-bg:rgba(20,22,30,0.05);
+
+  --dialog-bg:#ffffff;
+  --dialog-backdrop:rgba(20,20,30,0.45);
+
+  /* text-tone kicker colour: warm ink on light, warm brand on dark */
+  --kicker:#e0793a;
+
+  /* Fem-ho addition (docs/04 §2): kanban column background. The prototype hard-coded
+     rgba(20,22,30,0.02), which is invisible on dark. Tokenised across both themes. */
+  --column-bg:rgba(20,22,30,0.02);
+}
+[data-theme="dark"]{
+  --ink:#f5f6fa;
+  --ink-soft:rgba(245,246,250,0.62);
+  --ink-faint:rgba(245,246,250,0.45);
+
+  --page-bg:radial-gradient(circle at 20% 10%,#141826 0%,#05060a 55%); /* @kind color */
+  --app-bg:linear-gradient(160deg,#0e0f16 0%,#181420 50%,#1c1420 100%); /* @kind color */
+  --outer-bg:radial-gradient(circle at 30% 20%,#141826 0%,#05060a 60%); /* @kind color */
+  --panel-bg:#12131a;
+  --sidebar-bg:rgba(18,18,26,0.7);
+
+  --card-bg:rgba(255,255,255,0.06);
+  --card-border:rgba(255,255,255,0.09);
+  --card-shadow:0 6px 20px rgba(0,0,0,0.4);
+
+  --ghost-bg:rgba(255,255,255,0.08);
+  --ghost-text:#ffffff;
+  --tag-bg:rgba(255,255,255,0.08);
+  --tag-text:rgba(255,255,255,0.8);
+  --fab-bg:rgba(255,255,255,0.08);
+  --fab-text:#ffffff;
+  --seg-bg:rgba(255,255,255,0.06);
+  --seg-text:rgba(255,255,255,0.55);
+  --nav-idle:rgba(245,246,250,0.55);
+
+  --switcher-bg:rgba(20,20,26,0.75);
+  --switcher-border:rgba(255,255,255,0.08);
+  --switcher-shadow:0 14px 34px rgba(0,0,0,0.5);
+
+  --input-bg:rgba(255,255,255,0.06);
+  --input-border:rgba(255,255,255,0.12);
+  --divider:rgba(255,255,255,0.09);
+  --divider-soft:rgba(255,255,255,0.07);
+  --track-off:rgba(255,255,255,0.15);
+  --range-track:rgba(255,255,255,0.16);
+  --code-bg:rgba(255,255,255,0.06);
+
+  --dialog-bg:#171922;
+  --dialog-backdrop:rgba(0,0,0,0.55);
+
+  --kicker:#FF9D4D;
+
+  /* Fem-ho addition (docs/04 §2) */
+  --column-bg:rgba(255,255,255,0.03);
+}

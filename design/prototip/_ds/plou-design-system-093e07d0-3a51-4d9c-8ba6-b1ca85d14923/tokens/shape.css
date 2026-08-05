@@ -1,0 +1,17 @@
+:root{
+  /* Nothing in Plou has a square corner. */
+  --radius-pill:100px;     /* every control, tag, button, nav capsule */
+  --radius-circle:50%;     /* icon buttons, dots, gradient bubbles */
+  --radius-dialog:28px;
+  --radius-panel:28px;     /* sidebar, radar viewport */
+  --radius-card:24px;
+  --radius-card-tight:22px;/* glass sheets over the map */
+  --radius-card-sm:18px;   /* stat tiles */
+  --radius-input:14px;     /* text fields */
+  --radius-nav:14px;       /* sidebar nav item */
+  --radius-bar:4px;        /* chart bars, slider track */
+
+  --border-hairline:1px;
+  --stroke-icon:1.8; /* @kind other */ /* icon stroke-width, in px */
+  --stroke-icon-lg:1.6; /* @kind other */ /* 30px+ icons */
+}

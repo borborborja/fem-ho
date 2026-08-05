@@ -1,0 +1,133 @@
+/* ACCENT VARIANTS
+   The accent is orthogonal to the theme: set both on the root of a screen.
+     <div data-theme="light" data-accent="soft">
+   Default (no data-accent) = the original sunset triad.
+   Each scope overrides ONLY the brand tokens — surfaces, ink and shape are untouched,
+   so the whole flow (one gradient per view, warm kicker, glow under the gradient,
+   gradient-clipped wordmark) is identical in all of them.
+     soft       pastel version of the default sweep, ink text on the brand
+     mono-warm  one warm hue: short orange → pink
+     mono-cool  one cool hue: Plou blue, light → deep */
+
+/* --- soft: the same blue→sun→pink sweep, pastel, with dark text on the brand --- */
+[data-accent="soft"]{
+  --plou-blue:#A9C9FF; /* @kind color */
+  --plou-orange:#FFC79A; /* @kind color */
+  --plou-pink:#FFB1C8; /* @kind color */
+
+  --gradient-brand:linear-gradient(135deg,#A9C9FF 0%,#FFC79A 55%,#FFB1C8 100%); /* @kind color */
+  --gradient-brand-alt:linear-gradient(135deg,#A9C9FF,#FFC79A 60%,#FFB1C8); /* @kind color */
+  --gradient-brand-2stop:linear-gradient(135deg,#A9C9FF,#FFC79A); /* @kind color */
+  --gradient-toggle:linear-gradient(135deg,#A9C9FF,#FFB1C8); /* @kind color */
+
+  --gradient-wash-cool:linear-gradient(140deg,rgba(169,201,255,0.16),rgba(255,177,200,0.12)); /* @kind color */
+  --gradient-wash-warm:linear-gradient(140deg,rgba(255,199,154,0.20),rgba(255,177,200,0.12)); /* @kind color */
+  --gradient-wash-tag:linear-gradient(135deg,rgba(169,201,255,0.26),rgba(255,177,200,0.26)); /* @kind color */
+
+  --gradient-alert:linear-gradient(160deg,#2b3a63 0%,#7c5a8c 45%,#e8836a 80%,#f2b184 100%); /* @kind color */
+
+  /* Pastel can't carry white text — the brand fill flips to ink here. */
+  --on-brand:#14151a; /* @kind color */
+
+  --shadow-primary:0 6px 18px rgba(255,190,150,0.38); /* @kind shadow */
+  --shadow-primary-lg:0 8px 24px rgba(255,190,150,0.38); /* @kind shadow */
+  --shadow-tab-active:0 6px 16px rgba(255,190,150,0.45); /* @kind shadow */
+  --shadow-nav-active:0 8px 20px rgba(255,190,150,0.38); /* @kind shadow */
+  --shadow-thumb-ring:0 0 0 4px rgba(255,199,154,0.28); /* @kind shadow */
+  --shadow-pin-glow:0 0 18px rgba(255,177,200,0.8); /* @kind shadow */
+
+  --ring-radar:rgba(255,205,180,0.7); /* @kind color */
+
+  --dot-1:#A9C9FF; /* @kind color */
+  --dot-2:#FFC79A; /* @kind color */
+  --dot-3:#FFB1C8; /* @kind color */
+}
+
+/* --- mono-warm: one continuous warm hue — a short orange → pink sweep, same 135deg flow.
+       Far less chromatic than the default triad (which crosses blue to pink), but it stays
+       in the warm family, so the per-theme kicker in theme.css still fits and this scope
+       deliberately does NOT touch --kicker. --- */
+[data-accent="mono-warm"]{
+  --plou-blue:#FF9C4F; /* @kind color */
+  --plou-orange:#FF8C6D; /* @kind color */
+  --plou-pink:#FF7B8B; /* @kind color */
+
+  --plou-blue-ink:#e0793a; /* @kind color */
+  --plou-orange-ink:#dd6b58; /* @kind color */
+  --plou-pink-ink:#d75f76; /* @kind color */
+
+  --gradient-brand:linear-gradient(135deg,#FF9C4F 0%,#FF8C6D 55%,#FF7B8B 100%); /* @kind color */
+  --gradient-brand-alt:linear-gradient(135deg,#FF9C4F,#FF8C6D 60%,#FF7B8B); /* @kind color */
+  --gradient-brand-2stop:linear-gradient(135deg,#FF9C4F,#FF7B8B); /* @kind color */
+  --gradient-toggle:linear-gradient(135deg,#FF9C4F,#FF7B8B); /* @kind color */
+  --gradient-brand-text:linear-gradient(135deg,#e0793a,#dd6b58 55%,#d75f76); /* @kind color */
+
+  --gradient-wash-cool:linear-gradient(140deg,rgba(255,156,79,0.12),rgba(255,123,139,0.10)); /* @kind color */
+  --gradient-wash-warm:linear-gradient(140deg,rgba(255,156,79,0.18),rgba(255,123,139,0.10)); /* @kind color */
+  --gradient-wash-tag:linear-gradient(135deg,rgba(255,156,79,0.22),rgba(255,123,139,0.22)); /* @kind color */
+
+  --gradient-alert:linear-gradient(160deg,#3a2340 0%,#8c4a5e 45%,#ff8c6d 80%,#ff9c4f 100%); /* @kind color */
+
+  --on-brand:#ffffff; /* @kind color */
+
+  --shadow-primary:0 6px 18px rgba(255,140,110,0.32); /* @kind shadow */
+  --shadow-primary-lg:0 8px 24px rgba(255,140,110,0.32); /* @kind shadow */
+  --shadow-tab-active:0 6px 16px rgba(255,140,110,0.38); /* @kind shadow */
+  --shadow-nav-active:0 8px 20px rgba(255,140,110,0.32); /* @kind shadow */
+  --shadow-thumb-ring:0 0 0 4px rgba(255,156,79,0.22); /* @kind shadow */
+  --shadow-pin-glow:0 0 18px rgba(255,123,139,0.75); /* @kind shadow */
+
+  --ring-radar:rgba(255,172,150,0.7); /* @kind color */
+
+  --dot-1:#FF9C4F; /* @kind color */
+  --dot-2:#FF8C6D; /* @kind color */
+  --dot-3:#FF7B8B; /* @kind color */
+}
+
+/* --- mono-cool: one cool hue — Plou blue, three stops, same 135deg flow.
+       The blue ink is unreadable on a dark card, so the kicker needs a two-attribute
+       rule for the dark pairing (see the bottom of this file). --- */
+[data-accent="mono-cool"]{
+  --plou-blue:#8FC0FF; /* @kind color */
+  --plou-orange:#5A93F0; /* @kind color */
+  --plou-pink:#3B6FD6; /* @kind color */
+
+  --plou-orange-ink:#3b6fd6; /* @kind color */
+  --plou-pink-ink:#2b53a8; /* @kind color */
+
+  --gradient-brand:linear-gradient(135deg,#8FC0FF 0%,#5A93F0 55%,#3B6FD6 100%); /* @kind color */
+  --gradient-brand-alt:linear-gradient(135deg,#8FC0FF,#5A93F0 60%,#3B6FD6); /* @kind color */
+  --gradient-brand-2stop:linear-gradient(135deg,#8FC0FF,#3B6FD6); /* @kind color */
+  --gradient-toggle:linear-gradient(135deg,#8FC0FF,#3B6FD6); /* @kind color */
+  --gradient-brand-text:linear-gradient(135deg,#5A93F0,#3b6fd6 60%,#2b53a8); /* @kind color */
+
+  --gradient-wash-cool:linear-gradient(140deg,rgba(143,192,255,0.16),rgba(59,111,214,0.08)); /* @kind color */
+  --gradient-wash-warm:linear-gradient(140deg,rgba(90,147,240,0.16),rgba(59,111,214,0.08)); /* @kind color */
+  --gradient-wash-tag:linear-gradient(135deg,rgba(143,192,255,0.24),rgba(59,111,214,0.18)); /* @kind color */
+
+  --gradient-alert:linear-gradient(160deg,#0f1a3c 0%,#274a94 45%,#3b6fd6 80%,#6EA8FF 100%); /* @kind color */
+
+  --on-brand:#ffffff; /* @kind color */
+
+  --shadow-primary:0 6px 18px rgba(59,111,214,0.34); /* @kind shadow */
+  --shadow-primary-lg:0 8px 24px rgba(59,111,214,0.34); /* @kind shadow */
+  --shadow-tab-active:0 6px 16px rgba(59,111,214,0.4); /* @kind shadow */
+  --shadow-nav-active:0 8px 20px rgba(59,111,214,0.34); /* @kind shadow */
+  --shadow-thumb-ring:0 0 0 4px rgba(90,147,240,0.24); /* @kind shadow */
+  --shadow-pin-glow:0 0 18px rgba(110,168,255,0.8); /* @kind shadow */
+
+  --ring-radar:rgba(150,190,255,0.7); /* @kind color */
+
+  --dot-1:#8FC0FF; /* @kind color */
+  --dot-2:#5A93F0; /* @kind color */
+  --dot-3:#3B6FD6; /* @kind color */
+
+  --kicker:#3b6fd6; /* @kind color */
+}
+
+/* mono-cool's kicker is theme-dependent: the ink blue fails contrast on a dark card,
+   so the dark pairing takes the light end of the same hue. Two attributes = (0,2,0),
+   which beats both single-attribute scopes. */
+[data-theme="dark"][data-accent="mono-cool"]{
+  --kicker:#8FC0FF; /* @kind color */
+}

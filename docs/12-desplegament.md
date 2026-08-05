@@ -1,0 +1,185 @@
+# 12 · Desplegament
+
+Fem-ho s'autoallotja amb Docker. L'objectiu és que algú amb un servidor a casa el tingui funcionant amb un `compose.yaml` i cinc minuts.
+
+---
+
+## 1 · La imatge
+
+Multi-etapa: una etapa que compila el servidor i la web, i una final mínima que només porta el runtime i els artefactes.
+
+Requisits que no es negocien:
+
+- **Usuari no root.** Cap procés com a root dins del contenidor.
+- **PID 1 correcte.** El procés ha de rebre `SIGTERM` i tancar net; si el runtime no ho fa bé sol, cal un init mínim. Sense això, cada reinici és un tall brusc i amb SQLite això és arriscat.
+- **Healthcheck** que apunti a `/healthz`.
+- **Multi-arquitectura**: `amd64` i `arm64`. Molta gent ho posarà en un ARM petit.
+- Sense compiladors ni eines de construcció a la imatge final.
+
+Etiquetatge: `latest`, la versió sencera (`1.4.2`), i la major (`1`). Qui vulgui actualitzacions automàtiques fixa la major; qui vulgui control fixa la sencera.
+
+---
+
+## 2 · Compose
+
+### Mínim, amb SQLite
+
+Un sol contenidor. És el cas recomanat per a una casa.
+
+```yaml
+services:
+  femho:
+    image: ghcr.io/<owner>/fem-ho:1
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - femho-data:/data
+    environment:
+      FEMHO_BASE_URL: https://femho.example.com
+      FEMHO_DATABASE_URL: sqlite:///data/femho.db
+      FEMHO_TRUSTED_PROXIES: 172.16.0.0/12
+    healthcheck:
+      test: ["CMD", "/app/healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  femho-data:
+```
+
+### Amb PostgreSQL
+
+Igual, afegint el servei de base de dades, canviant `FEMHO_DATABASE_URL`, i amb `depends_on` que esperi el healthcheck del postgres, no només que existeixi el contenidor.
+
+**Un sol volum, `/data`**, amb la base de dades, els adjunts i els secrets generats. Un volum és una còpia de seguretat.
+
+---
+
+## 3 · Configuració
+
+Variables d'entorn amb prefix `FEMHO_`. Els secrets accepten el sufix `_FILE` per llegir-los d'un fitxer, que és el que permet fer servir secrets de Docker.
+
+| Variable | Per defecte | Notes |
+| --- | --- | --- |
+| `FEMHO_BASE_URL` | — | **Obligatòria.** Sense això, CalDAV i els enllaços compartits generen URL incorrectes |
+| `FEMHO_PORT` | `8080` | API i web |
+| `FEMHO_DAV_PORT` | `8081` | Superfície CalDAV |
+| `FEMHO_DATABASE_URL` | `sqlite:///data/femho.db` | |
+| `FEMHO_DATA_DIR` | `/data` | |
+| `FEMHO_TRUSTED_PROXIES` | — | Rangs dels quals s'accepten les capçaleres `X-Forwarded-*` |
+| `FEMHO_SECRET_KEY` | generat | Es persisteix al primer arrencament |
+| `FEMHO_SMTP_*` | — | Amfitrió, port, usuari, contrasenya, xifratge, remitent |
+| `FEMHO_REGISTRATION` | `disabled` | `disabled`, `invite`, `open` |
+| `FEMHO_MAX_UPLOAD_MB` | `25` | |
+| `FEMHO_LOG_LEVEL` | `info` | |
+| `FEMHO_CALDAV_ALLOWLIST` | — | Restricció opcional d'orígens externs |
+
+**`FEMHO_BASE_URL` mal posada és la causa número u de problemes.** Un CalDAV darrere d'un proxy que no la sap genera `href` amb l'amfitrió intern, i cap client hi pot connectar. Al primer arrencament, el servidor l'ha de validar i escriure un avís clar al log si sembla incorrecta.
+
+Els secrets generats (`FEMHO_SECRET_KEY`, la clau VAPID) es guarden a `/data` **el primer cop i no es regeneren mai**. La conseqüència de perdre'ls: credencials de calendaris externs il·legibles i totes les subscripcions de push mortes.
+
+---
+
+## 4 · Proxy invers
+
+Aquí és on falla la gent, i el motiu és sempre el mateix: **CalDAV fa servir verbs HTTP que molts proxies i tallafocs d'aplicació bloquegen per defecte.**
+
+Requisits per a qualsevol proxy:
+
+1. **Permetre els verbs** `PROPFIND`, `PROPPATCH`, `REPORT`, `MKCALENDAR`, `MKCOL`, `COPY` i `MOVE`. nginx i molts WAF els rebutgen si no s'hi diu res.
+2. **No fer memòria intermèdia** de `/api/v1/stream` (SSE) ni de `/mcp`. Amb *buffering*, els esdeveniments arriben a bocins o no arriben.
+3. **Passar `X-Forwarded-Proto`, `-Host` i `-For`**, i que `FEMHO_TRUSTED_PROXIES` inclogui el rang del proxy.
+4. **Permetre pujades grans** segons `FEMHO_MAX_UPLOAD_MB`.
+5. **Redirigir `/.well-known/caldav`** cap a la ruta del principal.
+6. **Temps d'espera llargs** a l'SSE — desenes de minuts, no segons.
+
+El repositori ha de portar exemples per a **Caddy**, **Traefik** i **nginx**. El de nginx ha de tenir els verbs DAV explícits i el *buffering* desactivat, amb un comentari que expliqui per què.
+
+---
+
+## 5 · Migracions
+
+S'executen a l'arrencar, abans d'escoltar peticions.
+
+- **Còpia de seguretat automàtica abans de migrar**, a `/data/backups/`, amb les últimes 5.
+- Si una migració falla, **el procés no arrenca**. Res de continuar amb l'esquema a mitges.
+- Cap migració destructiva sense una versió prèvia que la prepari: primer s'afegeix, es desplega, i la següent versió esborra.
+- El log de migracions ha de dir de quina versió a quina va, i quant ha trigat.
+
+---
+
+## 6 · Còpies de seguretat
+
+La documentació ha de dir tres coses, i la tercera és la que ningú fa:
+
+**Què copiar.** El volum `/data` sencer. Amb Postgres, el volum més un bolcat de la base.
+
+**Com.** Amb SQLite, l'API de còpia en línia o la instrucció de còpia de seguretat — **mai copiant el fitxer amb `cp` amb el servidor engegat**, que amb WAL dona una còpia corrupta. Es pot suggerir una eina de replicació contínua per a qui vulgui còpies contínues.
+
+**Com restaurar, provat.** La guia ha de tenir un procediment de restauració que l'autor hagi executat de veritat, no un paràgraf teòric. Una còpia que no s'ha restaurat mai no és una còpia.
+
+---
+
+## 7 · Primer arrencament
+
+Amb la base buida, el servidor crea l'esquema, genera els secrets i els persisteix, i espera.
+
+`/setup` mostra un formulari per crear el primer administrador. Un cop creat, la ruta es tanca per sempre.
+
+En crear l'administrador es creen els seus tres àmbits inicials (Personal, Feina, Família) amb els colors de la tríada. **No són especials**: es poden reanomenar i esborrar.
+
+Les altes posteriors depenen de `FEMHO_REGISTRATION`. Per defecte, `disabled`: els usuaris els crea l'administrador. És el comportament correcte per a una instància familiar exposada a internet.
+
+Dades de demostració: opcionals, darrere d'una variable, i mai per defecte.
+
+---
+
+## 8 · Observabilitat
+
+- **Registres estructurats** en JSON a stdout, amb nivell configurable. Cap secret, cap token, cap contrasenya. Les rutes `/s/*` amb el token anonimitzat.
+- **`/healthz`** — el procés és viu.
+- **`/readyz`** — base de dades accessible i migracions aplicades.
+- **`/metrics`** — opcional, desactivat per defecte.
+- **Paquet de diagnòstic** des d'Ajustos → Admin: versió, esquema, configuració **amb els secrets ocultats**, estat dels jobs, estat de la connexió SMTP, errors recents. És el que fa que un informe d'error sigui útil.
+
+---
+
+## 9 · Actualitzacions
+
+Semàntica de versions, i els canvis que trenquen coses només en major.
+
+Les notes de versió han de dir explícitament si cal alguna acció manual. Si una versió necessita intervenció, el servidor l'ha de detectar i **negar-se a arrencar amb un missatge que digui exactament què fer**, en comptes d'arrencar a mitges.
+
+Compatible amb actualitzacions automàtiques d'imatge quan es fixa la major.
+
+---
+
+## 10 · Publicació
+
+CI construeix i publica a cada etiqueta:
+
+- La imatge multi-arquitectura al registre de contenidors.
+- L'APK signat d'Android a la publicació de GitHub.
+- Les notes de versió.
+
+I a cada canvi proposat, sense publicar: construcció, proves de les dues bases de dades, verificació que el codi generat d'OpenAPI no té canvis pendents, proves de contracte, proves d'interfície i les de seguretat de [`10-compartits-i-seguretat.md`](10-compartits-i-seguretat.md) §10.
+
+---
+
+## 11 · Fitxers del repositori
+
+```
+Dockerfile
+compose.yaml                  SQLite, el recomanat
+compose.postgres.yaml         variant amb Postgres
+.env.example                  totes les variables comentades
+deploy/
+  caddy/Caddyfile
+  traefik/labels.yaml
+  nginx/femho.conf            amb els verbs DAV i el buffering
+docs/DEPLOY.md                guia per a qui allotja
+docs/BACKUP.md                copiar i restaurar, amb el procediment provat
+```

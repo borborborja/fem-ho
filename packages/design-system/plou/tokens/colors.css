@@ -1,0 +1,54 @@
+:root{
+  /* --- Brand: the "sunset light" triad. Never used as flat page fills. --- */
+  --plou-blue:#6EA8FF;
+  --plou-orange:#FF9D4D;
+  --plou-pink:#FF6FA0;
+
+  /* Darker, text-safe variants of the triad (used for gradient text + kickers on light surfaces) */
+  --plou-blue-ink:#3b6fd6;
+  --plou-orange-ink:#e0793a;
+  --plou-pink-ink:#d6598a;
+
+  /* --- The signature gradient. One instance per view, max. --- */
+  --gradient-brand:linear-gradient(135deg,#6EA8FF 0%,#FF9D4D 55%,#FF6FA0 100%); /* @kind color */
+  --gradient-brand-alt:linear-gradient(135deg,#6EA8FF,#FF9D4D 60%,#FF6FA0); /* @kind color */
+  --gradient-brand-text:linear-gradient(135deg,#3b6fd6,#e0793a 60%,#d6598a); /* @kind color */
+  --gradient-brand-2stop:linear-gradient(135deg,#6EA8FF,#FF9D4D); /* @kind color */
+  --gradient-toggle:linear-gradient(135deg,#6EA8FF,#FF6FA0); /* @kind color */
+
+  /* Tinted washes for "highlight" cards and tags — 10-20% alpha only */
+  --gradient-wash-cool:linear-gradient(140deg,rgba(110,168,255,0.12),rgba(255,111,160,0.10)); /* @kind color */
+  --gradient-wash-warm:linear-gradient(140deg,rgba(255,157,77,0.16),rgba(255,111,160,0.10)); /* @kind color */
+  --gradient-wash-tag:linear-gradient(135deg,rgba(110,168,255,0.20),rgba(255,111,160,0.20)); /* @kind color */
+
+  /* Full-bleed alert gradient — night → dusk → sun. Alert screens only. */
+  --gradient-alert:linear-gradient(160deg,#1a2a5c 0%,#7a3a8c 45%,#ff6f4d 80%,#ff9d4d 100%); /* @kind color */
+
+  /* Radar map substrate, under the tile imagery */
+  --gradient-radar:linear-gradient(165deg,#111726 0%,#1c1a2c 45%,#241a24 100%); /* @kind color */
+
+  /* Text/icon colour that sits ON the brand gradient. Pastel accents flip this to ink. */
+  --on-brand:#ffffff; /* @kind color */
+
+  /* The dashed watch-radius ring drawn on the radar map */
+  --ring-radar:rgba(255,159,122,0.6); /* @kind color */
+
+  /* Destructive — the ONLY non-gradient semantic colour in the system */
+  --danger-bg:rgba(230,70,70,0.10);
+  --danger-text:#c94040;
+
+  /* Location status dots — the triad, cycled in order */
+  --dot-1:#6EA8FF;
+  --dot-2:#FF9D4D;
+  --dot-3:#FF6FA0;
+
+  /* Glass (over the radar map) — identical in both themes */
+  --glass-bg:rgba(20,20,26,0.5);
+  --glass-bg-strong:rgba(20,20,26,0.55);
+  --glass-border:rgba(255,255,255,0.15);
+  --glass-fill:rgba(255,255,255,0.16);
+  --glass-text:#ffffff;
+  --glass-text-soft:rgba(255,255,255,0.7);
+  --glass-text-faint:rgba(255,255,255,0.6);
+  --glass-sheet-bg:rgba(255,255,255,0.92);
+}

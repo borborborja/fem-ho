@@ -1,0 +1,1284 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/plou-design-system-093e07d0-3a51-4d9c-8ba6-b1ca85d14923/tokens/fonts.css">
+<link rel="stylesheet" href="_ds/plou-design-system-093e07d0-3a51-4d9c-8ba6-b1ca85d14923/tokens/colors.css">
+<link rel="stylesheet" href="_ds/plou-design-system-093e07d0-3a51-4d9c-8ba6-b1ca85d14923/tokens/theme.css">
+<link rel="stylesheet" href="_ds/plou-design-system-093e07d0-3a51-4d9c-8ba6-b1ca85d14923/tokens/typography.css">
+<link rel="stylesheet" href="_ds/plou-design-system-093e07d0-3a51-4d9c-8ba6-b1ca85d14923/tokens/shape.css">
+<link rel="stylesheet" href="_ds/plou-design-system-093e07d0-3a51-4d9c-8ba6-b1ca85d14923/tokens/spacing.css">
+<link rel="stylesheet" href="_ds/plou-design-system-093e07d0-3a51-4d9c-8ba6-b1ca85d14923/tokens/elevation.css">
+<link rel="stylesheet" href="_ds/plou-design-system-093e07d0-3a51-4d9c-8ba6-b1ca85d14923/tokens/motion.css">
+<link rel="stylesheet" href="_ds/plou-design-system-093e07d0-3a51-4d9c-8ba6-b1ca85d14923/tokens/accents.css">
+<link rel="stylesheet" href="_ds/plou-design-system-093e07d0-3a51-4d9c-8ba6-b1ca85d14923/tokens/utilities.css">
+<link rel="stylesheet" href="_ds/plou-design-system-093e07d0-3a51-4d9c-8ba6-b1ca85d14923/styles.css">
+<script src="_ds/plou-design-system-093e07d0-3a51-4d9c-8ba6-b1ca85d14923/_ds_bundle.js"></script>
+<style>
+body{margin:0}
+a{color:var(--plou-blue-ink)}
+a:hover{color:var(--plou-orange-ink)}
+.femho-scroll::-webkit-scrollbar{display:none}
+.femho-scroll{scrollbar-width:none}
+input.femho-input{background:var(--input-bg);border:1px solid var(--input-border);border-radius:var(--radius-input);padding:10px 14px;font-size:13.5px;font-family:var(--font-sans);color:var(--ink);box-sizing:border-box;width:100%}
+input.femho-input::placeholder{color:var(--ink-faint)}
+button.femho-reset{border:none;background:none;padding:0;margin:0;font-family:var(--font-sans);cursor:pointer;text-align:left}
+@media (max-width:860px){.femho-web-only{display:none !important}.femho-mobile-only{display:flex !important}}
+</style>
+</helmet>
+
+<div data-theme="{{ theme }}" data-accent="{{ accent }}" style="min-height:100vh;box-sizing:border-box;background:var(--page-bg);color:var(--ink);font-family:var(--font-sans)">
+
+<sc-if value="{{ isLogin }}" hint-placeholder-val="{{ true }}">
+<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px">
+<div style="width:100%;max-width:380px;display:flex;flex-direction:column;align-items:center;gap:22px;background:var(--card-bg);border:1px solid var(--card-border);border-radius:var(--radius-card);box-shadow:var(--card-shadow);padding:40px 36px">
+<div style="font-weight:900;font-size:30px;font-family:var(--font-sans);background:var(--gradient-brand-text);-webkit-background-clip:text;background-clip:text;color:transparent">Fem-ho</div>
+<div style="font-size:13.5px;color:var(--ink-soft);text-align:center;margin-top:-14px">El gestor de tasques per a tu i la família</div>
+<div style="width:100%;display:flex;flex-direction:column;gap:12px;margin-top:8px">
+<x-import component-from-global-scope="PlouDesignSystem_093e07.TextField" label="Correu" tone="surface" placeholder="tu@correu.com" value="{{ loginEmail }}" onChange="{{ setLoginEmail }}" hint-size="100%,60px"></x-import>
+<x-import component-from-global-scope="PlouDesignSystem_093e07.TextField" label="Contrasenya" tone="surface" type="password" placeholder="••••••••" value="{{ loginPass }}" onChange="{{ setLoginPass }}" hint-size="100%,60px"></x-import>
+</div>
+<div style="width:100%;display:flex">
+<x-import component-from-global-scope="PlouDesignSystem_093e07.Button" size="md" block="{{ yes }}" onClick="{{ doLogin }}" hint-size="100%,42px">Entrar</x-import>
+</div>
+<a href="#" style="font-size:13px;text-decoration:none">Has oblidat la contrasenya?</a>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isApp }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;min-height:100vh">
+
+<div style="position:sticky;top:0;z-index:30;background:var(--sidebar-bg);backdrop-filter:blur(14px);border-bottom:1px solid var(--card-border)">
+<div style="max-width:1360px;margin:0 auto;padding:14px 28px;display:flex;align-items:center;gap:22px;flex-wrap:wrap">
+<button class="femho-reset" onClick="{{ openGlobal }}" style="font-weight:900;font-size:24px;font-family:var(--font-sans);background:var(--gradient-brand-text);-webkit-background-clip:text;background-clip:text;color:transparent">Fem-ho</button>
+
+<sc-if value="{{ showTopControls }}" hint-placeholder-val="{{ true }}">
+<x-import component-from-global-scope="PlouDesignSystem_093e07.SegmentedControl" size="md" options="{{ viewOptions }}" value="{{ view }}" onChange="{{ setView }}" hint-size="200px,40px"></x-import>
+
+<div style="position:relative">
+<button class="femho-reset" onClick="{{ togglePinnedMenu }}" style="width:38px;height:38px;border-radius:50%;background:var(--ghost-bg);color:var(--ink);display:flex;align-items:center;justify-content:center;position:relative">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"></path><path d="M8 3h8l1 6.2 3 2.8v2H4v-2l3-2.8z"></path></svg>
+<sc-if value="{{ hasPinned }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;top:-3px;right:-3px;background:var(--gradient-brand-2stop);color:#fff;font-size:9px;font-weight:800;border-radius:50%;width:15px;height:15px;display:flex;align-items:center;justify-content:center">{{ pinnedCount }}</span></sc-if>
+</button>
+<sc-if value="{{ pinnedMenuOpen }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;top:44px;left:0;z-index:20;background:var(--panel-bg);border:1px solid var(--card-border);border-radius:16px;box-shadow:var(--card-shadow);padding:6px;display:flex;flex-direction:column;gap:2px;width:240px;max-height:280px;overflow-y:auto">
+<sc-if value="{{ noPinned }}" hint-placeholder-val="{{ true }}"><div style="padding:12px 10px;font-size:12.5px;color:var(--ink-faint)">Cap llista pinejada. Pineja una llista senzilla des d'una tasca.</div></sc-if>
+<sc-for list="{{ pinnedMenuItems }}" as="pl" hint-placeholder-count="1">
+<button class="femho-reset" onClick="{{ pl.onClick }}" style="padding:9px 10px;border-radius:10px;font-size:12.5px;font-weight:600;color:var(--ink);display:flex;flex-direction:column;gap:2px">
+<span>{{ pl.label }}</span><span style="font-size:11px;color:var(--ink-faint);font-weight:500">{{ pl.progress }}</span>
+</button>
+</sc-for>
+</div>
+</sc-if>
+</div>
+
+<div style="display:flex;gap:6px">
+<sc-for list="{{ scopeChips }}" as="s" hint-placeholder-count="3">
+<button class="femho-reset" onClick="{{ s.onClick }}" style="padding:9px 16px;border-radius:100px;font-size:13px;font-weight:{{ s.weight }};background:{{ s.bg }};color:{{ s.color }};border:1px solid {{ s.border }}">{{ s.label }}</button>
+</sc-for>
+</div>
+
+<div style="position:relative">
+<button class="femho-reset" onClick="{{ toggleProjectMenu }}" style="padding:9px 14px;border-radius:100px;font-size:13px;font-weight:600;background:var(--ghost-bg);color:var(--ink);display:flex;align-items:center;gap:8px;min-width:170px">
+<span style="flex:1">{{ projectLabel }}</span><span style="color:var(--ink-faint)">▾</span>
+</button>
+<sc-if value="{{ projectMenuOpen }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;top:46px;left:0;min-width:200px;z-index:20;background:var(--panel-bg);border:1px solid var(--card-border);border-radius:16px;box-shadow:var(--card-shadow);padding:6px;display:flex;flex-direction:column;max-height:260px;overflow-y:auto">
+<sc-for list="{{ projectOptions }}" as="o" hint-placeholder-count="3">
+<button class="femho-reset" onClick="{{ o.onClick }}" style="padding:9px 12px;border-radius:10px;font-size:13px;font-weight:{{ o.weight }};color:{{ o.color }};background:{{ o.bg }}">{{ o.label }}</button>
+</sc-for>
+</div>
+</sc-if>
+</div>
+
+<button class="femho-reset" onClick="{{ toggleAddMenu }}" style="width:38px;height:38px;border-radius:50%;background:var(--ghost-bg);color:var(--ink);font-size:19px;display:flex;align-items:center;justify-content:center;position:relative">+
+<sc-if value="{{ addMenuOpen }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;top:44px;right:0;z-index:20;background:var(--panel-bg);border:1px solid var(--card-border);border-radius:16px;box-shadow:var(--card-shadow);padding:6px;display:flex;flex-direction:column;gap:2px;width:200px;text-align:left">
+<div class="femho-reset" style="padding:9px 10px;border-radius:10px;font-size:13px;font-weight:600;color:var(--ink)">+ Nou projecte</div>
+<div class="femho-reset" style="padding:9px 10px;border-radius:10px;font-size:13px;font-weight:600;color:var(--ink)">+ Llista de tasques senzilles</div>
+</div>
+</sc-if>
+</button>
+</sc-if>
+
+<div style="flex:1"></div>
+
+<div style="position:relative">
+<button class="femho-reset" onClick="{{ toggleProfileMenu }}" style="width:38px;height:38px;border-radius:50%;background:var(--tag-bg);color:var(--ink);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700">B</button>
+<sc-if value="{{ profileMenuOpen }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;top:46px;right:0;z-index:20;background:var(--panel-bg);border:1px solid var(--card-border);border-radius:16px;box-shadow:var(--card-shadow);padding:10px;display:flex;flex-direction:column;gap:2px;width:210px">
+<div style="padding:4px 10px 8px;border-bottom:1px solid var(--divider)">
+<div style="font-size:13.5px;font-weight:700">Borja</div>
+<div style="font-size:11.5px;color:var(--ink-faint)">borja@femho.app</div>
+</div>
+<button class="femho-reset" onClick="{{ openSettings }}" style="padding:9px 10px;border-radius:10px;font-size:13px;font-weight:600;color:var(--ink);margin-top:4px">Ajustos</button>
+<button class="femho-reset" onClick="{{ logout }}" style="padding:9px 10px;border-radius:10px;font-size:13px;font-weight:600;color:var(--danger-text)">Tancar sessió</button>
+</div>
+</sc-if>
+</div>
+
+</div>
+</div>
+
+<sc-if value="{{ isSettings }}" hint-placeholder-val="{{ false }}">
+<div style="max-width:1100px;margin:0 auto;width:100%;padding:28px;display:grid;grid-template-columns:220px 1fr;gap:28px;box-sizing:border-box">
+<div style="display:flex;flex-direction:column;gap:4px;height:fit-content">
+<button class="femho-reset" onClick="{{ closeSettings }}" style="font-size:13px;color:var(--ink-soft);padding:6px 12px 14px">‹ Tornar al tauler</button>
+<sc-for list="{{ settingsTabs }}" as="t" hint-placeholder-count="7">
+<button class="femho-reset" onClick="{{ t.onClick }}" style="padding:11px 14px;border-radius:14px;font-size:13.5px;font-weight:{{ t.weight }};background:{{ t.bg }};color:{{ t.color }}">{{ t.label }}</button>
+</sc-for>
+</div>
+<div style="display:flex;flex-direction:column;gap:18px;min-width:0">
+
+<sc-if value="{{ tabGeneral }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="PlouDesignSystem_093e07.SettingsGroup" title="Aparença" density="comfy" hint-size="100%,140px">
+<x-import component-from-global-scope="PlouDesignSystem_093e07.ChoiceChips" options="{{ themeOptions }}" value="{{ themeChoice }}" onChange="{{ setThemeChoice }}"></x-import>
+<x-import component-from-global-scope="PlouDesignSystem_093e07.ChoiceChips" options="{{ accentOptionLabels }}" value="{{ accentChoiceLabel }}" onChange="{{ setAccentChoice }}"></x-import>
+</x-import>
+<x-import component-from-global-scope="PlouDesignSystem_093e07.SettingsGroup" title="Idioma" density="comfy" hint-size="100%,90px">
+<x-import component-from-global-scope="PlouDesignSystem_093e07.ChoiceChips" options="{{ languageOptions }}" value="{{ languageChoice }}" onChange="{{ setLanguageChoice }}"></x-import>
+</x-import>
+<x-import component-from-global-scope="PlouDesignSystem_093e07.SettingsGroup" title="Dashboard" density="comfy" hint-size="100%,150px">
+<x-import component-from-global-scope="PlouDesignSystem_093e07.Switch" label="Mostrar calendari al dashboard" checked="{{ showCalendarWidget }}" onChange="{{ toggleShowCalendarWidget }}"></x-import>
+<x-import component-from-global-scope="PlouDesignSystem_093e07.Switch" label="Mostrar tasques endarrerides" checked="{{ showOverdue }}" onChange="{{ toggleShowOverdue }}"></x-import>
+</x-import>
+<x-import component-from-global-scope="PlouDesignSystem_093e07.SettingsGroup" title="Inbox del calendari" note="On vols veure la bústia respecte al calendari" density="comfy" hint-size="100%,120px">
+<x-import component-from-global-scope="PlouDesignSystem_093e07.ChoiceChips" options="{{ inboxPosOptions }}" value="{{ inboxPos }}" onChange="{{ setInboxPos }}"></x-import>
+</x-import>
+</sc-if>
+
+<sc-if value="{{ tabCalendaris }}" hint-placeholder-val="{{ false }}">
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
+<sc-for list="{{ scopeCaldavGroups }}" as="g" hint-placeholder-count="3">
+<x-import component-from-global-scope="PlouDesignSystem_093e07.SettingsGroup" title="{{ g.title }}" note="{{ g.note }}" density="comfy" hint-size="100%,260px">
+<x-import component-from-global-scope="PlouDesignSystem_093e07.TextField" label="CalDAV d'origen" tone="surface" placeholder="Cap seleccionat · Fem-ho és la font" hint-size="100%,58px"></x-import>
+<x-import component-from-global-scope="PlouDesignSystem_093e07.Button" variant="ghost" size="sm" hint-size="auto,36px">+ CalDAV per projecte</x-import>
+<div style="display:flex;gap:8px;align-items:flex-end;margin-top:6px">
+<x-import component-from-global-scope="PlouDesignSystem_093e07.TextField" label="Font RSS" tone="surface" placeholder="https://exemple.com/feed.xml" value="{{ g.rssDraft }}" onChange="{{ g.onRssDraft }}" hint-size="100%,58px"></x-import>
+<x-import component-from-global-scope="PlouDesignSystem_093e07.Button" variant="ghost" size="sm" onClick="{{ g.onAddRss }}" hint-size="auto,38px">+ Afegir</x-import>
+</div>
+<sc-for list="{{ g.rssList }}" as="r" hint-placeholder-count="0">
+<div style="display:flex;align-items:center;gap:8px;padding:5px 0">
+<div style="flex:1;min-width:0;font-size:12px;color:var(--ink-soft);font-family:monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.url }}</div>
+<button class="femho-reset" onClick="{{ r.onRemove }}" style="font-size:12px;color:var(--danger-text)">✕</button>
+</div>
+</sc-for>
+<sc-if value="{{ g.hasRss }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:var(--ink-faint);padding-top:2px">Els esdeveniments d'aquest RSS es mostren al calendari.</div></sc-if>
+</x-import>
+</sc-for>
+</div>
+<x-import component-from-global-scope="PlouDesignSystem_093e07.SettingsGroup" title="Els teus CalDAV Fem-ho" note="Bidireccionals · connecta'ls des de qualsevol client" density="comfy" hint-size="100%,160px">
+<sc-for list="{{ ownCaldavs }}" as="c" hint-placeholder-count="3">
+<div style="display:flex;align-items:center;gap:10px;padding:7px 0">
+<div style="flex:1;min-width:0;font-size:13px;color:var(--ink-soft);font-family:monospace">{{ c.label }}</div>
+<x-import component-from-global-scope="PlouDesignSystem_093e07.Tag" size="md" hint-size="auto,26px">Copiar</x-import>
+</div>
+</sc-for>
+</x-import>
+</sc-if>
+
+<sc-if value="{{ tabMcp }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="PlouDesignSystem_093e07.SettingsGroup" title="Servidor MCP" density="comfy" hint-size="100%,90px">
+<x-import component-from-global-scope="PlouDesignSystem_093e07.Switch" label="Activar MCP" checked="{{ mcpEnabled }}" onChange="{{ toggleMcp }}"></x-import>
+</x-import>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
+<x-import component-from-global-scope="PlouDesignSystem_093e07.SettingsGroup" title="Permisos" density="comfy" hint-size="100%,100px">
+<x-import component-from-global-scope="PlouDesignSystem_093e07.ChoiceChips" options="{{ mcpPermOptions }}"></x-import>
+</x-import>
+<x-import component-from-global-scope="PlouDesignSystem_093e07.SettingsGroup" title="Àmbits accessibles" density="comfy" hint-size="100%,100px">
+<x-import component-from-global-scope="PlouDesignSystem_093e07.ChoiceChips" options="{{ scopeLabelOptions }}"></x-import>
+</x-import>
+</div>
+<x-import component-from-global-scope="PlouDesignSystem_093e07.SettingsGroup" title="Tokens per abast" note="Un token/API key per àmbit, delimita l'impacte d'un error" density="comfy" hint-size="100%,130px">
+<sc-for list="{{ scopeTokens }}" as="tk" hint-placeholder-count="3">
+<div style="display:flex;align-items:center;gap:10px;padding:6px 0">
+<div style="flex:1;font-size:13px;font-weight:600">{{ tk.label }}</div>
+<div style="font-size:12px;color:var(--ink-faint);font-family:monospace">{{ tk.key }}</div>
+<x-import component-from-global-scope="PlouDesignSystem_093e07.Tag" size="md" hint-size="auto,26px">Copiar</x-import>
+</div>
+</sc-for>
+</x-import>
+<x-import component-from-global-scope="PlouDesignSystem_093e07.Card" kicker="Connectar" title="Claude / ChatGPT" hint-size="100%,170px">
+<div style="font-size:12px;line-height:1.6;color:var(--ink-soft);background:var(--code-bg);border-radius:12px;padding:12px 14px;font-family:monospace">mcp.femho.app/connect<br>token: femho_live_·····</div>
+</x-import>
+</sc-if>
+
+<sc-if value="{{ tabIa }}" hint-placeholder-val="{{ false }}">
+<div style="font-size:13px;line-height:1.5;color:var(--ink-soft);padding:0 2px 4px;max-width:640px">Fem-ho no processa cap tasca. Habilita un sistema per passar tasques i el seu context a un agent d'IA extern (Hermes, OpenClaw o d'altres) i dona facilitats perquè aquell agent reporti l'estat i una descripció de què ha fet.</div>
+<x-import component-from-global-scope="PlouDesignSystem_093e07.SettingsGroup" title="Usuari IA" note="{{ iaNote }}" density="comfy" hint-size="100%,100px">
+<x-import component-from-global-scope="PlouDesignSystem_093e07.Switch" label="Activar l'usuari IA" checked="{{ iaEnabled }}" onChange="{{ toggleIa }}"></x-import>
+</x-import>
+<sc-if value="{{ iaEnabled }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="PlouDesignSystem_093e07.SettingsGroup" title="Abast de la IA" note="Què pot fer la IA amb les tasques" density="comfy" hint-size="100%,100px">
+<x-import component-from-global-scope="PlouDesignSystem_093e07.ChoiceChips" options="{{ iaScopeOptions }}" value="{{ iaScopeChoice }}" onChange="{{ setIaScope }}"></x-import>
+</x-import>
+<x-import component-from-global-scope="PlouDesignSystem_093e07.SettingsGroup" title="Instruccions per àmbit / projecte" density="comfy" hint-size="100%,180px">
+<sc-for list="{{ iaInstructionRows }}" as="row" hint-placeholder-count="3">
+<x-import component-from-global-scope="PlouDesignSystem_093e07.TextField" label="{{ row.label }}" tone="surface" placeholder="Instruccions genèriques…" value="{{ row.value }}" onChange="{{ row.onChange }}" hint-size="100%,58px"></x-import>
+</sc-for>
+</x-import>
+</sc-if>
+</sc-if>
+
+<sc-if value="{{ tabShared }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="PlouDesignSystem_093e07.SettingsGroup" title="Enllaços compartits" note="Tasques, subtasques o llistes compartides amb persones externes" density="comfy" hint-size="100%,200px">
+<sc-for list="{{ sharedLinks }}" as="sl" hint-placeholder-count="2">
+<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--divider)">
+<div style="flex:1;min-width:0">
+<div style="font-size:13px;font-weight:700">{{ sl.title }}</div>
+<div style="font-size:11.5px;color:var(--ink-faint)">{{ sl.meta }}</div>
+</div>
+<x-import component-from-global-scope="PlouDesignSystem_093e07.Tag" size="md" hint-size="auto,26px">{{ sl.accessCount }} accessos</x-import>
+<x-import component-from-global-scope="PlouDesignSystem_093e07.Button" variant="ghost" size="sm" hint-size="auto,32px">Gestionar</x-import>
+</div>
+</sc-for>
+</x-import>
+</sc-if>
+
+<sc-if value="{{ tabAmbits }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="PlouDesignSystem_093e07.SettingsGroup" title="Els teus àmbits" note="Individuals o col·lectius, amb usuaris de l'eina o contactes CalDAV externs" density="comfy" hint-size="100%,180px">
+<sc-for list="{{ scopeRows }}" as="s2" hint-placeholder-count="3">
+<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--divider)">
+<div style="width:9px;height:9px;border-radius:50%;background:{{ s2.color }};flex-shrink:0"></div>
+<div style="flex:1;font-size:13.5px;font-weight:700">{{ s2.label }}</div>
+<x-import component-from-global-scope="PlouDesignSystem_093e07.Tag" size="md" hint-size="auto,26px">{{ s2.kind }}</x-import>
+</div>
+</sc-for>
+<x-import component-from-global-scope="PlouDesignSystem_093e07.Button" variant="ghost" size="sm" hint-size="auto,38px">+ Nou àmbit individual</x-import>
+<x-import component-from-global-scope="PlouDesignSystem_093e07.Button" variant="ghost" size="sm" hint-size="auto,38px">+ Nou àmbit col·lectiu</x-import>
+</x-import>
+</sc-if>
+
+<sc-if value="{{ tabPerfil }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="PlouDesignSystem_093e07.SettingsGroup" title="El teu perfil" note="borja@femho.app" density="comfy" hint-size="100%,130px">
+<x-import component-from-global-scope="PlouDesignSystem_093e07.TextField" label="Nom" tone="surface" value="{{ myName }}" onChange="{{ setMyName }}" hint-size="100%,58px"></x-import>
+</x-import>
+</sc-if>
+
+<sc-if value="{{ tabAdmin }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="PlouDesignSystem_093e07.SettingsGroup" title="Usuaris" density="comfy" hint-size="100%,150px">
+<sc-for list="{{ profiles }}" as="p" hint-placeholder-count="2">
+<div style="display:flex;align-items:center;gap:12px;padding:9px 0">
+<div style="width:32px;height:32px;border-radius:50%;background:var(--tag-bg);color:var(--ink);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700">{{ p.initials }}</div>
+<div style="flex:1;font-size:14px;font-weight:600">{{ p.name }}</div>
+<x-import component-from-global-scope="PlouDesignSystem_093e07.Tag" size="md" hint-size="auto,26px">{{ p.role }}</x-import>
+<x-import component-from-global-scope="PlouDesignSystem_093e07.Button" variant="ghost" size="sm" hint-size="auto,32px">Editar</x-import>
+</div>
+</sc-for>
+<x-import component-from-global-scope="PlouDesignSystem_093e07.Button" variant="ghost" size="sm" hint-size="auto,38px">+ Afegir usuari</x-import>
+</x-import>
+<x-import component-from-global-scope="PlouDesignSystem_093e07.SettingsGroup" title="Zona de perill" density="comfy" hint-size="100%,110px">
+<x-import component-from-global-scope="PlouDesignSystem_093e07.Button" variant="danger" size="sm" hint-size="auto,38px">Netejar instància</x-import>
+</x-import>
+</sc-if>
+
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isGlobal }}" hint-placeholder-val="{{ false }}">
+<div style="max-width:1100px;margin:0 auto;width:100%;padding:28px;box-sizing:border-box;display:flex;flex-direction:column;gap:22px">
+<div style="display:flex;align-items:center;gap:12px">
+<button class="femho-reset" onClick="{{ closeGlobal }}" style="font-size:13px;color:var(--ink-soft)">‹ Tornar</button>
+<div style="font-size:19px;font-weight:800">Vista general</div>
+</div>
+<input class="femho-input" placeholder="+ Afegir tasca a qualsevol àmbit… #Personal, #Feina o #Família @Persona" value="{{ globalDraft }}" onChange="{{ onGlobalDraft }}" onKeyDown="{{ onGlobalKey }}"/>
+<sc-if value="{{ globalError }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:var(--danger-text)">Indica l'àmbit amb #Personal, #Feina o #Família</div></sc-if>
+
+<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px">
+<sc-for list="{{ globalScopeCards }}" as="sc2" hint-placeholder-count="3">
+<div style="background:var(--card-bg);border:1px solid var(--card-border);border-radius:20px;box-shadow:var(--card-shadow);padding:18px;display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;align-items:center;gap:8px">
+<div style="width:9px;height:9px;border-radius:50%;background:{{ sc2.color }};flex-shrink:0"></div>
+<div style="font-size:14.5px;font-weight:800;flex:1">{{ sc2.label }}</div>
+<div style="font-size:11.5px;color:var(--ink-faint)">{{ sc2.openCount }} obertes</div>
+</div>
+<sc-for list="{{ sc2.topTasks }}" as="tt" hint-placeholder-count="2">
+<div style="font-size:13px;font-weight:600;color:var(--ink-soft)">· {{ tt.title }}</div>
+</sc-for>
+<sc-if value="{{ sc2.empty }}" hint-placeholder-val="{{ false }}"><div style="font-size:12.5px;color:var(--ink-faint)">Res pendent.</div></sc-if>
+</div>
+</sc-for>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:10px">
+<div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--ink-soft)">Avui a tots els àmbits</div>
+<sc-for list="{{ globalTodayItems }}" as="it" hint-placeholder-count="2">
+<div style="display:flex;align-items:center;gap:10px;background:var(--tag-bg);border-radius:14px;padding:10px 12px">
+<div style="width:8px;height:8px;border-radius:50%;background:{{ it.dot }};flex-shrink:0"></div>
+<div style="flex:1;font-size:13px;font-weight:600">{{ it.title }}</div>
+<sc-if value="{{ it.hasTime }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:var(--ink-faint)">{{ it.time }}</div></sc-if>
+</div>
+</sc-for>
+<sc-if value="{{ globalTodayEmpty }}" hint-placeholder-val="{{ false }}"><div style="font-size:13px;color:var(--ink-faint)">Res per avui.</div></sc-if>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isPinnedListView }}" hint-placeholder-val="{{ false }}">
+<div style="max-width:640px;margin:0 auto;width:100%;padding:24px 28px 40px;box-sizing:border-box;display:flex;flex-direction:column;gap:16px">
+<button class="femho-reset" onClick="{{ pinnedView.close }}" style="font-size:13px;color:var(--ink-soft)">‹ Tornar</button>
+<div style="display:flex;flex-direction:column;gap:2px">
+<div style="font-size:12px;color:var(--ink-faint)">{{ pinnedView.title }}</div>
+<div style="font-size:19px;font-weight:800">{{ pinnedView.listName }}</div>
+</div>
+<sc-if value="{{ pinnedView.showUnpinBanner }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;align-items:center;gap:12px;background:var(--gradient-wash-warm);border-radius:16px;padding:14px 16px">
+<div style="flex:1;font-size:13px;font-weight:600">Llista completada · vols despinejar-la?</div>
+<x-import component-from-global-scope="PlouDesignSystem_093e07.Button" size="sm" variant="ghost" onClick="{{ pinnedView.unpin }}" hint-size="auto,34px">Despinejar</x-import>
+</div>
+</sc-if>
+<div style="display:flex;gap:6px;align-items:center">
+<button class="femho-reset" onClick="{{ pinnedView.setInline }}" style="padding:7px 14px;border-radius:100px;font-size:12.5px;font-weight:{{ pinnedView.inlineWeight }};background:{{ pinnedView.inlineBg }};color:{{ pinnedView.inlineColor }}">Inline</button>
+<button class="femho-reset" onClick="{{ pinnedView.setGrouped }}" style="padding:7px 14px;border-radius:100px;font-size:12.5px;font-weight:{{ pinnedView.groupedWeight }};background:{{ pinnedView.groupedBg }};color:{{ pinnedView.groupedColor }}">Secció de completats</button>
+<div style="flex:1"></div>
+<div style="font-size:12px;color:var(--ink-faint)">{{ pinnedView.doneCount }}/{{ pinnedView.total }}</div>
+</div>
+
+<sc-if value="{{ pinnedView.isInline }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;flex-direction:column;gap:8px">
+<sc-for list="{{ pinnedView.allItems }}" as="li2" hint-placeholder-count="3">
+<button class="femho-reset" onClick="{{ li2.onToggle }}" style="display:flex;align-items:center;gap:10px;background:var(--card-bg);border:1px solid var(--card-border);border-radius:14px;padding:12px 14px;width:100%">
+<span style="width:20px;height:20px;border-radius:6px;border:2px solid var(--card-border);background:{{ li2.bg }};flex-shrink:0"></span>
+<span style="flex:1;font-size:13.5px;font-weight:600;text-decoration:{{ li2.strike }};color:var(--ink)">{{ li2.text }}</span>
+</button>
+</sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{ pinnedView.isGrouped }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:16px">
+<div style="display:flex;flex-direction:column;gap:8px">
+<sc-for list="{{ pinnedView.pendingItems }}" as="li2" hint-placeholder-count="2">
+<button class="femho-reset" onClick="{{ li2.onToggle }}" style="display:flex;align-items:center;gap:10px;background:var(--card-bg);border:1px solid var(--card-border);border-radius:14px;padding:12px 14px;width:100%">
+<span style="width:20px;height:20px;border-radius:6px;border:2px solid var(--card-border);background:transparent;flex-shrink:0"></span>
+<span style="flex:1;font-size:13.5px;font-weight:600">{{ li2.text }}</span>
+</button>
+</sc-for>
+<sc-if value="{{ pinnedView.pendingEmpty }}" hint-placeholder-val="{{ false }}"><div style="font-size:12.5px;color:var(--ink-faint)">Tot fet.</div></sc-if>
+</div>
+<div style="display:flex;flex-direction:column;gap:8px">
+<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--ink-faint)">Completats ({{ pinnedView.doneCount }})</div>
+<sc-for list="{{ pinnedView.doneItems }}" as="li2" hint-placeholder-count="2">
+<button class="femho-reset" onClick="{{ li2.onToggle }}" style="display:flex;align-items:center;gap:10px;background:var(--tag-bg);border-radius:14px;padding:12px 14px;opacity:0.7;width:100%">
+<span style="width:20px;height:20px;border-radius:6px;background:var(--gradient-brand-2stop);flex-shrink:0"></span>
+<span style="flex:1;font-size:13.5px;font-weight:600;text-decoration:line-through">{{ li2.text }}</span>
+</button>
+</sc-for>
+</div>
+</div>
+</sc-if>
+</div>
+</sc-if>
+
+<sc-if value="{{ isDashboard }}" hint-placeholder-val="{{ true }}">
+
+<sc-if value="{{ isTasksView }}" hint-placeholder-val="{{ true }}">
+<div style="max-width:1360px;margin:0 auto;width:100%;padding:24px 28px 40px;box-sizing:border-box;height:calc(100vh - 70px);display:flex;flex-direction:column">
+<div style="display:grid;grid-template-columns:280px 1fr;gap:16px;align-items:stretch;flex:1;min-height:0">
+
+<div style="display:flex;flex-direction:column;background:var(--gradient-wash-warm);border:1px solid var(--card-border);border-radius:22px;padding:14px;min-height:0" onDragOver="{{ inboxColumn.onDragOver }}" onDrop="{{ inboxColumn.onDrop }}">
+<div style="display:flex;align-items:center;gap:8px;padding:2px 4px 12px">
+<div style="font-size:14.5px;font-weight:800">{{ inboxColumn.label }}</div>
+<div style="font-size:11.5px;color:var(--ink-faint);background:rgba(255,255,255,0.5);border-radius:100px;padding:1px 9px">{{ inboxColumn.count }}</div>
+</div>
+<div style="position:relative;flex:1;min-height:0">
+<div class="femho-scroll" ref="{{ inboxColumn.scrollRef }}" onScroll="{{ inboxColumn.onScroll }}" style="height:100%;display:flex;flex-direction:column;gap:9px;overflow-y:auto;mask-image:{{ inboxColumn.fadeMaskStyle }};-webkit-mask-image:{{ inboxColumn.fadeMaskStyle }}">
+<sc-for list="{{ inboxColumn.groups }}" as="grp" hint-placeholder-count="1">
+<sc-if value="{{ grp.hasLabel }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;align-items:center;gap:4px;padding:4px">
+<button class="femho-reset" onClick="{{ grp.onToggle }}" style="display:flex;align-items:center;gap:6px;flex:1">
+<div style="width:7px;height:7px;border-radius:50%;background:{{ grp.color }}"></div>
+<div style="font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--ink-soft)">{{ grp.label }}</div>
+<div style="color:var(--ink-faint);font-size:11px">{{ grp.chevron }}</div>
+</button>
+<sc-if value="{{ grp.showOthersToggle }}" hint-placeholder-val="{{ false }}">
+<button class="femho-reset" onClick="{{ grp.onToggleOthers }}" title="Veure tasques d'altres" style="color:{{ grp.othersColor }};display:flex;align-items:center;padding:2px">
+<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"></path><circle cx="10" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+</button>
+</sc-if>
+</div>
+</sc-if>
+<sc-if value="{{ grp.open }}" hint-placeholder-val="{{ true }}">
+<sc-for list="{{ grp.tasks }}" as="t" hint-placeholder-count="2">
+<div draggable="true" onDragStart="{{ t.onDragStart }}" style="background:var(--card-bg);border:1px solid var(--card-border);border-radius:16px;box-shadow:var(--card-shadow);display:flex;overflow:hidden;cursor:grab;opacity:{{ t.rowOpacity }};flex-shrink:0">
+<div style="flex:1;min-width:0;padding:12px;display:flex;flex-direction:column;gap:9px">
+<div style="display:flex;gap:9px;align-items:flex-start">
+<div style="display:flex;flex-direction:column;align-items:center;gap:4px;flex-shrink:0">
+<button class="femho-reset" onClick="{{ t.onEdit }}" style="width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:var(--ink-faint);flex-shrink:0">
+<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"></path></svg>
+</button>
+</div>
+<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:6px">
+<div style="font-size:13.5px;font-weight:600;line-height:1.3;color:var(--ink)">{{ t.title }}</div>
+<div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center">
+<sc-if value="{{ t.hasProject }}" hint-placeholder-val="{{ false }}"><span style="font-size:10.5px;font-weight:600;padding:3px 9px;border-radius:100px;background:var(--tag-bg);color:var(--tag-text)">{{ t.project }}</span></sc-if>
+<sc-if value="{{ t.hasAssignee }}" hint-placeholder-val="{{ false }}"><span style="font-size:10px;font-weight:700;width:18px;height:18px;border-radius:50%;background:var(--tag-bg);color:var(--ink);display:flex;align-items:center;justify-content:center">{{ t.assigneeInitials }}</span></sc-if>
+<sc-if value="{{ t.hasTime }}" hint-placeholder-val="{{ false }}"><span style="font-size:10.5px;color:var(--ink-faint)">{{ t.time }}</span></sc-if>
+</div>
+</div>
+</div>
+<sc-if value="{{ t.hasLists }}" hint-placeholder-val="{{ false }}">
+<button class="femho-reset" onClick="{{ t.toggleLists }}" style="font-size:11px;font-weight:700;color:var(--ink-soft);padding:2px 0">{{ t.listsToggleLabel }}</button>
+<sc-if value="{{ t.listsExpanded }}" hint-placeholder-val="{{ false }}">
+<sc-for list="{{ t.lists }}" as="lst" hint-placeholder-count="1">
+<div style="background:var(--tag-bg);border-radius:12px;padding:8px 10px;display:flex;flex-direction:column;gap:6px">
+<div style="display:flex;align-items:center;gap:6px">
+<div style="flex:1;font-size:11.5px;font-weight:700">{{ lst.name }}</div>
+<button class="femho-reset" onClick="{{ lst.onPinToggle }}" style="font-size:10.5px;font-weight:700;color:var(--plou-blue-ink)">{{ lst.pinLabel }}</button>
+</div>
+<sc-for list="{{ lst.items }}" as="li2" hint-placeholder-count="2">
+<button class="femho-reset" onClick="{{ li2.onToggle }}" style="display:flex;align-items:center;gap:7px;width:100%">
+<span style="width:14px;height:14px;border-radius:4px;border:1.5px solid var(--card-border);background:{{ li2.bg }};flex-shrink:0"></span>
+<span style="font-size:12px;text-decoration:{{ li2.strike }};color:var(--ink-soft)">{{ li2.text }}</span>
+</button>
+</sc-for>
+</div>
+</sc-for>
+</sc-if>
+</sc-if>
+</div>
+<sc-if value="{{ t.showArrow }}" hint-placeholder-val="{{ false }}">
+<button class="femho-reset" onClick="{{ t.advance }}" style="width:28px;flex-shrink:0;border:none;background:var(--ghost-bg);display:flex;align-items:center;justify-content:center;cursor:pointer">
+<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ink-soft)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"></path></svg>
+</button>
+</sc-if>
+<sc-if value="{{ t.showTick }}" hint-placeholder-val="{{ false }}">
+<sc-if value="{{ t.done }}" hint-placeholder-val="{{ false }}">
+<button class="femho-reset" onClick="{{ t.onToggle }}" style="width:28px;flex-shrink:0;border:none;background:var(--gradient-brand-2stop);display:flex;align-items:center;justify-content:center;cursor:pointer">
+<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+</button>
+</sc-if>
+<sc-if value="{{ t.notDone }}" hint-placeholder-val="{{ true }}">
+<button class="femho-reset" onClick="{{ t.onToggle }}" style="width:28px;flex-shrink:0;border:none;background:var(--ghost-bg);display:flex;align-items:center;justify-content:center;cursor:pointer">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ink-soft)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle></svg>
+</button>
+</sc-if>
+</sc-if>
+</div>
+</sc-for>
+</sc-if>
+</sc-for>
+</div>
+</div>
+<input class="femho-input" placeholder="+ Afegir a {{ inboxColumn.label }}… #Àmbit @Persona" value="{{ inboxColumn.draft }}" onChange="{{ inboxColumn.onDraft }}" onKeyDown="{{ inboxColumn.onKey }}" style="margin-top:10px"/>
+<sc-if value="{{ inboxColumn.error }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:var(--danger-text);padding-top:4px">{{ inboxColumn.errorMsg }}</div></sc-if>
+</div>
+
+<div style="display:flex;background:var(--card-bg);border:1px solid var(--card-border);border-radius:22px;box-shadow:var(--card-shadow);min-height:0">
+<sc-for list="{{ kanbanColumns }}" as="col" hint-placeholder-count="3">
+<div style="{{ col.wrapStyle }}" onDragOver="{{ col.onDragOver }}" onDrop="{{ col.onDrop }}">
+<div style="display:flex;align-items:center;gap:8px;padding:2px 4px 12px">
+<div style="font-size:14.5px;font-weight:800">{{ col.label }}</div>
+<div style="font-size:11.5px;color:var(--ink-faint);background:var(--tag-bg);border-radius:100px;padding:1px 9px">{{ col.count }}</div>
+<sc-if value="{{ col.isFet }}" hint-placeholder-val="{{ false }}">
+<div style="flex:1"></div>
+<button class="femho-reset" onClick="{{ col.onOpenCal }}" style="color:var(--ink-faint);display:flex;align-items:center">
+<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"></rect><path d="M3 10h18"></path><path d="M8 3v4"></path><path d="M16 3v4"></path></svg>
+</button>
+</sc-if>
+</div>
+<sc-if value="{{ col.isFet }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;gap:6px;padding:0 4px 10px">
+<button class="femho-reset" onClick="{{ col.onShowAllToday }}" style="font-size:10.5px;font-weight:700;padding:4px 10px;border-radius:100px;background:var(--ghost-bg);color:var(--ink-soft)">Tot avui</button>
+<button class="femho-reset" onClick="{{ col.onClear }}" style="font-size:10.5px;font-weight:700;padding:4px 10px;border-radius:100px;background:var(--ghost-bg);color:var(--danger-text)">Netejar</button>
+</div>
+</sc-if>
+<div style="position:relative;flex:1;min-height:0">
+<div class="femho-scroll" ref="{{ col.scrollRef }}" onScroll="{{ col.onScroll }}" style="height:100%;display:flex;flex-direction:column;gap:9px;overflow-y:auto;mask-image:{{ col.fadeMaskStyle }};-webkit-mask-image:{{ col.fadeMaskStyle }}">
+<sc-for list="{{ col.groups }}" as="grp" hint-placeholder-count="1">
+<sc-if value="{{ grp.hasLabel }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;align-items:center;gap:4px;padding:4px">
+<button class="femho-reset" onClick="{{ grp.onToggle }}" style="display:flex;align-items:center;gap:6px;flex:1">
+<div style="width:7px;height:7px;border-radius:50%;background:{{ grp.color }}"></div>
+<div style="font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--ink-soft)">{{ grp.label }}</div>
+<div style="color:var(--ink-faint);font-size:11px">{{ grp.chevron }}</div>
+</button>
+<sc-if value="{{ grp.showOthersToggle }}" hint-placeholder-val="{{ false }}">
+<button class="femho-reset" onClick="{{ grp.onToggleOthers }}" title="Veure tasques d'altres" style="color:{{ grp.othersColor }};display:flex;align-items:center;padding:2px">
+<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"></path><circle cx="10" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+</button>
+</sc-if>
+</div>
+</sc-if>
+<sc-if value="{{ grp.open }}" hint-placeholder-val="{{ true }}">
+<sc-for list="{{ grp.tasks }}" as="t" hint-placeholder-count="2">
+<div draggable="true" onDragStart="{{ t.onDragStart }}" style="background:var(--card-bg);border:1px solid var(--card-border);border-radius:16px;box-shadow:var(--card-shadow);display:flex;overflow:hidden;cursor:grab;opacity:{{ t.rowOpacity }};flex-shrink:0">
+<div style="flex:1;min-width:0;padding:12px;display:flex;flex-direction:column;gap:9px">
+<div style="display:flex;gap:9px;align-items:flex-start">
+<div style="display:flex;flex-direction:column;align-items:center;gap:4px;flex-shrink:0">
+<button class="femho-reset" onClick="{{ t.onEdit }}" style="width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:var(--ink-faint);flex-shrink:0">
+<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"></path></svg>
+</button>
+</div>
+<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:6px">
+<div style="font-size:13.5px;font-weight:600;line-height:1.3;color:var(--ink)">{{ t.title }}</div>
+<div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center">
+<sc-if value="{{ t.hasProject }}" hint-placeholder-val="{{ false }}"><span style="font-size:10.5px;font-weight:600;padding:3px 9px;border-radius:100px;background:var(--tag-bg);color:var(--tag-text)">{{ t.project }}</span></sc-if>
+<sc-if value="{{ t.hasAssignee }}" hint-placeholder-val="{{ false }}"><span style="font-size:10px;font-weight:700;width:18px;height:18px;border-radius:50%;background:var(--tag-bg);color:var(--ink);display:flex;align-items:center;justify-content:center">{{ t.assigneeInitials }}</span></sc-if>
+<sc-if value="{{ t.hasTime }}" hint-placeholder-val="{{ false }}"><span style="font-size:10.5px;color:var(--ink-faint)">{{ t.time }}</span></sc-if>
+</div>
+</div>
+</div>
+<sc-if value="{{ t.hasLists }}" hint-placeholder-val="{{ false }}">
+<button class="femho-reset" onClick="{{ t.toggleLists }}" style="font-size:11px;font-weight:700;color:var(--ink-soft);padding:2px 0">{{ t.listsToggleLabel }}</button>
+<sc-if value="{{ t.listsExpanded }}" hint-placeholder-val="{{ false }}">
+<sc-for list="{{ t.lists }}" as="lst" hint-placeholder-count="1">
+<div style="background:var(--tag-bg);border-radius:12px;padding:8px 10px;display:flex;flex-direction:column;gap:6px">
+<div style="display:flex;align-items:center;gap:6px">
+<div style="flex:1;font-size:11.5px;font-weight:700">{{ lst.name }}</div>
+<button class="femho-reset" onClick="{{ lst.onPinToggle }}" style="font-size:10.5px;font-weight:700;color:var(--plou-blue-ink)">{{ lst.pinLabel }}</button>
+</div>
+<sc-for list="{{ lst.items }}" as="li2" hint-placeholder-count="2">
+<button class="femho-reset" onClick="{{ li2.onToggle }}" style="display:flex;align-items:center;gap:7px;width:100%">
+<span style="width:14px;height:14px;border-radius:4px;border:1.5px solid var(--card-border);background:{{ li2.bg }};flex-shrink:0"></span>
+<span style="font-size:12px;text-decoration:{{ li2.strike }};color:var(--ink-soft)">{{ li2.text }}</span>
+</button>
+</sc-for>
+</div>
+</sc-for>
+</sc-if>
+</sc-if>
+</div>
+<sc-if value="{{ t.showArrow }}" hint-placeholder-val="{{ false }}">
+<button class="femho-reset" onClick="{{ t.advance }}" style="width:28px;flex-shrink:0;border:none;background:var(--ghost-bg);display:flex;align-items:center;justify-content:center;cursor:pointer">
+<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ink-soft)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"></path></svg>
+</button>
+</sc-if>
+<sc-if value="{{ t.showTick }}" hint-placeholder-val="{{ false }}">
+<sc-if value="{{ t.done }}" hint-placeholder-val="{{ false }}">
+<button class="femho-reset" onClick="{{ t.onToggle }}" style="width:28px;flex-shrink:0;border:none;background:var(--gradient-brand-2stop);display:flex;align-items:center;justify-content:center;cursor:pointer">
+<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+</button>
+</sc-if>
+<sc-if value="{{ t.notDone }}" hint-placeholder-val="{{ true }}">
+<button class="femho-reset" onClick="{{ t.onToggle }}" style="width:28px;flex-shrink:0;border:none;background:var(--ghost-bg);display:flex;align-items:center;justify-content:center;cursor:pointer">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ink-soft)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle></svg>
+</button>
+</sc-if>
+</sc-if>
+</div>
+</sc-for>
+</sc-if>
+</sc-for>
+</div>
+</div>
+<input class="femho-input" placeholder="+ Afegir a {{ col.label }}… #Àmbit @Persona" value="{{ col.draft }}" onChange="{{ col.onDraft }}" onKeyDown="{{ col.onKey }}" style="margin-top:10px"/>
+<sc-if value="{{ col.error }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:var(--danger-text);padding-top:4px">{{ col.errorMsg }}</div></sc-if>
+</div>
+</sc-for>
+</div>
+
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isCalendarView }}" hint-placeholder-val="{{ false }}">
+<div style="max-width:1360px;margin:0 auto;width:100%;padding:24px 28px 40px;box-sizing:border-box;display:grid;grid-template-columns:1fr 340px;gap:24px">
+
+<div style="display:flex;flex-direction:column;gap:16px;min-width:0">
+<div style="display:flex;align-items:center;gap:10px">
+<x-import component-from-global-scope="PlouDesignSystem_093e07.SegmentedControl" size="md" options="{{ calViewOptions }}" value="{{ calendarView }}" onChange="{{ setCalendarView }}" hint-size="260px,40px"></x-import>
+<div style="flex:1"></div>
+<sc-for list="{{ peopleChips }}" as="p" hint-placeholder-count="2">
+<button class="femho-reset" onClick="{{ p.onClick }}" style="width:30px;height:30px;border-radius:50%;font-size:11.5px;font-weight:700;background:{{ p.bg }};color:{{ p.color }};border:1px solid {{ p.border }}">{{ p.initials }}</button>
+</sc-for>
+</div>
+
+<sc-if value="{{ isMonth }}" hint-placeholder-val="{{ true }}">
+<div style="background:var(--card-bg);border:1px solid var(--card-border);border-radius:var(--radius-card);box-shadow:var(--card-shadow);padding:22px">
+<div style="display:flex;align-items:center;justify-content:space-between;padding-bottom:16px">
+<button class="femho-reset" onClick="{{ prevMonth }}" style="font-size:18px;color:var(--ink-soft);padding:0 8px">‹</button>
+<div style="font-size:16px;font-weight:700">{{ monthLabel }}</div>
+<button class="femho-reset" onClick="{{ nextMonth }}" style="font-size:18px;color:var(--ink-soft);padding:0 8px">›</button>
+</div>
+<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;font-size:11.5px;color:var(--ink-faint);text-align:center;padding-bottom:6px">
+<sc-for list="{{ weekdayLabels }}" as="w" hint-placeholder-count="7"><div>{{ w }}</div></sc-for>
+</div>
+<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px">
+<sc-for list="{{ monthDays }}" as="d" hint-placeholder-count="35">
+<button class="femho-reset" onClick="{{ d.onClick }}" style="aspect-ratio:1;border-radius:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;background:{{ d.bg }};opacity:{{ d.opacity }}">
+<span style="font-size:13px;font-weight:{{ d.weight }};color:{{ d.color }}">{{ d.num }}</span>
+<div style="display:flex;gap:3px;height:5px">
+<sc-for list="{{ d.dots }}" as="dot" hint-placeholder-count="0"><div style="width:5px;height:5px;border-radius:50%;background:{{ dot }}"></div></sc-for>
+</div>
+</button>
+</sc-for>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isWeek }}" hint-placeholder-val="{{ false }}">
+<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:8px">
+<sc-for list="{{ weekDays }}" as="d" hint-placeholder-count="7">
+<button class="femho-reset" onClick="{{ d.onClick }}" style="display:flex;flex-direction:column;gap:8px;padding:12px 10px;border-radius:16px;background:{{ d.bg }};border:1px solid var(--card-border);min-height:160px">
+<div style="text-align:center"><div style="font-size:10.5px;color:var(--ink-faint);text-transform:uppercase">{{ d.weekday }}</div><div style="font-size:15px;font-weight:700;color:{{ d.color }}">{{ d.num }}</div></div>
+<div style="display:flex;flex-direction:column;gap:4px">
+<sc-for list="{{ d.items }}" as="it" hint-placeholder-count="2"><span style="font-size:10.5px;font-weight:600;padding:3px 8px;border-radius:100px;background:{{ it.bg }};color:{{ it.color }};text-align:center">{{ it.title }}</span></sc-for>
+<sc-if value="{{ d.empty }}" hint-placeholder-val="{{ false }}"><span style="font-size:11px;color:var(--ink-faint);text-align:center">Sense res</span></sc-if>
+</div>
+</button>
+</sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{ isDay }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:10px;background:var(--card-bg);border:1px solid var(--card-border);border-radius:var(--radius-card);box-shadow:var(--card-shadow);padding:22px">
+<div style="font-size:16px;font-weight:700">{{ dayLabel }}</div>
+<sc-for list="{{ dayItems }}" as="it" hint-placeholder-count="3">
+<div style="display:flex;align-items:center;gap:10px;background:var(--tag-bg);border-radius:14px;padding:12px 14px">
+<div style="width:9px;height:9px;border-radius:50%;background:{{ it.dot }};flex-shrink:0"></div>
+<div style="flex:1;font-size:14px;font-weight:600">{{ it.title }}</div>
+<sc-if value="{{ it.hasTime }}" hint-placeholder-val="{{ false }}"><div style="font-size:12px;color:var(--ink-faint)">{{ it.time }}</div></sc-if>
+</div>
+</sc-for>
+<sc-if value="{{ dayEmpty }}" hint-placeholder-val="{{ false }}"><div style="font-size:13px;color:var(--ink-faint);padding:14px 2px">Sense esdeveniments ni tasques aquest dia.</div></sc-if>
+</div>
+</sc-if>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:20px">
+<div style="background:var(--card-bg);border:1px solid var(--card-border);border-radius:var(--radius-card);box-shadow:var(--card-shadow);padding:18px;display:flex;flex-direction:column;gap:10px">
+<div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--ink-soft)">{{ selectedDayLabel }}</div>
+<sc-for list="{{ selectedDayItems }}" as="it" hint-placeholder-count="2">
+<div style="display:flex;align-items:center;gap:10px;background:var(--tag-bg);border-radius:14px;padding:10px 12px">
+<div style="width:8px;height:8px;border-radius:50%;background:{{ it.dot }};flex-shrink:0"></div>
+<div style="flex:1;font-size:13px;font-weight:600">{{ it.title }}</div>
+<sc-if value="{{ it.hasTime }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:var(--ink-faint)">{{ it.time }}</div></sc-if>
+</div>
+</sc-for>
+<sc-if value="{{ selectedDayEmpty }}" hint-placeholder-val="{{ false }}"><div style="font-size:13px;color:var(--ink-faint)">Res per aquest dia.</div></sc-if>
+<input class="femho-input" placeholder="+ Afegir el {{ selectedDayShort }}… #Àmbit @Persona" value="{{ dayDraft }}" onChange="{{ onDayDraft }}" onKeyDown="{{ onDayKey }}"/>
+<sc-if value="{{ dayError }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:var(--danger-text)">Indica l'àmbit amb #Personal, #Feina o #Família</div></sc-if>
+</div>
+
+<div style="background:var(--card-bg);border:1px solid var(--card-border);border-radius:var(--radius-card);box-shadow:var(--card-shadow);padding:18px;display:flex;flex-direction:column;gap:10px">
+<div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--ink-soft)">Sense dia</div>
+<sc-for list="{{ noDateItems }}" as="it" hint-placeholder-count="1">
+<div style="display:flex;align-items:center;gap:10px;background:var(--tag-bg);border-radius:14px;padding:10px 12px">
+<div style="width:8px;height:8px;border-radius:50%;background:{{ it.dot }};flex-shrink:0"></div>
+<div style="flex:1;font-size:13px;font-weight:600">{{ it.title }}</div>
+</div>
+</sc-for>
+<sc-if value="{{ noDateEmpty }}" hint-placeholder-val="{{ false }}"><div style="font-size:13px;color:var(--ink-faint)">Cap tasca sense dia.</div></sc-if>
+<input class="femho-input" placeholder="+ Afegir sense dia… #Àmbit @Persona" value="{{ noDateDraft }}" onChange="{{ onNoDateDraft }}" onKeyDown="{{ onNoDateKey }}"/>
+<sc-if value="{{ noDateError }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:var(--danger-text)">Indica l'àmbit amb #Personal, #Feina o #Família</div></sc-if>
+</div>
+</div>
+
+</div>
+</sc-if>
+
+</sc-if>
+
+<sc-if value="{{ editorOpen }}" hint-placeholder-val="{{ false }}">
+<div style="position:fixed;inset:0;z-index:50;background:rgba(20,20,30,0.45);display:flex;align-items:center;justify-content:center;padding:24px" onClick="{{ closeEditor }}">
+<div style="width:100%;max-width:480px;max-height:88vh;overflow-y:auto;background:var(--panel-bg);border-radius:24px;box-shadow:var(--shadow-dialog);padding:26px;display:flex;flex-direction:column;gap:16px" onClick="{{ stopClick }}">
+<div style="display:flex;align-items:center;gap:10px">
+<div style="flex:1;font-size:17px;font-weight:800">Editar tasca</div>
+<button class="femho-reset" onClick="{{ closeEditor }}" style="font-size:18px;color:var(--ink-faint)">✕</button>
+</div>
+<x-import component-from-global-scope="PlouDesignSystem_093e07.TextField" label="Títol" tone="surface" value="{{ editDraft.title }}" onChange="{{ editDraft.onTitle }}" hint-size="100%,58px"></x-import>
+<x-import component-from-global-scope="PlouDesignSystem_093e07.TextField" label="Descripció" tone="surface" placeholder="Detalls de la tasca…" value="{{ editDraft.description }}" onChange="{{ editDraft.onDescription }}" hint-size="100%,80px"></x-import>
+<div style="display:flex;flex-direction:column;gap:6px">
+<div style="font-size:11.5px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:0.04em">Àmbit</div>
+<div style="display:flex;gap:6px;flex-wrap:wrap">
+<sc-for list="{{ editDraft.scopeChips }}" as="sc3" hint-placeholder-count="3">
+<button class="femho-reset" onClick="{{ sc3.onClick }}" style="padding:8px 15px;border-radius:100px;font-size:12.5px;font-weight:{{ sc3.weight }};background:{{ sc3.bg }};color:{{ sc3.color }};border:1px solid {{ sc3.border }}">{{ sc3.label }}</button>
+</sc-for>
+</div>
+</div>
+<x-import component-from-global-scope="PlouDesignSystem_093e07.TextField" label="Projecte" tone="surface" placeholder="Sense projecte" value="{{ editDraft.project }}" onChange="{{ editDraft.onProject }}" hint-size="100%,58px"></x-import>
+<sc-if value="{{ editDraft.isCollaborative }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:6px">
+<div style="font-size:11.5px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:0.04em">Persona delegada</div>
+<x-import component-from-global-scope="PlouDesignSystem_093e07.ChoiceChips" options="{{ editDraft.assigneeOptions }}" value="{{ editDraft.assigneeLabel }}" onChange="{{ editDraft.onAssignee }}"></x-import>
+</div>
+</sc-if>
+<x-import component-from-global-scope="PlouDesignSystem_093e07.TextField" label="Caducitat" tone="surface" type="date" value="{{ editDraft.deadline }}" onChange="{{ editDraft.onDeadline }}" hint-size="100%,58px"></x-import>
+<sc-if value="{{ iaEnabled }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:6px">
+<div style="font-size:11.5px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:0.04em">Mode IA</div>
+<x-import component-from-global-scope="PlouDesignSystem_093e07.ChoiceChips" options="{{ iaModeOptions }}" value="{{ editDraft.iaModeLabel }}" onChange="{{ editDraft.onIaMode }}"></x-import>
+</div>
+<sc-if value="{{ editDraft.showIaFields }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="PlouDesignSystem_093e07.TextField" label="Instruccions per la IA" tone="surface" placeholder="Explica què ha de fer…" value="{{ editDraft.instructions }}" onChange="{{ editDraft.onInstructions }}" hint-size="100%,80px"></x-import>
+</sc-if>
+</sc-if>
+<div style="display:flex;flex-direction:column;gap:8px">
+<div style="font-size:11.5px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:0.04em">Arxius adjunts</div>
+<label style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;border:1.5px dashed var(--card-border);border-radius:14px;padding:18px;cursor:pointer;text-align:center" onDragOver="{{ editDraft.onDragOverFiles }}" onDrop="{{ editDraft.onDropFiles }}">
+<span style="font-size:12.5px;font-weight:600;color:var(--ink-soft)">Arrossega arxius o fes clic per afegir</span>
+<input type="file" multiple="true" onChange="{{ editDraft.onPickFiles }}" style="display:none"/>
+</label>
+<sc-for list="{{ editDraft.contextFiles }}" as="cf" hint-placeholder-count="0">
+<div style="display:flex;align-items:center;gap:8px;background:var(--tag-bg);border-radius:10px;padding:7px 10px">
+<div style="flex:1;font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ cf.name }}</div>
+<button class="femho-reset" onClick="{{ cf.onRemove }}" style="font-size:12px;color:var(--danger-text)">✕</button>
+</div>
+</sc-for>
+</div>
+<div style="display:flex;gap:10px;padding-top:6px">
+<x-import component-from-global-scope="PlouDesignSystem_093e07.Button" variant="ghost" onClick="{{ closeEditor }}" hint-size="auto,44px">Cancel·lar</x-import>
+<x-import component-from-global-scope="PlouDesignSystem_093e07.Button" block="{{ yes }}" onClick="{{ saveEditor }}" hint-size="100%,44px">Desar</x-import>
+</div>
+</div>
+</div>
+</sc-if>
+
+</div>
+</sc-if>
+
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+const SCOPES = [
+  { id: 'personal', label: 'Personal', color: 'var(--plou-blue)', ink: 'var(--plou-blue-ink)' },
+  { id: 'feina', label: 'Feina', color: 'var(--plou-orange)', ink: 'var(--plou-orange-ink)' },
+  { id: 'familia', label: 'Família', color: 'var(--plou-pink)', ink: 'var(--plou-pink-ink)' },
+];
+const PROJECTS = { personal: ['Reforma pis'], feina: ['Client Salt'], familia: ['Vacances estiu'] };
+const PEOPLE = [
+  { id: 'borja', name: 'Borja', initials: 'B', email: 'borja@femho.app', role: 'Administrador' },
+  { id: 'alba', name: 'Alba', initials: 'A', email: 'alba@femho.app', role: 'Membre' },
+];
+const CURRENT_USER = 'borja';
+const WEEKDAYS = ['dl', 'dt', 'dc', 'dj', 'dv', 'ds', 'dg'];
+const MONTHS = ['gener', 'febrer', 'març', 'abril', 'maig', 'juny', 'juliol', 'agost', 'setembre', 'octubre', 'novembre', 'desembre'];
+
+function scopeMeta(id) { return SCOPES.find(s => s.id === id); }
+
+let ID_SEQ = 100;
+function seedItems() {
+  return [
+    { id: 1, scope: 'personal', project: null, title: 'Renovar DNI', column: 'perfer', assignee: 'borja', date: null, time: null },
+    { id: 2, scope: 'personal', project: 'Reforma pis', title: 'Trucar lampista', column: 'inbox', assignee: 'borja', date: '2026-08-05', time: null },
+    { id: 3, scope: 'personal', project: null, title: 'Anar al gimnàs', column: 'fet', assignee: 'borja', date: '2026-08-04', time: null },
+    { id: 4, scope: 'feina', project: 'Client Salt', title: 'Enviar proposta', column: 'fent', assignee: 'borja', date: null, time: null },
+    { id: 5, scope: 'feina', project: null, title: 'Revisar factures', column: 'perfer', assignee: 'borja', date: null, time: null },
+    { id: 6, scope: 'feina', project: 'Client Salt', title: 'Reunió de seguiment', column: 'inbox', assignee: 'borja', date: '2026-08-05', time: '10:00' },
+    { id: 7, scope: 'familia', project: null, title: 'Comprar regal aniversari', column: 'perfer', assignee: 'alba', date: null, time: null },
+    { id: 8, scope: 'familia', project: 'Vacances estiu', title: 'Reservar allotjament', column: 'fent', assignee: 'borja', date: null, time: null },
+    { id: 9, scope: 'familia', project: null, title: 'Portar cotxe a revisar', column: 'inbox', assignee: null, date: '2026-08-06', time: null },
+    { id: 10, scope: 'familia', project: 'Vacances estiu', title: 'Confirmar vols', column: 'fet', assignee: 'alba', date: '2026-08-03', time: null },
+    { id: 11, scope: 'personal', project: null, title: 'Pagar rebut llum', column: 'perfer', assignee: 'borja', date: null, time: null },
+    { id: 12, scope: 'feina', project: null, title: 'Preparar informe mensual', column: 'perfer', assignee: 'borja', date: null, time: null },
+    { id: 13, scope: 'familia', project: null, title: 'Dentista Alba', column: 'inbox', assignee: 'alba', date: '2026-08-05', time: '17:30' },
+    { id: 14, scope: 'personal', project: 'Reforma pis', title: 'Escollir rajoles bany', column: 'fet', assignee: 'borja', date: null, time: null },
+    { id: 15, scope: 'familia', project: null, title: 'Trucada metge', column: null, assignee: 'alba', date: '2026-08-07', time: '09:00' },
+    { id: 16, scope: 'familia', project: null, title: 'Aniversari Alba', column: null, assignee: null, date: '2026-08-10', time: null },
+    { id: 17, scope: 'familia', project: 'Vacances estiu', title: 'Fer la maleta', column: 'perfer', assignee: 'borja', date: null, time: null, lists: [
+      { id: 'l1', name: 'Maleta Borja', pinned: true, items: [
+        { id: 'i1', text: 'Cables', done: false }, { id: 'i2', text: '3 pantalons', done: false }, { id: 'i3', text: '6 samarretes', done: true },
+      ] },
+      { id: 'l2', name: 'Maleta nens', pinned: false, items: [
+        { id: 'i4', text: 'Joguines', done: false }, { id: 'i5', text: 'Roba de bany', done: false },
+      ] },
+    ] },
+  ];
+}
+
+class Component extends DCLogic {
+  state = {
+    screen: 'login', loginEmail: '', loginPass: '', serverUrl: '', serverTestResult: null,
+    appScreen: 'dashboard', view: 'tasques', settingsTab: 'general',
+    scopes: { personal: true, feina: true, familia: true },
+    projectFilter: 'all', projectMenuOpen: false, addMenuOpen: false, profileMenuOpen: false, pinnedMenuOpen: false,
+    collapsed: {}, drafts: { inbox: '', perfer: '', fent: '', fet: '' }, draftErrors: { inbox: false, perfer: false, fent: false, fet: false },
+    calendarView: 'month', peopleVisible: { borja: true, alba: true },
+    calYear: 2026, calMonth: 7, selectedDate: '2026-08-05',
+    dayDraft: '', dayError: false, noDateDraft: '', noDateError: false,
+    globalDraft: '', globalError: false,
+    items: seedItems(),
+    dragId: null, expandedLists: {}, activePinnedListId: null, pinnedShowMode: {}, showOthers: {}, fadeState: {},
+    editingTaskId: null, editDraft: null,
+    showCalendarWidget: true, showOverdue: true, iaEnabled: false, iaScopeChoice: 'Processar i crear', inboxPos: 'Dreta', mcpEnabled: false,
+    themeChoice: 'Sistema', accentChoiceLabel: 'Sunset', myName: 'Borja', languageChoice: 'Idioma del sistema',
+    rssFeeds: { personal: [], feina: [{ url: 'https://exemple.com/festius.xml' }], familia: [] },
+    rssDraft: { personal: '', feina: '', familia: '' },
+    iaInstructions: { personal: '', feina: '', familia: '', 'Reforma pis': '', 'Client Salt': '', 'Vacances estiu': '' },
+  };
+
+  fmtDate(y, m, d) { return `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`; }
+
+  selectedScopeIds() { return SCOPES.map(s => s.id).filter(id => this.state.scopes[id]); }
+
+  visibleItems(needsColumn) {
+    const sel = this.selectedScopeIds();
+    return this.state.items.filter(it => {
+      if (!sel.includes(it.scope)) return false;
+      if (needsColumn && !it.column) return false;
+      if (this.state.projectFilter !== 'all' && it.project !== this.state.projectFilter) return false;
+      return true;
+    });
+  }
+
+  parseQuick(text) {
+    let scope = null, project = null, assignee = null;
+    text = text.replace(/#([^\s]+)/g, (m, tok) => {
+      const [s, p] = tok.split('/');
+      const found = SCOPES.find(sc => sc.label.toLowerCase() === s.toLowerCase() || sc.id === s.toLowerCase());
+      if (found) { scope = found.id; if (p) project = p; }
+      return '';
+    });
+    text = text.replace(/@([^\s]+)/g, (m, name) => {
+      const p = PEOPLE.find(p => p.name.toLowerCase() === name.toLowerCase());
+      if (p) assignee = p.id;
+      return '';
+    });
+    const title = text.trim().replace(/\s+/g, ' ');
+    return { title, scope, project, assignee };
+  }
+
+  submitDraft(column) {
+    const text = this.state.drafts[column];
+    if (!text || !text.trim()) return;
+    const parsed = this.parseQuick(text);
+    const sel = this.selectedScopeIds();
+    let scope = parsed.scope;
+    if (!scope) {
+      if (sel.length === 1) scope = sel[0];
+      else { this.setState({ draftErrors: { ...this.state.draftErrors, [column]: true } }); return; }
+    }
+    const newItem = { id: ++ID_SEQ, scope, project: parsed.project || null, title: parsed.title || 'Nova tasca', column, assignee: parsed.assignee, date: null, time: null };
+    this.setState({ items: [...this.state.items, newItem], drafts: { ...this.state.drafts, [column]: '' }, draftErrors: { ...this.state.draftErrors, [column]: false } });
+  }
+
+  submitDated(text, date, onDone) {
+    if (!text || !text.trim()) return false;
+    const parsed = this.parseQuick(text);
+    const sel = this.selectedScopeIds();
+    let scope = parsed.scope;
+    if (!scope) { if (sel.length === 1) scope = sel[0]; else return false; }
+    const newItem = { id: ++ID_SEQ, scope, project: parsed.project || null, title: parsed.title || 'Nova tasca', column: null, assignee: parsed.assignee, date, time: null };
+    this.setState({ items: [...this.state.items, newItem] });
+    onDone();
+    return true;
+  }
+
+  toggleDone(id) {
+    this.setState({ items: this.state.items.map(it => it.id === id ? { ...it, column: it.column === 'fet' ? 'fent' : 'fet' } : it) });
+  }
+  moveTo(id, col) {
+    if (!id) return;
+    this.setState({ items: this.state.items.map(it => it.id === id ? { ...it, column: col } : it), dragId: null });
+  }
+
+  measureFade(colId, el) {
+    if (!el) return;
+    const top = el.scrollTop > 4;
+    const bottom = el.scrollTop + el.clientHeight < el.scrollHeight - 4;
+    const cur = this.state.fadeState[colId];
+    if (cur && cur.top === top && cur.bottom === bottom) return;
+    this.setState({ fadeState: { ...this.state.fadeState, [colId]: { top, bottom } } });
+  }
+  registerScroll(colId, el) {
+    if (!el) return;
+    requestAnimationFrame(() => this.measureFade(colId, el));
+  }
+  fadeMask(top, bottom) {
+    if (!top && !bottom) return 'none';
+    const topStop = top ? 'transparent 0, black 20px' : 'black 0';
+    const bottomStop = bottom ? 'black calc(100% - 20px), transparent 100%' : 'black 100%';
+    return `linear-gradient(to bottom, ${topStop}, ${bottomStop})`;
+  }
+
+  allLists() {
+    const out = [];
+    this.state.items.forEach(it => (it.lists || []).forEach(l => out.push({ globalId: `${it.id}:${l.id}`, task: it, list: l })));
+    return out;
+  }
+  togglePinList(taskId, listId) {
+    this.setState({ items: this.state.items.map(it => it.id !== taskId ? it : { ...it, lists: it.lists.map(l => l.id === listId ? { ...l, pinned: !l.pinned } : l) }) });
+  }
+  toggleListItem(taskId, listId, itemId) {
+    const items = this.state.items.map(it => {
+      if (it.id !== taskId) return it;
+      const lists = (it.lists || []).map(l => l.id !== listId ? l : { ...l, items: l.items.map(i => i.id === itemId ? { ...i, done: !i.done } : i) });
+      const allDone = lists.length > 0 && lists.every(l => l.items.every(i => i.done));
+      return { ...it, lists, column: allDone ? 'fet' : it.column };
+    });
+    this.setState({ items });
+  }
+  addRss(scopeId) {
+    const url = (this.state.rssDraft[scopeId] || '').trim();
+    if (!url) return;
+    this.setState({
+      rssFeeds: { ...this.state.rssFeeds, [scopeId]: [...this.state.rssFeeds[scopeId], { url }] },
+      rssDraft: { ...this.state.rssDraft, [scopeId]: '' },
+    });
+  }
+  removeRss(scopeId, idx) {
+    this.setState({ rssFeeds: { ...this.state.rssFeeds, [scopeId]: this.state.rssFeeds[scopeId].filter((_, i) => i !== idx) } });
+  }
+  toggleListsExpanded(taskId) {
+    this.setState({ expandedLists: { ...this.state.expandedLists, [taskId]: !this.state.expandedLists[taskId] } });
+  }
+
+  openEditor(id) {
+    const it = this.state.items.find(i => i.id === id);
+    if (!it) return;
+    this.setState({ editingTaskId: id, editDraft: {
+      title: it.title, description: it.description || '', scopeId: it.scope, project: it.project || '', assigneeId: it.assignee || null,
+      deadline: it.deadline || '', iaMode: it.iaMode || 'off', instructions: it.instructions || '', contextFiles: it.contextFiles ? [...it.contextFiles] : [],
+    } });
+  }
+  closeEditor() { this.setState({ editingTaskId: null, editDraft: null }); }
+  saveEditor() {
+    const ed = this.state.editDraft;
+    this.setState({ items: this.state.items.map(it => it.id === this.state.editingTaskId ? { ...it, title: ed.title, description: ed.description, scope: ed.scopeId, project: ed.project || null, assignee: ed.scopeId === 'familia' ? ed.assigneeId : null, deadline: ed.deadline || null, iaMode: ed.iaMode, instructions: ed.instructions, contextFiles: ed.contextFiles } : it), editingTaskId: null, editDraft: null });
+  }
+  updateEditDraft(field, val) { this.setState({ editDraft: { ...this.state.editDraft, [field]: val } }); }
+  addFiles(fileList) {
+    const names = Array.from(fileList || []).map(f => ({ name: f.name }));
+    this.setState({ editDraft: { ...this.state.editDraft, contextFiles: [...this.state.editDraft.contextFiles, ...names] } });
+  }
+  removeFile(idx) { this.setState({ editDraft: { ...this.state.editDraft, contextFiles: this.state.editDraft.contextFiles.filter((_, i) => i !== idx) } }); }
+
+  buildEditDraftView() {
+    const ed = this.state.editDraft;
+    if (!ed) return null;
+    const collaborative = ed.scopeId === 'familia';
+    const peopleOptions = collaborative ? ['Qui pugui', ...PEOPLE.map(p => p.name)] : [];
+    const assigneeLabel = ed.assigneeId ? PEOPLE.find(p => p.id === ed.assigneeId).name : 'Qui pugui';
+    return {
+      title: ed.title, onTitle: e => this.updateEditDraft('title', e.target.value),
+      description: ed.description, onDescription: e => this.updateEditDraft('description', e.target.value),
+      scopeChips: SCOPES.map(s => ({ label: s.label, weight: ed.scopeId === s.id ? 700 : 500, bg: ed.scopeId === s.id ? s.color : 'var(--ghost-bg)', color: ed.scopeId === s.id ? '#fff' : 'var(--ink-soft)', border: ed.scopeId === s.id ? s.color : 'var(--card-border)', onClick: () => this.updateEditDraft('scopeId', s.id) })),
+      isCollaborative: collaborative,
+      project: ed.project, onProject: e => this.updateEditDraft('project', e.target.value),
+      assigneeOptions: peopleOptions, assigneeLabel, onAssignee: v => { const p = PEOPLE.find(pp => pp.name === v); this.updateEditDraft('assigneeId', p ? p.id : null); },
+      deadline: ed.deadline, onDeadline: e => this.updateEditDraft('deadline', e.target.value),
+      iaModeLabel: ({ off: 'Desactivat', assist: 'Acompanya', auto: 'Autònoma' })[ed.iaMode] || 'Desactivat',
+      onIaMode: v => { const map = { Desactivat: 'off', Acompanya: 'assist', Autònoma: 'auto' }; this.updateEditDraft('iaMode', map[v] || 'off'); },
+      showIaFields: ed.iaMode === 'assist' || ed.iaMode === 'auto',
+      instructions: ed.instructions, onInstructions: e => this.updateEditDraft('instructions', e.target.value),
+      contextFiles: ed.contextFiles.map((f, idx) => ({ name: f.name, onRemove: () => this.removeFile(idx) })),
+      onPickFiles: e => this.addFiles(e.target.files),
+      onDragOverFiles: e => e.preventDefault(),
+      onDropFiles: e => { e.preventDefault(); this.addFiles(e.dataTransfer.files); },
+    };
+  }
+
+  buildColumns() {
+    const defs = [{ id: 'inbox', label: 'Inbox' }, { id: 'perfer', label: 'Per fer' }, { id: 'fent', label: 'Fent' }, { id: 'fet', label: 'Fet' }];
+    const sel = this.selectedScopeIds();
+    const grouped = sel.length > 1 && this.state.projectFilter === 'all';
+    return defs.map((def, idx) => {
+      const items = this.visibleItems(true).filter(it => it.column === def.id);
+      let groups;
+      if (grouped) {
+        groups = sel.filter(sid => items.some(it => it.scope === sid)).map(sid => {
+          const meta = scopeMeta(sid);
+          const key = `${def.id}:${sid}`;
+          const open = !this.state.collapsed[key];
+          const othersOn = !!this.state.showOthers[key];
+          const scopedItems = items.filter(it => it.scope === sid);
+          const visible = def.id === 'inbox' ? scopedItems : scopedItems.filter(it => !it.assignee || it.assignee === CURRENT_USER || othersOn);
+          return {
+            hasLabel: true, label: meta.label, color: meta.color, open, chevron: open ? '▾' : '▸',
+            onToggle: () => this.setState({ collapsed: { ...this.state.collapsed, [key]: open } }),
+            showOthersToggle: def.id !== 'inbox',
+            othersColor: othersOn ? 'var(--plou-blue-ink)' : 'var(--ink-faint)',
+            onToggleOthers: () => this.setState({ showOthers: { ...this.state.showOthers, [key]: !othersOn } }),
+            tasks: visible.map(it => this.taskView(it, def.id)),
+          };
+        });
+      } else {
+        groups = [{ hasLabel: false, open: true, tasks: items.map(it => this.taskView(it, def.id)) }];
+      }
+      return {
+        id: def.id, label: def.label, count: items.length, groups, isFet: def.id === 'fet',
+        draft: this.state.drafts[def.id], error: this.state.draftErrors[def.id],
+        errorMsg: "Indica l'àmbit amb #Personal, #Feina o #Família",
+        onDraft: e => this.setState({ drafts: { ...this.state.drafts, [def.id]: e.target.value } }),
+        onKey: e => { if (e.key === 'Enter') this.submitDraft(def.id); },
+        onDragOver: e => e.preventDefault(),
+        onDrop: e => { e.preventDefault(); this.moveTo(this.state.dragId, def.id); },
+        onOpenCal: () => {}, onShowAllToday: () => {}, onClear: () => this.setState({ items: this.state.items.filter(it => !(it.column === 'fet' && sel.includes(it.scope))) }),
+        wrapStyle: `flex:1;display:flex;flex-direction:column;padding:14px;min-width:0;min-height:0;${idx > 0 ? 'border-left:1px solid var(--card-border)' : ''}`,
+        scrollRef: el => this.registerScroll(def.id, el),
+        onScroll: e => this.measureFade(def.id, e.target),
+        fadeMaskStyle: this.fadeMask((this.state.fadeState[def.id] || {}).top, (this.state.fadeState[def.id] || {}).bottom),
+      };
+    });
+  }
+
+  taskView(it, colId) {
+    const person = PEOPLE.find(p => p.id === it.assignee);
+    const lists = (it.lists || []).map(l => ({
+      name: l.name, pinned: l.pinned, pinLabel: l.pinned ? 'Pinejada ✓' : '+ Pinejar',
+      onPinToggle: () => this.togglePinList(it.id, l.id),
+      items: l.items.map(i => ({ text: i.text, bg: i.done ? 'var(--gradient-brand-2stop)' : 'transparent', strike: i.done ? 'line-through' : 'none', onToggle: () => this.toggleListItem(it.id, l.id, i.id) })),
+    }));
+    const expanded = !!this.state.expandedLists[it.id];
+    const isOthers = colId !== 'inbox' && !!it.assignee && it.assignee !== CURRENT_USER;
+    return {
+      id: it.id, title: it.title, done: it.column === 'fet', notDone: it.column !== 'fet',
+      hasProject: !!it.project, project: it.project,
+      hasAssignee: colId === 'inbox' ? !!person : isOthers, assigneeInitials: person ? person.initials : '',
+      rowOpacity: isOthers ? '0.55' : '1',
+      hasTime: !!it.time, time: it.time,
+      showTick: colId === 'fent' || colId === 'fet',
+      showArrow: colId === 'inbox' || colId === 'perfer',
+      onToggle: () => this.toggleDone(it.id),
+      advance: () => this.moveTo(it.id, colId === 'inbox' ? 'perfer' : 'fent'),
+      onDragStart: () => this.setState({ dragId: it.id }),
+      hasLists: lists.length > 0, lists, listsExpanded: expanded,
+      listsToggleLabel: expanded ? `▾ Llistes (${lists.length})` : `▸ Llistes (${lists.length})`,
+      toggleLists: () => this.toggleListsExpanded(it.id),
+      onEdit: () => this.openEditor(it.id),
+    };
+  }
+
+  buildMonthDays() {
+    const { calYear, calMonth } = this.state;
+    const first = new Date(calYear, calMonth, 1);
+    const startOffset = (first.getDay() + 6) % 7;
+    const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+    const todayStr = '2026-08-05';
+    const sel = this.selectedScopeIds();
+    const visible = PEOPLE.filter(p => this.state.peopleVisible[p.id]).map(p => p.id);
+    const cells = [];
+    for (let i = 0; i < startOffset; i++) cells.push({ inMonth: false, num: '', dots: [], bg: 'transparent', opacity: 0, onClick: () => {} });
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateStr = this.fmtDate(calYear, calMonth, d);
+      const dayItems = this.state.items.filter(it => it.date === dateStr && sel.includes(it.scope) && (!it.assignee || visible.includes(it.assignee)));
+      const dots = [...new Set(dayItems.map(it => it.scope))].slice(0, 3).map(s => scopeMeta(s).color);
+      const isSelected = dateStr === this.state.selectedDate;
+      const isToday = dateStr === todayStr;
+      cells.push({
+        inMonth: true, num: d, dots, opacity: 1,
+        bg: isSelected ? 'var(--gradient-brand-2stop)' : (isToday ? 'var(--ghost-bg)' : 'transparent'),
+        color: isSelected ? '#fff' : 'var(--ink)', weight: isSelected ? 800 : 500,
+        onClick: () => this.setState({ selectedDate: dateStr }),
+      });
+    }
+    return cells;
+  }
+
+  buildWeekDays() {
+    const base = new Date(this.state.selectedDate);
+    const startOffset = (base.getDay() + 6) % 7;
+    const monday = new Date(base); monday.setDate(base.getDate() - startOffset);
+    const sel = this.selectedScopeIds();
+    const visible = PEOPLE.filter(p => this.state.peopleVisible[p.id]).map(p => p.id);
+    return Array.from({ length: 7 }).map((_, i) => {
+      const d = new Date(monday); d.setDate(monday.getDate() + i);
+      const dateStr = this.fmtDate(d.getFullYear(), d.getMonth(), d.getDate());
+      const items = this.state.items.filter(it => it.date === dateStr && sel.includes(it.scope) && (!it.assignee || visible.includes(it.assignee)));
+      const isSelected = dateStr === this.state.selectedDate;
+      return {
+        weekday: WEEKDAYS[i], num: d.getDate(), color: isSelected ? 'var(--plou-blue-ink)' : 'var(--ink)',
+        bg: isSelected ? 'var(--ghost-bg)' : 'transparent', empty: items.length === 0,
+        items: items.slice(0, 3).map(it => ({ title: it.title, bg: 'var(--tag-bg)', color: 'var(--tag-text)' })),
+        onClick: () => this.setState({ selectedDate: dateStr }),
+      };
+    });
+  }
+
+  dayItemsFor(dateStr) {
+    const sel = this.selectedScopeIds();
+    const visible = PEOPLE.filter(p => this.state.peopleVisible[p.id]).map(p => p.id);
+    return this.state.items.filter(it => it.date === dateStr && sel.includes(it.scope) && (!it.assignee || visible.includes(it.assignee)))
+      .map(it => ({ title: it.title, dot: scopeMeta(it.scope).color, hasTime: !!it.time, time: it.time }));
+  }
+
+  buildGlobalScopeCards() {
+    return SCOPES.map(s => {
+      const open = this.state.items.filter(it => it.scope === s.id && it.column && it.column !== 'fet');
+      return { label: s.label, color: s.color, openCount: open.length, topTasks: open.slice(0, 3).map(it => ({ title: it.title })), empty: open.length === 0 };
+    });
+  }
+
+  buildPinnedView() {
+    const gid = this.state.activePinnedListId;
+    if (!gid) return null;
+    const entry = this.allLists().find(x => x.globalId === gid);
+    if (!entry) return null;
+    const mode = this.state.pinnedShowMode[gid] || 'inline';
+    const items = entry.list.items;
+    const doneCount = items.filter(i => i.done).length;
+    const allDone = doneCount === items.length;
+    const mk = i => ({ id: i.id, text: i.text, bg: i.done ? 'var(--gradient-brand-2stop)' : 'transparent', strike: i.done ? 'line-through' : 'none', onToggle: () => this.toggleListItem(entry.task.id, entry.list.id, i.id) });
+    return {
+      title: entry.task.title, listName: entry.list.name,
+      isInline: mode === 'inline', isGrouped: mode === 'grouped',
+      inlineWeight: mode === 'inline' ? 700 : 500, inlineBg: mode === 'inline' ? 'var(--gradient-brand-alt)' : 'var(--ghost-bg)', inlineColor: mode === 'inline' ? 'var(--on-brand)' : 'var(--ink-soft)',
+      groupedWeight: mode === 'grouped' ? 700 : 500, groupedBg: mode === 'grouped' ? 'var(--gradient-brand-alt)' : 'var(--ghost-bg)', groupedColor: mode === 'grouped' ? 'var(--on-brand)' : 'var(--ink-soft)',
+      setInline: () => this.setState({ pinnedShowMode: { ...this.state.pinnedShowMode, [gid]: 'inline' } }),
+      setGrouped: () => this.setState({ pinnedShowMode: { ...this.state.pinnedShowMode, [gid]: 'grouped' } }),
+      allItems: items.map(mk), pendingItems: items.filter(i => !i.done).map(mk), doneItems: items.filter(i => i.done).map(mk),
+      pendingEmpty: items.every(i => i.done),
+      doneCount, total: items.length, showUnpinBanner: allDone && entry.list.pinned,
+      unpin: () => this.togglePinList(entry.task.id, entry.list.id),
+      close: () => this.setState({ activePinnedListId: null }),
+    };
+  }
+
+  renderVals() {
+    const sel = this.selectedScopeIds();
+    const allProjects = [];
+    sel.forEach(s => (PROJECTS[s] || []).forEach(p => allProjects.push(p)));
+    const dayItems = this.dayItemsFor(this.state.selectedDate);
+    const noDate = this.state.items.filter(it => !it.date && sel.includes(it.scope) && (this.state.projectFilter === 'all' || it.project === this.state.projectFilter));
+    const d = new Date(this.state.selectedDate);
+    const cols = this.buildColumns();
+    const allPinned = this.allLists().filter(x => x.list.pinned);
+    const activePinned = !!this.state.activePinnedListId;
+
+    return {
+      yes: true,
+      theme: this.state.themeChoice === 'Fosc' ? 'dark' : (this.state.themeChoice === 'Clar' ? 'light' : (this.props.theme || 'light')),
+      accent: ({ Sunset: 'default', Suau: 'soft', 'Càlid mono': 'mono-warm', 'Fred mono': 'mono-cool' })[this.state.accentChoiceLabel] || 'default',
+      isLogin: this.state.screen === 'login', isApp: this.state.screen === 'app',
+      serverUrl: this.state.serverUrl, setServerUrl: e => this.setState({ serverUrl: e.target.value, serverTestResult: null }),
+      testServer: () => { const ok = /^https?:\/\/.+\..+/.test(this.state.serverUrl.trim()); this.setState({ serverTestResult: ok ? 'ok' : 'fail' }); },
+      serverTestResult: !!this.state.serverTestResult,
+      serverTestColor: this.state.serverTestResult === 'ok' ? 'var(--plou-blue-ink)' : 'var(--danger-text)',
+      serverTestMsg: this.state.serverTestResult === 'ok' ? '✓ Servidor accessible' : 'No es pot connectar amb aquest servidor',
+      loginEmail: this.state.loginEmail, setLoginEmail: e => this.setState({ loginEmail: e.target.value }),
+      loginPass: this.state.loginPass, setLoginPass: e => this.setState({ loginPass: e.target.value }),
+      doLogin: () => this.setState({ screen: 'app' }),
+
+      isSettings: this.state.appScreen === 'settings', isDashboard: this.state.appScreen === 'dashboard' && !activePinned, isGlobal: this.state.appScreen === 'global',
+      isPinnedListView: activePinned,
+      showTopControls: this.state.appScreen === 'dashboard' && !activePinned,
+      openGlobal: () => this.setState({ appScreen: 'global', profileMenuOpen: false, projectMenuOpen: false, addMenuOpen: false, pinnedMenuOpen: false }),
+      closeGlobal: () => this.setState({ appScreen: 'dashboard' }),
+      openSettings: () => this.setState({ appScreen: 'settings', profileMenuOpen: false }),
+      closeSettings: () => this.setState({ appScreen: 'dashboard' }),
+      toggleProfileMenu: () => this.setState({ profileMenuOpen: !this.state.profileMenuOpen, projectMenuOpen: false, addMenuOpen: false, pinnedMenuOpen: false }),
+      toggleProjectMenu: () => this.setState({ projectMenuOpen: !this.state.projectMenuOpen, addMenuOpen: false, profileMenuOpen: false, pinnedMenuOpen: false }),
+      toggleAddMenu: () => this.setState({ addMenuOpen: !this.state.addMenuOpen, projectMenuOpen: false, profileMenuOpen: false, pinnedMenuOpen: false }),
+      togglePinnedMenu: () => this.setState({ pinnedMenuOpen: !this.state.pinnedMenuOpen, projectMenuOpen: false, addMenuOpen: false, profileMenuOpen: false }),
+      closeMenus: () => this.setState({ addMenuOpen: false, projectMenuOpen: false }),
+      logout: () => this.setState({ screen: 'login', appScreen: 'dashboard', profileMenuOpen: false }),
+
+      hasPinned: allPinned.length > 0, noPinned: allPinned.length === 0, pinnedCount: allPinned.length,
+      pinnedMenuOpen: this.state.pinnedMenuOpen,
+      pinnedMenuItems: allPinned.map(x => ({ label: `${x.task.title} · ${x.list.name}`, progress: `${x.list.items.filter(i => i.done).length}/${x.list.items.length} fets`, onClick: () => this.setState({ activePinnedListId: x.globalId, pinnedMenuOpen: false }) })),
+      pinnedView: this.buildPinnedView(),
+
+      editorOpen: !!this.state.editingTaskId, editDraft: this.buildEditDraftView(), closeEditor: () => this.closeEditor(), saveEditor: () => this.saveEditor(),
+      stopClick: e => e.stopPropagation(), iaModeOptions: ['Desactivat', 'Acompanya', 'Autònoma'],
+
+      settingsTabs: [
+        { id: 'general', label: 'General' }, { id: 'calendaris', label: 'Calendaris' }, { id: 'mcp', label: 'MCP' },
+        { id: 'ia', label: 'IA' }, { id: 'ambits', label: 'Àmbits' }, { id: 'compartits', label: 'Compartits' }, { id: 'perfil', label: 'Perfil' }, { id: 'admin', label: 'Admin' },
+      ].map(t => ({ ...t, weight: this.state.settingsTab === t.id ? 700 : 500, bg: this.state.settingsTab === t.id ? 'var(--gradient-brand-alt)' : 'transparent', color: this.state.settingsTab === t.id ? 'var(--on-brand)' : 'var(--ink-soft)', onClick: () => this.setState({ settingsTab: t.id }) })),
+      tabGeneral: this.state.settingsTab === 'general', tabCalendaris: this.state.settingsTab === 'calendaris',
+      tabMcp: this.state.settingsTab === 'mcp', tabIa: this.state.settingsTab === 'ia', tabAmbits: this.state.settingsTab === 'ambits',
+      tabShared: this.state.settingsTab === 'compartits', tabPerfil: this.state.settingsTab === 'perfil', tabAdmin: this.state.settingsTab === 'admin',
+
+      themeOptions: ['Sistema', 'Clar', 'Fosc'], themeChoice: this.state.themeChoice, setThemeChoice: v => this.setState({ themeChoice: v }),
+      accentOptionLabels: ['Sunset', 'Suau', 'Càlid mono', 'Fred mono'], accentChoiceLabel: this.state.accentChoiceLabel, setAccentChoice: v => this.setState({ accentChoiceLabel: v }),
+      languageOptions: ['Idioma del sistema', 'Català', 'Castellà', 'English'], languageChoice: this.state.languageChoice, setLanguageChoice: v => this.setState({ languageChoice: v }),
+      showCalendarWidget: this.state.showCalendarWidget, toggleShowCalendarWidget: () => this.setState({ showCalendarWidget: !this.state.showCalendarWidget }),
+      showOverdue: this.state.showOverdue, toggleShowOverdue: () => this.setState({ showOverdue: !this.state.showOverdue }),
+      iaEnabled: this.state.iaEnabled, toggleIa: () => this.setState({ iaEnabled: !this.state.iaEnabled }),
+      iaNote: this.state.iaEnabled ? 'Actiu.' : 'Desactivat.',
+      iaScopeOptions: ['Només processar', 'Processar i crear'], iaScopeChoice: this.state.iaScopeChoice, setIaScope: v => this.setState({ iaScopeChoice: v }),
+      iaInstructionRows: [...SCOPES.map(s => s.label), ...allProjects].map(label => ({ label, value: this.state.iaInstructions[label] || '', onChange: e => this.setState({ iaInstructions: { ...this.state.iaInstructions, [label]: e.target.value } }) })),
+      inboxPosOptions: ['Esquerra', 'Dreta', 'Sota'], inboxPos: this.state.inboxPos, setInboxPos: v => this.setState({ inboxPos: v }),
+
+      scopeCaldavGroups: SCOPES.map(s => ({
+        title: s.label, note: `Calendari font per a ${s.label.toLowerCase()}`,
+        rssDraft: this.state.rssDraft[s.id], onRssDraft: e => this.setState({ rssDraft: { ...this.state.rssDraft, [s.id]: e.target.value } }),
+        onAddRss: () => this.addRss(s.id),
+        rssList: this.state.rssFeeds[s.id].map((r, idx) => ({ url: r.url, onRemove: () => this.removeRss(s.id, idx) })),
+        hasRss: this.state.rssFeeds[s.id].length > 0,
+      })),
+      ownCaldavs: SCOPES.map(s => ({ label: `caldav.femho.app/${s.id}` })),
+
+      mcpEnabled: this.state.mcpEnabled, toggleMcp: () => this.setState({ mcpEnabled: !this.state.mcpEnabled }),
+      mcpPermOptions: ['Lectura', 'Escriptura', 'Esborrar'],
+      scopeLabelOptions: SCOPES.map(s => s.label),
+      scopeTokens: SCOPES.map(s => ({ label: s.label, key: `femho_${s.id}_·····` })),
+
+      sharedLinks: [
+        { title: 'Fer la maleta · Maleta Borja', meta: 'Expira en 3 dies · sense contrasenya', accessCount: 2 },
+        { title: 'Reservar allotjament', meta: 'Sense expiració · amb contrasenya', accessCount: 0 },
+      ],
+      scopeRows: [
+        { label: 'Personal', color: 'var(--plou-blue)', kind: 'Individual' },
+        { label: 'Feina', color: 'var(--plou-orange)', kind: 'Individual' },
+        { label: 'Família', color: 'var(--plou-pink)', kind: 'Col·lectiu · Borja + Alba' },
+      ],
+      myName: this.state.myName, setMyName: e => this.setState({ myName: e.target.value }),
+
+      profiles: PEOPLE,
+
+      view: this.state.view, viewOptions: [{ value: 'tasques', label: 'Tasques' }, { value: 'calendari', label: 'Calendari' }],
+      setView: v => this.setState({ view: v }),
+      isTasksView: this.state.view === 'tasques' && !activePinned, isCalendarView: this.state.view === 'calendari' && !activePinned,
+
+      scopeChips: SCOPES.map(s => { const active = this.state.scopes[s.id]; return {
+        label: s.label, weight: active ? 700 : 500,
+        bg: active ? s.color : 'var(--ghost-bg)', color: active ? '#fff' : 'var(--ink-soft)',
+        border: active ? s.color : 'var(--card-border)',
+        onClick: () => {
+          const n = { ...this.state.scopes, [s.id]: !this.state.scopes[s.id] };
+          if (Object.values(n).some(Boolean)) this.setState({ scopes: n, projectFilter: 'all' });
+        },
+      };}),
+
+      projectLabel: this.state.projectFilter === 'all' ? 'Tots els projectes' : this.state.projectFilter,
+      projectOptions: [{ label: 'Tots els projectes', weight: this.state.projectFilter === 'all' ? 700 : 500, color: 'var(--ink)', bg: this.state.projectFilter === 'all' ? 'var(--ghost-bg)' : 'transparent', onClick: () => this.setState({ projectFilter: 'all', projectMenuOpen: false }) }]
+        .concat(allProjects.map(p => ({ label: p, weight: this.state.projectFilter === p ? 700 : 500, color: 'var(--ink)', bg: this.state.projectFilter === p ? 'var(--ghost-bg)' : 'transparent', onClick: () => this.setState({ projectFilter: p, projectMenuOpen: false }) }))),
+      projectMenuOpen: this.state.projectMenuOpen, addMenuOpen: this.state.addMenuOpen, profileMenuOpen: this.state.profileMenuOpen,
+
+      inboxColumn: cols[0], kanbanColumns: cols.slice(1),
+
+      calViewOptions: [{ value: 'month', label: 'Mensual' }, { value: 'week', label: 'Setmanal' }, { value: 'day', label: 'Diari' }],
+      calendarView: this.state.calendarView, setCalendarView: v => this.setState({ calendarView: v }),
+      isMonth: this.state.calendarView === 'month', isWeek: this.state.calendarView === 'week', isDay: this.state.calendarView === 'day',
+      peopleChips: PEOPLE.map(p => { const active = this.state.peopleVisible[p.id]; return {
+        initials: p.initials, bg: active ? 'var(--ghost-bg)' : 'transparent', color: active ? 'var(--ink)' : 'var(--ink-faint)', border: active ? 'var(--card-border)' : 'var(--card-border)',
+        onClick: () => this.setState({ peopleVisible: { ...this.state.peopleVisible, [p.id]: !this.state.peopleVisible[p.id] } }),
+      };}),
+
+      monthLabel: `${MONTHS[this.state.calMonth][0].toUpperCase()}${MONTHS[this.state.calMonth].slice(1)} ${this.state.calYear}`,
+      prevMonth: () => { let m = this.state.calMonth - 1, y = this.state.calYear; if (m < 0) { m = 11; y--; } this.setState({ calMonth: m, calYear: y }); },
+      nextMonth: () => { let m = this.state.calMonth + 1, y = this.state.calYear; if (m > 11) { m = 0; y++; } this.setState({ calMonth: m, calYear: y }); },
+      weekdayLabels: WEEKDAYS, monthDays: this.buildMonthDays(),
+      weekDays: this.buildWeekDays(),
+      dayLabel: `${d.getDate()} ${MONTHS[d.getMonth()]}`, dayItems, dayEmpty: dayItems.length === 0,
+
+      selectedDayLabel: `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`,
+      selectedDayItems: dayItems, selectedDayEmpty: dayItems.length === 0, selectedDayShort: d.getDate(),
+      dayDraft: this.state.dayDraft, onDayDraft: e => this.setState({ dayDraft: e.target.value }),
+      onDayKey: e => { if (e.key === 'Enter') { const ok = this.submitDated(this.state.dayDraft, this.state.selectedDate, () => this.setState({ dayDraft: '', dayError: false })); if (!ok) this.setState({ dayError: true }); } },
+      dayError: this.state.dayError,
+
+      noDateItems: noDate.map(it => ({ title: it.title, dot: scopeMeta(it.scope).color })), noDateEmpty: noDate.length === 0,
+      noDateDraft: this.state.noDateDraft, onNoDateDraft: e => this.setState({ noDateDraft: e.target.value }),
+      onNoDateKey: e => { if (e.key === 'Enter') { const ok = this.submitDated(this.state.noDateDraft, null, () => this.setState({ noDateDraft: '', noDateError: false })); if (!ok) this.setState({ noDateError: true }); } },
+      noDateError: this.state.noDateError,
+
+      globalDraft: this.state.globalDraft, onGlobalDraft: e => this.setState({ globalDraft: e.target.value }), globalError: this.state.globalError,
+      onGlobalKey: e => {
+        if (e.key !== 'Enter') return;
+        const parsed = this.parseQuick(this.state.globalDraft);
+        if (!parsed.scope) { this.setState({ globalError: true }); return; }
+        const ni = { id: ++ID_SEQ, scope: parsed.scope, project: parsed.project || null, title: parsed.title || 'Nova tasca', column: 'inbox', assignee: parsed.assignee, date: null, time: null };
+        this.setState({ items: [...this.state.items, ni], globalDraft: '', globalError: false });
+      },
+      globalScopeCards: this.buildGlobalScopeCards(),
+      globalTodayItems: this.state.items.filter(it => it.date === '2026-08-05').map(it => ({ title: it.title, dot: scopeMeta(it.scope).color, hasTime: !!it.time, time: it.time })),
+      globalTodayEmpty: this.state.items.filter(it => it.date === '2026-08-05').length === 0,
+    };
+  }
+}
+
+</script>
+</body>
+</html>

@@ -1,0 +1,38 @@
+:root{
+  --font-sans:'Roboto',system-ui,-apple-system,'Segoe UI',sans-serif;
+
+  --weight-regular:400; /* @kind font */
+  --weight-medium:500; /* @kind font */
+  --weight-bold:700; /* @kind font */
+  --weight-black:900; /* @kind font */
+
+  /* Numeric display — always weight 900 + negative tracking */
+  --text-hero:64px;      /* alert clock, desktop */
+  --text-hero-sm:58px;   /* alert clock, mobile */
+  --text-display:52px;   /* temperature, desktop */
+  --text-display-sm:46px;/* temperature, mobile */
+  --text-alert-title:30px;
+
+  --text-section:26px;   /* view title, desktop */
+  --text-logo:24px;
+  --text-logo-sm:21px;
+  --text-h2:19px;        /* dialog + emphasis titles */
+  --text-h3:17px;
+  --text-card-title:16px;
+  --text-subtitle:15px;
+  --text-body:14px;
+  --text-body-sm:13.5px;
+  --text-body-xs:13px;
+  --text-meta:12.5px;
+  --text-label:12px;
+  --text-tag:11px;
+  --text-kicker:10.5px;  /* uppercase kicker */
+  --text-micro:9.5px;    /* stat tile labels */
+
+  --leading-tight:1.15; /* @kind other */
+  --leading-body:1.45; /* @kind other */
+  --tracking-tight:-0.02em; /* @kind other */
+  --tracking-snug:-0.01em; /* @kind other */
+  --tracking-caps:0.06em; /* @kind other */
+  --tracking-caps-sm:0.05em; /* @kind other */
+}

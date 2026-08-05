@@ -1,0 +1,18 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    // vite/client declara les importacions d'efecte lateral de .css i els actius
+    // estàtics. Sense això, `import '…/styles.css'` no compila.
+    "types": ["vite/client"],
+    "jsx": "react-jsx",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "noEmit": true,
+    "allowJs": true,
+    // Plou ve en .jsx sense tipar, amb els seus contractes als .d.ts del costat.
+    // No es comprova el seu cos; es respecten els seus .d.ts (docs/04 §3).
+    "checkJs": false
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx", "vite.config.ts"]
+}

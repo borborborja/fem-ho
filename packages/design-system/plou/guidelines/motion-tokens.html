@@ -1,0 +1,20 @@
+<!-- @dsCard group="Motion" viewport="700x160" name="Motion & states" subtitle="Short, no bounce. Hover brightens; press shrinks to 0.97" -->
+<!DOCTYPE html><html data-theme="light"><head><meta charset="utf-8"><link rel="stylesheet" href="../styles.css"><style>
+body{margin:0;font-family:var(--font-sans);color:var(--ink);background:var(--card-bg);padding:18px;box-sizing:border-box}
+a{color:var(--plou-blue-ink)}a:hover{color:var(--plou-orange-ink)}
+.g{display:grid;gap:10px}.r{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.sw{height:52px;border-radius:14px;border:1px solid var(--card-border)}
+.n{font-size:10.5px;margin-top:5px;color:var(--ink-soft);font-weight:500}
+.v{font-size:9.5px;color:var(--ink-faint);font-family:ui-monospace,monospace}
+code{font-family:ui-monospace,monospace;font-size:10px;background:var(--code-bg);padding:2px 5px;border-radius:5px}
+</style></head><body><div style="display:flex;flex-direction:column;gap:9px;font-size:12.5px;color:var(--ink-soft)">
+<div><code>--dur-instant</code> 120ms press · <code>--dur-fast</code> 180ms colour · <code>--dur-base</code> 240ms toggle/tab · <code>--dur-slow</code> 320ms</div>
+<div><code>--ease-standard</code> cubic-bezier(0.2,0,0,1) — Material 3 emphasised decelerate, used for everything</div>
+<div>Hover: <code>filter:brightness(1.04)</code>. Press: <code>transform:scale(0.97)</code>. Disabled: <code>opacity:0.45</code>, shadow removed.</div>
+<div>No slide-ins, no bounce, no spring. Tab and theme changes cross-fade colour only.</div>
+</div>
+<div class="r" style="margin-top:12px;gap:10px">
+<button class="plou-btn plou-btn-primary">Hover / press me</button>
+<button class="plou-btn plou-btn-ghost">Ghost</button>
+<button class="plou-btn plou-btn-primary" disabled>Disabled</button>
+</div></body></html>

@@ -1,0 +1,48 @@
+<!-- @dsCard group="Components" viewport="700x430" name="Forms — SegmentedControl, ChoiceChips, SettingsGroup, Switch, Slider, TextField" subtitle="Capsule choices, wrapping chips, settings rows, toggles, tracks" -->
+<!DOCTYPE html><html data-theme="light"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../../styles.css">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+<style>body{margin:0;font-family:var(--font-sans);background:var(--page-bg);color:var(--ink);padding:18px;box-sizing:border-box}a{color:var(--plou-blue-ink)}a:hover{color:var(--plou-orange-ink)}.row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.col{display:flex;flex-direction:column;gap:14px}.lbl{font-size:9.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint)}</style></head><body><div id="root"></div>
+<script type="text/babel">
+const { SegmentedControl, ChoiceChips, SettingsGroup, SettingsRow, Switch, Slider, TextField } = window.PlouDesignSystem_093e07;
+function Demo(){
+ const [lang,setLang]=React.useState('Castellano');
+ const [th,setTh]=React.useState('Claro');
+ const [mm,setMm]=React.useState(true);
+ const [awake,setAwake]=React.useState(false);
+ const [r,setR]=React.useState(20);
+ const [scale,setScale]=React.useState('Original');
+ const [wind,setWind]=React.useState('km/h');
+ return <div className="col">
+  <div><div className="lbl" style={{marginBottom:8}}>ChoiceChips · wraps, for more than 4 options</div>
+   <ChoiceChips options={['Blanco y negro','Original','Azul universal','Titan','The Weather Channel','Meteored','NEXRAD nivel III','Dark Sky']} value={scale} onChange={setScale}/></div>
+  <SettingsGroup title="Unidades">
+   <SettingsRow label="Temperatura" inline><SegmentedControl options={['°C','°F']} value="°C" style={{width:110}}/></SettingsRow>
+   <SettingsRow label="Viento"><ChoiceChips size="sm" options={['km/h','m/s','mph','kn','Bft']} value={wind} onChange={setWind}/></SettingsRow>
+   <SettingsRow label="Mantener la pantalla encendida" inline><Switch checked={false} onChange={()=>{}}/></SettingsRow>
+  </SettingsGroup>
+  <div><div className="lbl" style={{marginBottom:8}}>SegmentedControl · block / sm / compact</div>
+   <div className="col" style={{gap:8}}>
+    <SegmentedControl block options={['Castellano','Català','English']} value={lang} onChange={setLang}/>
+    <div className="row" style={{gap:10}}>
+     <SegmentedControl size="sm" options={['Sistema','Claro','Oscuro']} value={th} onChange={setTh}/>
+     <SegmentedControl options={['°C','°F']} style={{width:110}} value="°C"/>
+     <SegmentedControl options={['mm','in']} style={{width:110}} value="mm"/>
+    </div></div></div>
+  <div className="row" style={{gap:24,alignItems:'flex-end'}}>
+   <div style={{flex:1}}><div className="lbl" style={{marginBottom:8}}>Slider</div>
+    <Slider label="Radio de vigilancia" valueLabel={r+' km'} min={5} max={50} value={r} onChange={setR}/></div>
+   <div style={{flex:1}}><div className="lbl" style={{marginBottom:8}}>TextField</div>
+    <TextField label="Nombre de la ubicación" defaultValue="Cornellà del Terri"/></div>
+  </div>
+  <div><div className="lbl" style={{marginBottom:8}}>Switch</div>
+   <div className="col" style={{gap:10}}>
+    <Switch label="Mostrar intensidad en mm/h" checked={mm} onChange={setMm}/>
+    <Switch label="Mantener la pantalla encendida" checked={awake} onChange={setAwake}/>
+   </div></div>
+ </div>}
+ReactDOM.createRoot(document.getElementById('root')).render(<Demo/>);
+</script></body></html>

@@ -1,0 +1,4 @@
+/* Plou uses Roboto exclusively (400 / 500 / 700 / 900).
+   Roboto is served from Google Fonts — no local binaries were provided with the source.
+   Swap this @import for @font-face rules if self-hosted files become available. */
+@import url("https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&display=swap");

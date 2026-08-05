@@ -1,0 +1,16 @@
+:root{
+  /* Plou motion is short and unshowy: opacity + tiny scale, never bounce or slide-in. */
+  --dur-instant:120ms; /* @kind other */
+  --dur-fast:180ms; /* @kind other */
+  --dur-base:240ms; /* @kind other */
+  --dur-slow:320ms; /* @kind other */
+  --ease-standard:cubic-bezier(0.2,0,0,1); /* @kind other */ /* Material 3 emphasised-decelerate */
+  --ease-out:cubic-bezier(0.05,0.7,0.1,1); /* @kind other */
+  --ease-in-out:cubic-bezier(0.4,0,0.2,1); /* @kind other */
+
+  --press-scale:0.97; /* @kind other */
+  --hover-lift:translateY(-1px); /* @kind other */
+}
+@media (prefers-reduced-motion:reduce){
+  :root{--dur-instant:0ms; /* @kind other */ --dur-fast:0ms; /* @kind other */ --dur-base:0ms; /* @kind other */ --dur-slow:0ms /* @kind other */}
+}

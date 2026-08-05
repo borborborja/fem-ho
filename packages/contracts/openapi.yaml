@@ -1,0 +1,142 @@
+openapi: 3.1.0
+
+info:
+  title: Fem-ho
+  version: 0.1.0
+  description: |
+    Contracte de l'API de Fem-ho. Aquest fitxer és la font de veritat (regla 5
+    d'instruccions.md): els tipus de TypeScript i el client de Kotlin es generen des
+    d'aquí i cap client escriu tipus a mà. Un endpoint que no hi és no existeix.
+
+    A M1 només hi ha les dues rutes públiques de vida i identitat. La resta arriba a
+    la seva fita, seguint docs/05-api-rest.md.
+  license:
+    name: AGPL-3.0-or-later
+    identifier: AGPL-3.0-or-later
+
+servers:
+  - url: /api/v1
+    description: Base de l'API. GET /info i GET /healthz pengen de l'arrel, no d'aquí.
+
+tags:
+  - name: instance
+    description: Identitat i salut de la instància. Públic i sense autenticar.
+
+paths:
+  /info:
+    servers:
+      - url: /
+    get:
+      tags: [instance]
+      operationId: getInfo
+      summary: Identitat de la instància
+      description: |
+        Públic i sense autenticar. És el que fa servir Android per validar la URL del
+        servidor abans de demanar credencials (docs/05 §4), i el que li permet avisar
+        si el servidor és més nou que l'app.
+      security: []
+      responses:
+        '200':
+          description: La instància respon i s'identifica.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Info'
+
+  /healthz:
+    servers:
+      - url: /
+    get:
+      tags: [instance]
+      operationId: getHealthz
+      summary: El procés és viu
+      description: |
+        Comprova només que el procés respon. No toca la base de dades: per a això hi ha
+        /readyz (docs/12 §8). És el healthcheck del contenidor.
+      security: []
+      responses:
+        '200':
+          description: El procés és viu.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+
+components:
+  schemas:
+    Info:
+      type: object
+      additionalProperties: false
+      required: [name, version, registration]
+      properties:
+        name:
+          type: string
+          description: Nom de la instància, configurable per qui l'allotja.
+          examples: ['Fem-ho']
+        version:
+          type: string
+          description: Versió del servidor, en semàntica de versions.
+          examples: ['0.1.0']
+        registration:
+          type: string
+          enum: [disabled, invite, open]
+          description: |
+            Si la instància accepta altes. Surt de FEMHO_REGISTRATION i per defecte és
+            `disabled`, que és el correcte per a una instància familiar exposada a
+            internet (docs/12 §7).
+        setup_required:
+          type: boolean
+          description: |
+            Cert mentre no hi hagi cap administrador. Mentre ho sigui, /setup és
+            accessible; un cop creat el primer administrador, es tanca per sempre.
+
+    Health:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+
+    Problem:
+      type: object
+      description: |
+        Error en application/problem+json (RFC 9457, docs/05 §3). `type` i `title` són
+        estables i en anglès per poder-hi programar; `detail` va en l'idioma de
+        l'Accept-Language.
+      required: [type, title, status]
+      properties:
+        type:
+          type: string
+          format: uri
+          examples: ['https://femho.app/errors/scope-forbidden']
+        title:
+          type: string
+          examples: ['Scope not accessible']
+        status:
+          type: integer
+          examples: [403]
+        detail:
+          type: string
+          examples: ["Aquest token només té accés a l'àmbit Feina."]
+        instance:
+          type: string
+
+  securitySchemes:
+    session:
+      type: apiKey
+      in: cookie
+      name: femho_session
+      description: Sessió de navegador. Galeta HttpOnly, Secure, SameSite=Lax.
+    bearer:
+      type: http
+      scheme: bearer
+      description: |
+        Token d'accés (Android) o token d'API `femho_pat_…` (integracions, MCP, IA).
+        Les capacitats i els àmbits van al registre del token, no a scopes d'OAuth
+        (regla 9).
+
+security:
+  - session: []
+  - bearer: []

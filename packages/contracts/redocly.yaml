@@ -1,0 +1,17 @@
+# Configuració de validació d'openapi.yaml.
+#
+# Es desactiven dues regles, i totes dues amb motiu escrit. Un avís que no marxa mai
+# ensenya la gent a ignorar la sortida de CI, que és pitjor que no tenir la regla.
+
+extends:
+  - recommended
+
+rules:
+  # /info i /healthz són públiques, sense autenticar i sense paràmetres: no tenen cap
+  # 4xx possible. La resta d'endpoints sí que en tindran, i llavors la regla hi val.
+  operation-4xx-response: off
+
+  # El contracte es construeix fita a fita (docs/13). `Problem` és el format d'error de
+  # docs/05 §3 i s'estrena a M3, quan hi ha la primera ruta que pot fallar. Definir-lo
+  # abans és deliberat: és el contracte d'errors de tot el projecte.
+  no-unused-components: off

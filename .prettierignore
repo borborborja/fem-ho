@@ -1,0 +1,16 @@
+node_modules/
+dist/
+coverage/
+package-lock.json
+
+# Plou ve vendoritzat tal com és. No es reformata (docs/04 §1).
+packages/design-system/plou/
+
+# El prototip és una maqueta de referència, no codi del projecte.
+design/prototip/
+
+# Tipus generats des d'OpenAPI: els escriu el generador.
+packages/contracts/src/generated/
+
+docs/
+research/

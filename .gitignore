@@ -1,0 +1,28 @@
+node_modules/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+# Dades locals de desenvolupament
+data/
+*.db
+*.db-wal
+*.db-shm
+
+.env
+.env.local
+
+# Android
+apps/android/local.properties
+apps/android/.gradle/
+apps/android/build/
+apps/android/**/build/
+.idea/
+
+# Playwright
+test-results/
+playwright-report/
+
+# Captures reals de Playwright (les de referència sí que es versionen)
+apps/web/e2e/**/*-actual.png

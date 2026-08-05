@@ -1,0 +1,15 @@
+{
+  "name": "@fem-ho/design-system",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Plou vendoritzat tal com ve, i els components propis de Fem-ho",
+  "exports": {
+    "./styles.css": "./plou/styles.css",
+    "./plou": "./plou/index.js",
+    "./femho": "./femho/index.js"
+  },
+  "peerDependencies": {
+    "react": "19.2.8"
+  }
+}

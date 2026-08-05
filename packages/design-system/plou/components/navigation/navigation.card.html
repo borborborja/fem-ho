@@ -1,0 +1,25 @@
+<!-- @dsCard group="Components" viewport="700x260" name="Navigation — NavItem, TabBar" subtitle="Sidebar rows and the floating mobile switcher" -->
+<!DOCTYPE html><html data-theme="light"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../../styles.css">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+<style>body{margin:0;font-family:var(--font-sans);background:var(--page-bg);color:var(--ink);padding:18px;box-sizing:border-box}a{color:var(--plou-blue-ink)}a:hover{color:var(--plou-orange-ink)}.row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.col{display:flex;flex-direction:column;gap:14px}.lbl{font-size:9.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint)}</style></head><body><div id="root"></div>
+<script type="text/babel">
+const { NavItem, TabBar, Icon } = window.PlouDesignSystem_093e07;
+const TABS=[{value:'radar',label:'Radar',icon:<Icon name="radar"/>},{value:'prevision',label:'Previsión',icon:<Icon name="forecast"/>},{value:'alarmas',label:'Alarmas',icon:<Icon name="bell"/>},{value:'ajustes',label:'Ajustes',icon:<Icon name="settings"/>}];
+function Demo(){
+ const [nav,setNav]=React.useState('radar');
+ const [tab,setTab]=React.useState('radar');
+ return <div className="row" style={{alignItems:'stretch',gap:20}}>
+  <div style={{width:230,background:'var(--sidebar-bg)',backdropFilter:'var(--blur-sidebar)',border:'1px solid var(--card-border)',borderRadius:'var(--radius-panel)',padding:'14px 12px',display:'flex',flexDirection:'column',gap:4}}>
+   {TABS.map(t=><NavItem key={t.value} icon={React.cloneElement(t.icon,{size:19})} active={nav===t.value} onClick={()=>setNav(t.value)}>{t.label}</NavItem>)}
+  </div>
+  <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'flex-end',gap:10}}>
+   <div className="lbl">TabBar · floating={'{false}'} for use outside a phone frame</div>
+   <TabBar floating={false} tabs={TABS} value={tab} onChange={setTab}/>
+  </div>
+ </div>}
+ReactDOM.createRoot(document.getElementById('root')).render(<Demo/>);
+</script></body></html>

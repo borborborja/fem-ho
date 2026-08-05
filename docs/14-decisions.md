@@ -1,0 +1,284 @@
+# 14 · Decisions
+
+Registre de les decisions ja preses. **No les reobris** sense un motiu nou i escrit.
+
+Tres seccions: les contradiccions entre dossiers de `research/`, els dubtes que el brief deixava oberts, i la traçabilitat frase a frase del brief.
+
+---
+
+## Part 1 — Contradiccions entre dossiers
+
+Els 15 dossiers es van escriure en paral·lel i es contradiuen en 12 punts. Un crític que els va llegir sencers els va identificar. Aquestes són les resolucions. **Manen sobre qualsevol dossier.**
+
+### D1 · Llenguatge del backend
+
+**El conflicte.** El dossier 08 argumenta llargament que Go és l'únic backend sensat, i el motiu decisiu és que *"no existeix cap llibreria de servidor CalDAV per a Node; calcula 2-4 vegades l'esforç"*. El dossier 03 diu el mateix. El dossier 12, en canvi, dona per fet un `apps/server` de TypeScript.
+
+**La resolució: TypeScript.** La premissa del 08 era **falsa**, i el dossier 13 la desmunta amb fonts:
+
+- Node accepta tots els verbs CalDAV sense cap configuració. `PROPFIND`, `PROPPATCH`, `REPORT`, `MKCALENDAR`, `MKCOL`, `COPY`, `MOVE`, `ACL` i `LOCK`/`UNLOCK` són a la taula de mètodes de llhttp. No hi ha allow-list ni flag. El risc era zero.
+- `caldav-adapter` (MIT) és un servidor CalDAV escrit en Node que ja implementa `calendar-query`, `calendar-multiget`, `sync-collection` (RFC 6578), `expand-property`, `MKCALENDAR`, `PROPPATCH` i ctag. Es fa servir com a **referència de lectura**, no com a dependència: arrossega Koa, moment i lodash, i el contracte del seu magatzem no està documentat.
+
+**Conseqüència sobre el dossier 08.** Queda re-etiquetat com a *"esquema, semàntica i raonament de modelatge"*. Tots els seus pins de llibreries Go, el seu Dockerfile, la seva tria de `sqlc`/`goose` i tots els seus fragments de codi **estan anul·lats**.
+
+**Arquitectura de la superfície DAV.** Va sobre `node:http` pelat, en un port propi dins del mateix procés:
+
+- **Fastify** fa 404 silenciós als verbs DAV fins que els registres a mà, i llavors respon 415 a l'XML fins que hi afegeixes un parser de tipus de contingut.
+- **Express 5** rebutja les rutes amb comodí de la forma antiga i fa doble descodificació dels `href`, que trenca els UID amb caràcters escapats.
+- **Hono** fa passar tot pel `Request` de WHATWG, amb el cost afegit que això implica.
+
+**XML.** Es parseja amb una llibreria namespace-aware i es despatxa **sempre** per `(namespaceURI, localName)`, mai pel prefix: els clients fan servir prefixos diferents i redefineixen `xmlns` a mig document. `fast-xml-parser` i `xml2js` **queden prohibits al camí DAV**: no són namespace-aware.
+
+**Un parany específic de Node.** Si registres un listener de `'checkContinue'` sense cridar `res.writeContinue()`, tots els `PUT` d'Apple es pengen.
+
+### D2 · La columna del kanban
+
+**El conflicte.** Quatre dossiers, tres noms i dos vocabularis: `column` amb valors catalans `['inbox','per_fer','fent','fet']`, `status` amb valors anglesos `['inbox','todo','doing','done']`, i un tercer que l'indexa com a `status` sense dir-ne els valors.
+
+**La resolució: `status`, valors `inbox` · `todo` · `doing` · `done`.**
+
+`column` xoca amb el vocabulari SQL de tot ORM i de tota conversa sobre bases de dades. I els identificadors catalans obliguen a mantenir accents i majúscules coherents a la base de dades, l'API, el CalDAV i el MCP alhora — el mateix dossier que els proposava argumenta, tres paràgrafs més avall, que els identificadors han de ser ASCII estable.
+
+El català viu **només** als fitxers de traducció.
+
+### D3 · L'ordre dins d'una columna
+
+**El conflicte.** Un dossier diu `position TEXT`, índex fraccional calculat al **client**. Un altre diu `board_rank TEXT COLLATE BINARY`, índex fraccional base62 generat al **servidor** a partir dels IDs veïns. Un tercer (Vikunja) fa servir un `DOUBLE` amb inserció al punt mitjà i recàlcul al servidor.
+
+**La resolució: `position TEXT`, índex fraccional, calculat al client, `COLLATE BINARY`.**
+
+El càlcul al client **no és opcional**: un moviment offline a Android ha de produir la clau definitiva sense anar al servidor, o la targeta salta de lloc quan torna la connexió. El servidor accepta `position` directament o `{before_id, after_id}` i el calcula ell, per a clients simples.
+
+`COLLATE BINARY` és obligatori. Amb una collation lingüística l'ordre de les claus és incorrecte i les targetes es desordenen sense cap error visible.
+
+S'hi afegeix **jitter** al final de la clau: dos clients que insereixin simultàniament al mateix buit generarien la mateixa clau, i sense jitter l'empat es resol de manera arbitrària i diferent a cada client.
+
+El `DOUBLE` de Vikunja queda descartat: amb dos clients offline no convergeix.
+
+### D4 · Els identificadors
+
+**El conflicte.** Un dossier proposa cadenes opaques amb prefix (`tsk_`, `prj_`, `scp_`…) sobre un cos ULID o UUIDv7. Dos més demanen UUIDv7 nu generat pel client.
+
+**La resolució: UUIDv7 nu, generat pel client, sense prefix.**
+
+El prefix és incompatible amb la generació al client si no repliques la regla de prefixat a web i a Android, i els dos dossiers que el proposaven **ni tan sols coincideixen en quins prefixos**, cosa que ja demostra el problema. Si vols llegibilitat als logs, posa el tipus a la URL i als camps del log, no dins de l'identificador.
+
+UUIDv7 i no UUIDv4 perquè porta el temps al davant: els índexs no es fragmenten i l'ordre d'inserció és útil.
+
+### D5 · La identitat de la IA
+
+**El conflicte.** Un dossier vol una fila a `users` amb `kind='ai'`, sembrada per migració, que sigui assignable i comentarista. Un altre vol una taula `ai_agents` separada amb `on_behalf_of_user_id`, més `ai_sessions` i `ai_activities`, i insisteix que **delegar no és assignar**.
+
+**La resolució: totes dues coses, cadascuna per al seu propòsit.**
+
+- `ai_agents` és la identitat de delegació. Té `on_behalf_of_user_id`: **la responsabilitat es queda sempre amb una persona**. La tasca porta `delegate_agent_id`, que és un camp diferent d'`assignee_id`.
+- I una fila a `users` de tipus `ai` que és **l'actor del registre d'activitat i l'autor dels comentaris**, perquè la línia de temps i el camí de l'avatar no hagin de tractar un actor polimòrfic.
+
+`ai_agents.actor_user_id` apunta a aquesta fila.
+
+Delegar ≠ assignar és la lliçó cara de Linear, i és el que manté la rendició de comptes en mans humanes. Una tasca delegada segueix tenint una persona responsable.
+
+### D6 · Els noms de les tools MCP
+
+**El conflicte.** Tres catàlegs incompatibles: un sense prefix i verb primer (`list_tasks`, `create_task`), un amb prefix `femho_*`, i un tercer diferent.
+
+**La resolució: sense prefix, verb primer, amb el catàleg del dossier 10.**
+
+Sense prefix perquè els clients **ja** fan namespace pel seu compte, com `mcp__<servidor>__<tool>`. Prefixar-ho altra vegada malgasta tokens a cada nom de tool, a cada crida, a cada finestra de context.
+
+Però el **conjunt** de tools que val és el del dossier 10, que és el ben dissenyat: té briefing, leasing de tasques, sessions i claus d'idempotència, que als altres els falten. Se li treu el prefix i ja està.
+
+Les tools s'ordenen alfabèticament a `tools/list`: els clients cacheguen, i un ordre estable millora els encerts de la memòria cau de prompts.
+
+### D7 · El pipeline de tokens de disseny
+
+**El conflicte.** Plou ve amb CSS escrit a mà. Un dossier proposa convertir-lo a JSON DTCG i generar-lo amb Style Dictionary, amb el CSS com a artefacte generat i no versionat.
+
+**La resolució: híbrida, i escrita com a decisió abans de tocar cap codi.**
+
+El **CSS de Plou és la font de veritat per al web**, tal com ve. Ja codifica comportament de cascada i especificitat que un generador de variables planes no sap expressar: si ho aplanes tot a `:root`, destrueixes el mecanisme d'accents, que depèn que `accents.css` s'importi **l'últim** i que la regla composta `[data-theme][data-accent]` guanyi.
+
+Style Dictionary s'utilitza **només** per exportar cap a Compose, en una direcció.
+
+### D8 · Els esdeveniments de calendari
+
+**El conflicte.** Cap dossier els modela: no hi ha taula, ni recurs REST, ni tool MCP. Però un ja emet `entity: 'task' | 'checklist' | 'event' | …` pel canal SSE i munta un calendari complet.
+
+**La resolució: entitat de primer nivell, decidida abans de l'esquema.**
+
+Un esdeveniment **no pot ser una tasca amb hores**:
+
+- `STATUS` de VEVENT és `TENTATIVE` / `CONFIRMED` / `CANCELLED`; el de VTODO és `NEEDS-ACTION` / `IN-PROCESS` / `COMPLETED` / `CANCELLED`. Enums diferents.
+- Els enums de `PARTSTAT` també difereixen.
+- `TRANSP` (si l'esdeveniment ocupa temps) no té cap equivalent a VTODO.
+- Un calendari extern subscrit **només** pot produir VEVENTs.
+
+**Una fila per component, no per recurs.** El mestre té `recurrence_id IS NULL`; cada instància modificada és una fila germana amb el seu `RECURRENCE-ID`. És el model de Google (`recurringEventId` + `originalStartTime`), d'Android (`ORIGINAL_ID` + `ORIGINAL_INSTANCE_TIME`) i de Morgen.
+
+**Els esdeveniments no surten mai al kanban.** Apareixen al calendari i, el dia que toca, a l'Inbox — com diu el brief.
+
+### D9 · Les col·leccions CalDAV
+
+**La resolució: dues col·leccions per contenidor, sempre.**
+
+RFC 4791 §5.2 prohibeix recursos amb components mixtos. Cada àmbit i cada projecte que es publiqui necessita una col·lecció `-events` (VEVENT) i una `-todos` (VTODO).
+
+No és pedanteria: DAVx⁵ classifica una col·lecció **només** per `supported-calendar-component-set`, Apple ho imposa a nivell de sistema operatiu amb `EKCalendar.allowedEntityTypes`, i el CalDAV de Google directament no suporta VTODO.
+
+### D10 · Els enllaços compartits
+
+**El conflicte.** Tres esquemes: taula `share` o `shares`, i enums de permisos `('read','check')` o `('view','check','comment','edit')`, amb el token guardat en clar en un cas.
+
+**La resolució: la mecànica de seguretat del dossier 09, el vocabulari del 08 retallat.**
+
+Del 09: columna HMAC amb pebre per buscar el token (mai el token en clar), `secret_version` per poder rotar, `locked_until` per bloquejar força bruta, i **cap columna d'IP enlloc** — és una decisió de privadesa explícita.
+
+El permís és **un sol enum**: `view` · `check` · `comment`. Sense `edit`: un convidat anònim no edita tasques. I sense la barreja de booleans i enum que tenien els dossiers, que és exactament com s'acaba amb tots dos.
+
+### D11 · La base de dades
+
+**La resolució: SQLite per defecte, PostgreSQL suportat, CI prova les dues.**
+
+SQLite és la tria correcta per a una llar que s'autoallotja: un fitxer, cap contenidor extra, còpia de seguretat trivial. Postgres per a qui ja en té un.
+
+Provar les dues a CI **no és cosmètic**: decideix FTS5 contra tsvector per a la cerca en català, i si es poden fer servir tipus enum natius (a SQLite, no).
+
+### D12 · Dates en llenguatge natural
+
+**El conflicte.** Un dossier diu que el parser català de dates és *"el lloc més clar on Fem-ho pot guanyar a Vikunja"* (el de Vikunja és regex fet a mà i només en anglès). Un altre ho posa com a **anti-objectiu** explícit de la v1.
+
+**La resolució: v1 només sigils. El parser de dates va a la v1.1, darrere d'un endpoint propi.**
+
+La v1 reconeix `@persona` i `#Àmbit/Projecte`. Les dates surten del selector.
+
+Però **no s'escriu com a anti-objectiu**, perquè la superfície MCP ja promet que el servidor sap interpretar una cadena de data, i un anti-objectiu escrit en un document que la mateixa IA llegeix a la mateixa sessió genera exactament la confusió que volíem evitar. S'escriu com "v1.1, darrere de `POST /api/v1/parse`".
+
+Quan s'implementi, dues coses no negociables:
+
+- El **xip reversible**: el text reconegut s'ha de poder tornar a convertir en text pla amb un clic. És el que fa que Todoist pugui permetre's un parser agressiu, i el que Akiflow va acabar copiant.
+- Els **fixtures compartits** entre TypeScript i Kotlin, verificats a CI, o les dues implementacions divergeixen.
+
+---
+
+## Part 2 — El que el brief deixava obert
+
+El brief pensa en veu alta i deixa quatre coses sense decidir. Tres es resolen amb precedent investigat; la quarta és una tria de disseny.
+
+### P1 · Llistes senzilles: subprojecte o subtasca?
+
+**El dubte del brief**, literal: *"Estic pensant que lo de les subtasques de dins d'un projecte xoca amb que la llista sigui com un subprojecte."*
+
+**La resolució: cap de les dues. Dues taules i un flag de presentació.**
+
+- `checklist` pertany **sempre** a una tasca, i opcionalment s'ancora a una subtasca concreta.
+- `checklist_item` només té text i fet/no fet.
+- Una tasca porta `view_mode`: quan val `simple`, la UI la pinta com una llista de comprovació en comptes de com una targeta de kanban. **És presentació, no estructura.**
+
+Els ítems **no** tenen data, ni assignat, ni niuament. Aquesta contenció és deliberada i és de Things 3: és exactament el que fa que la seva llista d'avui es mantingui neta. La riquesa va al **contenidor** (la llista es pot pinejar i compartir), no als ítems.
+
+**La cascada amunt sí que hi és**, com demana el brief: marcar tots els ítems marca la subtasca o la tasca d'origen. Un dossier ho prohibia explícitament; mana el brief.
+
+Quan una llista pinejada es completa del tot, es pregunta si es vol despinejar. L'usuari la pot despinejar quan vulgui.
+
+### P2 · La columna "Fet" es neteja cada dia
+
+**La resolució: és una consulta, no un estat. Cap job nocturn.**
+
+La columna es calcula amb `status = 'done'` i `completed_at` dins d'un rang, **en el fus horari de qui mira**. Això vol dir:
+
+- Cap tasca programada a mitjanit que pugui fallar.
+- Correcte amb els canvis d'hora, que és on fallen les implementacions ingènues.
+- Correcte quan dues persones de la casa són a fusos diferents.
+
+`user_settings.done_cleared_at` es guarda **per usuari**: netejar és un gest personal, no destrueix res i no afecta ningú més.
+
+**La presentació és més suau que un tall sec**: per defecte es veu el d'avui, i a sota "Ahir" i "Aquesta setmana" plegats amb el recompte. No s'amaga res, es plega. La cadència documentada del Personal Kanban és setmanal, no diària, i cap app de referència neteja el Fet silenciosament.
+
+Es mantenen les dues coses que demana el brief: el botó de netejar a demanda, i el mini-calendari a la capçalera per navegar a qualsevol dia passat. Més el botó de "veure tot el fet d'avui", que ignora el `done_cleared_at`.
+
+### P3 · Membres externs d'un àmbit col·lectiu
+
+**El dubte del brief**: àmbits col·lectius *"amb usuaris de l'eina o externs (via caldav) o fins i tot col·lectius de les dues tipologies"*.
+
+**La resolució: dos mecanismes segons què vulgui l'usuari.**
+
+- **Només lectura** → subscripció a un `.ics` o a una col·lecció CalDAV externa. La persona no existeix com a usuari; el seu calendari es reflecteix dins de l'àmbit i es marca de només lectura.
+- **Lectura i escriptura** → una fila d'usuari real l'única credencial de la qual és una **app password de CalDAV**. No té accés web ni a l'app; només connecta el seu client de calendari. Apareix com a membre, se li poden assignar tasques i queda al registre d'activitat com qualsevol altre.
+
+### P4 · L'Inbox té dues identitats
+
+**La resolució: és literalment la mateixa instància de component.**
+
+No és una decisió d'arquitectura, és de UI, i la resposta correcta és la trivial: la columna Inbox del kanban i el rail de l'Inbox al costat del calendari són **el mateix component amb la mateixa font de dades**. Si divergeixen, es notarà.
+
+És el consens del sector: de vuit apps que fusionen tasques i calendari, cinc posen el dipòsit de tasques sense hora en un rail a l'esquerra del calendari. El que és nou a Fem-ho és fer-lo alhora la primera columna del kanban.
+
+---
+
+## Part 3 — Fets sospitosos de `research/`
+
+El crític va marcar 7 afirmacions com a probablement inventades, obsoletes o internament incoherents. **Cap `docs/` en depèn.**
+
+| Què | Per què no t'hi refiïs |
+| --- | --- |
+| Un conjunt de versions "de lockfile": `typescript 6.0.3`, `vite 8.2.0`, `eslint 10.8.0`, `react 19.2.8`, `lucide-react 1.28.0` | Salts de major molt per davant del que es pot documentar. `lucide-react` ha estat a 0.x tota la seva vida: un 1.28.0 implicaria una renumeració que ningú ha vist. |
+| Els plugins de FullCalendar a 7.0.2 en bloc, amb un polyfill de Temporal com a peer obligatori | El dossier admet que només va verificar dos paquets contra el registre. La resta i el requisit del polyfill són extrapolació. |
+| L'SDK d'MCP amb paquets `@modelcontextprotocol/{core,server,client,node,express,hono,fastify}` tots a 2.0.0 | El dossier mateix diu que la pàgina de release li va donar un any impossible. |
+| `tsdav` a 2.3.1 publicat el 2026-07-10 | Un altre dossier de la mateixa sessió el marca `UNVERIFIED`. Dues verificacions incompatibles del mateix fet: senyal que les etiquetes "verificat" no són comparables entre fitxers. |
+| Els pins de Go (`modernc.org/sqlite`, `go-webdav`, `rrule-go`) amb versions d'SQLite aparellades | Irrellevant: l'stack és TypeScript. I l'aparellament de versions és el tipus de detall que envelleix malament. |
+| El format de token amb CRC32 justificat citant GitHub | La citació fa servir "digits" per a caràcters base62, cosa que suggereix una paràfrasi que s'ha endurit fins a semblar una cita literal. |
+| OkHttp 5.4.0 i Retrofit 3.0.0 a la mateixa taula "compatible" | Incoherent: l'entrada de Retrofit fixa la seva dependència transitiva a OkHttp 4.12 mentre la taula presenta la 5.4.0 com a actual. |
+
+**La regla que en surt:** cap document d'aquesta carpeta fixa cap versió. Es resolen en crear l'scaffold, es comproven contra el registre real, i es congelen al lockfile.
+
+---
+
+## Part 4 — Traçabilitat del brief
+
+Cada requisit d'`instruccions.txt` i on viu. Els números de línia són del brief original.
+
+| Línia | Requisit | On |
+| --- | --- | --- |
+| 2 | Gestor personal i familiar, multi-usuari; web i app; app autònoma però aparellada a un servidor | `00`, `03`, `06` |
+| 4 | Dues UI que se sentin la mateixa cosa; web responsive; web mòbil ≈ app mòbil; camp de servidor al login de l'app | `02`, `03` |
+| 6 | Web autoallotjada amb Docker | `12` |
+| 7 | App mòbil nativa d'Android | `03` |
+| 11 | Login amb correu i contrasenya; dashboard que ho ensenya tot d'una mirada; afegir tasques i marcar-les fetes ràpid; calendari al dashboard | `02`, `05` |
+| 13 | Tres àmbits; espai general per àmbit; projectes dins d'un àmbit | `01` |
+| 15 | Menú superior: switch calendari/tasques, chips multiselector d'àmbit, desplegable de projecte, botó `+`, botó de perfil | `02`, `03` |
+| 17 | Calendari mensual/setmanal/diari; esdeveniments d'altres usuaris amb permís; afegir tasques i esdeveniments; tasques normalment sense hora; els esdeveniments surten a l'Inbox el dia que toca; columna d'Inbox al costat, posicionable; secció de tasques sense dia | `01`, `02`, `07` |
+| 19 | Amb més d'un àmbit seleccionat cal triar àmbit; una tasca pot no tenir projecte però mai no tenir àmbit | `01`, `02` |
+| 21 | Kanban de 4 columnes; `+` per afegir ràpid sense modal; assignació a persona; a Personal tot és de qui ha entrat; `@` autocompleta persona; `#Àmbit` i `#Àmbit/Projecte` encaminen | `01`, `02` |
+| 23 | Inbox dinàmic, punt d'unió entre els dos móns; tasques del dia; sense data; endarrerides configurable; canviar de dia; filtrar per projecte | `01`, `02`, P4 |
+| 25 | "Per fer" rígid, s'arrossega dia a dia; epígrafs d'àmbit plegables amb més d'un àmbit | `01`, `02` |
+| 27-33 | Ajustos: General, Calendaris, MCP, Usuari IA, Perfil, Admin | `02`, `07`, `08`, `09` |
+| 37 | Selector de tema sistema/clar/fosc i d'accent | `02`, `04` |
+| 38 | Dashboard global clicant el títol "Fem-ho" | `02` |
+| 39 | L'Inbox s'ha de veure diferent de les tres llistes kanban | `02`, `04` |
+| 40 | Botons ràpids a la targeta; drag & drop al web | `02`, `04` |
+| 41 | Dins d'Ajustos no hi ha d'haver switch ni àmbits, només "Tornar" | `02`, `03` |
+| 42 | A Perfil edites el teu, no el dels altres | `05` |
+| 43 | Admin: afegir, editar i eliminar usuaris; netejar instància | `05`, `10` |
+| 44 | Crear àmbits: individuals o col·lectius; membres interns, externs via CalDAV, o mixtos | `01`, `07`, P3 |
+| 45 | Llistes de tasques senzilles: creació, selecció, vista simple, ancoratge a subtasca, pinejat, cascada de completat, despinejat | `01`, `02`, P1 |
+| 47-48 | Mode IA: individual / amb ajuda / delegada; sense fricció en crear; Fem-ho no té motor d'IA; indicadors visuals; canvis autònoms visibles; historial | `09` |
+| 50 | API i MCP d'usuari i d'IA amb límits separats; no duplicar lògica; tokens per àmbit; passar fitxers de context i instruccions | `05`, `08`, `09` |
+| 52 | Instruccions genèriques i descripcions per àmbit i per projecte | `09` |
+| 54 | Historial de canvis a totes les tasques | `01`, `05` |
+| 56 | Edició completa en modal: títol, àmbit, projecte, persones, mode IA, deadline, instruccions, fitxers | `02`, `03` |
+| 58 | "Fet" es neteja cada dia o a demanda; mini-calendari per navegar; veure tot el fet d'avui | `01`, `02`, P2 |
+| 60 | Compartir amb enllaç; durada, contrasenya, nom obligatori; Ajustos-Compartits; els externs surten a l'historial amb nom o amb identificador | `10` |
+
+**Divergències deliberades respecte al brief**, totes justificades més amunt: la columna "Fet" no s'esborra (P2), les llistes senzilles no són subprojectes (P1), i el parser de dates en llenguatge natural es difereix a la v1.1 (D12).
+
+### Divergències respecte al prototip
+
+El prototip és una maqueta i en tres punts es queda curt respecte al que demana el brief. **Mana el brief.**
+
+| El prototip fa | Fem-ho fa | Per què |
+| --- | --- | --- |
+| Admin acaba amb "Zona de perill → Eliminar compte" | Admin gestiona usuaris (afegir, convidar, editar, eliminar) i té "Netejar instància" | El brief (línia 43) demana gestió d'usuaris i neteja d'instància, no que l'administrador esborri el seu propi compte |
+| Manté el switch de vista i els chips d'àmbit dins d'Ajustos | Dins d'Ajustos només hi ha "‹ Tornar al tauler" | Queixa explícita del brief (línia 41) |
+| Pinta el fons de columna amb un literal `rgba(20,22,30,0.02)` | Fa servir el token `--column-bg`, definit als dos temes | És un bug: en tema fosc el fons és invisible |
+
+I quatre pantalles que el prototip no té i el brief demana: el dashboard global (línia 38), el rail de llistes pinejades (línia 45), la creació d'àmbits (línia 44) i la pestanya de Compartits (línia 60). Més el camp de servidor al login d'Android (línia 4).

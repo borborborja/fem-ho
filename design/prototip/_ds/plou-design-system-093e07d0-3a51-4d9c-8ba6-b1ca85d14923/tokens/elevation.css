@@ -1,0 +1,22 @@
+:root{
+  /* Coloured glow under anything wearing the brand gradient */
+  --shadow-primary:0 6px 18px rgba(255,140,90,0.3);
+  --shadow-primary-lg:0 8px 24px rgba(255,140,90,0.3);
+  --shadow-tab-active:0 6px 16px rgba(255,140,90,0.35);
+  --shadow-nav-active:0 8px 20px rgba(255,140,90,0.3);
+
+  /* Neutral elevation — see also themed --card-shadow / --switcher-shadow */
+  --shadow-dialog:0 20px 60px rgba(30,30,50,0.3);
+  --shadow-glass:0 10px 30px rgba(0,0,0,0.25);
+  --shadow-map:0 20px 50px rgba(20,20,40,0.18);
+  --shadow-knob:0 2px 4px rgba(0,0,0,0.2);
+  --shadow-thumb-ring:0 0 0 4px rgba(255,157,77,0.2);
+  --shadow-bubble-glow:0 0 40px rgba(255,255,255,0.25);
+  --shadow-pin-glow:0 0 18px rgba(255,110,160,0.7);
+
+  /* Blur strengths — glass is always blur + translucent fill + hairline border */
+  --blur-glass:blur(10px); /* @kind other */
+  --blur-sidebar:blur(14px); /* @kind other */
+  --blur-switcher:blur(16px); /* @kind other */
+  --blur-soft:blur(8px); /* @kind other */
+}
