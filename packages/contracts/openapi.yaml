@@ -23,6 +23,10 @@ tags:
     description: Identitat i salut de la instància. Públic i sense autenticar.
   - name: scopes
     description: Àmbits i projectes. Una tasca sempre té àmbit; el projecte és opcional.
+  - name: sync
+    description: |
+      El contracte de sincronització. L'implementen DOS clients —la web i Android— i han
+      de fer-ho igual (docs/06).
   - name: checklists
     description: |
       Llistes senzilles. Un ítem només té text i fet/no fet (P1); la riquesa va al
@@ -804,8 +808,169 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthenticated'
 
+  /sync:
+    get:
+      tags: [sync]
+      operationId: pullSync
+      summary: Delta des d'un cursor
+      description: |
+        Ordenat per `seq` ascendent, sempre. Filtrat pel principal: només arriba el dels
+        àmbits que el token pot veure.
+
+        Un `upsert` porta l'entitat SENCERA, no un diff: és més trànsit i molta menys
+        complexitat, i les entitats de Fem-ho són petites. Un `delete` només porta
+        l'identificador.
+
+        **Sense cursor és una sincronització completa.**
+      parameters:
+        - name: cursor
+          in: query
+          description: Cadena OPACA. El client no l'ha d'interpretar mai.
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 500 }
+      responses:
+        '200':
+          description: El delta.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '409':
+          description: |
+            El cursor és més vell que la retenció de tombstones i el delta seria
+            incomplet. El client buida la base local i torna a començar sense cursor.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+
+  /sync/batch:
+    post:
+      tags: [sync]
+      operationId: pushSync
+      summary: Buidat de la cua de sortida
+      description: |
+        **Cada operació es resol per separat**: una que falli no ha de tombar el lot.
+
+        `op_id` és la clau d'idempotència. Reenviar un lot després d'una caiguda no
+        duplica res.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SyncBatch'
+      responses:
+        '200':
+          description: Un resultat per operació, en el mateix ordre.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncBatchResults'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+
 components:
   schemas:
+    SyncChange:
+      type: object
+      additionalProperties: false
+      required: [entity, id, op, seq]
+      properties:
+        entity: { type: string }
+        id: { type: string }
+        op:
+          type: string
+          enum: [upsert, delete]
+        seq: { type: integer }
+        data:
+          type: object
+          additionalProperties: true
+          description: L'entitat SENCERA. Absent als `delete`.
+
+    SyncResponse:
+      type: object
+      additionalProperties: false
+      required: [changes, next_cursor, has_more, server_time]
+      properties:
+        changes:
+          type: array
+          items:
+            $ref: '#/components/schemas/SyncChange'
+        next_cursor: { type: string }
+        has_more: { type: boolean }
+        server_time:
+          type: string
+          format: date-time
+          description: |
+            Perquè el client detecti desviació de rellotge. Un rellotge mal posat trenca
+            els recordatoris i les comparacions de "avui" (docs/06 §3).
+
+    SyncOperation:
+      type: object
+      additionalProperties: false
+      required: [op_id, entity, op, id]
+      properties:
+        op_id:
+          type: string
+          description: Clau d'idempotència. Reenviar el lot no duplica res.
+        entity: { type: string }
+        op:
+          type: string
+          enum: [create, update, delete, move]
+        id: { type: string }
+        base_version:
+          type: integer
+          description: La versió sobre la qual s'edita.
+        data:
+          type: object
+          additionalProperties: true
+
+    SyncBatch:
+      type: object
+      additionalProperties: false
+      required: [operations]
+      properties:
+        operations:
+          type: array
+          items:
+            $ref: '#/components/schemas/SyncOperation'
+
+    SyncBatchResult:
+      type: object
+      additionalProperties: false
+      required: [op_id, status]
+      properties:
+        op_id: { type: string }
+        status:
+          type: string
+          enum: [ok, conflict, rejected]
+          description: Tres resultats i prou (docs/06 §4).
+        entity:
+          type: object
+          additionalProperties: true
+        server_entity:
+          type: object
+          additionalProperties: true
+          description: L'estat actual, perquè el client pugui fusionar sense una altra petició.
+        error:
+          type: object
+          additionalProperties: true
+
+    SyncBatchResults:
+      type: object
+      additionalProperties: false
+      required: [results]
+      properties:
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/SyncBatchResult'
+
     Checklist:
       type: object
       additionalProperties: false

@@ -71,6 +71,28 @@ export interface AuditContext {
   now: string;
 }
 
+/**
+ * EL PARANY DE LA VISIBILITAT FORA D'ORDRE
+ *
+ * docs/06 §2: "amb un comptador autoincremental, una transacció llarga que agafa el
+ * `seq` 100 pot fer-se visible DESPRÉS d'una de curta amb el `seq` 101. Un client que
+ * hagi llegit fins al 101 no veurà mai el 100."
+ *
+ * De les dues solucions que el document dona, s'implementa la recomanada: **assignar el
+ * `seq` al final de la transacció, sota un bloqueig curt**, de manera que l'ordre
+ * d'assignació sigui l'ordre de compromís.
+ *
+ * A SQLite en mode WAL hi ha un sol escriptor i el problema pràcticament no existeix.
+ * **A PostgreSQL sí que hi és**, i per això s'hi pren un bloqueig d'assessorament de
+ * transacció just abans d'escriure a `change_log`. És barat perquè és a la CUA de la
+ * transacció: el que se serialitza són uns quants INSERT, no la feina.
+ *
+ * L'identificador del bloqueig és una constant arbitrària però FIXA: si canviés entre
+ * versions del servidor, dos processos de versions diferents no es bloquejarien entre
+ * ells i el parany tornaria.
+ */
+const CHANGE_LOG_LOCK_ID = 851_002_026;
+
 export interface AuditedTransactionOptions {
   /**
    * Una transacció de només lectura no ha de deixar rastre i no s'hi exigeix cap
@@ -79,6 +101,11 @@ export interface AuditedTransactionOptions {
    */
   readOnly?: boolean;
   now?: string;
+  /**
+   * El motor. Cal per saber si s'ha de prendre el bloqueig d'assessorament, que és
+   * exclusiu de Postgres.
+   */
+  engine?: 'sqlite' | 'postgres';
 }
 
 /**
@@ -124,6 +151,13 @@ export async function auditedTransaction<T>(
 
     for (const entry of entries) {
       await writeEntry(tx, principal, entry, now);
+    }
+
+    // El `seq` s'assigna AQUÍ, al final i sota bloqueig, no a mesura que es treballa.
+    if (options.engine === 'postgres') {
+      await sql`SELECT pg_advisory_xact_lock(${CHANGE_LOG_LOCK_ID})`.execute(tx);
+    }
+    for (const entry of entries) {
       await writeChangeLog(tx, entry, now);
     }
 

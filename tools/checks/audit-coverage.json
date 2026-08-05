@@ -24,7 +24,8 @@
     "createChecklistItem": "apps/server/src/http/checklists.test.ts · \"s'hi poden afegir ítems\"",
     "updateChecklistItem": "apps/server/src/http/checklists.test.ts · \"la cascada queda registrada com a cascade_complete\"",
     "pinChecklist": "apps/server/src/http/checklists.test.ts · \"pinejar és PERSONAL\"",
-    "unpinChecklist": "apps/server/src/http/checklists.test.ts · \"es pot despinejar\""
+    "unpinChecklist": "apps/server/src/http/checklists.test.ts · \"es pot despinejar\"",
+    "pushSync": "apps/server/src/http/sync.test.ts · \"cas 1 · mode avió\" i la resta dels vuit casos de docs/06 §10"
   },
   "exempt": {
     "refresh": "Rotar un token de refresc no és un canvi d'estat del producte: no toca cap tasca, cap àmbit ni cap dada de l'usuari. La sessió ja va quedar registrada al login, i registrar cada refresc ofegaria la taula amb una entrada cada quinze minuts per dispositiu. La reutilització d'un token gastat SÍ que es registra, però al log del servidor i com a avís, perquè és un incident de seguretat i no una acció de ningú."

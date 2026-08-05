@@ -480,10 +480,119 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Delta des d'un cursor
+         * @description Ordenat per `seq` ascendent, sempre. Filtrat pel principal: només arriba el dels
+         *     àmbits que el token pot veure.
+         *
+         *     Un `upsert` porta l'entitat SENCERA, no un diff: és més trànsit i molta menys
+         *     complexitat, i les entitats de Fem-ho són petites. Un `delete` només porta
+         *     l'identificador.
+         *
+         *     **Sense cursor és una sincronització completa.**
+         */
+        get: operations["pullSync"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sync/batch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Buidat de la cua de sortida
+         * @description **Cada operació es resol per separat**: una que falli no ha de tombar el lot.
+         *
+         *     `op_id` és la clau d'idempotència. Reenviar un lot després d'una caiguda no
+         *     duplica res.
+         */
+        post: operations["pushSync"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        SyncChange: {
+            entity: string;
+            id: string;
+            /** @enum {string} */
+            op: "upsert" | "delete";
+            seq: number;
+            /** @description L'entitat SENCERA. Absent als `delete`. */
+            data?: {
+                [key: string]: unknown;
+            };
+        };
+        SyncResponse: {
+            changes: components["schemas"]["SyncChange"][];
+            next_cursor: string;
+            has_more: boolean;
+            /**
+             * Format: date-time
+             * @description Perquè el client detecti desviació de rellotge. Un rellotge mal posat trenca
+             *     els recordatoris i les comparacions de "avui" (docs/06 §3).
+             */
+            server_time: string;
+        };
+        SyncOperation: {
+            /** @description Clau d'idempotència. Reenviar el lot no duplica res. */
+            op_id: string;
+            entity: string;
+            /** @enum {string} */
+            op: "create" | "update" | "delete" | "move";
+            id: string;
+            /** @description La versió sobre la qual s'edita. */
+            base_version?: number;
+            data?: {
+                [key: string]: unknown;
+            };
+        };
+        SyncBatch: {
+            operations: components["schemas"]["SyncOperation"][];
+        };
+        SyncBatchResult: {
+            op_id: string;
+            /**
+             * @description Tres resultats i prou (docs/06 §4).
+             * @enum {string}
+             */
+            status: "ok" | "conflict" | "rejected";
+            entity?: {
+                [key: string]: unknown;
+            };
+            /** @description L'estat actual, perquè el client pugui fusionar sense una altra petició. */
+            server_entity?: {
+                [key: string]: unknown;
+            };
+            error?: {
+                [key: string]: unknown;
+            };
+        };
+        SyncBatchResults: {
+            results: components["schemas"]["SyncBatchResult"][];
+        };
         Checklist: {
             id: string;
             task_id: string;
@@ -1662,6 +1771,68 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Checklist"][];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    pullSync: {
+        parameters: {
+            query?: {
+                /** @description Cadena OPACA. El client no l'ha d'interpretar mai. */
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description El delta. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyncResponse"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            /**
+             * @description El cursor és més vell que la retenció de tombstones i el delta seria
+             *     incomplet. El client buida la base local i torna a començar sense cursor.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    pushSync: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SyncBatch"];
+            };
+        };
+        responses: {
+            /** @description Un resultat per operació, en el mateix ordre. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyncBatchResults"];
                 };
             };
             401: components["responses"]["Unauthenticated"];
