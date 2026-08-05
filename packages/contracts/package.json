@@ -6,7 +6,8 @@
   "description": "Font de veritat de l'API i tot el que web, servidor i Android han de compartir",
   "exports": {
     ".": "./src/index.ts",
-    "./openapi.yaml": "./openapi.yaml"
+    "./openapi.yaml": "./openapi.yaml",
+    "./i18n/ca.json": "./i18n/ca.json"
   },
   "scripts": {
     "generate": "openapi-typescript openapi.yaml -o src/generated/api.ts",

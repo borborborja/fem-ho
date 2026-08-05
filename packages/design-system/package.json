@@ -7,7 +7,8 @@
   "exports": {
     "./styles.css": "./plou/styles.css",
     "./plou": "./plou/index.js",
-    "./femho": "./femho/index.js"
+    "./femho": "./femho/index.js",
+    "./femho.css": "./femho/tokens.css"
   },
   "peerDependencies": {
     "react": "19.2.8"

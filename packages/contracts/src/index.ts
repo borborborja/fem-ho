@@ -23,6 +23,9 @@ export {
 } from './position.js';
 export type { RandomSource } from './position.js';
 
+export { MESSAGES, messageKeys, t } from './i18n.js';
+export type { MessageKey, TranslateOptions } from './i18n.js';
+
 /** Els valors canònics de `status`. `column` no existeix (D2). */
 export const TASK_STATUSES = ['inbox', 'todo', 'doing', 'done'] as const;
 export type TaskStatus = (typeof TASK_STATUSES)[number];

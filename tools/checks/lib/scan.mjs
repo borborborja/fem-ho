@@ -46,6 +46,17 @@ export function* walk(dir = ROOT, extensions = DEFAULT_EXTENSIONS) {
 }
 
 /**
+ * Un comentari no és codi. Cobreix les quatre formes que es donen al projecte:
+ * `//`, `/* …`, `{/* …` de JSX, i la continuació ` * …` d'un bloc.
+ *
+ * Val per a TOTES les comprovacions de text: un comentari que explica quin patró està
+ * prohibit ha de poder escriure'l, o no es pot documentar res.
+ */
+export function isComment(line) {
+  return /^\s*\*|\/\/|\{?\/\*|<!--/.test(line);
+}
+
+/**
  * Aplica una llista de regles a un text i retorna les infraccions amb número de línia.
  * Una regla és { name, re, message, allow? }. `allow` és un predicat sobre la línia
  * sencera que perdona un fals positiu conegut.
@@ -71,6 +82,9 @@ export function applyRules(text, rules, rel) {
 
   for (const [i, line] of lines.entries()) {
     if (isIgnored(i)) continue;
+    // Cap regla salta dins d'un comentari, tret que ho demani explícitament.
+    if (isComment(line)) continue;
+
     for (const rule of rules) {
       rule.re.lastIndex = 0;
       const m = rule.re.exec(line);

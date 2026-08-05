@@ -1,0 +1,65 @@
+/**
+ * Tokens propis de Fem-ho.
+ *
+ * docs/04 §2: l'ÚNICA modificació autoritzada als fitxers de Plou és `--column-bg`.
+ * Qualsevol altra extensió va aquí. Aquest fitxer s'importa DESPRÉS de Plou, o sigui
+ * que pot fer servir els seus valors.
+ *
+ * Tot el que hi ha aquí surt de portar el prototip i trobar-hi literals que en tema
+ * fosc no funcionen. És exactament la mateixa família de bug que `--column-bg`, que
+ * docs/04 ja documentava: un color escrit a mà que es va triar mirant el tema clar.
+ */
+
+:root,
+[data-theme='light'] {
+  /**
+   * Fons de la pastilla de recompte de l'Inbox.
+   *
+   * El prototip hi posa `rgba(255,255,255,0.5)` literal. Sobre el wash càlid del tema
+   * clar queda bé; en tema fosc, un blanc al 50% sobre un fons fosc és una taca
+   * lluminosa que no s'assembla gens a la resta de pastilles.
+   */
+  --inbox-pill-bg: rgba(255, 255, 255, 0.5);
+
+  /**
+   * Vora d'inserció mentre s'arrossega (docs/02 §4). Es fa amb el gradient de marca,
+   * que és el que ja fa servir el prototip per als elements actius.
+   */
+  --drop-indicator: var(--gradient-brand-2stop);
+
+  /**
+   * Els vuit colors dels àmbits que crea l'usuari (docs/04 §4, regla 5).
+   *
+   * "Els àmbits creats per l'usuari no fan servir la tríada. Reben color d'una paleta
+   * ampliada de 8 tons, escollits per contrast suficient amb --ink en els dos temes i
+   * distingibles amb les formes més comunes de daltonisme."
+   *
+   * La tríada queda reservada als tres àmbits inicials: Personal blau, Feina taronja,
+   * Família rosa.
+   */
+  --femho-scope-1: #4fb3a3;
+  --femho-scope-2: #8b7bd8;
+  --femho-scope-3: #d99a3f;
+  --femho-scope-4: #5c93c4;
+  --femho-scope-5: #c96f8f;
+  --femho-scope-6: #6aa84f;
+  --femho-scope-7: #b5763f;
+  --femho-scope-8: #7a8fa6;
+}
+
+[data-theme='dark'] {
+  /* Sobre superfície fosca, la pastilla ha de ser un vel clar molt tènue, com la
+     resta de `--tag-bg` del tema, i no un blanc al 50%. */
+  --inbox-pill-bg: rgba(255, 255, 255, 0.12);
+
+  /* Els colors d'àmbit pugen una mica de lluminositat perquè mantinguin el contrast
+     contra el fons fosc. */
+  --femho-scope-1: #62c9b8;
+  --femho-scope-2: #a396e8;
+  --femho-scope-3: #e8b05a;
+  --femho-scope-4: #7aabd8;
+  --femho-scope-5: #dc8aa8;
+  --femho-scope-6: #85c268;
+  --femho-scope-7: #cc8f58;
+  --femho-scope-8: #9aadc2;
+}

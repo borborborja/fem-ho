@@ -12,15 +12,7 @@
  * que ja està exclosa del recorregut.
  */
 
-import { applyRules, report, walk } from './lib/scan.mjs';
-
-/**
- * Un comentari no és codi. Cobreix les quatre formes que es donen al projecte:
- * `//`, `/* …`, `{/* …` de JSX, i la continuació ` * …` d'un bloc.
- */
-function isComment(line) {
-  return /^\s*\*|\/\/|\{?\/\*|<!--/.test(line);
-}
+import { applyRules, isComment, report, walk } from './lib/scan.mjs';
 
 const RULES = [
   {
