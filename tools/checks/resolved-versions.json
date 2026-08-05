@@ -122,6 +122,14 @@
     "uuid": {
       "version": "14.0.1",
       "checkedAt": "2026-08-05"
+    },
+    "@dnd-kit/core": {
+      "version": "6.3.1",
+      "checkedAt": "2026-08-05"
+    },
+    "@dnd-kit/sortable": {
+      "version": "10.0.0",
+      "checkedAt": "2026-08-05"
     }
   },
   "verifiedAvailableForLaterMilestones": {
@@ -132,8 +140,6 @@
     "web-push": "3.6.7",
     "@tanstack/react-query": "5.101.4",
     "dexie": "4.4.4",
-    "@dnd-kit/core": "6.3.1",
-    "@dnd-kit/sortable": "10.0.0",
     "vite-plugin-pwa": "1.3.0",
     "style-dictionary": "5.5.0",
     "@openapitools/openapi-generator-cli": "2.40.1"

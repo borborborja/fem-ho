@@ -30,7 +30,9 @@ export default tseslint.config(
       ],
       // El vocabulari canònic el vigila tools/checks/vocab-lint.mjs, que sap de camps
       // i d'enums. Aquí només hi ha les regles de llenguatge.
-      eqeqeq: ['error', 'always'],
+      // `x == null` és la comprovació idiomàtica de "nul o indefinit" i es fa servir a
+      // posta on els dos casos volen dir el mateix. La resta de comparacions, estrictes.
+      eqeqeq: ['error', 'always', { null: 'ignore' }],
       'no-console': ['warn', { allow: ['warn', 'error'] }],
     },
   },

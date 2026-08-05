@@ -7,7 +7,7 @@
  * Els textos surten TOTS del catàleg (regla 3). Cap literal català en aquest fitxer.
  */
 
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { t } from '@fem-ho/contracts';
 import type { TaskStatus } from '@fem-ho/contracts';
 import {
@@ -17,6 +17,7 @@ import {
   ScopeGroupHeader,
   TaskCard,
 } from '@fem-ho/design-system/femho';
+import { BoardDnd, DraggableCard, DroppableColumn } from './dnd.js';
 
 export interface BoardTask {
   id: string;
@@ -47,7 +48,11 @@ export interface KanbanBoardProps {
   onOpen?: (taskId: string) => void;
   onToggleDone?: (taskId: string) => void;
   doneHeaderActions?: ReactNode;
-  draggingId?: string | null;
+  /**
+   * Arrossegar entre columnes canvia `status`. La crida ha de fer l'actualització
+   * optimista i revertir si el servidor rebutja (docs/02 §4).
+   */
+  onDrop?: (taskId: string, status: TaskStatus) => void;
 }
 
 /** L'ordre de les columnes és el del producte i no es reordena. */
@@ -67,8 +72,9 @@ export function KanbanBoard({
   onOpen,
   onToggleDone,
   doneHeaderActions,
-  draggingId = null,
+  onDrop,
 }: KanbanBoardProps) {
+  const [draggingId, setDraggingId] = useState<string | null>(null);
   // L'agrupació per àmbit surt quan hi ha més d'un àmbit actiu (docs/02 §4).
   const grouped = scopes.length > 1;
 
@@ -77,38 +83,38 @@ export function KanbanBoard({
     const isInbox = column.status === 'inbox';
 
     const cardFor = (task: BoardTask) => (
-      <TaskCard
-        key={task.id}
-        data-testid={`task-${task.id}`}
-        data-status={task.status}
-        title={task.title}
-        project={task.project}
-        assigneeInitials={task.assigneeInitials}
-        time={task.time}
-        aiMode={task.aiMode ?? 'manual'}
-        aiModeLabel={
-          task.aiMode === 'delegated'
-            ? t('ai.mode.delegated')
-            : task.aiMode === 'assisted'
-              ? t('ai.mode.assisted')
-              : undefined
-        }
-        hasUnseenAiChange={task.hasUnseenAiChange ?? false}
-        checklistProgress={task.checklistProgress}
-        dragging={draggingId === task.id}
-        done={task.status === 'done'}
-        onOpen={() => onOpen?.(task.id)}
-        onToggleDone={() => onToggleDone?.(task.id)}
-        quickActions={
-          // Accions ràpides NOMÉS a l'Inbox (docs/02 §4).
-          isInbox
-            ? [
-                { label: t('board.card.toTodo'), onClick: () => onMove?.(task.id, 'todo') },
-                { label: t('board.card.toDoing'), onClick: () => onMove?.(task.id, 'doing') },
-              ]
-            : []
-        }
-      />
+      <DraggableCard key={task.id} id={task.id} testId={`task-${task.id}`}>
+        <TaskCard
+          data-status={task.status}
+          title={task.title}
+          project={task.project}
+          assigneeInitials={task.assigneeInitials}
+          time={task.time}
+          aiMode={task.aiMode ?? 'manual'}
+          aiModeLabel={
+            task.aiMode === 'delegated'
+              ? t('ai.mode.delegated')
+              : task.aiMode === 'assisted'
+                ? t('ai.mode.assisted')
+                : undefined
+          }
+          hasUnseenAiChange={task.hasUnseenAiChange ?? false}
+          checklistProgress={task.checklistProgress}
+          dragging={draggingId === task.id}
+          done={task.status === 'done'}
+          onOpen={() => onOpen?.(task.id)}
+          onToggleDone={() => onToggleDone?.(task.id)}
+          quickActions={
+            // Accions ràpides NOMÉS a l'Inbox (docs/02 §4).
+            isInbox
+              ? [
+                  { label: t('board.card.toTodo'), onClick: () => onMove?.(task.id, 'todo') },
+                  { label: t('board.card.toDoing'), onClick: () => onMove?.(task.id, 'doing') },
+                ]
+              : []
+          }
+        />
+      </DraggableCard>
     );
 
     let body: ReactNode;
@@ -137,39 +143,60 @@ export function KanbanBoard({
     }
 
     return (
-      <KanbanColumn
-        key={column.status}
-        data-testid={`column-${column.status}`}
-        data-column-status={column.status}
-        label={t(column.labelKey)}
-        count={ofColumn.length}
-        variant={isInbox ? 'inbox' : 'grouped'}
-        divider={column.status !== 'inbox' && column.status !== 'todo'}
-        headerActions={column.status === 'done' ? doneHeaderActions : undefined}
-      >
-        {body}
-      </KanbanColumn>
+      <DroppableColumn key={column.status} status={column.status}>
+        {(over) => (
+          <KanbanColumn
+            data-testid={`column-${column.status}`}
+            data-column-status={column.status}
+            data-drop-target={over ? 'true' : 'false'}
+            label={t(column.labelKey)}
+            count={ofColumn.length}
+            variant={isInbox ? 'inbox' : 'grouped'}
+            divider={column.status !== 'inbox' && column.status !== 'todo'}
+            dropIndicator={over}
+            headerActions={column.status === 'done' ? doneHeaderActions : undefined}
+          >
+            {body}
+          </KanbanColumn>
+        )}
+      </DroppableColumn>
     );
   };
 
   const [inbox, ...rest] = COLUMNS;
 
+  const titleOf = (taskId: string): string => tasks.find((task) => task.id === taskId)?.title ?? '';
+  const labelOf = (status: TaskStatus): string =>
+    t(COLUMNS.find((column) => column.status === status)?.labelKey ?? '');
+
   return (
-    <div
-      data-testid="kanban"
-      style={{
-        display: 'grid',
-        // L'Inbox se separa de les altres tres amb 24px en comptes de 16 (docs/02 §4),
-        // i les tres van dins d'una sola targeta perquè "es sentin un sol element"
-        // (brief línia 39), que és el que fa el prototip.
-        gridTemplateColumns: '1fr 3fr',
-        gap: 24,
-        alignItems: 'start',
+    <BoardDnd
+      titleOf={titleOf}
+      labelOf={labelOf}
+      onDragStart={setDraggingId}
+      onDragEnd={(taskId, status) => {
+        setDraggingId(null);
+        // `status` nul vol dir que s'ha deixat anar fora de qualsevol columna, o que
+        // s'ha cancel·lat amb Escape. En cap dels dos casos es mou res.
+        if (status !== null && taskId !== '') onDrop?.(taskId, status);
       }}
     >
-      {inbox === undefined ? null : renderColumn(inbox)}
-      <KanbanGroup>{rest.map(renderColumn)}</KanbanGroup>
-    </div>
+      <div
+        data-testid="kanban"
+        style={{
+          display: 'grid',
+          // L'Inbox se separa de les altres tres amb 24px en comptes de 16 (docs/02 §4),
+          // i les tres van dins d'una sola targeta perquè "es sentin un sol element"
+          // (brief línia 39), que és el que fa el prototip.
+          gridTemplateColumns: '1fr 3fr',
+          gap: 24,
+          alignItems: 'start',
+        }}
+      >
+        {inbox === undefined ? null : renderColumn(inbox)}
+        <KanbanGroup>{rest.map(renderColumn)}</KanbanGroup>
+      </div>
+    </BoardDnd>
   );
 }
 
