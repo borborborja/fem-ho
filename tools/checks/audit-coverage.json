@@ -1,0 +1,20 @@
+{
+  "$comment": [
+    "Cobertura de la regla 4: cada escriptura deixa rastre a activity_log.",
+    "",
+    "Tota operacio POST/PUT/PATCH/DELETE d'openapi.yaml ha de ser en un dels dos blocs.",
+    "Afegir un endpoint d'escriptura sense tocar aquest fitxer fa fallar CI, que es",
+    "exactament el que volem: la regla 4 no es pot complir per bona voluntat.",
+    "",
+    "audited → la prova que comprova que escriu a activity_log.",
+    "exempt  → per que NO n'ha d'escriure. El motiu es obligatori i s'ha de poder",
+    "          defensar; 'no cal' no es un motiu."
+  ],
+  "audited": {
+    "login": "apps/server/src/http/auth.test.ts · \"el login escriu a activity_log amb l'actor i el canal correctes\"",
+    "logout": "apps/server/src/http/auth.test.ts · \"el logout també\""
+  },
+  "exempt": {
+    "refresh": "Rotar un token de refresc no és un canvi d'estat del producte: no toca cap tasca, cap àmbit ni cap dada de l'usuari. La sessió ja va quedar registrada al login, i registrar cada refresc ofegaria la taula amb una entrada cada quinze minuts per dispositiu. La reutilització d'un token gastat SÍ que es registra, però al log del servidor i com a avís, perquè és un incident de seguretat i no una acció de ningú."
+  }
+}

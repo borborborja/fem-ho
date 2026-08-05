@@ -21,6 +21,10 @@ servers:
 tags:
   - name: instance
     description: Identitat i salut de la instància. Públic i sense autenticar.
+  - name: auth
+    description: |
+      Sessions i compte. docs/05 §1. Els tokens de refresc roten: cada refresc n'emet un
+      de nou i invalida l'anterior, i reutilitzar-ne un de gastat revoca la família.
 
 paths:
   /info:
@@ -91,8 +95,189 @@ paths:
               schema:
                 $ref: '#/components/schemas/Problem'
 
+  /auth/login:
+    post:
+      tags: [auth]
+      operationId: login
+      summary: Entrar amb correu i contrasenya
+      description: |
+        Retorna un token d'accés de vida curta i un de refresc de vida llarga.
+
+        **Mai es diu si el correu existeix o no** (docs/02 §2): un correu desconegut i
+        una contrasenya errònia donen exactament la mateixa resposta i triguen el
+        mateix. Amb 10 intents fallits en 15 minuts comença un bloqueig progressiu
+        comptat per correu, no per IP — darrere d'un proxy casolà totes les peticions
+        comparteixen IP (docs/05 §7).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Credencials correctes.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokens'
+        '401':
+          description: Correu o contrasenya incorrectes.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '429':
+          description: Massa intents. Porta `Retry-After`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+
+  /auth/refresh:
+    post:
+      tags: [auth]
+      operationId: refresh
+      summary: Rotar el token de refresc
+      description: |
+        Emet un token nou i invalida l'anterior. Si arriba un token ja gastat es revoca
+        tota la família de sessions: és senyal de robatori i no se sap quina de les dues
+        bandes és la legítima (docs/05 §1).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '200':
+          description: Token rotat.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokens'
+        '401':
+          description: Token no vàlid, caducat, revocat o ja gastat.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+
+  /auth/logout:
+    post:
+      tags: [auth]
+      operationId: logout
+      summary: Tancar la sessió
+      responses:
+        '204':
+          description: Sessió revocada.
+        '401':
+          description: Cal estar autenticat.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+
+  /auth/me:
+    get:
+      tags: [auth]
+      operationId: getMe
+      summary: Usuari, capacitats efectives i àmbits
+      description: |
+        Diu QUÈ pot fer aquesta credencial i A QUINS àmbits arriba. És l'equivalent REST
+        de la tool `whoami` d'MCP, i existeix pel mateix motiu: que qui la fa servir
+        sàpiga els seus límits abans de trobar-se un 403.
+      responses:
+        '200':
+          description: Qui pregunta.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Me'
+        '401':
+          description: Cal estar autenticat.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+
 components:
   schemas:
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 1
+
+    RefreshRequest:
+      type: object
+      additionalProperties: false
+      required: [refresh_token]
+      properties:
+        refresh_token:
+          type: string
+
+    AuthTokens:
+      type: object
+      additionalProperties: false
+      required: [access_token, refresh_token, expires_at]
+      properties:
+        access_token:
+          type: string
+          description: Vida curta. A la web viatja en galeta HttpOnly; a Android com a Bearer.
+        refresh_token:
+          type: string
+          description: Vida llarga i d'un sol ús. Cada refresc n'emet un de nou.
+        expires_at:
+          type: string
+          format: date-time
+          description: Caducitat del token de refresc.
+
+    Me:
+      type: object
+      additionalProperties: false
+      required: [id, name, kind, capabilities, scope_ids]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        email:
+          type: [string, 'null']
+        kind:
+          type: string
+          enum: [user, agent, guest]
+          description: Quina mena de principal és aquesta credencial.
+        role:
+          type: string
+          enum: [admin, member]
+        timezone:
+          type: string
+          description: Les consultes de "avui" es resolen en el fus de qui mira (docs/01 §8).
+        capabilities:
+          type: array
+          items:
+            type: string
+          description: Les capacitats EFECTIVES, ja intersecades amb el rol del propietari.
+        scope_ids:
+          type: [array, 'null']
+          items:
+            type: string
+          description: |
+            Els àmbits accessibles, o `null` per a tots els del propietari. Regla 9: això
+            surt del registre del token, no de cap scope d'OAuth.
+        agent_id:
+          type: [string, 'null']
+          description: Si la credencial és d'un agent, quin. Delegar no és assignar (D5).
+
     Info:
       type: object
       additionalProperties: false

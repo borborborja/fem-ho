@@ -20,11 +20,7 @@ const CHECKS = [
   { name: 'i18n-lint', script: 'i18n-lint.mjs', selfTest: true },
   { name: 'no-pinned-from-research', script: 'no-pinned-from-research.mjs' },
   { name: 'contrast-check', script: 'contrast-check.mjs' },
-  {
-    name: 'audit-coverage',
-    pending: 'M3',
-    why: "necessita els endpoints d'escriptura i la taula activity_log",
-  },
+  { name: 'audit-coverage', script: 'audit-coverage.mjs' },
   {
     name: 'parser-parity',
     pending: 'M6 (TS) i M13 (Kotlin)',

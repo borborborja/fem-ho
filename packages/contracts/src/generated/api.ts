@@ -72,10 +72,139 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Entrar amb correu i contrasenya
+         * @description Retorna un token d'accés de vida curta i un de refresc de vida llarga.
+         *
+         *     **Mai es diu si el correu existeix o no** (docs/02 §2): un correu desconegut i
+         *     una contrasenya errònia donen exactament la mateixa resposta i triguen el
+         *     mateix. Amb 10 intents fallits en 15 minuts comença un bloqueig progressiu
+         *     comptat per correu, no per IP — darrere d'un proxy casolà totes les peticions
+         *     comparteixen IP (docs/05 §7).
+         */
+        post: operations["login"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rotar el token de refresc
+         * @description Emet un token nou i invalida l'anterior. Si arriba un token ja gastat es revoca
+         *     tota la família de sessions: és senyal de robatori i no se sap quina de les dues
+         *     bandes és la legítima (docs/05 §1).
+         */
+        post: operations["refresh"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Tancar la sessió */
+        post: operations["logout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Usuari, capacitats efectives i àmbits
+         * @description Diu QUÈ pot fer aquesta credencial i A QUINS àmbits arriba. És l'equivalent REST
+         *     de la tool `whoami` d'MCP, i existeix pel mateix motiu: que qui la fa servir
+         *     sàpiga els seus límits abans de trobar-se un 403.
+         */
+        get: operations["getMe"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        LoginRequest: {
+            /** Format: email */
+            email: string;
+            password: string;
+        };
+        RefreshRequest: {
+            refresh_token: string;
+        };
+        AuthTokens: {
+            /** @description Vida curta. A la web viatja en galeta HttpOnly; a Android com a Bearer. */
+            access_token: string;
+            /** @description Vida llarga i d'un sol ús. Cada refresc n'emet un de nou. */
+            refresh_token: string;
+            /**
+             * Format: date-time
+             * @description Caducitat del token de refresc.
+             */
+            expires_at: string;
+        };
+        Me: {
+            id: string;
+            name: string;
+            email?: string | null;
+            /**
+             * @description Quina mena de principal és aquesta credencial.
+             * @enum {string}
+             */
+            kind: "user" | "agent" | "guest";
+            /** @enum {string} */
+            role?: "admin" | "member";
+            /** @description Les consultes de "avui" es resolen en el fus de qui mira (docs/01 §8). */
+            timezone?: string;
+            /** @description Les capacitats EFECTIVES, ja intersecades amb el rol del propietari. */
+            capabilities: string[];
+            /**
+             * @description Els àmbits accessibles, o `null` per a tots els del propietari. Regla 9: això
+             *     surt del registre del token, no de cap scope d'OAuth.
+             */
+            scope_ids: string[] | null;
+            /** @description Si la credencial és d'un agent, quin. Delegar no és assignar (D5). */
+            agent_id?: string | null;
+        };
         Info: {
             /**
              * @description Nom de la instància, configurable per qui l'allotja.
@@ -206,6 +335,137 @@ export interface operations {
             };
             /** @description La base no respon o les migracions no s'han aplicat. */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    login: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LoginRequest"];
+            };
+        };
+        responses: {
+            /** @description Credencials correctes. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthTokens"];
+                };
+            };
+            /** @description Correu o contrasenya incorrectes. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Massa intents. Porta `Retry-After`. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    refresh: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RefreshRequest"];
+            };
+        };
+        responses: {
+            /** @description Token rotat. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthTokens"];
+                };
+            };
+            /** @description Token no vàlid, caducat, revocat o ja gastat. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    logout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sessió revocada. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Cal estar autenticat. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getMe: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Qui pregunta. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Me"];
+                };
+            };
+            /** @description Cal estar autenticat. */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -11,6 +11,7 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { Config } from './config.js';
 import type { Connection } from './db/connection.js';
+import { registerAuthRoutes } from './http/auth.js';
 import { registerInstanceRoutes } from './http/instance.js';
 
 export interface BuildOptions {
@@ -44,6 +45,7 @@ export function buildApp(config: Config, options: BuildOptions = {}): FastifyIns
   });
 
   registerInstanceRoutes(app);
+  registerAuthRoutes(app);
 
   return app;
 }
