@@ -6,3 +6,5 @@ export { EmptyState } from './EmptyState.js';
 export type { EmptyStateProps } from './EmptyState.js';
 export { ScopeChip } from './ScopeChip.js';
 export type { ScopeChipProps } from './ScopeChip.js';
+export { QuickAddInput } from './QuickAddInput.js';
+export type { QuickAddInputProps, QuickAddChip, QuickAddSuggestion } from './QuickAddInput.js';
