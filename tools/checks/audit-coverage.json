@@ -19,7 +19,12 @@
     "moveTask": "apps/server/src/http/tasks.test.ts · \"moure deixa rastre amb el valor anterior i el nou\"",
     "completeTask": "apps/server/src/http/tasks.test.ts · \"marca la tasca i les seves subtasques\"",
     "createEvent": "apps/server/src/http/events.test.ts · \"crea un esdeveniment i deixa rastre\"",
-    "updateEvent": "apps/server/src/http/events.test.ts · \"partir la sèrie deixa rastre dels dos costats\""
+    "updateEvent": "apps/server/src/http/events.test.ts · \"partir la sèrie deixa rastre dels dos costats\"",
+    "createChecklist": "apps/server/src/http/checklists.test.ts · \"es pot crear una llista dins d'una tasca\"",
+    "createChecklistItem": "apps/server/src/http/checklists.test.ts · \"s'hi poden afegir ítems\"",
+    "updateChecklistItem": "apps/server/src/http/checklists.test.ts · \"la cascada queda registrada com a cascade_complete\"",
+    "pinChecklist": "apps/server/src/http/checklists.test.ts · \"pinejar és PERSONAL\"",
+    "unpinChecklist": "apps/server/src/http/checklists.test.ts · \"es pot despinejar\""
   },
   "exempt": {
     "refresh": "Rotar un token de refresc no és un canvi d'estat del producte: no toca cap tasca, cap àmbit ni cap dada de l'usuari. La sessió ja va quedar registrada al login, i registrar cada refresc ofegaria la taula amb una entrada cada quinze minuts per dispositiu. La reutilització d'un token gastat SÍ que es registra, però al log del servidor i com a avís, perquè és un incident de seguretat i no una acció de ningú."

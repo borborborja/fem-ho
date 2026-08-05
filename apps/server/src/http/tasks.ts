@@ -21,6 +21,14 @@ import {
   type CreateEventInput,
   type SeriesMode,
 } from '../services/events.js';
+import {
+  createChecklist,
+  createChecklistItem,
+  listChecklists,
+  listPinnedChecklists,
+  setPinned,
+  updateChecklistItem,
+} from '../services/checklists.js';
 import { completeTask, createTask, getBoard, listTasks, moveTask } from '../services/tasks.js';
 import { principalOf } from './auth.js';
 
@@ -248,5 +256,92 @@ export function registerEventRoutes(app: FastifyInstance): void {
         ),
       );
     }),
+  );
+}
+
+/**
+ * Rutes de llistes senzilles.
+ *
+ * `PATCH /checklist-items/{id}` és la que pot disparar la cascada amunt: marcar
+ * l'últim ítem marca la subtasca ancorada i, si tot està fet, la tasca (P1).
+ */
+export function registerChecklistRoutes(app: FastifyInstance): void {
+  app.get<{ Params: { id: string } }>('/api/v1/tasks/:id/checklists', async (request, reply) =>
+    handle(app, request, reply, async (principal) =>
+      listChecklists(app.connection!.db, principal, request.params.id),
+    ),
+  );
+
+  app.post<{ Params: { id: string } }>('/api/v1/tasks/:id/checklists', async (request, reply) =>
+    handle(app, request, reply, async (principal) => {
+      const body = (request.body ?? {}) as Record<string, unknown>;
+      const created = await auditedTransaction(app.connection!.db, principal, (ctx) =>
+        createChecklist(ctx, principal, request.params.id, {
+          id: typeof body.id === 'string' ? body.id : undefined,
+          name: typeof body.name === 'string' ? body.name : undefined,
+          subtask_id: typeof body.subtask_id === 'string' ? body.subtask_id : undefined,
+          show_completed_inline:
+            typeof body.show_completed_inline === 'boolean'
+              ? body.show_completed_inline
+              : undefined,
+        }),
+      );
+      void reply.code(201);
+      return created;
+    }),
+  );
+
+  app.post<{ Params: { id: string } }>('/api/v1/checklists/:id/items', async (request, reply) =>
+    handle(app, request, reply, async (principal) => {
+      const body = (request.body ?? {}) as Record<string, unknown>;
+      const created = await auditedTransaction(app.connection!.db, principal, (ctx) =>
+        createChecklistItem(ctx, principal, request.params.id, {
+          id: typeof body.id === 'string' ? body.id : undefined,
+          text: typeof body.text === 'string' ? body.text : undefined,
+          position: typeof body.position === 'string' ? body.position : undefined,
+        }),
+      );
+      void reply.code(201);
+      return created;
+    }),
+  );
+
+  app.patch<{ Params: { id: string } }>('/api/v1/checklist-items/:id', async (request, reply) =>
+    handle(app, request, reply, async (principal) => {
+      const body = (request.body ?? {}) as Record<string, unknown>;
+      return auditedTransaction(app.connection!.db, principal, (ctx) =>
+        updateChecklistItem(ctx, principal, request.params.id, {
+          text: typeof body.text === 'string' ? body.text : undefined,
+          done: typeof body.done === 'boolean' ? body.done : undefined,
+          position: typeof body.position === 'string' ? body.position : undefined,
+        }),
+      );
+    }),
+  );
+
+  app.post<{ Params: { id: string } }>('/api/v1/checklists/:id/pin', async (request, reply) =>
+    handle(app, request, reply, async (principal) => {
+      await auditedTransaction(app.connection!.db, principal, (ctx) =>
+        setPinned(ctx, principal, request.params.id, true),
+      );
+      void reply.code(204).send();
+      return undefined;
+    }),
+  );
+
+  app.delete<{ Params: { id: string } }>('/api/v1/checklists/:id/pin', async (request, reply) =>
+    handle(app, request, reply, async (principal) => {
+      await auditedTransaction(app.connection!.db, principal, (ctx) =>
+        setPinned(ctx, principal, request.params.id, false),
+      );
+      void reply.code(204).send();
+      return undefined;
+    }),
+  );
+
+  app.get('/api/v1/pinned-checklists', async (request, reply) =>
+    handle(app, request, reply, async (principal) =>
+      listPinnedChecklists(app.connection!.db, principal),
+    ),
   );
 }

@@ -372,10 +372,171 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/tasks/{id}/checklists": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Les llistes senzilles d'una tasca */
+        get: operations["listChecklists"];
+        put?: never;
+        /**
+         * Crear una llista dins d'una tasca
+         * @description Una llista pertany **sempre** a una tasca, i opcionalment s'ancora a una subtasca
+         *     concreta (P1). No és un subprojecte ni una subtasca: són dues taules i un flag de
+         *     presentació.
+         */
+        post: operations["createChecklist"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/checklists/{id}/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Afegir un ítem
+         * @description Un ítem **només té text i fet/no fet** (P1). Cap data, cap assignat, cap
+         *     niuament. La contenció és deliberada i ve de Things 3: és el que fa que la llista
+         *     no es converteixi en un segon gestor de tasques dins del gestor de tasques.
+         */
+        post: operations["createChecklistItem"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/checklist-items/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Marcar o desmarcar un ítem
+         * @description **Marcar-lo pot disparar la cascada amunt** (docs/01 §4): quan l'últim ítem d'una
+         *     llista passa a fet, en la mateixa transacció es marca la subtasca ancorada; i si
+         *     totes les llistes i subtasques d'una tasca estan fetes, la tasca passa a `done`.
+         *
+         *     Es registra amb `verb='cascade_complete'` perquè es distingeixi d'un gest directe.
+         */
+        patch: operations["updateChecklistItem"];
+        trace?: never;
+    };
+    "/checklists/{id}/pin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pinejar una llista
+         * @description El pinejat és **per usuari** (docs/01 §4): el rail de llistes pinejades és de
+         *     cada persona, no de la casa.
+         */
+        post: operations["pinChecklist"];
+        /** Despinejar una llista */
+        delete: operations["unpinChecklist"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/pinned-checklists": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Les llistes pinejades de qui pregunta */
+        get: operations["listPinnedChecklists"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        Checklist: {
+            id: string;
+            task_id: string;
+            /** @description Ancoratge opcional a una subtasca concreta (P1). */
+            subtask_id?: string | null;
+            name: string;
+            /** @description Pinejat PER USUARI. El rail és de cada persona. */
+            pinned: boolean;
+            /**
+             * @description Completats ratllats al seu lloc, o en una secció "Completats" al final,
+             *     plegada amb el recompte (docs/02 §6).
+             */
+            show_completed_inline: boolean;
+            position: string;
+            items: components["schemas"]["ChecklistItem"][];
+            version: number;
+        };
+        ChecklistInput: {
+            id?: string;
+            name: string;
+            subtask_id?: string;
+            show_completed_inline?: boolean;
+        };
+        ChecklistItem: {
+            id: string;
+            checklist_id: string;
+            text: string;
+            done: boolean;
+            /** Format: date-time */
+            done_at?: string | null;
+            done_by?: string | null;
+            position: string;
+        };
+        ChecklistItemInput: {
+            id?: string;
+            text?: string;
+            done?: boolean;
+            position?: string;
+        };
+        ChecklistItemResult: {
+            item: components["schemas"]["ChecklistItem"];
+            /** @description Què ha tocat la cascada amunt, perquè la interfície ho pugui dir. */
+            cascade: {
+                checklist_completed: boolean;
+                subtask_completed: boolean;
+                task_completed: boolean;
+                /**
+                 * @description Cert quan una llista PINEJADA s'ha completat del tot: llavors es pregunta
+                 *     si es vol despinejar (P1).
+                 */
+                suggest_unpin?: boolean;
+            };
+        };
         Calendar: {
             id: string;
             scope_id: string;
@@ -1328,6 +1489,179 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Calendar"][];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    listChecklists: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Llistes amb els seus ítems. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Checklist"][];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    createChecklist: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChecklistInput"];
+            };
+        };
+        responses: {
+            /** @description Creada. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Checklist"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    createChecklistItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChecklistItemInput"];
+            };
+        };
+        responses: {
+            /** @description Afegit. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChecklistItem"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    updateChecklistItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChecklistItemInput"];
+            };
+        };
+        responses: {
+            /** @description Modificat, amb el que la cascada hagi tocat. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChecklistItemResult"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    pinChecklist: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pinejada. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    unpinChecklist: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Despinejada. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    listPinnedChecklists: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Llistes pinejades, amb el seu progrés. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Checklist"][];
                 };
             };
             401: components["responses"]["Unauthenticated"];

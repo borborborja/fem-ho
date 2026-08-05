@@ -1,0 +1,468 @@
+/**
+ * Servei de llistes senzilles. P1 de docs/14, docs/01 §4.
+ *
+ * NI SUBPROJECTE NI SUBTASCA: DUES TAULES I UN FLAG DE PRESENTACIÓ
+ * ----------------------------------------------------------------
+ * El brief dubtava: *"Estic pensant que lo de les subtasques de dins d'un projecte xoca
+ * amb que la llista sigui com un subprojecte."* La resolució de P1 és cap de les dues.
+ *
+ * Una `checklist` pertany **sempre** a una tasca i opcionalment s'ancora a una subtasca.
+ * Un `checklist_item` **només té text i fet/no fet**: cap data, cap assignat, cap
+ * niuament. La contenció és deliberada i ve de Things 3 — és exactament el que fa que la
+ * llista d'avui es mantingui neta i no es converteixi en un segon gestor de tasques dins
+ * del gestor de tasques. La riquesa va al CONTENIDOR: la llista es pot pinejar i
+ * compartir.
+ *
+ * LA CASCADA AMUNT
+ * -----------------
+ * Un dossier de research la prohibia explícitament; **mana el brief**, que la demana:
+ * *"aquestes llistes son vives, quan marques un element de la llista com a fet es marca
+ * la subtasca i quan tota la llista esta completa es marca com a feta la tasca o la
+ * subtasca de la qual es deriva"*.
+ *
+ * Va tota dins de la MATEIXA transacció i es registra amb `verb='cascade_complete'`,
+ * per distingir-la d'un gest directe de l'usuari a l'historial.
+ */
+
+import { sql } from 'kysely';
+import { v7 as uuidv7 } from 'uuid';
+import { generatePosition } from '@fem-ho/contracts';
+import type { AuditContext } from '../audit/audited-transaction.js';
+import type { MigrationDb } from '../db/migration-db.js';
+import { PolicyError, missingCapability, notFound } from '../policy/errors.js';
+import { hasCapability, type Principal } from '../policy/principal.js';
+import { assertScopeAccess } from './scopes.js';
+
+export interface ChecklistItemRow {
+  id: string;
+  checklist_id: string;
+  text: string;
+  done: number;
+  done_at: string | null;
+  done_by: string | null;
+  position: string;
+}
+
+export interface ChecklistRow {
+  id: string;
+  task_id: string;
+  subtask_id: string | null;
+  name: string;
+  pinned: number;
+  pinned_by: string | null;
+  show_completed_inline: number;
+  position: string;
+  version: number;
+}
+
+export interface ChecklistView {
+  id: string;
+  task_id: string;
+  subtask_id: string | null;
+  name: string;
+  pinned: boolean;
+  show_completed_inline: boolean;
+  position: string;
+  items: {
+    id: string;
+    checklist_id: string;
+    text: string;
+    done: boolean;
+    done_at: string | null;
+    done_by: string | null;
+    position: string;
+  }[];
+  version: number;
+}
+
+function toView(row: ChecklistRow, items: ChecklistItemRow[], principal: Principal): ChecklistView {
+  return {
+    id: row.id,
+    task_id: row.task_id,
+    subtask_id: row.subtask_id,
+    // El pinejat és PER USUARI: la llista només surt pinejada per a qui la va pinejar.
+    pinned: row.pinned === 1 && row.pinned_by === principal.userId,
+    name: row.name,
+    show_completed_inline: row.show_completed_inline === 1,
+    position: row.position,
+    items: items.map((item) => ({
+      id: item.id,
+      checklist_id: item.checklist_id,
+      text: item.text,
+      done: item.done === 1,
+      done_at: item.done_at,
+      done_by: item.done_by,
+      position: item.position,
+    })),
+    version: row.version,
+  };
+}
+
+async function itemsOf(
+  db: MigrationDb,
+  checklistIds: string[],
+): Promise<Map<string, ChecklistItemRow[]>> {
+  if (checklistIds.length === 0) return new Map();
+  const rows = await sql<ChecklistItemRow>`
+    SELECT id, checklist_id, text, done, done_at, done_by, position
+    FROM checklist_items
+    WHERE deleted_at IS NULL AND checklist_id IN (${sql.join(checklistIds)})
+    ORDER BY position
+  `.execute(db);
+
+  const byList = new Map<string, ChecklistItemRow[]>();
+  for (const item of rows.rows) {
+    const list = byList.get(item.checklist_id) ?? [];
+    list.push(item);
+    byList.set(item.checklist_id, list);
+  }
+  return byList;
+}
+
+/** La tasca d'una llista, amb el seu àmbit, per poder comprovar l'accés. */
+async function taskOfChecklist(
+  db: MigrationDb,
+  checklistId: string,
+): Promise<{ checklist: ChecklistRow; taskId: string; scopeId: string }> {
+  const found = await sql<ChecklistRow & { scope_id: string }>`
+    SELECT c.id, c.task_id, c.subtask_id, c.name, c.pinned, c.pinned_by,
+           c.show_completed_inline, c.position, c.version, t.scope_id
+    FROM checklists c
+    JOIN tasks t ON t.id = c.task_id
+    WHERE c.id = ${checklistId} AND c.deleted_at IS NULL AND t.deleted_at IS NULL
+  `.execute(db);
+
+  const row = found.rows[0];
+  if (row === undefined) throw notFound('llista', checklistId);
+  return { checklist: row, taskId: row.task_id, scopeId: row.scope_id };
+}
+
+export async function listChecklists(
+  db: MigrationDb,
+  principal: Principal,
+  taskId: string,
+): Promise<ChecklistView[]> {
+  if (!hasCapability(principal, 'checklists:read')) throw missingCapability('checklists:read');
+
+  const task = await sql<{ scope_id: string }>`
+    SELECT scope_id FROM tasks WHERE id = ${taskId} AND deleted_at IS NULL
+  `.execute(db);
+  const scopeId = task.rows[0]?.scope_id;
+  if (scopeId === undefined) throw notFound('tasca', taskId);
+  await assertScopeAccess(db, principal, scopeId, { type: 'La tasca', id: taskId });
+
+  const rows = await sql<ChecklistRow>`
+    SELECT id, task_id, subtask_id, name, pinned, pinned_by, show_completed_inline,
+           position, version
+    FROM checklists WHERE task_id = ${taskId} AND deleted_at IS NULL ORDER BY position
+  `.execute(db);
+
+  const items = await itemsOf(
+    db,
+    rows.rows.map((r) => r.id),
+  );
+  return rows.rows.map((row) => toView(row, items.get(row.id) ?? [], principal));
+}
+
+export async function listPinnedChecklists(
+  db: MigrationDb,
+  principal: Principal,
+): Promise<ChecklistView[]> {
+  if (!hasCapability(principal, 'checklists:read')) throw missingCapability('checklists:read');
+
+  // `pinned_by` fa que el rail sigui de cada persona: una llista que ha pinejat algú
+  // altre de la casa no surt al meu rail.
+  const rows = await sql<ChecklistRow>`
+    SELECT c.id, c.task_id, c.subtask_id, c.name, c.pinned, c.pinned_by,
+           c.show_completed_inline, c.position, c.version
+    FROM checklists c
+    JOIN tasks t ON t.id = c.task_id
+    WHERE c.deleted_at IS NULL AND t.deleted_at IS NULL
+      AND c.pinned = 1 AND c.pinned_by = ${principal.userId}
+    ORDER BY c.position
+  `.execute(db);
+
+  const items = await itemsOf(
+    db,
+    rows.rows.map((r) => r.id),
+  );
+  return rows.rows.map((row) => toView(row, items.get(row.id) ?? [], principal));
+}
+
+export async function createChecklist(
+  ctx: AuditContext,
+  principal: Principal,
+  taskId: string,
+  input: {
+    id?: string | undefined;
+    name?: string | undefined;
+    subtask_id?: string | undefined;
+    show_completed_inline?: boolean | undefined;
+  },
+): Promise<ChecklistView> {
+  if (!hasCapability(principal, 'checklists:write')) throw missingCapability('checklists:write');
+  if (input.name === undefined || input.name.trim() === '') {
+    throw new PolicyError('name-required', 'Name required', 422, 'La llista necessita un nom.');
+  }
+
+  const task = await sql<{ scope_id: string }>`
+    SELECT scope_id FROM tasks WHERE id = ${taskId} AND deleted_at IS NULL
+  `.execute(ctx.tx);
+  const scopeId = task.rows[0]?.scope_id;
+  if (scopeId === undefined) throw notFound('tasca', taskId);
+  await assertScopeAccess(ctx.tx, principal, scopeId, { type: 'La tasca', id: taskId });
+
+  const id = input.id ?? uuidv7();
+  const last = await sql<{ position: string }>`
+    SELECT position FROM checklists WHERE task_id = ${taskId} AND deleted_at IS NULL
+    ORDER BY position DESC LIMIT 1
+  `.execute(ctx.tx);
+
+  await sql`
+    INSERT INTO checklists (id, task_id, subtask_id, name, pinned, show_completed_inline,
+                            position, created_at, updated_at, version)
+    VALUES (${id}, ${taskId}, ${input.subtask_id ?? null}, ${input.name.trim()}, 0,
+            ${input.show_completed_inline === false ? 0 : 1},
+            ${generatePosition(last.rows[0]?.position ?? null, null)}, ${ctx.now}, ${ctx.now}, 1)
+  `.execute(ctx.tx);
+
+  ctx.record({ entityType: 'checklist', entityId: id, scopeId, verb: 'created' });
+
+  const created = await sql<ChecklistRow>`
+    SELECT id, task_id, subtask_id, name, pinned, pinned_by, show_completed_inline,
+           position, version FROM checklists WHERE id = ${id}
+  `.execute(ctx.tx);
+  const row = created.rows[0];
+  if (row === undefined) throw notFound('llista', id);
+  return toView(row, [], principal);
+}
+
+export async function createChecklistItem(
+  ctx: AuditContext,
+  principal: Principal,
+  checklistId: string,
+  input: { id?: string | undefined; text?: string | undefined; position?: string | undefined },
+): Promise<ChecklistItemRow> {
+  if (!hasCapability(principal, 'checklists:write')) throw missingCapability('checklists:write');
+  if (input.text === undefined || input.text.trim() === '') {
+    throw new PolicyError('text-required', 'Text required', 422, "L'ítem necessita text.");
+  }
+
+  const { scopeId } = await taskOfChecklist(ctx.tx, checklistId);
+  await assertScopeAccess(ctx.tx, principal, scopeId);
+
+  const id = input.id ?? uuidv7();
+  const last = await sql<{ position: string }>`
+    SELECT position FROM checklist_items WHERE checklist_id = ${checklistId} AND deleted_at IS NULL
+    ORDER BY position DESC LIMIT 1
+  `.execute(ctx.tx);
+
+  await sql`
+    INSERT INTO checklist_items (id, checklist_id, text, done, position, created_at, updated_at, version)
+    VALUES (${id}, ${checklistId}, ${input.text.trim()}, 0,
+            ${input.position ?? generatePosition(last.rows[0]?.position ?? null, null)},
+            ${ctx.now}, ${ctx.now}, 1)
+  `.execute(ctx.tx);
+
+  ctx.record({ entityType: 'checklist_item', entityId: id, scopeId, verb: 'created' });
+
+  const created = await sql<ChecklistItemRow>`
+    SELECT id, checklist_id, text, done, done_at, done_by, position
+    FROM checklist_items WHERE id = ${id}
+  `.execute(ctx.tx);
+  const row = created.rows[0];
+  if (row === undefined) throw notFound('ítem', id);
+  return row;
+}
+
+export interface CascadeResult {
+  checklist_completed: boolean;
+  subtask_completed: boolean;
+  task_completed: boolean;
+  suggest_unpin: boolean;
+}
+
+/**
+ * Marca o desmarca un ítem, i aplica **la cascada amunt**.
+ *
+ * Tot passa dins de la mateixa transacció que la crida: si la cascada fallés, l'ítem
+ * tampoc quedaria marcat, i mai es veuria una llista sencera feta amb la tasca oberta.
+ */
+export async function updateChecklistItem(
+  ctx: AuditContext,
+  principal: Principal,
+  itemId: string,
+  input: { text?: string | undefined; done?: boolean | undefined; position?: string | undefined },
+): Promise<{ item: ChecklistItemRow; cascade: CascadeResult }> {
+  if (!hasCapability(principal, 'checklists:write')) throw missingCapability('checklists:write');
+
+  const found = await sql<ChecklistItemRow>`
+    SELECT id, checklist_id, text, done, done_at, done_by, position
+    FROM checklist_items WHERE id = ${itemId} AND deleted_at IS NULL
+  `.execute(ctx.tx);
+  const item = found.rows[0];
+  if (item === undefined) throw notFound('ítem', itemId);
+
+  const { checklist, taskId, scopeId } = await taskOfChecklist(ctx.tx, item.checklist_id);
+  await assertScopeAccess(ctx.tx, principal, scopeId);
+
+  const done = input.done ?? item.done === 1;
+
+  await sql`
+    UPDATE checklist_items SET
+      text = COALESCE(${input.text ?? null}, text),
+      position = COALESCE(${input.position ?? null}, position),
+      done = ${done ? 1 : 0},
+      done_at = ${done ? ctx.now : null},
+      done_by = ${done ? principal.userId : null},
+      updated_at = ${ctx.now},
+      version = version + 1
+    WHERE id = ${itemId}
+  `.execute(ctx.tx);
+
+  ctx.record({
+    entityType: 'checklist_item',
+    entityId: itemId,
+    scopeId,
+    verb: done ? 'completed' : 'reopened',
+    changes: { done: { from: item.done === 1, to: done } },
+  });
+
+  const cascade = await applyCascade(ctx, principal, checklist, taskId, scopeId);
+  const updated = await sql<ChecklistItemRow>`
+    SELECT id, checklist_id, text, done, done_at, done_by, position
+    FROM checklist_items WHERE id = ${itemId}
+  `.execute(ctx.tx);
+
+  return { item: updated.rows[0]!, cascade };
+}
+
+/**
+ * La cascada amunt: llista → subtasca ancorada → tasca.
+ *
+ * Cada pas es registra amb `verb='cascade_complete'`, que és el que distingeix "això ho
+ * ha fet el sistema perquè tot el que hi havia a sota estava fet" de "això ho ha marcat
+ * una persona". A l'historial, la diferència importa.
+ */
+async function applyCascade(
+  ctx: AuditContext,
+  principal: Principal,
+  checklist: ChecklistRow,
+  taskId: string,
+  scopeId: string,
+): Promise<CascadeResult> {
+  const result: CascadeResult = {
+    checklist_completed: false,
+    subtask_completed: false,
+    task_completed: false,
+    suggest_unpin: false,
+  };
+
+  const pending = await sql<{ n: number }>`
+    SELECT COUNT(*) AS n FROM checklist_items
+    WHERE checklist_id = ${checklist.id} AND deleted_at IS NULL AND done = 0
+  `.execute(ctx.tx);
+  const total = await sql<{ n: number }>`
+    SELECT COUNT(*) AS n FROM checklist_items
+    WHERE checklist_id = ${checklist.id} AND deleted_at IS NULL
+  `.execute(ctx.tx);
+
+  // Una llista buida no està "completa": no hi ha res a completar-hi.
+  const complete = Number(total.rows[0]?.n ?? 0) > 0 && Number(pending.rows[0]?.n ?? 0) === 0;
+  result.checklist_completed = complete;
+
+  if (!complete) return result;
+
+  // Quan una llista PINEJADA es completa del tot, es pregunta si es vol despinejar (P1).
+  // Es proposa, no es fa: despinejar-la sola seria decidir per l'usuari.
+  result.suggest_unpin = checklist.pinned === 1 && checklist.pinned_by === principal.userId;
+
+  // Pas 1: la subtasca ancorada, si n'hi ha.
+  if (checklist.subtask_id !== null) {
+    const others = await sql<{ n: number }>`
+      SELECT COUNT(*) AS n FROM checklists c
+      WHERE c.subtask_id = ${checklist.subtask_id} AND c.deleted_at IS NULL
+        AND EXISTS (SELECT 1 FROM checklist_items i
+                    WHERE i.checklist_id = c.id AND i.deleted_at IS NULL AND i.done = 0)
+    `.execute(ctx.tx);
+
+    if (Number(others.rows[0]?.n ?? 0) === 0) {
+      await sql`
+        UPDATE subtasks SET done = 1, updated_at = ${ctx.now}, version = version + 1
+        WHERE id = ${checklist.subtask_id} AND done = 0
+      `.execute(ctx.tx);
+
+      result.subtask_completed = true;
+      ctx.record({
+        entityType: 'subtask',
+        entityId: checklist.subtask_id,
+        scopeId,
+        verb: 'cascade_complete',
+      });
+    }
+  }
+
+  // Pas 2: la tasca, si TOTES les seves llistes i subtasques estan fetes.
+  const pendingSubtasks = await sql<{ n: number }>`
+    SELECT COUNT(*) AS n FROM subtasks
+    WHERE task_id = ${taskId} AND deleted_at IS NULL AND done = 0
+  `.execute(ctx.tx);
+  const pendingLists = await sql<{ n: number }>`
+    SELECT COUNT(*) AS n FROM checklists c
+    WHERE c.task_id = ${taskId} AND c.deleted_at IS NULL
+      AND EXISTS (SELECT 1 FROM checklist_items i
+                  WHERE i.checklist_id = c.id AND i.deleted_at IS NULL AND i.done = 0)
+  `.execute(ctx.tx);
+
+  if (Number(pendingSubtasks.rows[0]?.n ?? 0) === 0 && Number(pendingLists.rows[0]?.n ?? 0) === 0) {
+    const task = await sql<{ status: string }>`
+      SELECT status FROM tasks WHERE id = ${taskId}
+    `.execute(ctx.tx);
+
+    if (task.rows[0]?.status !== 'done') {
+      await sql`
+        UPDATE tasks SET status = 'done', completed_at = ${ctx.now}, updated_at = ${ctx.now},
+                         version = version + 1
+        WHERE id = ${taskId}
+      `.execute(ctx.tx);
+
+      result.task_completed = true;
+      ctx.record({
+        entityType: 'task',
+        entityId: taskId,
+        scopeId,
+        verb: 'cascade_complete',
+        changes: { status: { from: task.rows[0]?.status ?? 'inbox', to: 'done' } },
+      });
+    }
+  }
+
+  return result;
+}
+
+export async function setPinned(
+  ctx: AuditContext,
+  principal: Principal,
+  checklistId: string,
+  pinned: boolean,
+): Promise<void> {
+  if (!hasCapability(principal, 'checklists:write')) throw missingCapability('checklists:write');
+
+  const { scopeId } = await taskOfChecklist(ctx.tx, checklistId);
+  await assertScopeAccess(ctx.tx, principal, scopeId);
+
+  await sql`
+    UPDATE checklists SET pinned = ${pinned ? 1 : 0},
+                          pinned_by = ${pinned ? principal.userId : null},
+                          updated_at = ${ctx.now}, version = version + 1
+    WHERE id = ${checklistId}
+  `.execute(ctx.tx);
+
+  ctx.record({
+    entityType: 'checklist',
+    entityId: checklistId,
+    scopeId,
+    verb: 'updated',
+    changes: { pinned: { from: !pinned, to: pinned } },
+  });
+}

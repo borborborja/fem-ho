@@ -23,6 +23,10 @@ tags:
     description: Identitat i salut de la instància. Públic i sense autenticar.
   - name: scopes
     description: Àmbits i projectes. Una tasca sempre té àmbit; el projecte és opcional.
+  - name: checklists
+    description: |
+      Llistes senzilles. Un ítem només té text i fet/no fet (P1); la riquesa va al
+      contenidor, que es pot pinejar i compartir.
   - name: events
     description: |
       Esdeveniments i calendaris. Un esdeveniment NO és una tasca amb hores (D8) i no
@@ -626,8 +630,262 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthenticated'
 
+  /tasks/{id}/checklists:
+    get:
+      tags: [checklists]
+      operationId: listChecklists
+      summary: Les llistes senzilles d'una tasca
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Llistes amb els seus ítems.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Checklist'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags: [checklists]
+      operationId: createChecklist
+      summary: Crear una llista dins d'una tasca
+      description: |
+        Una llista pertany **sempre** a una tasca, i opcionalment s'ancora a una subtasca
+        concreta (P1). No és un subprojecte ni una subtasca: són dues taules i un flag de
+        presentació.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChecklistInput'
+      responses:
+        '201':
+          description: Creada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Checklist'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /checklists/{id}/items:
+    post:
+      tags: [checklists]
+      operationId: createChecklistItem
+      summary: Afegir un ítem
+      description: |
+        Un ítem **només té text i fet/no fet** (P1). Cap data, cap assignat, cap
+        niuament. La contenció és deliberada i ve de Things 3: és el que fa que la llista
+        no es converteixi en un segon gestor de tasques dins del gestor de tasques.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChecklistItemInput'
+      responses:
+        '201':
+          description: Afegit.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChecklistItem'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /checklist-items/{id}:
+    patch:
+      tags: [checklists]
+      operationId: updateChecklistItem
+      summary: Marcar o desmarcar un ítem
+      description: |
+        **Marcar-lo pot disparar la cascada amunt** (docs/01 §4): quan l'últim ítem d'una
+        llista passa a fet, en la mateixa transacció es marca la subtasca ancorada; i si
+        totes les llistes i subtasques d'una tasca estan fetes, la tasca passa a `done`.
+
+        Es registra amb `verb='cascade_complete'` perquè es distingeixi d'un gest directe.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChecklistItemInput'
+      responses:
+        '200':
+          description: Modificat, amb el que la cascada hagi tocat.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChecklistItemResult'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /checklists/{id}/pin:
+    post:
+      tags: [checklists]
+      operationId: pinChecklist
+      summary: Pinejar una llista
+      description: |
+        El pinejat és **per usuari** (docs/01 §4): el rail de llistes pinejades és de
+        cada persona, no de la casa.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '204':
+          description: Pinejada.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    delete:
+      tags: [checklists]
+      operationId: unpinChecklist
+      summary: Despinejar una llista
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '204':
+          description: Despinejada.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+
+  /pinned-checklists:
+    get:
+      tags: [checklists]
+      operationId: listPinnedChecklists
+      summary: Les llistes pinejades de qui pregunta
+      responses:
+        '200':
+          description: Llistes pinejades, amb el seu progrés.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Checklist'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+
 components:
   schemas:
+    Checklist:
+      type: object
+      additionalProperties: false
+      required: [id, task_id, name, pinned, show_completed_inline, position, items, version]
+      properties:
+        id: { type: string }
+        task_id: { type: string }
+        subtask_id:
+          type: [string, 'null']
+          description: Ancoratge opcional a una subtasca concreta (P1).
+        name: { type: string }
+        pinned:
+          type: boolean
+          description: Pinejat PER USUARI. El rail és de cada persona.
+        show_completed_inline:
+          type: boolean
+          description: |
+            Completats ratllats al seu lloc, o en una secció "Completats" al final,
+            plegada amb el recompte (docs/02 §6).
+        position: { type: string }
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChecklistItem'
+        version: { type: integer }
+
+    ChecklistInput:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        id: { type: string }
+        name: { type: string, minLength: 1 }
+        subtask_id: { type: string }
+        show_completed_inline: { type: boolean }
+
+    ChecklistItem:
+      type: object
+      additionalProperties: false
+      required: [id, checklist_id, text, done, position]
+      properties:
+        id: { type: string }
+        checklist_id: { type: string }
+        text: { type: string }
+        done: { type: boolean }
+        done_at: { type: [string, 'null'], format: date-time }
+        done_by: { type: [string, 'null'] }
+        position: { type: string }
+
+    ChecklistItemInput:
+      type: object
+      additionalProperties: false
+      properties:
+        id: { type: string }
+        text: { type: string, minLength: 1 }
+        done: { type: boolean }
+        position: { type: string }
+
+    ChecklistItemResult:
+      type: object
+      additionalProperties: false
+      required: [item, cascade]
+      properties:
+        item:
+          $ref: '#/components/schemas/ChecklistItem'
+        cascade:
+          type: object
+          additionalProperties: false
+          required: [checklist_completed, subtask_completed, task_completed]
+          description: Què ha tocat la cascada amunt, perquè la interfície ho pugui dir.
+          properties:
+            checklist_completed: { type: boolean }
+            subtask_completed: { type: boolean }
+            task_completed: { type: boolean }
+            suggest_unpin:
+              type: boolean
+              description: |
+                Cert quan una llista PINEJADA s'ha completat del tot: llavors es pregunta
+                si es vol despinejar (P1).
+
     Calendar:
       type: object
       additionalProperties: false
