@@ -90,14 +90,34 @@
     "globals": {
       "version": "17.9.0",
       "checkedAt": "2026-08-05"
+    },
+    "kysely": {
+      "version": "0.29.4",
+      "checkedAt": "2026-08-05"
+    },
+    "better-sqlite3": {
+      "version": "13.0.3",
+      "checkedAt": "2026-08-05"
+    },
+    "pg": {
+      "version": "8.22.0",
+      "checkedAt": "2026-08-05"
+    },
+    "@types/better-sqlite3": {
+      "version": "9.6.0",
+      "checkedAt": "2026-08-05"
+    },
+    "@types/pg": {
+      "version": "8.20.4",
+      "checkedAt": "2026-08-05"
+    },
+    "kysely-codegen": {
+      "version": "0.20.0",
+      "checkedAt": "2026-08-05"
     }
   },
   "verifiedAvailableForLaterMilestones": {
     "$comment": "Existència comprovada al registre el 2026-08-05. Es fixaran a la seva fita, amb el mateix procediment.",
-    "kysely": "0.29.4",
-    "kysely-codegen": "0.20.0",
-    "better-sqlite3": "13.0.3",
-    "pg": "8.22.0",
     "@node-rs/argon2": "2.0.2",
     "uuid": "14.0.1",
     "saxes": "6.0.0",

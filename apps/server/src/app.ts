@@ -10,9 +10,19 @@
 
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { Config } from './config.js';
+import type { Connection } from './db/connection.js';
 import { registerInstanceRoutes } from './http/instance.js';
 
-export function buildApp(config: Config): FastifyInstance {
+export interface BuildOptions {
+  /**
+   * La connexió a la base. Opcional perquè les proves de contracte de les rutes
+   * públiques no n'han de muntar cap, i perquè /healthz ha de respondre encara que la
+   * base no hi sigui — que és tot el motiu pel qual està separada de /readyz.
+   */
+  connection?: Connection;
+}
+
+export function buildApp(config: Config, options: BuildOptions = {}): FastifyInstance {
   const app = Fastify({
     // Registres estructurats en JSON a stdout, sense cap secret (docs/12 §8).
     logger: { level: config.logLevel },
@@ -22,6 +32,7 @@ export function buildApp(config: Config): FastifyInstance {
   });
 
   app.decorate('config', config);
+  app.decorate('connection', options.connection);
 
   // Capçaleres de seguretat de docs/10 §8. La CSP arriba a M5, quan hi ha una pàgina
   // de veritat a què aplicar-la.
@@ -40,5 +51,6 @@ export function buildApp(config: Config): FastifyInstance {
 declare module 'fastify' {
   interface FastifyInstance {
     config: Config;
+    connection: Connection | undefined;
   }
 }

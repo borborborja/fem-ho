@@ -58,6 +58,8 @@ export interface Config {
   /** La superfície CalDAV va en un port propi, dins del mateix procés (docs/07 §1). */
   davPort: number;
   dataDir: string;
+  /** Cadena de connexió. Per defecte SQLite a /data, que és el cas recomanat (D11). */
+  databaseUrl: string;
   registration: RegistrationMode;
   logLevel: string;
 }
@@ -70,6 +72,7 @@ export function loadConfig(version: string): Config {
     port: envInt('PORT', 8080),
     davPort: envInt('DAV_PORT', 8081),
     dataDir: env('DATA_DIR') ?? '/data',
+    databaseUrl: env('DATABASE_URL') ?? 'sqlite:///data/femho.db',
     registration: envRegistration(),
     logLevel: env('LOG_LEVEL') ?? 'info',
   };

@@ -62,6 +62,35 @@ paths:
               schema:
                 $ref: '#/components/schemas/Health'
 
+  /readyz:
+    servers:
+      - url: /
+    get:
+      tags: [instance]
+      operationId: getReadyz
+      summary: Base de dades accessible i migracions aplicades
+      description: |
+        docs/12 §8. A diferència de /healthz, aquesta SÍ que toca la base: diu si la
+        instància pot servir peticions de veritat.
+
+        Van separades a propòsit. Si el healthcheck del contenidor depengués de la base,
+        una base lenta reiniciaria el contenidor en bucle, que és el pitjor que pot
+        passar amb SQLite a mig escriure.
+      security: []
+      responses:
+        '200':
+          description: La base respon i l'esquema és al dia.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Readiness'
+        '503':
+          description: La base no respon o les migracions no s'han aplicat.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+
 components:
   schemas:
     Info:
@@ -98,6 +127,23 @@ components:
         status:
           type: string
           enum: [ok]
+
+    Readiness:
+      type: object
+      additionalProperties: false
+      required: [status, database, schema_version]
+      properties:
+        status:
+          type: string
+          enum: [ready]
+        database:
+          type: string
+          enum: [sqlite, postgres]
+          description: El motor amb què corre la instància (D11).
+        schema_version:
+          type: string
+          description: L'última migració aplicada.
+          examples: ['001-initial-schema']
 
     Problem:
       type: object

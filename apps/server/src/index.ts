@@ -9,6 +9,9 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { buildApp } from './app.js';
 import { loadConfig } from './config.js';
+import { connect } from './db/connection.js';
+import { parseDatabaseUrl } from './db/dialect.js';
+import { ensureParentDir, migrateToLatest } from './db/migrator.js';
 
 function readVersion(): string {
   const pkgUrl = new URL('../package.json', import.meta.url);
@@ -22,7 +25,34 @@ function readVersion(): string {
 
 async function main(): Promise<void> {
   const config = loadConfig(readVersion());
-  const app = buildApp(config);
+
+  // El directori s'ha de crear ABANS d'obrir la base: better-sqlite3 no el crea i falla
+  // amb "directory does not exist". És el primer arrencament d'un volum nou.
+  const target = parseDatabaseUrl(config.databaseUrl);
+  const databasePath = target.engine === 'sqlite' ? target.target : undefined;
+  if (databasePath !== undefined) ensureParentDir(databasePath);
+
+  const connection = connect(config.databaseUrl);
+  const app = buildApp(config, { connection });
+
+  /**
+   * Les migracions s'executen a l'arrencar, ABANS d'escoltar peticions, i si una falla
+   * el procés NO arrenca (docs/12 §5). Res de continuar amb l'esquema a mitges: un
+   * servidor que respon amb la meitat de les taules fa molt més mal que un que no
+   * arrenca i ho diu.
+   */
+
+  try {
+    await migrateToLatest(connection.db, {
+      engine: connection.engine,
+      ...(databasePath === undefined ? {} : { databasePath, dataDir: config.dataDir }),
+      log: (message) => app.log.info(message),
+    });
+  } catch (error) {
+    app.log.error({ err: error }, 'Una migració ha fallat. El servidor no arrencarà.');
+    await connection.close();
+    process.exit(1);
+  }
 
   if (config.baseUrl === undefined) {
     app.log.warn(
@@ -34,7 +64,10 @@ async function main(): Promise<void> {
   for (const signal of ['SIGTERM', 'SIGINT'] as const) {
     process.once(signal, () => {
       app.log.info({ signal }, 'Tancant');
-      void app.close().then(() => process.exit(0));
+      void app
+        .close()
+        .then(() => connection.close())
+        .then(() => process.exit(0));
     });
   }
 

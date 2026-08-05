@@ -47,6 +47,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/readyz": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Base de dades accessible i migracions aplicades
+         * @description docs/12 §8. A diferència de /healthz, aquesta SÍ que toca la base: diu si la
+         *     instància pot servir peticions de veritat.
+         *
+         *     Van separades a propòsit. Si el healthcheck del contenidor depengués de la base,
+         *     una base lenta reiniciaria el contenidor en bucle, que és el pitjor que pot
+         *     passar amb SQLite a mig escriure.
+         */
+        get: operations["getReadyz"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -78,6 +103,20 @@ export interface components {
         Health: {
             /** @enum {string} */
             status: "ok";
+        };
+        Readiness: {
+            /** @enum {string} */
+            status: "ready";
+            /**
+             * @description El motor amb què corre la instància (D11).
+             * @enum {string}
+             */
+            database: "sqlite" | "postgres";
+            /**
+             * @description L'última migració aplicada.
+             * @example 001-initial-schema
+             */
+            schema_version: string;
         };
         /**
          * @description Error en application/problem+json (RFC 9457, docs/05 §3). `type` i `title` són
@@ -143,6 +182,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Health"];
+                };
+            };
+        };
+    };
+    getReadyz: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description La base respon i l'esquema és al dia. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Readiness"];
+                };
+            };
+            /** @description La base no respon o les migracions no s'han aplicat. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };

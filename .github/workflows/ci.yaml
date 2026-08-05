@@ -15,6 +15,27 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+
+    # D11: CI prova els DOS motors. No és cosmètic — decideix FTS5 contra tsvector per
+    # a la cerca en català, i és on es veu el parany de visibilitat fora d'ordre del
+    # cursor de sync, que a SQLite pràcticament no existeix i a Postgres sí.
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: femho
+          POSTGRES_DB: femho_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      FEMHO_TEST_POSTGRES_URL: postgres://postgres:femho@localhost:5432/femho_test
+
     steps:
       - uses: actions/checkout@v4
 

@@ -8,9 +8,11 @@
 
 import type { FastifyInstance } from 'fastify';
 import type { components } from '@fem-ho/contracts';
+import { sql } from 'kysely';
 
 type Info = components['schemas']['Info'];
 type Health = components['schemas']['Health'];
+type Readiness = components['schemas']['Readiness'];
 
 export function registerInstanceRoutes(app: FastifyInstance): void {
   /**
@@ -36,5 +38,50 @@ export function registerInstanceRoutes(app: FastifyInstance): void {
    */
   app.get('/healthz', async (): Promise<Health> => {
     return { status: 'ok' };
+  });
+
+  /**
+   * Aquesta SÍ que toca la base (docs/12 §8). Diu si la instància pot servir peticions
+   * de veritat: base accessible i migracions aplicades.
+   */
+  app.get('/readyz', async (_request, reply): Promise<Readiness | undefined> => {
+    const conn = app.connection;
+    if (conn === undefined) {
+      void reply.code(503).type('application/problem+json').send({
+        type: 'https://femho.app/errors/not-ready',
+        title: 'Database not connected',
+        status: 503,
+        detail: 'La instància encara no té connexió a la base de dades.',
+      });
+      return undefined;
+    }
+
+    try {
+      const result = await sql
+        .raw('SELECT name FROM schema_migrations ORDER BY name DESC LIMIT 1')
+        .execute(conn.db);
+      const row = result.rows[0] as { name: string } | undefined;
+
+      if (row === undefined) {
+        void reply.code(503).type('application/problem+json').send({
+          type: 'https://femho.app/errors/not-migrated',
+          title: 'Schema not migrated',
+          status: 503,
+          detail: "La base respon però no s'hi ha aplicat cap migració.",
+        });
+        return undefined;
+      }
+
+      return { status: 'ready', database: conn.engine, schema_version: row.name };
+    } catch (error) {
+      app.log.error({ err: error }, 'readyz: la base no respon');
+      void reply.code(503).type('application/problem+json').send({
+        type: 'https://femho.app/errors/database-unavailable',
+        title: 'Database unavailable',
+        status: 503,
+        detail: 'La base de dades no respon.',
+      });
+      return undefined;
+    }
   });
 }

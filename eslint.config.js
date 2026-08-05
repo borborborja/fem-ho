@@ -38,7 +38,14 @@ export default tseslint.config(
   {
     // Les comprovacions permanents i els fitxers de configuració són scripts de Node:
     // process, console i URL hi són globals legítims.
-    files: ['tools/**/*.mjs', '**/*.config.ts', '**/*.config.js', 'eslint.config.js'],
+    files: [
+      'tools/**/*.mjs',
+      '**/scripts/*.mjs',
+      '**/scripts/*.ts',
+      '**/*.config.ts',
+      '**/*.config.js',
+      'eslint.config.js',
+    ],
     languageOptions: { globals: globals.node },
     rules: {
       // Una comprovació de CI comunica el resultat per stdout. És la seva feina.
