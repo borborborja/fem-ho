@@ -17,6 +17,7 @@
     "@node-rs/argon2": "2.0.2",
     "better-sqlite3": "13.0.3",
     "fastify": "5.11.2",
+    "ical.js": "2.2.1",
     "kysely": "0.29.4",
     "pg": "8.22.0",
     "uuid": "14.0.1"
