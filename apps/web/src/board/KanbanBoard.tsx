@@ -265,8 +265,17 @@ export function KanbanBoard({
           // i les tres van dins d'una sola targeta perquè "es sentin un sol element"
           // (brief línia 39), que és el que fa el prototip.
           gridTemplateColumns: '1fr 3fr',
+          /**
+           * `minmax(0, 1fr)` a les files i `stretch`: les quatre columnes fan la mateixa
+           * alçada i es desplacen per dins. Amb `start` i files automàtiques, una
+           * columna amb quaranta targetes estirava la pàgina i les altres tres quedaven
+           * penjades a dalt.
+           */
+          gridTemplateRows: 'minmax(0, 1fr)',
           gap: 24,
-          alignItems: 'start',
+          alignItems: 'stretch',
+          flex: 1,
+          minHeight: 0,
         }}
       >
         {/*
@@ -304,7 +313,15 @@ export function KanbanBoard({
           El gir viu aquí i no a cada columna: el que gira és la targeta sencera, i
           animar-ne tres per separat les desincronitzaria a la primera pantalla lenta.
         */}
-        <div style={{ perspective: 1800, minHeight: 0, position: 'relative' }}>
+        <div
+          style={{
+            perspective: 1800,
+            minHeight: 0,
+            position: 'relative',
+            display: 'flex',
+            flexDirection: 'column',
+          }}
+        >
           {aiBoard ? (
             <span
               data-testid="ai-board-badge"
@@ -337,6 +354,9 @@ export function KanbanBoard({
                */
               transform: flip?.transform ?? 'none',
               transition: flip?.transition,
+              display: 'flex',
+              flex: 1,
+              minHeight: 0,
             }}
           >
             <KanbanGroup borderColor={aiBoard ? 'var(--plou-blue-ink)' : undefined}>

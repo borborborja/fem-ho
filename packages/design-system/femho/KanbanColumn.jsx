@@ -189,6 +189,11 @@ export function KanbanGroup({ children, borderColor, style, ...rest }) {
         boxShadow: 'var(--card-shadow)',
         padding: 14,
         minHeight: 0,
+        // Omple el que li dona el tauler: si no, les tres columnes es quedarien de
+        // l'alçada del contingut i el desplaçament de dins no serviria de res.
+        flex: 1,
+        boxSizing: 'border-box',
+        overflow: 'hidden',
         ...style,
       }}
       {...rest}

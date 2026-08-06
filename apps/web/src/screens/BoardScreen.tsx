@@ -39,6 +39,7 @@ function toBoardTask(
   projectName: string | undefined,
   initials: string | undefined,
   assignedToOther: boolean,
+  collective: boolean,
 ): BoardTask {
   return {
     id: task.id,
@@ -47,12 +48,16 @@ function toBoardTask(
     scope_id: task.scope_id,
     project: projectName,
     /**
-     * A la bústia, sempre qui la té; fora, **només si és d'algú altre**.
+     * A la bústia d'un àmbit **col·lectiu**, sempre qui la té; fora, només si és d'algú
+     * altre.
      *
-     * A "Per fer" gairebé totes són teves, i pintar la teva inicial a cadascuna és una
-     * columna de la mateixa lletra que no distingeix res.
+     * A un àmbit individual la tasca s'autoassigna al propietari (docs/02 §4), o sigui
+     * que la inicial seria la teva a totes les targetes: una columna de la mateixa
+     * lletra que no distingeix res. I a "Per fer", el mateix.
      */
-    assigneeInitials: task.status === 'inbox' || assignedToOther ? initials : undefined,
+    assigneeInitials: (collective && task.status === 'inbox') || assignedToOther
+      ? initials
+      : undefined,
     assignedToOther,
     time: task.due_time ?? undefined,
     aiMode: task.ai_mode,
@@ -127,12 +132,13 @@ export function BoardScreen({
             projectName(task.project_id ?? null),
             initialsOf(assignees),
             assignees.length > 0 && !assignees.includes(profile.id),
+            scopes.find((scope) => scope.id === task.scope_id)?.kind === 'collective',
           );
           const moved = optimistic[task.id];
           return moved === undefined ? card : { ...card, status: moved };
         })
     );
-  }, [board.data, optimistic, projectName, initialsOf, aiBoard, profile.id]);
+  }, [board.data, optimistic, projectName, initialsOf, aiBoard, profile.id, scopes]);
 
   const activeScopes = scopes.filter((scope) => activeScopeIds.includes(scope.id));
 
@@ -243,7 +249,12 @@ export function BoardScreen({
     <div
       data-testid="board-screen"
       style={{
-        display: 'grid',
+        display: 'flex',
+        flexDirection: 'column',
+        // Omple el que li dona el `main`, que al tauler té alçada fixa. Sense això, el
+        // tauler quedaria arrapat a dalt amb el forat a sota.
+        flex: 1,
+        minHeight: 0,
         gap: 16,
         // Contingut anterior amb opacitat mentre es revalida: res d'esquelets brillants,
         // que el design system prohibeix (docs/02 §12).

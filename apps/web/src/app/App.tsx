@@ -193,6 +193,8 @@ function AppShell() {
   const view: 'tasks' | 'calendar' = route.path === '/calendar' ? 'calendar' : 'tasks';
   const list = match('/lists/:id', route.path);
 
+  const fullHeight = list === null && view === 'tasks' && route.path === '/';
+
   return (
     <div style={{ minHeight: '100vh', background: 'var(--page-bg)' }}>
       <TopBar
@@ -216,6 +218,26 @@ function AppShell() {
           maxWidth: 'var(--content-max, 1360px)',
           margin: '0 auto',
           padding: '20px 28px calc(28px + env(safe-area-inset-bottom, 0px))',
+          /**
+           * **El tauler omple la pantalla; la resta creix amb el contingut.**
+           *
+           * El disseny validat dona al tauler una alçada fixa —`calc(100vh - 70px)`, els
+           * 70 de la barra— i fa que cada columna es desplaci per dins. Sense això, una
+           * columna amb quaranta targetes estirava la pàgina i les altres tres quedaven
+           * penjades a dalt amb un pam de buit a sota.
+           *
+           * Només al tauler: Ajustos, el cercador i el tauler general són documents i
+           * s'han de poder llegir avall.
+           */
+          ...(fullHeight
+            ? {
+                height: 'calc(100dvh - 70px)',
+                boxSizing: 'border-box' as const,
+                display: 'flex',
+                flexDirection: 'column' as const,
+                minHeight: 0,
+              }
+            : {}),
         }}
       >
         {warning === null ? null : (
