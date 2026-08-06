@@ -91,7 +91,7 @@ export async function listCollections(
     WHERE scope_id IN (${scopeIds}) AND kind = 'events' AND deleted_at IS NULL
   `.execute(db);
 
-  const changeSeq = await currentChangeSeq(db);
+  const taskSeqs = await taskSeqByContainer(db, scopeIds);
   const collections: DavCollection[] = [];
   const vistos = new Set<string>();
 
@@ -129,7 +129,10 @@ export async function listCollections(
           projectId: project?.id ?? null,
           color: scope.color,
           calendarId: kind === 'events' ? (calendar?.id ?? null) : null,
-          syncSeq: kind === 'events' ? (calendar?.sync_seq ?? 0) : changeSeq,
+          syncSeq:
+            kind === 'events'
+              ? (calendar?.sync_seq ?? 0)
+              : (taskSeqs.get(`${scope.id}:${project?.id ?? ''}`) ?? 0),
         });
       }
     }
@@ -145,6 +148,34 @@ export async function findCollection(
   name: string,
 ): Promise<DavCollection | undefined> {
   return (await listCollections(db, principal)).find((collection) => collection.name === name);
+}
+
+/**
+ * L'últim `seq` de cada contenidor de tasques.
+ *
+ * **Per contenidor i no global.** Amb un comptador global, un canvi a qualsevol àmbit
+ * mouria el ctag de totes les col·leccions i cada client se les tornaria a baixar
+ * senceres: correcte, però una tempesta de trànsit a cada tecla.
+ *
+ * Surt del `change_log`, que és el mateix comptador que fa servir el sync de la web
+ * (docs/06 §2): un canvi fet al kanban ja mou el ctag del CalDAV sense que ningú hagi
+ * d'enllaçar les dues coses.
+ */
+async function taskSeqByContainer(
+  db: MigrationDb,
+  scopeIds: ReturnType<typeof sql.join>,
+): Promise<Map<string, number>> {
+  const found = await sql<{ scope_id: string; project_id: string | null; seq: number }>`
+    SELECT t.scope_id, t.project_id, MAX(c.seq) AS seq
+    FROM change_log c
+    JOIN tasks t ON t.id = c.entity_id
+    WHERE c.entity_type = 'task' AND t.scope_id IN (${scopeIds})
+    GROUP BY t.scope_id, t.project_id
+  `.execute(db);
+
+  return new Map(
+    found.rows.map((row) => [`${row.scope_id}:${row.project_id ?? ''}`, Number(row.seq)]),
+  );
 }
 
 /**

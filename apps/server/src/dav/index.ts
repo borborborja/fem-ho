@@ -10,6 +10,7 @@ import type { Server } from 'node:http';
 import type { Connection } from '../db/connection.js';
 import { get, propfind, proppatch, reportHandler } from './handlers.js';
 import { createDavServer } from './server.js';
+import { del, put } from './write.js';
 
 export { createDavServer } from './server.js';
 export { ALLOWED_METHODS, DAV_COMPLIANCE } from './server.js';
@@ -23,6 +24,8 @@ export function buildDavServer(connection: Connection): Server {
       REPORT: reportHandler,
       GET: get,
       HEAD: get,
+      PUT: put,
+      DELETE: del,
     },
   });
 }

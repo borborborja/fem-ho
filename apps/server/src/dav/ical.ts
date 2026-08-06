@@ -189,14 +189,18 @@ export async function renderTodo(db: MigrationDb, taskId: string): Promise<strin
   if (row.completed_at !== null) setUtc(todo, 'completed', row.completed_at);
   if (row.rrule !== null) todo.updatePropertyWithValue('rrule', ICAL.Recur.fromString(row.rrule));
 
+  // `CATEGORIES` ↔ etiquetes (docs/07 §6). Les taules són `labels` i `task_labels`.
   const categories = await sql<{ name: string }>`
-    SELECT t.name FROM tags t
-    JOIN task_tags tt ON tt.tag_id = t.id
-    WHERE tt.task_id = ${row.id}
-    ORDER BY t.name
+    SELECT l.name FROM labels l
+    JOIN task_labels tl ON tl.label_id = l.id
+    WHERE tl.task_id = ${row.id} AND l.deleted_at IS NULL
+    ORDER BY l.name
   `.execute(db);
   if (categories.rows.length > 0) {
-    todo.updatePropertyWithValue('categories', categories.rows.map((tag) => tag.name).join(','));
+    todo.updatePropertyWithValue(
+      'categories',
+      categories.rows.map((label) => label.name).join(','),
+    );
   }
 
   // Les propietats pròpies (docs/07 §7): el que Fem-ho té i iCalendar no sap dir.
@@ -231,25 +235,25 @@ async function renderSubtasks(
   const found = await sql<{
     id: string;
     title: string;
-    completed_at: string | null;
+    done: number | boolean;
     position: string;
     created_at: string;
     updated_at: string;
   }>`
-    SELECT id, title, completed_at, position, created_at, updated_at
+    SELECT id, title, done, position, created_at, updated_at
     FROM subtasks WHERE task_id = ${taskId} AND deleted_at IS NULL
     ORDER BY position
   `.execute(db);
 
   return found.rows.map((row) => {
     const child = new ICAL.Component('vtodo');
+    // `subtasks` guarda si està feta, no quan. El `COMPLETED` d'iCalendar surt de
+    // l'últim canvi, que és el més fidel que es pot dir sense inventar-se una data.
+    const done = row.done === true || row.done === 1;
     child.updatePropertyWithValue('uid', row.id);
     child.updatePropertyWithValue('summary', row.title);
-    child.updatePropertyWithValue(
-      'status',
-      row.completed_at === null ? 'NEEDS-ACTION' : 'COMPLETED',
-    );
-    if (row.completed_at !== null) setUtc(child, 'completed', row.completed_at);
+    child.updatePropertyWithValue('status', done ? 'COMPLETED' : 'NEEDS-ACTION');
+    if (done) setUtc(child, 'completed', row.updated_at);
 
     const related = child.updatePropertyWithValue('related-to', parentUid);
     related.setParameter('reltype', 'PARENT');
@@ -270,16 +274,16 @@ async function renderSubtasks(
  * propietat per poder-les reconstruir exactament. En importar, mana la propietat.
  */
 async function renderChecklist(db: MigrationDb, taskId: string): Promise<string | undefined> {
-  const lists = await sql<{ id: string; title: string }>`
-    SELECT id, title FROM checklists
+  const lists = await sql<{ id: string; name: string }>`
+    SELECT id, name FROM checklists
     WHERE task_id = ${taskId} AND deleted_at IS NULL
     ORDER BY position
   `.execute(db);
 
   if (lists.rows.length === 0) return undefined;
 
-  const items = await sql<{ checklist_id: string; text: string; completed_at: string | null }>`
-    SELECT checklist_id, text, completed_at FROM checklist_items
+  const items = await sql<{ checklist_id: string; text: string; done: number | boolean }>`
+    SELECT checklist_id, text, done FROM checklist_items
     WHERE checklist_id IN (${sql.join(lists.rows.map((list) => sql`${list.id}`))})
       AND deleted_at IS NULL
     ORDER BY position
@@ -292,10 +296,10 @@ async function renderChecklist(db: MigrationDb, taskId: string): Promise<string 
    */
   return JSON.stringify(
     lists.rows.map((list) => ({
-      title: list.title,
+      title: list.name,
       items: items.rows
         .filter((item) => item.checklist_id === list.id)
-        .map((item) => ({ text: item.text, done: item.completed_at !== null })),
+        .map((item) => ({ text: item.text, done: item.done === true || item.done === 1 })),
     })),
   );
 }
