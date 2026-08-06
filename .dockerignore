@@ -1,0 +1,23 @@
+# El context de construcció.
+#
+# Sense això, `COPY . .` s'endú `node_modules` i els `dist` de la màquina de qui
+# construeix: centenars de MB que després la imatge reescriu igualment, i —pitjor—
+# binaris compilats per a una altra arquitectura que poden acabar a la imatge final.
+node_modules
+**/node_modules
+**/dist
+**/build
+.git
+.gradle
+test-results
+playwright-report
+
+# Els zips originals del disseny: ja estan extrets al repositori.
+*.zip
+
+# Res de secrets ni de dades locals.
+.env
+.env.*
+*.db
+*.db-wal
+*.db-shm

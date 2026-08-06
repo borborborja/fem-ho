@@ -1,0 +1,66 @@
+/**
+ * L'arrel de l'aplicació. docs/02 §1.
+ *
+ * "Arrel amb `data-theme` i `data-accent`, `min-height:100vh`, fons `var(--page-bg)`,
+ * tipografia `var(--font-sans)`."
+ *
+ * **Res d'això surt sol.** Plou defineix els tokens i les classes d'utilitat, però no
+ * toca `html` ni `body`: és un design system, no un `reset`, i decidir la tipografia de
+ * la pàgina és de qui la munta. Sense aquest fitxer, tota l'app es veia amb la serif per
+ * defecte del navegador i el fons només arribava on algú l'havia posat a mà.
+ */
+
+html {
+  min-height: 100%;
+  background: var(--page-bg);
+  background-attachment: fixed;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: var(--font-sans);
+  color: var(--ink);
+  /* El fons ja el porta `html`: repetir-lo aquí taparia el gradient fix en fer scroll. */
+  background: transparent;
+  -webkit-font-smoothing: antialiased;
+}
+
+/**
+ * Els camps i els botons hereten la família.
+ *
+ * Els controls de formulari **no hereten la tipografia** per defecte: el navegador els
+ * dona la seva, i el resultat és una app amb dues tipografies on els camps criden
+ * l'atenció per motius equivocats.
+ */
+input,
+textarea,
+select,
+button {
+  font-family: inherit;
+}
+
+/** Scroll vertical sense barra visible (docs/02 §4). */
+.femho-scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.femho-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+/**
+ * `prefers-reduced-motion`: sense animació de transició, el canvi és instantani
+ * (docs/02 §4). Plou ja ho respecta als seus components; això cobreix el que hi hagi
+ * fora.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

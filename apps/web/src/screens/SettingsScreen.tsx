@@ -368,7 +368,7 @@ function ScopesTab() {
 
       <Group title={t('settings.newScope')}>
         <input
-          className="femho-input"
+          className="plou-input"
           data-testid="new-scope-name"
           value={name}
           placeholder={t('settings.scopeName')}
@@ -385,7 +385,7 @@ function ScopesTab() {
         />
         <button
           type="button"
-          className="plou-button"
+          className="plou-btn plou-btn-primary"
           data-testid="new-scope-create"
           disabled={create.busy}
           onClick={() => void create.run()}
@@ -450,7 +450,7 @@ function CalendarsTab() {
                     data-testid={`caldav-${scope.id}-${kind}`}
                     value={`${base}/dav/calendars/${scope.id}-${kind}/`}
                     onFocus={(event) => event.currentTarget.select()}
-                    className="femho-input"
+                    className="plou-input"
                     style={{ fontSize: 11.5 }}
                   />
                 </div>
@@ -490,7 +490,7 @@ function McpTab() {
           data-testid="mcp-url"
           value={`${window.location.origin}/mcp`}
           onFocus={(event) => event.currentTarget.select()}
-          className="femho-input"
+          className="plou-input"
           style={{ fontSize: 12 }}
         />
       </Group>
@@ -503,7 +503,7 @@ function McpTab() {
               data-testid="token-value"
               value={created}
               onFocus={(event) => event.currentTarget.select()}
-              className="femho-input"
+              className="plou-input"
               style={{ fontSize: 12 }}
             />
             {/* Un sol cop: del hash no se'n pot treure el token (docs/08 §5). */}
@@ -551,7 +551,7 @@ function McpTab() {
 
         <div style={{ display: 'flex', gap: 8 }}>
           <input
-            className="femho-input"
+            className="plou-input"
             data-testid="token-name"
             value={name}
             placeholder={t('tokens.name')}
@@ -559,7 +559,7 @@ function McpTab() {
           />
           <button
             type="button"
-            className="plou-button"
+            className="plou-btn plou-btn-primary"
             data-testid="token-create"
             disabled={create.busy}
             onClick={() => void create.run()}
@@ -615,7 +615,7 @@ function AiTab() {
 
       <div style={{ display: 'flex', gap: 8 }}>
         <input
-          className="femho-input"
+          className="plou-input"
           data-testid="agent-name"
           value={name}
           placeholder={t('settings.newAgent')}
@@ -623,7 +623,7 @@ function AiTab() {
         />
         <button
           type="button"
-          className="plou-button"
+          className="plou-btn plou-btn-primary"
           data-testid="agent-create"
           onClick={() => {
             if (name.trim() === '') return;
@@ -729,7 +729,7 @@ function ProfileTab() {
         <label style={{ display: 'grid', gap: 5 }}>
           <span style={{ fontSize: 11.5, color: 'var(--ink-soft)' }}>{t('settings.profileName')}</span>
           <input
-            className="femho-input"
+            className="plou-input"
             data-testid="profile-name"
             value={name}
             onChange={(event) => setName(event.target.value)}
@@ -744,7 +744,7 @@ function ProfileTab() {
 
       <Group title={t('settings.changePassword')}>
         <input
-          className="femho-input"
+          className="plou-input"
           type="password"
           data-testid="password-current"
           value={current}
@@ -752,7 +752,7 @@ function ProfileTab() {
           onChange={(event) => setCurrent(event.target.value)}
         />
         <input
-          className="femho-input"
+          className="plou-input"
           type="password"
           data-testid="password-new"
           value={next}
@@ -771,7 +771,7 @@ function ProfileTab() {
         ) : null}
         <button
           type="button"
-          className="plou-button"
+          className="plou-btn plou-btn-primary"
           data-testid="password-submit"
           disabled={change.busy}
           onClick={() => void change.run()}
@@ -831,14 +831,14 @@ function AdminTab() {
 
       <Group title={t('settings.invite')}>
         <input
-          className="femho-input"
+          className="plou-input"
           data-testid="invite-email"
           value={email}
           placeholder={t('settings.inviteEmail')}
           onChange={(event) => setEmail(event.target.value)}
         />
         <input
-          className="femho-input"
+          className="plou-input"
           data-testid="invite-name"
           value={name}
           placeholder={t('settings.inviteName')}
@@ -850,7 +850,7 @@ function AdminTab() {
             data-testid="invite-url"
             value={invite}
             onFocus={(event) => event.currentTarget.select()}
-            className="femho-input"
+            className="plou-input"
             style={{ fontSize: 11.5 }}
           />
         ) : null}
@@ -861,7 +861,7 @@ function AdminTab() {
         ) : null}
         <button
           type="button"
-          className="plou-button"
+          className="plou-btn plou-btn-primary"
           data-testid="invite-send"
           disabled={send.busy}
           onClick={() => void send.run()}
@@ -875,7 +875,7 @@ function AdminTab() {
           {t('settings.wipeWarning')}
         </p>
         <input
-          className="femho-input"
+          className="plou-input"
           data-testid="wipe-confirmation"
           value={confirmation}
           placeholder={t('settings.wipeConfirm', { name: instanceName })}

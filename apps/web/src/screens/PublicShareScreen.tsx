@@ -106,7 +106,7 @@ export function PublicShareScreen({ token }: { token: string }) {
 
         {needs?.name === true ? (
           <input
-            className="femho-input"
+            className="plou-input"
             data-testid="share-name"
             value={name}
             placeholder={t('share.enterName')}
@@ -116,7 +116,7 @@ export function PublicShareScreen({ token }: { token: string }) {
 
         {needs?.password === true ? (
           <input
-            className="femho-input"
+            className="plou-input"
             type="password"
             data-testid="share-password-input"
             value={password}
@@ -132,7 +132,7 @@ export function PublicShareScreen({ token }: { token: string }) {
         ) : null}
 
         {needs !== null || error !== null ? (
-          <button type="submit" className="plou-button" data-testid="share-enter">
+          <button type="submit" className="plou-btn plou-btn-primary" data-testid="share-enter">
             {t('share.enter')}
           </button>
         ) : (
@@ -209,7 +209,7 @@ export function PublicShareScreen({ token }: { token: string }) {
           ))}
           <div style={{ display: 'flex', gap: 8 }}>
             <input
-              className="femho-input"
+              className="plou-input"
               data-testid="share-comment"
               value={comment}
               placeholder={t('task.newComment')}
@@ -217,7 +217,7 @@ export function PublicShareScreen({ token }: { token: string }) {
             />
             <button
               type="button"
-              className="plou-button"
+              className="plou-btn plou-btn-primary"
               onClick={() => {
                 if (comment.trim() === '') return;
                 void request(`/s/${token}/comments`, {

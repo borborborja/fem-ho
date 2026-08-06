@@ -54,7 +54,7 @@ export function SearchScreen({ onOpenTask }: SearchScreenProps) {
     >
       <input
         ref={input}
-        className="femho-input"
+        className="plou-input"
         data-testid="search-input"
         value={text}
         placeholder={t('nav.search')}

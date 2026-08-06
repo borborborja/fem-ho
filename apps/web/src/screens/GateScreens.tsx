@@ -89,7 +89,7 @@ export function InviteScreen({ token }: { token: string }) {
   if (done) {
     return (
       <Card title={t('invite.title')} subtitle={t('invite.done')}>
-        <a href="/" className="plou-button" style={{ textAlign: 'center' }}>
+        <a href="/" className="plou-btn plou-btn-primary" style={{ textAlign: 'center' }}>
           {t('login.submit')}
         </a>
       </Card>
@@ -100,7 +100,7 @@ export function InviteScreen({ token }: { token: string }) {
     <Card title={t('invite.title')} subtitle={t('invite.subtitle')}>
       <form onSubmit={submit} data-testid="invite" style={{ display: 'grid', gap: 12 }}>
         <input
-          className="femho-input"
+          className="plou-input"
           type="password"
           autoComplete="new-password"
           data-testid="invite-password"
@@ -109,7 +109,7 @@ export function InviteScreen({ token }: { token: string }) {
           onChange={(event) => setPassword(event.target.value)}
         />
         <input
-          className="femho-input"
+          className="plou-input"
           type="password"
           autoComplete="new-password"
           data-testid="invite-repeat"
@@ -122,7 +122,7 @@ export function InviteScreen({ token }: { token: string }) {
             {error}
           </p>
         ) : null}
-        <button type="submit" className="plou-button" data-testid="invite-submit">
+        <button type="submit" className="plou-btn plou-btn-primary" data-testid="invite-submit">
           {t('nav.save')}
         </button>
       </form>
@@ -152,14 +152,14 @@ export function SetupScreen({ onDone }: { onDone: () => void }) {
     <Card title={t('setup.title')} subtitle={t('setup.subtitle')}>
       <form onSubmit={submit} data-testid="setup" style={{ display: 'grid', gap: 12 }}>
         <input
-          className="femho-input"
+          className="plou-input"
           data-testid="setup-name"
           value={name}
           placeholder={t('setup.name')}
           onChange={(event) => setName(event.target.value)}
         />
         <input
-          className="femho-input"
+          className="plou-input"
           type="email"
           autoComplete="username"
           data-testid="setup-email"
@@ -168,7 +168,7 @@ export function SetupScreen({ onDone }: { onDone: () => void }) {
           onChange={(event) => setEmail(event.target.value)}
         />
         <input
-          className="femho-input"
+          className="plou-input"
           type="password"
           autoComplete="new-password"
           data-testid="setup-password"
@@ -181,7 +181,7 @@ export function SetupScreen({ onDone }: { onDone: () => void }) {
             {error}
           </p>
         ) : null}
-        <button type="submit" className="plou-button" data-testid="setup-submit">
+        <button type="submit" className="plou-btn plou-btn-primary" data-testid="setup-submit">
           {t('setup.submit')}
         </button>
       </form>

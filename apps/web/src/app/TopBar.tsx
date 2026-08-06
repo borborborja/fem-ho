@@ -311,7 +311,10 @@ export function TopBar({
                 key={scope.id}
                 data-testid={`scope-${scope.id}`}
                 label={scope.name}
-                color={scope.color}
+                // El camp de l'API és el NOM del token (`--plou-blue`), no un valor CSS:
+                // passar-lo tal qual dona una declaració invàlida i el navegador cau al
+                // gris per defecte, amb el text blanc a sobre i il·legible.
+                color={`var(${scope.color})`}
                 active={activeScopeIds.includes(scope.id)}
                 aria-label={t('nav.scopeToggle', { name: scope.name })}
                 onClick={() => toggleScope(scope.id)}

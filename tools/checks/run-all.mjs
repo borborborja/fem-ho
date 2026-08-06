@@ -23,6 +23,7 @@ const CHECKS = [
   { name: 'audit-coverage', script: 'audit-coverage.mjs' },
   { name: 'parser-parity', script: 'parser-parity.mjs' },
   { name: 'tokens-parity', script: 'tokens-parity.mjs' },
+  { name: 'css-classes', script: 'css-classes.mjs', selfTest: true },
 ];
 
 const results = [];

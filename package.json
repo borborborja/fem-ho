@@ -21,6 +21,7 @@
     "check": "node tools/checks/run-all.mjs",
     "check:audit-coverage": "node tools/checks/audit-coverage.mjs",
     "check:contrast": "node tools/checks/contrast-check.mjs",
+    "check:css-classes": "node tools/checks/css-classes.mjs",
     "check:i18n-lint": "node tools/checks/i18n-lint.mjs",
     "check:no-hardcoded-colors": "node tools/checks/no-hardcoded-colors.mjs",
     "check:no-pinned-from-research": "node tools/checks/no-pinned-from-research.mjs",

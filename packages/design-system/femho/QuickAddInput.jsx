@@ -91,7 +91,7 @@ export function QuickAddInput({
 
         <input
           ref={inputRef}
-          className="femho-input"
+          className="plou-input"
           value={value}
           placeholder={placeholder}
           onChange={(event) => onChange?.(event.target.value)}

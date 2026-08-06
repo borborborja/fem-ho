@@ -6,6 +6,8 @@ import { createRoot } from 'react-dom/client';
 import '@fem-ho/design-system/styles.css';
 // Els tokens propis de Fem-ho van DESPRÉS de Plou: en depenen (docs/04 §2).
 import '@fem-ho/design-system/femho.css';
+// I l'arrel al final: fa servir els tokens dels dos (docs/02 §1).
+import './app.css';
 
 import { App } from './app/App.js';
 import { RouterProvider } from './app/router.js';

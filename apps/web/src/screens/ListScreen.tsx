@@ -189,7 +189,7 @@ export function ListScreen({ checklistId, onOpenTask }: ListScreenProps) {
 
         <div style={{ paddingTop: 10 }}>
           <input
-            className="femho-input"
+            className="plou-input"
             data-testid="list-add"
             value={text}
             placeholder={t('checklist.addItem')}

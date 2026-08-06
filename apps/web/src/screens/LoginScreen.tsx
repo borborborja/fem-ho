@@ -70,7 +70,7 @@ export function LoginScreen() {
             {t('login.email')}
           </span>
           <input
-            className="femho-input"
+            className="plou-input"
             type="email"
             autoComplete="username"
             value={email}
@@ -84,7 +84,7 @@ export function LoginScreen() {
             {t('login.password')}
           </span>
           <input
-            className="femho-input"
+            className="plou-input"
             type="password"
             autoComplete="current-password"
             value={password}
@@ -107,7 +107,7 @@ export function LoginScreen() {
           type="submit"
           disabled={busy}
           data-testid="login-submit"
-          className="plou-button"
+          className="plou-btn plou-btn-primary"
           style={{ width: '100%' }}
         >
           {t('login.submit')}

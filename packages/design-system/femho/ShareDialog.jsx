@@ -177,7 +177,7 @@ export function ShareDialog({
           <button
             type="button"
             onClick={onClose}
-            className="plou-button plou-button--ghost"
+            className="plou-btn plou-btn-ghost"
             data-testid="share-close"
           >
             {labels.close}
@@ -187,7 +187,7 @@ export function ShareDialog({
               type="button"
               onClick={onCreate}
               disabled={busy}
-              className="plou-button"
+              className="plou-btn plou-btn-primary"
               data-testid="share-create"
             >
               {labels.create}
@@ -196,7 +196,7 @@ export function ShareDialog({
             <button
               type="button"
               onClick={onCopy}
-              className="plou-button"
+              className="plou-btn plou-btn-primary"
               data-testid="share-copy"
             >
               {labels.copy}

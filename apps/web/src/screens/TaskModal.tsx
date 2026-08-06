@@ -219,7 +219,7 @@ export function TaskModal({ taskId, onClose, onChanged, onShare, onOpenList }: T
             <label style={{ display: 'grid', gap: 5 }}>
               {label(t('task.description'))}
               <textarea
-                className="femho-input"
+                className="plou-input"
                 rows={3}
                 value={draft.description}
                 data-testid="task-description"
@@ -241,7 +241,7 @@ export function TaskModal({ taskId, onClose, onChanged, onShare, onOpenList }: T
               <label style={{ display: 'grid', gap: 5 }}>
                 {label(t('task.project'))}
                 <select
-                  className="femho-input"
+                  className="plou-input"
                   data-testid="task-project"
                   value={data?.project_id ?? ''}
                   onChange={(event) => {
@@ -272,7 +272,7 @@ export function TaskModal({ taskId, onClose, onChanged, onShare, onOpenList }: T
               <label style={{ display: 'grid', gap: 5 }}>
                 {label(t('task.dueDate'))}
                 <input
-                  className="femho-input"
+                  className="plou-input"
                   type="date"
                   value={draft.due_date}
                   data-testid="task-due-date"
@@ -282,7 +282,7 @@ export function TaskModal({ taskId, onClose, onChanged, onShare, onOpenList }: T
               <label style={{ display: 'grid', gap: 5 }}>
                 {label(t('task.dueTime'))}
                 <input
-                  className="femho-input"
+                  className="plou-input"
                   type="time"
                   value={draft.due_time}
                   data-testid="task-due-time"
@@ -299,7 +299,7 @@ export function TaskModal({ taskId, onClose, onChanged, onShare, onOpenList }: T
             <label style={{ display: 'grid', gap: 5 }}>
               {label(t('task.deadline'))}
               <input
-                className="femho-input"
+                className="plou-input"
                 type="date"
                 value={draft.deadline}
                 data-testid="task-deadline"
@@ -404,7 +404,7 @@ export function TaskModal({ taskId, onClose, onChanged, onShare, onOpenList }: T
               <label style={{ display: 'grid', gap: 5 }}>
                 {label(t('task.aiInstructions'))}
                 <textarea
-                  className="femho-input"
+                  className="plou-input"
                   rows={2}
                   value={draft.ai_instructions}
                   data-testid="task-ai-instructions"
@@ -515,7 +515,7 @@ export function TaskModal({ taskId, onClose, onChanged, onShare, onOpenList }: T
                 ))
               )}
               <input
-                className="femho-input"
+                className="plou-input"
                 data-testid="task-new-subtask"
                 value={newSubtask}
                 placeholder={t('task.newSubtask')}
@@ -609,7 +609,7 @@ export function TaskModal({ taskId, onClose, onChanged, onShare, onOpenList }: T
               )}
               <div style={{ display: 'flex', gap: 8 }}>
                 <input
-                  className="femho-input"
+                  className="plou-input"
                   data-testid="task-new-comment"
                   value={newComment}
                   placeholder={t('task.newComment')}
@@ -617,7 +617,7 @@ export function TaskModal({ taskId, onClose, onChanged, onShare, onOpenList }: T
                 />
                 <button
                   type="button"
-                  className="plou-button"
+                  className="plou-btn plou-btn-primary"
                   onClick={() => {
                     if (newComment.trim() === '') return;
                     void api
@@ -698,7 +698,7 @@ export function TaskModal({ taskId, onClose, onChanged, onShare, onOpenList }: T
                 <button
                   type="button"
                   data-testid="task-cancel"
-                  className="plou-button plou-button--ghost"
+                  className="plou-btn plou-btn-ghost"
                   onClick={tryClose}
                 >
                   {t('nav.cancel')}
@@ -706,7 +706,7 @@ export function TaskModal({ taskId, onClose, onChanged, onShare, onOpenList }: T
                 <button
                   type="button"
                   data-testid="task-save"
-                  className="plou-button"
+                  className="plou-btn plou-btn-primary"
                   disabled={save.busy}
                   onClick={() => void save.run()}
                 >

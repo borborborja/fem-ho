@@ -13,6 +13,17 @@ curl -O https://raw.githubusercontent.com/borborborja/fem-ho/main/compose.yaml
 docker compose up -d
 ```
 
+### Si munta un directori del disc en comptes d'un volum
+
+El contenidor **no corre com a root** (docs/12 §1): l'usuari de dins és `node`, uid 1000.
+Amb un volum de Docker això no es nota —Docker li dona la propietat—, però amb un
+`bind mount` d'un directori del disc, el directori és de qui l'ha creat i el contenidor
+no hi pot escriure. L'error és `SQLITE_CANTOPEN` i no diu res de permisos:
+
+```bash
+sudo chown -R 1000:1000 /el/teu/directori
+```
+
 Obre `https://el-teu-domini/setup`, crea el primer administrador, i ja està. Aquella
 ruta **es tanca per sempre** un cop hi ha administrador: si perds l'accés, s'ha d'entrar
 a la base de dades. Una porta que es pugui reobrir des d'internet no és una porta.
