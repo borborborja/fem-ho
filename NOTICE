@@ -1,0 +1,49 @@
+Fem-ho
+Copyright (C) 2026 Borja Balsera
+
+Aquest programa és programari lliure: el podeu redistribuir i modificar sota els termes
+de la Llicència Pública General Affero de GNU, versió 3 o posterior, publicada per la
+Free Software Foundation. Veure LICENSE.
+
+Es distribueix amb l'esperança que sigui útil, però SENSE CAP GARANTIA.
+
+---
+
+## Què inclou aquest repositori que no és nostre
+
+### Plou — design system
+
+`packages/design-system/plou/` i `design/prototip/_ds/`
+
+Sistema de disseny d'un producte a part, vendoritzat aquí **tal com ve** amb dues
+modificacions autoritzades (Roboto autoallotjada i la variable `--column-bg`). Els seus
+components, tokens i documentació **porten les seves pròpies condicions** i no queden
+coberts per l'AGPL d'aquest repositori.
+
+Veure `packages/design-system/plou/readme.md`.
+
+### Roboto
+
+`packages/design-system/plou/tokens/fonts/*.woff2`
+
+Copyright Google LLC, sota la llicència Apache 2.0.
+<https://github.com/googlefonts/roboto>
+
+S'autoallotja en comptes d'importar-la d'un CDN perquè una app que s'autoallotja no pot
+dependre del servidor de ningú altre.
+
+### Dependències
+
+Les de `package.json` i les de Gradle porten cadascuna la seva llicència, i no es
+redistribueixen en aquest repositori: s'instal·len des del seu registre.
+
+---
+
+## Què vol dir l'AGPL aquí
+
+Fem-ho està fet per **servir-se per xarxa**: és el cas exacte per al qual existeix
+l'article 13 de l'AGPL. Si en publiques una versió modificada i la gent hi accedeix per
+la xarxa, els has d'oferir el codi d'aquella versió — encara que no els n'entreguis cap
+còpia.
+
+Amb la GPL normal això no caldria, i és per això que no és la GPL normal.

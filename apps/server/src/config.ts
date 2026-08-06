@@ -46,6 +46,11 @@ function envRegistration(): RegistrationMode {
 export interface Config {
   /** Nom de la instància, el que veu qui s'hi connecta. */
   instanceName: string;
+  /**
+   * On és el codi d'aquesta instància. Es publica a `/info` per l'article 13 de l'AGPL:
+   * qui hi accedeix per xarxa té dret al codi de la versió que li està servint.
+   */
+  sourceUrl: string;
   /** Versió del servidor. Surt del package.json en construir. */
   version: string;
   /**
@@ -71,6 +76,14 @@ export interface Config {
 
 export function loadConfig(version: string): Config {
   return {
+    /**
+     * On és el codi d'aquesta instància (AGPL §13).
+     *
+     * Per defecte, el repositori original. **Qui en publiqui una versió modificada hi
+     * ha de posar la seva**: amb aquesta apuntant a l'original, els seus usuaris no
+     * podrien arribar al codi que realment els està servint.
+     */
+    sourceUrl: process.env.FEMHO_SOURCE_URL ?? 'https://github.com/borborborja/fem-ho',
     instanceName: env('INSTANCE_NAME') ?? 'Fem-ho',
     version,
     baseUrl: env('BASE_URL'),

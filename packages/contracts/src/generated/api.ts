@@ -2319,6 +2319,21 @@ export interface components {
              *     accessible; un cop creat el primer administrador, es tanca per sempre.
              */
             setup_required?: boolean;
+            /** @example AGPL-3.0-or-later */
+            license?: string;
+            /**
+             * Format: uri
+             * @description On és el codi d'aquesta instància. **No és publicitat: és l'article 13 de
+             *     l'AGPL.** Qui hi accedeix per xarxa té dret al codi de la versió que li està
+             *     servint, i la manera d'oferir-lo és dir-li on és. Per això va a `/info`, que
+             *     és públic i sense autenticar: el dret el té qualsevol que hi arribi, no
+             *     només qui hi tingui compte.
+             *
+             *     Qui publiqui una versió modificada hi ha de posar la seva, amb
+             *     `FEMHO_SOURCE_URL`: amb aquesta apuntant a l'original, els seus usuaris no
+             *     podrien arribar al codi que realment els està servint.
+             */
+            source_url?: string;
         };
         Health: {
             /** @enum {string} */

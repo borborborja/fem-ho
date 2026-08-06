@@ -202,6 +202,7 @@
     <string name="palette_go">Anar a</string>
     <string name="palette_placeholder">Escriu per anar a un lloc o buscar una tasca…</string>
     <string name="palette_tasks">Tasques</string>
+    <string name="settings_about">Sobre</string>
     <string name="settings_accent">Accent</string>
     <string name="settings_accent_default">Per defecte</string>
     <string name="settings_accent_mono_cool">Fred</string>
@@ -255,6 +256,8 @@
     <string name="settings_scopename">Nom</string>
     <string name="settings_showcalendarwidget">Calendari en miniatura</string>
     <string name="settings_showoverduesection">Secció d\'endarrerides</string>
+    <string name="settings_source">Aquesta instància fa servir Fem-ho {version}, sota llicència {license}.</string>
+    <string name="settings_sourcelink">El codi</string>
     <string name="settings_sources">Fonts de dades</string>
     <string name="settings_sources_add">+ Afegir font</string>
     <string name="settings_sources_empty">Aquest àmbit no té cap font externa. Les que hi afegeixis es veuran al calendari.</string>

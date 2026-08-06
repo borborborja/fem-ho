@@ -17,7 +17,7 @@ import { api } from '../app/api.js';
 import { useRouter } from '../app/router.js';
 import { useSession, useSessionData } from '../app/session.js';
 import { useApi, useMutation } from '../app/useApi.js';
-import type { AdminUser, Agent, ApiTokenSummary, Calendar, Member, Scope, ShareSummary } from '../app/types.js';
+import type { AdminUser, Agent, ApiTokenSummary, Calendar, Info, Member, Scope, ShareSummary } from '../app/types.js';
 import { ErrorBanner } from './BoardScreen.js';
 
 const TABS = [
@@ -231,6 +231,8 @@ function Toggle({
 function GeneralTab() {
   const { profile, settings } = useSessionData();
   const weekStart = resolveWeekStart(settings.week_start, getLocale());
+  // `/info` és públic i sense autenticar: el dret al codi el té qualsevol que hi arribi.
+  const info = useApi<Info>('/info').data ?? { version: '', license: '', source_url: '' };
   const { updateProfile, updateSettings } = useSession();
 
   return (
@@ -285,6 +287,22 @@ function GeneralTab() {
           ]}
           onChange={(value) => void updateSettings({ week_start: value })}
         />
+      </Group>
+
+      {/*
+        **Article 13 de l'AGPL, no un crèdit.**
+
+        Qui fa servir aquesta instància per la xarxa té dret al codi de la versió que li
+        estan servint, i la manera d'oferir-lo és dir-li on és. La URL surt de `/info`,
+        que la porta configurable: qui publiqui una versió modificada hi posarà la seva.
+      */}
+      <Group title={t('settings.about')}>
+        <span style={{ fontSize: 12, color: 'var(--ink-soft)' }}>
+          {t('settings.source', { version: info.version, license: info.license ?? '' })}{' '}
+          <a href={info.source_url ?? ''} target="_blank" rel="noreferrer noopener">
+            {t('settings.sourceLink')}
+          </a>
+        </span>
       </Group>
 
       <Group title={t('settings.theme')}>

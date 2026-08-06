@@ -202,6 +202,7 @@
     <string name="palette_go">Go to</string>
     <string name="palette_placeholder">Type to go somewhere or find a task…</string>
     <string name="palette_tasks">Tasks</string>
+    <string name="settings_about">About</string>
     <string name="settings_accent">Accent</string>
     <string name="settings_accent_default">Default</string>
     <string name="settings_accent_mono_cool">Cool</string>
@@ -255,6 +256,8 @@
     <string name="settings_scopename">Name</string>
     <string name="settings_showcalendarwidget">Small calendar</string>
     <string name="settings_showoverduesection">Overdue section</string>
+    <string name="settings_source">This instance runs Fem-ho {version}, licensed under {license}.</string>
+    <string name="settings_sourcelink">The source</string>
     <string name="settings_sources">Data sources</string>
     <string name="settings_sources_add">+ Add source</string>
     <string name="settings_sources_empty">This scope has no external sources. The ones you add will show up in the calendar.</string>

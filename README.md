@@ -96,8 +96,25 @@ hi és— és a [`docs/ESTAT.md`](docs/ESTAT.md).
 
 ## Llicència
 
-Encara no n'hi ha cap. Sense llicència, tots els drets queden reservats: es pot llegir,
-però no reutilitzar. Si això no és el que vols, cal afegir-hi un `LICENSE`.
+**GNU AGPL-3.0-or-later.** Veure [`LICENSE`](LICENSE).
 
-El design system **Plou**, a `packages/design-system/plou/`, ve d'un projecte a part i
-porta les seves pròpies condicions.
+Vol dir que el pots fer servir, estudiar, modificar i redistribuir, amb dues condicions:
+
+- **Cita l'origen.** Els avisos de copyright i de llicència es mantenen, i els canvis es
+  marquen com a canvis.
+- **El que en surti ha de ser igual d'obert.** Un derivat es distribueix sota la mateixa
+  llicència, no sota una de més tancada.
+
+I una tercera que és la raó de triar l'**A**GPL i no la GPL a seques: Fem-ho està fet per
+**servir-se per xarxa**. Si en publiques una versió modificada i la gent hi accedeix per
+la xarxa, els has d'oferir el codi d'aquella versió, encara que no els n'entreguis cap
+còpia. Sense això, qualsevol el podria oferir com a servei de pagament sense tornar mai
+res, que és exactament el que "igual d'obert" vol evitar.
+
+El que **no** cobreix: el design system **Plou** (`packages/design-system/plou/`) ve d'un
+projecte a part i porta les seves pròpies condicions, i la tipografia Roboto és de Google
+sota Apache 2.0. Tot plegat, a [`NOTICE`](NOTICE).
+
+> Si algun dia vols publicar l'APK a Google Play, val la pena mirar-s'ho: les condicions
+> de Play han tingut friccions conegudes amb les llicències de la família GPL. F-Droid no
+> en té cap.

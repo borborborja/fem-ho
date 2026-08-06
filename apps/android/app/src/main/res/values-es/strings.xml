@@ -202,6 +202,7 @@
     <string name="palette_go">Ir a</string>
     <string name="palette_placeholder">Escribe para ir a un sitio o buscar una tarea…</string>
     <string name="palette_tasks">Tareas</string>
+    <string name="settings_about">Acerca de</string>
     <string name="settings_accent">Acento</string>
     <string name="settings_accent_default">Por defecto</string>
     <string name="settings_accent_mono_cool">Frío</string>
@@ -255,6 +256,8 @@
     <string name="settings_scopename">Nombre</string>
     <string name="settings_showcalendarwidget">Calendario en miniatura</string>
     <string name="settings_showoverduesection">Sección de atrasadas</string>
+    <string name="settings_source">Esta instancia usa Fem-ho {version}, bajo licencia {license}.</string>
+    <string name="settings_sourcelink">El código</string>
     <string name="settings_sources">Fuentes de datos</string>
     <string name="settings_sources_add">+ Añadir fuente</string>
     <string name="settings_sources_empty">Este ámbito no tiene ninguna fuente externa. Las que añadas se verán en el calendario.</string>

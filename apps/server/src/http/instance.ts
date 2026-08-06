@@ -44,6 +44,18 @@ export function registerInstanceRoutes(app: FastifyInstance): void {
       version: app.config.version,
       registration: app.config.registration,
       setup_required: setupRequired,
+      /**
+       * D'on surt el codi d'aquesta instància.
+       *
+       * **No és publicitat: és l'article 13 de l'AGPL.** Qui hi accedeix per xarxa té
+       * dret al codi de la versió que està fent servir, i la manera d'oferir-lo és
+       * dir-li on és. Va a `/info`, que és públic i sense autenticar, perquè el dret
+       * el té qualsevol que hi arribi i no només qui hi tingui compte.
+       *
+       * Si algú publica una versió modificada, aquí hi ha d'anar la seva.
+       */
+      license: 'AGPL-3.0-or-later',
+      source_url: app.config.sourceUrl,
     };
   });
 
