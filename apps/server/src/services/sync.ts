@@ -17,6 +17,7 @@ import type { MigrationDb } from '../db/migration-db.js';
 import { PolicyError, missingCapability } from '../policy/errors.js';
 import { hasCapability, type Principal } from '../policy/principal.js';
 import { listScopes } from './scopes.js';
+import { clampInt } from '../util/clamp.js';
 
 /** Les tombstones es conserven 90 dies (docs/01 §12). */
 export const TOMBSTONE_RETENTION_DAYS = 90;
@@ -90,7 +91,7 @@ export async function pull(
   if (!hasCapability(principal, 'tasks:read')) throw missingCapability('tasks:read');
 
   const now = options.now ?? new Date().toISOString();
-  const limit = Math.min(Math.max(options.limit ?? 500, 1), 1000);
+  const limit = clampInt(options.limit, { min: 1, max: 1000, fallback: 500 });
 
   let from = 0;
   if (options.cursor !== undefined && options.cursor !== '') {

@@ -71,7 +71,25 @@ export function registerSyncRoutes(app: FastifyInstance): void {
       const operations = Array.isArray(body.operations) ? body.operations : [];
 
       const results: BatchResult[] = [];
-      for (const operation of operations) {
+      for (const [index, operation] of operations.entries()) {
+        /**
+         * **Una operació que no és un objecte tomba el lot sencer si no es mira.**
+         * `null`, un número o una cadena a la llista feien petar `operation.op_id` amb
+         * un TypeError que pujava fins a dalt i tornava un 500. El client no en treia
+         * res: ni quina operació era dolenta, ni què havia passat amb les bones.
+         *
+         * Ara es rebutja aquella i prou, que és el que docs/06 §4 demana: "cada
+         * operació es resol per separat".
+         */
+        if (typeof operation !== 'object' || operation === null || Array.isArray(operation)) {
+          results.push({
+            op_id: `desconegut-${String(index)}`,
+            status: 'rejected',
+            error: { detail: `L'operació ${String(index)} del lot no és un objecte.` },
+          });
+          continue;
+        }
+
         // CADA operació es resol per separat: una que falli no ha de tombar el lot
         // (docs/06 §4).
         results.push(await applyOne(app, principal, operation));

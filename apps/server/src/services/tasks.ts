@@ -15,6 +15,7 @@ import type { MigrationDb } from '../db/migration-db.js';
 import { PolicyError, missingCapability, notFound } from '../policy/errors.js';
 import { hasCapability, type Principal } from '../policy/principal.js';
 import { normalizeForSearch, normalizeQuery } from '../text/search-text.js';
+import { clampInt } from '../util/clamp.js';
 import { assertScopeAccess, listScopes } from './scopes.js';
 
 export interface TaskRow {
@@ -115,7 +116,7 @@ export async function listTasks(
   const statuses = filters.statuses ?? [...TASK_STATUSES];
   // Paginació per cursor i no per desplaçament: amb dades que canvien, el desplaçament
   // es salta i repeteix files (docs/05 §3). El cursor és la posició de l'última fila.
-  const limit = Math.min(Math.max(filters.limit ?? 50, 1), 200);
+  const limit = clampInt(filters.limit, { min: 1, max: 200, fallback: 50 });
   const cursor = filters.cursor ?? '';
 
   const rows = await sql<TaskRow>`
