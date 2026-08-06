@@ -233,6 +233,16 @@ class FemhoApi(
 
     suspend fun completeTask(id: String): Task = post("/api/v1/tasks/$id/complete")
 
+    /**
+     * El mode d'IA té ruta pròpia i no és un `PATCH` de la tasca.
+     *
+     * És el mateix criteri que `/move`: canviar el mode d'IA és el gest que dispara la
+     * delegació, i barrejar-lo amb l'edició de camps faria que desar un títol el pogués
+     * canviar sense voler.
+     */
+    suspend fun setAiMode(id: String, mode: String): Task =
+        post("/api/v1/tasks/$id/ai-mode", mapOf("ai_mode" to mode))
+
     suspend fun checklists(taskId: String): List<Checklist> =
         get("/api/v1/tasks/$taskId/checklists")
 

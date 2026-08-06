@@ -53,6 +53,7 @@
     <string name="board_quickadd_placeholder">+ Afegir a {column}… #Àmbit @Persona</string>
     <string name="board_quickadd_revert">Tornar «{label}» a text</string>
     <string name="board_quickadd_scoperequired">Indica l\'àmbit amb #{scopes}</string>
+    <string name="board_quickadd_scoperequiredprefix">Indica l\'àmbit amb #</string>
     <string name="calendar_day">Diari</string>
     <string name="calendar_empty_day">Sense esdeveniments ni tasques aquest dia.</string>
     <string name="calendar_empty_week">Sense res</string>

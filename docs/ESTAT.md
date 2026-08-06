@@ -102,10 +102,15 @@ Els vuit mòduls de `docs/03` §11 existeixen i l'APK es construeix.
 | Calendari mensual i diari | fet |
 | Ajustos amb tema i accent | fet |
 | Base local amb Room i cua de sortida | fet |
-| **Pantalla de detall de tasca** | **no fet** |
-| **Afegida ràpida amb xips de `#` i `@`** | **no fet** — el camp crea text pla |
+| Detall de tasca, com a full des de baix | fet |
+| Afegida ràpida amb xips reversibles | fet, amb el parser compartit |
 | **UnifiedPush** | **no fet** |
 | **Vista setmanal a la navegació** | el component hi és, no s'hi arriba |
+
+El detall té menys camps que el modal de la web, i és deliberat (`docs/03` §6): al mòbil
+s'edita el que es toca sovint —títol, estat, mode d'IA i les llistes— i la resta es fa
+des de la web. Un formulari de disset camps en una pantalla de 5,5 polzades no s'omple;
+s'abandona.
 
 ---
 

@@ -60,6 +60,7 @@
   "board.quickAdd.placeholder": "+ Afegir a {column}… #Àmbit @Persona",
   "board.quickAdd.revert": "Tornar «{label}» a text",
   "board.quickAdd.scopeRequired": "Indica l'àmbit amb #{scopes}",
+  "board.quickAdd.scopeRequiredPrefix": "Indica l'àmbit amb #",
   "calendar.day": "Diari",
   "calendar.empty.day": "Sense esdeveniments ni tasques aquest dia.",
   "calendar.empty.week": "Sense res",

@@ -47,6 +47,14 @@ import ho.fem.settings.SettingsLabels
 import ho.fem.settings.SettingsScreen
 import ho.fem.tasks.BoardLabels
 import ho.fem.tasks.BoardScreen
+import ho.fem.tasks.QuickAddField
+import ho.fem.tasks.TaskDetail
+import ho.fem.tasks.TaskDetailLabels
+import ho.fem.model.AiMode
+import ho.fem.model.QuickAddContext
+import ho.fem.model.QuickAddPerson
+import ho.fem.model.QuickAddProject
+import ho.fem.model.QuickAddScope
 
 /**
  * L'activitat única. docs/03.
@@ -259,8 +267,18 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: (
     val tasks by model.tasks.collectAsStateWithLifecycle()
     val scopes by model.scopes.collectAsStateWithLifecycle()
     val pending by model.pending.collectAsStateWithLifecycle()
+    val projects by model.projects.collectAsStateWithLifecycle()
+    val people by model.people.collectAsStateWithLifecycle()
+    val openTask by model.openTask.collectAsStateWithLifecycle()
+    val openChecklists by model.openChecklists.collectAsStateWithLifecycle()
     var active by remember { mutableStateOf<Set<String>>(emptySet()) }
-    var draft by remember { mutableStateOf("") }
+
+    // Els textos es resolen aquí i no dins dels callbacks: `stringResource` és
+    // `@Composable` i no es pot cridar des d'una lambda que no ho és.
+    val quickAddError = stringResource(R.string.board_quickadd_scoperequiredprefix)
+    val manualLabel = stringResource(R.string.ai_mode_manual)
+    val assistedLabel = stringResource(R.string.ai_mode_assisted)
+    val delegatedLabel = stringResource(R.string.ai_mode_delegated)
 
     val visible = if (active.isEmpty()) tasks else tasks.filter { it.scopeId in active }
 
@@ -298,7 +316,7 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: (
                 toDoing = stringResource(R.string.board_card_todoing),
                 toggle = stringResource(R.string.sync_complete),
             ),
-            onOpen = {},
+            onOpen = model::open,
             onMove = { task, status -> model.move(task, status) },
             onToggle = { task ->
                 model.move(task, if (task.status == TaskStatus.DONE) TaskStatus.TODO else TaskStatus.DONE)
@@ -307,34 +325,73 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: (
         )
 
         /**
-         * L'afegida ràpida, al peu.
+         * L'afegida ràpida, al peu, **amb el mateix parser que la web**.
          *
-         * Amb un sol àmbit actiu s'agafa aquell; amb més d'un, cal `#` i es demana
-         * (docs/02 §4). Aquí es resol amb el primer àmbit visible quan només n'hi ha un,
-         * que és el cas normal al mòbil.
+         * `parseQuickAdd` viu a `:core-model` i `parser-parity` el compara amb el de
+         * TypeScript amb els mateixos fixtures. Una versió pròpia aquí divergiria al
+         * primer cas rar.
          */
-        val target = if (active.size == 1) active.first() else scopes.firstOrNull()?.id
-        androidx.compose.material3.OutlinedTextField(
-            value = draft,
-            onValueChange = { draft = it },
-            singleLine = true,
-            placeholder = { Text(stringResource(R.string.checklist_additem)) },
-            keyboardActions = androidx.compose.foundation.text.KeyboardActions(
-                onDone = {
-                    if (draft.isNotBlank() && target != null) {
-                        model.create(target, draft.trim())
-                        // El camp es buida i manté el focus, per poder-ne encadenar.
-                        draft = ""
-                    }
+        QuickAddField(
+            context = QuickAddContext(
+                scopes = scopes.map { scope ->
+                    QuickAddScope(
+                        id = scope.id,
+                        name = scope.name,
+                        projects = projects
+                            .filter { it.scopeId == scope.id }
+                            .map { QuickAddProject(it.id, it.name) },
+                    )
                 },
+                people = people.map { QuickAddPerson(it.id, it.name) },
+                activeScopeIds = if (active.isEmpty()) scopes.map { it.id } else active.toList(),
             ),
-            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                imeAction = androidx.compose.ui.text.input.ImeAction.Done,
+            placeholder = stringResource(R.string.dashboard_quickadd),
+            scopeRequiredLabel = { noms -> "${'$'}{quickAddError}${'$'}noms" },
+            aiModeLabel = { mode ->
+                when (mode) {
+                    "assisted" -> assistedLabel
+                    "delegated" -> delegatedLabel
+                    else -> manualLabel
+                }
+            },
+            onCreate = { title, scopeId, _, _ -> model.create(scopeId, title) },
+            modifier = Modifier.padding(12.dp),
+        )
+    }
+
+    // El full de detall va per sobre de tot, com a la web.
+    openTask?.let { task ->
+        TaskDetail(
+            task = task,
+            checklists = openChecklists,
+            labels = TaskDetailLabels(
+                title = stringResource(R.string.task_title),
+                description = stringResource(R.string.task_description),
+                status = mapOf(
+                    TaskStatus.INBOX to stringResource(R.string.board_column_inbox),
+                    TaskStatus.TODO to stringResource(R.string.board_column_todo),
+                    TaskStatus.DOING to stringResource(R.string.board_column_doing),
+                    TaskStatus.DONE to stringResource(R.string.board_column_done),
+                ),
+                aiMode = mapOf(
+                    AiMode.MANUAL to manualLabel,
+                    AiMode.ASSISTED to assistedLabel,
+                    AiMode.DELEGATED to delegatedLabel,
+                ),
+                checklists = stringResource(R.string.task_checklists),
+                toggle = stringResource(R.string.sync_complete),
+                save = stringResource(R.string.nav_save),
+                close = stringResource(R.string.nav_close),
+                emptyChecklists = stringResource(R.string.checklist_empty),
             ),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp)
-                .testTag("quick-add"),
+            onSave = { title, mode ->
+                model.rename(task, title)
+                if (mode != task.aiMode) model.setAiMode(task, mode)
+                model.closeTask()
+            },
+            onStatus = { model.move(task, it) },
+            onToggleItem = model::toggleItem,
+            onClose = model::closeTask,
         )
     }
 }

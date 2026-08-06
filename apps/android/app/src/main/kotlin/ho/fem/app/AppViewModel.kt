@@ -3,6 +3,8 @@ package ho.fem.app
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import ho.fem.data.Container
+import ho.fem.model.AiMode
+import ho.fem.model.Checklist
 import ho.fem.model.EventOccurrence
 import ho.fem.model.Inbox
 import ho.fem.model.Person
@@ -67,6 +69,12 @@ class AppViewModel(private val container: Container) : ViewModel() {
 
     private val _inbox = MutableStateFlow<Inbox?>(null)
     val inbox: StateFlow<Inbox?> = _inbox.asStateFlow()
+
+    private val _openTask = MutableStateFlow<Task?>(null)
+    val openTask: StateFlow<Task?> = _openTask.asStateFlow()
+
+    private val _openChecklists = MutableStateFlow<List<Checklist>>(emptyList())
+    val openChecklists: StateFlow<List<Checklist>> = _openChecklists.asStateFlow()
 
     private var serverUrl: String? = null
 
@@ -172,6 +180,61 @@ class AppViewModel(private val container: Container) : ViewModel() {
             val api = container.api(base)
             runCatching { api.events(from, to, active) }.onSuccess { _events.value = it }
             runCatching { api.inbox(day, true, active) }.onSuccess { _inbox.value = it }
+        }
+    }
+
+    /**
+     * Obre una tasca.
+     *
+     * La tasca surt de la base local —ja la tenim— i les llistes es demanen: no es
+     * repliquen perquè només es miren en obrir la tasca, i replicar-les faria la primera
+     * sincronització llarga per a un contingut que la majoria de tasques no tenen.
+     */
+    fun open(task: Task) {
+        _openTask.value = task
+        _openChecklists.value = emptyList()
+
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).checklists(task.id) }
+                .onSuccess { _openChecklists.value = it }
+        }
+    }
+
+    fun closeTask() {
+        _openTask.value = null
+        _openChecklists.value = emptyList()
+    }
+
+    fun rename(task: Task, title: String) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            val repository = container.repository(base)
+            repository.renameTask(task, title)
+            repository.flush()
+            _openTask.value = task.copy(title = title)
+        }
+    }
+
+    fun toggleItem(itemId: String, done: Boolean) {
+        val base = serverUrl ?: return
+        val task = _openTask.value ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).setChecklistItem(itemId, done) }
+            // Es rellegeix: la cascada amunt pot haver completat la subtasca i la tasca
+            // (P1), i sense rellegir la pantalla ensenyaria l'ítem marcat i la resta no.
+            runCatching { container.api(base).checklists(task.id) }
+                .onSuccess { _openChecklists.value = it }
+            refresh()
+        }
+    }
+
+    fun setAiMode(task: Task, mode: AiMode) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).setAiMode(task.id, mode.wire) }
+                .onSuccess { _openTask.value = it }
+            refresh()
         }
     }
 
