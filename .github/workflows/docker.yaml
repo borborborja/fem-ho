@@ -14,6 +14,10 @@ on:
   # A les propostes es CONSTRUEIX però no es publica: que una branca qualsevol pugui
   # escriure al registre és com es publiquen imatges que ningú ha revisat.
   pull_request:
+  # A mà: reconstruir la imatge o l'APK sense esperar cap canvi de codi és el que
+  # calen el dia que una dependència base es corregeix i el que hi ha publicat encara
+  # porta la versió vella.
+  workflow_dispatch:
 
 permissions:
   contents: read
