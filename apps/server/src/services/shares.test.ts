@@ -325,6 +325,7 @@ describe('qui és el convidat', () => {
 describe('CAS 5 de docs/10 §10 · el convidat no escala', () => {
   const share: Share = {
     id: 'share-1',
+    created_by: 'usuari-1',
     task_id: 'tasca-1',
     checklist_id: null,
     permission: 'check',
@@ -341,8 +342,8 @@ describe('CAS 5 de docs/10 §10 · el convidat no escala', () => {
     const convidat = guestPrincipal(share, 'a4f2', null);
     expect(convidat.kind).toBe('guest');
     expect(convidat.shareId).toBe('share-1');
-    // Cap àmbit: no pot llistar res per la via normal de l'API.
-    expect(convidat.scopeIds?.size).toBe(0);
+    // Actua en nom de qui va crear l'enllaç: ho necessita per poder llegir-ne les dades.
+    expect(convidat.userId).toBe('usuari-1');
   });
 
   it('el permís de veure NO deixa marcar', () => {

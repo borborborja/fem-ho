@@ -182,13 +182,28 @@ async function writeEntry(
   const actorType =
     principal.kind === 'agent' ? 'ai_agent' : principal.kind === 'guest' ? 'guest' : 'user';
 
+  /**
+   * Un principal **sense usuari** —un convidat d'un enllaç compartit, o el sistema
+   * obrint-lo abans de saber qui hi ha darrere— escriu `NULL` i no una cadena buida.
+   *
+   * `actor_user_id` té clau forana cap a `users(id)`, i `''` no és cap usuari: la
+   * inserció petava amb un error de clau forana que, des de fora, semblava que la
+   * pàgina compartida estigués trencada.
+   *
+   * Un convidat també escriu `NULL` encara que porti l'identificador de qui va crear
+   * l'enllaç: el necessita per poder tocar les seves dades, però **el que fa és seu**, i
+   * apuntar-ho al compte de qui li va passar l'enllaç seria mentir a l'historial.
+   */
+  const actorUserId =
+    principal.kind === 'guest' || principal.userId === '' ? null : principal.userId;
+
   await sql`
     INSERT INTO activity_log
       (id, entity_type, entity_id, scope_id, actor_type, actor_user_id, actor_agent_id,
        actor_label, source, verb, changes, created_at)
     VALUES
       (${uuidv7()}, ${entry.entityType}, ${entry.entityId}, ${entry.scopeId ?? null},
-       ${actorType}, ${principal.userId}, ${principal.agentId ?? null},
+       ${actorType}, ${actorUserId}, ${principal.agentId ?? null},
        ${principal.label ?? null}, ${principal.source}, ${entry.verb},
        ${entry.changes === undefined ? null : JSON.stringify(entry.changes)}, ${now})
   `.execute(tx);

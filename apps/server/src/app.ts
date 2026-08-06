@@ -11,10 +11,13 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { Config } from './config.js';
 import type { Connection } from './db/connection.js';
+import { ensureInstanceSecret } from './config/secret.js';
 import { registerAuthRoutes } from './http/auth.js';
 import { registerInstanceRoutes } from './http/instance.js';
 import { registerMcpRoutes } from './http/mcp.js';
 import { registerSyncRoutes } from './http/sync.js';
+import { registerPushRoutes } from './http/push.js';
+import { registerShareRoutes } from './http/shares.js';
 import { registerTokenRoutes } from './http/tokens.js';
 import { registerChecklistRoutes, registerEventRoutes, registerTaskRoutes } from './http/tasks.js';
 
@@ -25,6 +28,11 @@ export interface BuildOptions {
    * base no hi sigui — que és tot el motiu pel qual està separada de /readyz.
    */
   connection?: Connection;
+  /**
+   * El secret de la instància. Les proves en passen un de fix; en producció es genera
+   * un sol cop al volum de dades i **no** a la base (`config/secret.ts`).
+   */
+  secret?: string;
 }
 
 export function buildApp(config: Config, options: BuildOptions = {}): FastifyInstance {
@@ -39,13 +47,23 @@ export function buildApp(config: Config, options: BuildOptions = {}): FastifyIns
   app.decorate('config', config);
   app.decorate('connection', options.connection);
 
-  // Capçaleres de seguretat de docs/10 §8. La CSP arriba a M5, quan hi ha una pàgina
-  // de veritat a què aplicar-la.
-  app.addHook('onSend', async (_request, reply) => {
+  /**
+   * Capçaleres de seguretat de docs/10 §8, aplicades **centralment**.
+   *
+   * S'escriuen aquí i no a cada ruta a posta: així cap ruta les pot afluixar per
+   * descuit. La pàgina compartida en necessita una de **més estricta**
+   * —`no-referrer`, docs/10 §4— i per això la decisió és aquí i no allà: si la posés la
+   * ruta, aquest hook la sobreescriuria després i el token acabaria viatjant al referent
+   * d'un servidor de tercers sense que ningú se n'adonés.
+   */
+  app.addHook('onSend', async (request, reply) => {
     reply.header('X-Content-Type-Options', 'nosniff');
     reply.header('X-Frame-Options', 'DENY');
-    reply.header('Referrer-Policy', 'strict-origin-when-cross-origin');
     reply.header('Permissions-Policy', 'geolocation=(), camera=(), microphone=()');
+    reply.header(
+      'Referrer-Policy',
+      request.url.startsWith('/s/') ? 'no-referrer' : 'strict-origin-when-cross-origin',
+    );
   });
 
   registerInstanceRoutes(app);
@@ -56,6 +74,17 @@ export function buildApp(config: Config, options: BuildOptions = {}): FastifyIns
   registerSyncRoutes(app);
   registerMcpRoutes(app);
   registerTokenRoutes(app);
+  registerPushRoutes(app);
+  /**
+   * El secret es resol **quan es necessita**, no en construir l'app: `buildApp` no ha de
+   * tocar el disc. Una instància que només serveixi `/healthz` no ha de crear cap fitxer,
+   * i les proves de contracte no n'han de muntar cap volum.
+   */
+  let secret: string | undefined = options.secret;
+  registerShareRoutes(app, () => {
+    secret ??= ensureInstanceSecret(config.dataDir, config.secret);
+    return secret;
+  });
 
   return app;
 }

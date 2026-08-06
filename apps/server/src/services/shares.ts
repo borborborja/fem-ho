@@ -73,6 +73,8 @@ export function tokenHmac(token: string, pepper: string, version = 1): string {
 
 export interface Share {
   id: string;
+  /** Qui el va crear. És en nom de qui llegeix el convidat. */
+  created_by: string;
   task_id: string | null;
   checklist_id: string | null;
   permission: SharePermission;
@@ -87,6 +89,7 @@ export interface Share {
 
 interface ShareRow {
   id: string;
+  created_by: string;
   task_id: string | null;
   checklist_id: string | null;
   permission: SharePermission;
@@ -105,6 +108,7 @@ interface ShareRow {
 function toShare(row: ShareRow): Share {
   return {
     id: row.id,
+    created_by: row.created_by,
     task_id: row.task_id,
     checklist_id: row.checklist_id,
     permission: row.permission,
@@ -198,6 +202,7 @@ export async function createShare(
     token,
     share: {
       id,
+      created_by: principal.userId,
       task_id: input.task_id ?? null,
       checklist_id: input.checklist_id ?? null,
       permission,
@@ -256,9 +261,9 @@ export async function listShares(db: MigrationDb, principal: Principal): Promise
   if (!hasCapability(principal, 'shares:read')) throw missingCapability('shares:read');
 
   const found = await sql<ShareRow>`
-    SELECT id, task_id, checklist_id, permission, require_name, password_hash, expires_at,
-           max_views, view_count, failed_attempts, locked_until, created_at, revoked_at,
-           secret_version
+    SELECT id, created_by, task_id, checklist_id, permission, require_name, password_hash,
+           expires_at, max_views, view_count, failed_attempts, locked_until, created_at,
+           revoked_at, secret_version
     FROM shares WHERE created_by = ${principal.userId}
     ORDER BY created_at DESC
   `.execute(db);
@@ -323,9 +328,9 @@ export async function openShare(
   pepper: string,
 ): Promise<OpenResult> {
   const found = await sql<ShareRow>`
-    SELECT id, task_id, checklist_id, permission, require_name, password_hash, expires_at,
-           max_views, view_count, failed_attempts, locked_until, created_at, revoked_at,
-           secret_version
+    SELECT id, created_by, task_id, checklist_id, permission, require_name, password_hash,
+           expires_at, max_views, view_count, failed_attempts, locked_until, created_at,
+           revoked_at, secret_version
     FROM shares WHERE token_hmac = ${tokenHmac(input.token, pepper)}
   `.execute(ctx.tx);
 
@@ -460,12 +465,20 @@ export function guestPrincipal(
 
   return {
     kind: 'guest',
-    // Un convidat no és ningú del sistema: actua en nom de qui va crear l'enllaç només
-    // per poder escriure a les seves dades, i queda registrat com a `guest`.
-    userId: '',
+    /**
+     * **Actua en nom de qui va crear l'enllaç.** Ho necessita per poder llegir i marcar
+     * les seves dades: la comprovació d'àmbit va per pertinença, i un convidat no és
+     * membre de cap.
+     *
+     * A l'historial, però, **no hi consta com aquella persona**: `actor_type` és `guest`
+     * i `actor_user_id` queda a `NULL`. El que fa un convidat és seu, no de qui li va
+     * passar l'enllaç.
+     */
+    userId: share.created_by,
     shareId: share.id,
     capabilities,
-    scopeIds: new Set(),
+    // L'abast el marca l'enllaç, no els àmbits: per això `null` i no un conjunt buit.
+    scopeIds: null,
     source: 'share',
     label: guestLabel(guestName, guestRef),
   };

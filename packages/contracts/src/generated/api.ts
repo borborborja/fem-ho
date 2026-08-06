@@ -509,6 +509,96 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/shares": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Els enllaços públics de qui pregunta
+         * @description Es llisten amb la configuració i les visites, **mai amb el token**: només se'n
+         *     guarda l'HMAC (docs/10 §3). Si l'usuari el perd, ha de crear-ne un de nou.
+         */
+        get: operations["listShares"];
+        put?: never;
+        /**
+         * Crear un enllaç públic
+         * @description Una **tasca amb les seves llistes**, o una **llista sola**. No es comparteixen
+         *     projectes ni àmbits sencers (docs/10 §1).
+         *
+         *     **No hi ha permís d'edició** (D10): un convidat marca ítems i comenta.
+         *
+         *     L'URL sencer es retorna **un sol cop**.
+         */
+        post: operations["createShare"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/shares/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Revocar un enllaç */
+        delete: operations["revokeShare"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/push/subscriptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Registrar una subscripció de push
+         * @description **La mateixa ruta per a Web Push i per a UnifiedPush**: comparteixen RFC i
+         *     xifratge (docs/11 §1). El mateix `endpoint` actualitza la fila en comptes de
+         *     crear-ne una de nova.
+         */
+        post: operations["subscribePush"];
+        /** Treure una subscripció */
+        delete: operations["unsubscribePush"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/push/public-key": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * La clau pública VAPID de la instància
+         * @description És estable per sempre: es genera un sol cop i **no hi ha rotació** (docs/11 §2).
+         */
+        get: operations["getVapidPublicKey"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/tasks/{id}/ai-mode": {
         parameters: {
             query?: never;
@@ -623,6 +713,24 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        ShareSummary: {
+            id: string;
+            task_id?: string | null;
+            checklist_id?: string | null;
+            /** @enum {string} */
+            permission: "view" | "check" | "comment";
+            require_name: boolean;
+            /** @description Si en té, no quina. La contrasenya es guarda amb argon2id. */
+            has_password: boolean;
+            /** Format: date-time */
+            expires_at?: string | null;
+            max_views?: number | null;
+            view_count: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            revoked_at?: string | null;
+        };
         ApiTokenSummary: {
             id: string;
             name: string;
@@ -1962,6 +2070,168 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    listShares: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Els enllaços. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ShareSummary"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    createShare: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    task_id?: string;
+                    checklist_id?: string;
+                    /**
+                     * @default view
+                     * @enum {string}
+                     */
+                    permission?: "view" | "check" | "comment";
+                    password?: string | null;
+                    /** @default false */
+                    require_name?: boolean;
+                    /** Format: date-time */
+                    expires_at?: string | null;
+                    max_views?: number | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Creat. Porta l'URL, i és l'única vegada. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        url: string;
+                        token: string;
+                        share: components["schemas"]["ShareSummary"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    revokeShare: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Revocat. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    subscribePush: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    endpoint: string;
+                    p256dh: string;
+                    auth: string;
+                    /** @enum {string} */
+                    platform: "web" | "android";
+                };
+            };
+        };
+        responses: {
+            /** @description Registrada. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    unsubscribePush: {
+        parameters: {
+            query: {
+                endpoint: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Treta. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    getVapidPublicKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description La clau. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        public_key: string;
+                    };
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
         };
     };
     setAiMode: {

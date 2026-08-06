@@ -876,6 +876,152 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /shares:
+    get:
+      tags: [shares]
+      operationId: listShares
+      summary: Els enllaços públics de qui pregunta
+      description: |
+        Es llisten amb la configuració i les visites, **mai amb el token**: només se'n
+        guarda l'HMAC (docs/10 §3). Si l'usuari el perd, ha de crear-ne un de nou.
+      responses:
+        '200':
+          description: Els enllaços.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/ShareSummary' }
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+    post:
+      tags: [shares]
+      operationId: createShare
+      summary: Crear un enllaç públic
+      description: |
+        Una **tasca amb les seves llistes**, o una **llista sola**. No es comparteixen
+        projectes ni àmbits sencers (docs/10 §1).
+
+        **No hi ha permís d'edició** (D10): un convidat marca ítems i comenta.
+
+        L'URL sencer es retorna **un sol cop**.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                task_id: { type: string }
+                checklist_id: { type: string }
+                permission:
+                  type: string
+                  enum: [view, check, comment]
+                  default: view
+                password: { type: [string, 'null'] }
+                require_name: { type: boolean, default: false }
+                expires_at: { type: [string, 'null'], format: date-time }
+                max_views: { type: [integer, 'null'] }
+      responses:
+        '201':
+          description: Creat. Porta l'URL, i és l'única vegada.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [url, token, share]
+                properties:
+                  url: { type: string }
+                  token: { type: string }
+                  share: { $ref: '#/components/schemas/ShareSummary' }
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /shares/{id}:
+    delete:
+      tags: [shares]
+      operationId: revokeShare
+      summary: Revocar un enllaç
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '204':
+          description: Revocat.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /push/subscriptions:
+    post:
+      tags: [notifications]
+      operationId: subscribePush
+      summary: Registrar una subscripció de push
+      description: |
+        **La mateixa ruta per a Web Push i per a UnifiedPush**: comparteixen RFC i
+        xifratge (docs/11 §1). El mateix `endpoint` actualitza la fila en comptes de
+        crear-ne una de nova.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [endpoint, p256dh, auth, platform]
+              properties:
+                endpoint: { type: string }
+                p256dh: { type: string }
+                auth: { type: string }
+                platform: { type: string, enum: [web, android] }
+      responses:
+        '201':
+          description: Registrada.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+    delete:
+      tags: [notifications]
+      operationId: unsubscribePush
+      summary: Treure una subscripció
+      parameters:
+        - name: endpoint
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        '204':
+          description: Treta.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+
+  /push/public-key:
+    get:
+      tags: [notifications]
+      operationId: getVapidPublicKey
+      summary: La clau pública VAPID de la instància
+      description: |
+        És estable per sempre: es genera un sol cop i **no hi ha rotació** (docs/11 §2).
+      responses:
+        '200':
+          description: La clau.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [public_key]
+                properties:
+                  public_key: { type: string }
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+
   /tasks/{id}/ai-mode:
     post:
       tags: [tasks]
@@ -1033,6 +1179,26 @@ paths:
 
 components:
   schemas:
+    ShareSummary:
+      type: object
+      required: [id, permission, require_name, has_password, view_count, created_at]
+      properties:
+        id: { type: string }
+        task_id: { type: [string, 'null'] }
+        checklist_id: { type: [string, 'null'] }
+        permission:
+          type: string
+          enum: [view, check, comment]
+        require_name: { type: boolean }
+        has_password:
+          type: boolean
+          description: Si en té, no quina. La contrasenya es guarda amb argon2id.
+        expires_at: { type: [string, 'null'], format: date-time }
+        max_views: { type: [integer, 'null'] }
+        view_count: { type: integer }
+        created_at: { type: string, format: date-time }
+        revoked_at: { type: [string, 'null'], format: date-time }
+
     ApiTokenSummary:
       type: object
       required: [id, name, token_prefix, capabilities, scope_ids, created_at]

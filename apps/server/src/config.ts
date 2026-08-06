@@ -2,8 +2,7 @@
  * Configuració per variables d'entorn amb prefix FEMHO_ (docs/12 §3).
  *
  * Els secrets accepten el sufix _FILE per llegir-los d'un fitxer, que és el que permet
- * fer servir secrets de Docker. A M1 encara no hi ha cap secret, però el lector ja hi
- * és perquè no s'hagi de reescriure la lectura més endavant.
+ * fer servir secrets de Docker.
  */
 
 import { readFileSync } from 'node:fs';
@@ -62,6 +61,12 @@ export interface Config {
   databaseUrl: string;
   registration: RegistrationMode;
   logLevel: string;
+  /**
+   * El secret de la instància. Si no es dona, es genera un sol cop al volum de dades
+   * (`config/secret.ts`) i **no** a la base: qui es quedi una còpia de la base no ha de
+   * poder recalcular cap `token_hmac` (docs/10 §3).
+   */
+  secret: string | undefined;
 }
 
 export function loadConfig(version: string): Config {
@@ -74,6 +79,7 @@ export function loadConfig(version: string): Config {
     dataDir: env('DATA_DIR') ?? '/data',
     databaseUrl: env('DATABASE_URL') ?? 'sqlite:///data/femho.db',
     registration: envRegistration(),
+    secret: env('SECRET'),
     logLevel: env('LOG_LEVEL') ?? 'info',
   };
 }
