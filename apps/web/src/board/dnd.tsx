@@ -12,9 +12,11 @@
  * sentir català.
  */
 
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import {
   DndContext,
+  DragOverlay,
   KeyboardSensor,
   PointerSensor,
   useDraggable,
@@ -35,6 +37,12 @@ export interface BoardDndProps {
   /** Per als anuncis: cal poder dir el títol de la targeta i el nom de la columna. */
   titleOf: (taskId: string) => string;
   labelOf: (status: TaskStatus) => string;
+  /**
+   * La targeta que segueix el cursor mentre s'arrossega.
+   *
+   * Es pinta a part i **fora del tauler**; veure el comentari de `BoardDnd`.
+   */
+  renderOverlay?: ((taskId: string) => ReactNode) | undefined;
 }
 
 /**
@@ -89,7 +97,31 @@ const jumpBetweenColumns: KeyboardCoordinateGetter = (event, { context }) => {
   };
 };
 
-export function BoardDnd({ children, onDragStart, onDragEnd, titleOf, labelOf }: BoardDndProps) {
+/**
+ * @remarks
+ * **La targeta arrossegada es pinta a `document.body`, no dins del tauler.**
+ *
+ * Abans es movia l'element original amb un `transform`, i per tant continuava vivint
+ * dins de la columna: la columna té desplaçament propi (`overflow-y:auto`) i la targeta
+ * que agrupa les tres, `overflow:hidden`. Treure la targeta de la seva columna volia
+ * dir treure-la del rectangle visible, i **desapareixia a mig gest**. Arrossegar a
+ * cegues no és arrossegar.
+ *
+ * `DragOverlay` la pinta com un element a part que segueix el cursor, i l'original es
+ * queda al seu lloc a `opacity:0.4` (docs/02 §4). El portal a `document.body` no és
+ * opcional: l'overlay va `position:fixed`, i un avantpassat amb `transform` o
+ * `perspective` —el tauler en té un, per al gir del kanban de la IA— fa que `fixed`
+ * deixi de ser respecte de la finestra i torni a quedar atrapat.
+ */
+export function BoardDnd({
+  children,
+  onDragStart,
+  onDragEnd,
+  titleOf,
+  labelOf,
+  renderOverlay,
+}: BoardDndProps) {
+  const [active, setActive] = useState<string | null>(null);
   const sensors = useSensors(
     // Amb 6px de marge, clicar una targeta no compta com a arrossegar-la: sense això,
     // obrir el modal amb el ratolí es converteix en una loteria.
@@ -123,14 +155,36 @@ export function BoardDnd({ children, onDragStart, onDragEnd, titleOf, labelOf }:
           onDragCancel: () => t('board.drag.cancelled'),
         },
       }}
-      onDragStart={(event: DragStartEvent) => onDragStart?.(String(event.active.id))}
+      onDragStart={(event: DragStartEvent) => {
+        setActive(String(event.active.id));
+        onDragStart?.(String(event.active.id));
+      }}
       onDragEnd={(event: DragEndEvent) => {
+        setActive(null);
         const status = event.over === null ? null : (String(event.over.id) as TaskStatus);
         onDragEnd?.(String(event.active.id), status);
       }}
-      onDragCancel={() => onDragEnd?.('', null)}
+      onDragCancel={() => {
+        setActive(null);
+        onDragEnd?.('', null);
+      }}
     >
       {children}
+
+      {renderOverlay === undefined || typeof document === 'undefined'
+        ? null
+        : createPortal(
+            // Sense animació de tornada: la targeta ja s'ha mogut de columna quan
+            // s'acaba el gest, i veure-la volar cap al lloc d'on venia és mentida.
+            <DragOverlay dropAnimation={null} zIndex={60}>
+              {active === null ? null : (
+                <div data-testid="drag-overlay" style={{ cursor: 'grabbing' }}>
+                  {renderOverlay(active)}
+                </div>
+              )}
+            </DragOverlay>,
+            document.body,
+          )}
     </DndContext>
   );
 }
@@ -152,7 +206,7 @@ export function DraggableCard({
   testId?: string | undefined;
   children: ReactNode;
 }) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id });
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id });
 
   return (
     <div
@@ -163,14 +217,12 @@ export function DraggableCard({
       // que per tant NO és part del que renderitza el component compartit. La prova de
       // P4 el salta per poder comparar només el que InboxRail pinta.
       data-host-wrapper="true"
-      style={{
-        transform:
-          transform === null ? undefined : `translate3d(${transform.x}px, ${transform.y}px, 0)`,
-        // La targeta arrossegada va per damunt de la resta mentre es mou.
-        zIndex: isDragging ? 10 : undefined,
-        position: 'relative',
-        cursor: 'grab',
-      }}
+      /**
+       * **L'original NO es mou.** Qui segueix el cursor és l'overlay de `BoardDnd`;
+       * aquí la targeta es queda al seu lloc i qui la pinta la deixa a `opacity:0.4`
+       * (docs/02 §4), que és el forat que diu d'on ve.
+       */
+      style={{ position: 'relative', cursor: isDragging ? 'grabbing' : 'grab' }}
       {...listeners}
       {...attributes}
     >

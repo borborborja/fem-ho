@@ -269,3 +269,54 @@ test("i a l'escriptori torna a ser la graella de sempre", async ({ page }) => {
     'grid',
   );
 });
+
+/**
+ * **La targeta arrossegada s'ha de veure fora de la seva columna.**
+ *
+ * Es movia l'element original amb un `transform`, i per tant continuava vivint dins de
+ * la columna: amb el desplaçament propi de la columna i l'`overflow:hidden` de la
+ * targeta que agrupa les tres, treure-la del seu lloc volia dir treure-la del rectangle
+ * visible i **desapareixia a mig gest**.
+ *
+ * Aquí es comprova el que ho impedeix: que mentre s'arrossega hi ha una targeta que
+ * segueix el cursor, que **penja de `<body>` i no del tauler** —que és l'única manera
+ * que cap avantpassat la retalli— i que es veu quan el cursor ja és a l'altra punta.
+ */
+test("arrossegar no amaga la targeta en sortir de la columna", async ({ page }) => {
+  await page.goto('/proof/board');
+  const surface = page.locator('[data-testid="board-light"]');
+
+  const card = surface.locator('[data-testid="task-1"]');
+  const target = surface.locator('[data-column-status="done"]');
+  const from = await card.boundingBox();
+  const to = await target.boundingBox();
+  if (from === null || to === null) throw new Error('no es poden mesurar els elements');
+
+  await page.mouse.move(from.x + from.width / 2, from.y + 20);
+  await page.mouse.down();
+  await page.mouse.move(from.x + from.width / 2 + 40, from.y + 40, { steps: 5 });
+  // Fins a l'última columna: el camí travessa totes les vores que abans la retallaven.
+  await page.mouse.move(to.x + to.width / 2, to.y + 60, { steps: 12 });
+
+  const overlay = page.locator('[data-testid="drag-overlay"]');
+  await expect(overlay).toBeVisible();
+  await expect(overlay).toContainText('Trucar al fontaner');
+
+  // Penja de <body> i no del tauler: si fos a dins, tornaria a quedar retallada.
+  expect(
+    await overlay.evaluate((node) => node.closest('[data-testid="kanban"]') === null),
+  ).toBe(true);
+
+  // I és on és el cursor, no on era la targeta.
+  const box = await overlay.boundingBox();
+  if (box === null) throw new Error("l'overlay no es pot mesurar");
+  expect(box.x + box.width / 2).toBeGreaterThan(to.x);
+
+  // L'original es queda al seu lloc, atenuat (docs/02 §4).
+  await expect(surface.locator('[data-column-status="inbox"] [data-testid="task-1"]')).toBeVisible();
+
+  await page.mouse.up();
+  await expect(
+    surface.locator('[data-column-status="done"] [data-testid="task-1"]'),
+  ).toBeVisible();
+});

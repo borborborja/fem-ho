@@ -272,6 +272,30 @@ export function KanbanBoard({
       titleOf={titleOf}
       labelOf={labelOf}
       onDragStart={setDraggingId}
+      /**
+       * La targeta que segueix el cursor.
+       *
+       * És **la mateixa** que la del tauler, sense l'embolcall d'arrossegar i sense
+       * marcar-la com a arrossegada: aquesta és la que es veu sencera, i la del seu
+       * lloc és la que queda atenuada.
+       */
+      renderOverlay={(taskId) => {
+        const task = tasks.find((candidate) => candidate.id === taskId);
+        if (task === undefined) return null;
+        return (
+          // L'ombra de diàleg: la targeta que es mou ha de llegir-se **per damunt** de
+          // la que hi ha a sota, i el fons de targeta és translúcid en tema fosc.
+          <div style={{ borderRadius: 16, boxShadow: 'var(--shadow-dialog)' }}>
+            <BoardCard
+              task={task}
+              progress={task.progress ?? { done: 0, total: 0, lists: 0 }}
+              onOpen={() => undefined}
+              onToggleDone={() => undefined}
+              onChanged={() => undefined}
+            />
+          </div>
+        );
+      }}
       onDragEnd={(taskId, status) => {
         setDraggingId(null);
         // `status` nul vol dir que s'ha deixat anar fora de qualsevol columna, o que
