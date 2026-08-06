@@ -64,25 +64,29 @@ Les dotze seccions de `docs/02`:
 | §4 Kanban | fet, amb arrossegament de ratolí i de teclat |
 | §5 Calendari | fet: mes, setmana, dia i rail configurable |
 | §6 Vista de llista senzilla | fet |
-| §7 Modal d'edició completa | **parcial** — veure sota |
+| §7 Modal d'edició completa | fet menys els adjunts |
 | §8 Tauler general | fet |
 | §9 Ajustos | fet, les vuit pestanyes |
 | §10 Responsive | fet |
-| §11 Dreceres de teclat | fet menys `Cmd/Ctrl+K` |
+| §11 Dreceres de teclat | fet, amb la paleta d'ordres |
 | §12 Estats buits, càrrega i error | fet |
 
-### Què falta al modal (§7)
+### L'única cosa que falta al modal (§7)
 
-- **Repetició** — el constructor d'`RRULE` i el commutador "comptar des que es
-  completa". El servidor ja ho suporta (`recurrence_mode`), la interfície no.
-- **Adjunts** — amb el commutador de context per a la IA. Tampoc hi ha l'endpoint.
-- **Deadline** — el camp existeix a la base i a l'API; el modal només ensenya el
-  venciment.
-- **Canviar d'àmbit o de projecte** — s'ensenyen, no s'editen.
+**Els adjunts**, amb el commutador de context per a la IA. No és una omissió per manca
+de temps: `docs/12` no diu on es guarden els fitxers —volum, mida màxima, servei— i
+inventar-ho voldria dir triar per l'operador coses que després no es poden desfer sense
+migrar dades. El camp `attachments` és a `docs/05` §4 i l'endpoint no existeix.
 
-### Què falta a les dreceres (§11)
+La repetició, la data límit i el canvi de projecte **sí que hi són**.
 
-- **`Cmd/Ctrl+K`**, la paleta d'ordres. La resta hi són.
+### Sobre el constructor de repetició
+
+Quatre opcions —cada dia, setmana, mes i any— més el commutador de "comptar des que es
+completa". No hi ha editor de regles arbitràries: `BYDAY`, `BYSETPOS` i `WKST` són molta
+pantalla per a un cas que gairebé ningú té. Una regla més complicada que arribi per
+CalDAV **es conserva i s'ensenya tal com és**; sobreescriure-la seria perdre el que algú
+va escriure en una altra app.
 
 ---
 

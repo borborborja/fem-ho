@@ -23,6 +23,7 @@ import { InviteScreen, SetupScreen } from '../screens/GateScreens.js';
 import { ListScreen } from '../screens/ListScreen.js';
 import { LoginScreen } from '../screens/LoginScreen.js';
 import { PublicShareScreen } from '../screens/PublicShareScreen.js';
+import { CommandPalette } from '../screens/CommandPalette.js';
 import { SearchScreen } from '../screens/SearchScreen.js';
 import { SettingsScreen } from '../screens/SettingsScreen.js';
 import { TaskModal } from '../screens/TaskModal.js';
@@ -85,6 +86,7 @@ function AppShell() {
   const [warning, setWarning] = useState<string | null>(null);
   const [openTask, setOpenTask] = useState<string | null>(null);
   const [sharingTask, setSharingTask] = useState<string | null>(null);
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const boardRef = useRef<HTMLDivElement | null>(null);
 
@@ -136,8 +138,10 @@ function AppShell() {
       onSettings: () => navigate('/settings'),
       onSearch: () => navigate('/search'),
       onHelp: () => setWarning(t('shortcuts.title')),
+      onPalette: () => setPaletteOpen((open) => !open),
       onEscape: () => {
         setWarning(null);
+        setPaletteOpen(false);
       },
     });
   }, [navigate, scopes, activeScopeIds, setQuery]);
@@ -238,6 +242,21 @@ function AppShell() {
       {sharingTask === null ? null : (
         <ShareTaskDialog taskId={sharingTask} onClose={() => setSharingTask(null)} />
       )}
+
+      {paletteOpen ? (
+        <CommandPalette
+          destinations={[
+            { id: 'tasks', label: t('nav.tasks'), href: '/' },
+            { id: 'calendar', label: t('nav.calendar'), href: '/calendar' },
+            { id: 'dashboard', label: t('nav.dashboard'), href: '/dashboard' },
+            { id: 'search', label: t('nav.search'), href: '/search' },
+            { id: 'settings', label: t('nav.settings'), href: '/settings' },
+          ]}
+          onNavigate={navigate}
+          onOpenTask={setOpenTask}
+          onClose={() => setPaletteOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }

@@ -237,6 +237,29 @@ test('les dreceres de teclat funcionen, i no dins d\'un camp', async ({ page }) 
   expect(await camp.inputValue()).toBe('kanban');
 });
 
+test('la paleta d\'ordres porta on vas amb tres tecles', async ({ page }) => {
+  await login(page);
+
+  await page.keyboard.press('Control+k');
+  await expect(page.locator('[data-testid="command-palette"]')).toBeVisible();
+
+  // Les destinacions hi són sense escriure res.
+  await expect(page.locator('[data-testid="palette-item-calendar"]')).toBeVisible();
+
+  await page.locator('[data-testid="palette-input"]').fill('calen');
+  await page.keyboard.press('Enter');
+
+  await expect(page.locator('[data-testid="calendar-screen"]')).toBeVisible();
+  await expect(page.locator('[data-testid="command-palette"]')).toBeHidden();
+
+  // I `Escape` la tanca encara que el focus sigui al camp: la drecera global no
+  // s'activa escrivint, i sense el maneig local quedaria oberta.
+  await page.keyboard.press('Control+k');
+  await expect(page.locator('[data-testid="command-palette"]')).toBeVisible();
+  await page.locator('[data-testid="palette-input"]').press('Escape');
+  await expect(page.locator('[data-testid="command-palette"]')).toBeHidden();
+});
+
 test('tancar sessió torna al login', async ({ page }) => {
   await login(page);
 

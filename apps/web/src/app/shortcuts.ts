@@ -21,6 +21,7 @@ export interface ShortcutHandlers {
   onSettings: () => void;
   onSearch: () => void;
   onHelp: () => void;
+  onPalette: () => void;
   onEscape: () => void;
 }
 
@@ -42,6 +43,18 @@ export function installShortcuts(handlers: ShortcutHandlers): () => void {
       handlers.onEscape();
       return;
     }
+    /**
+     * `Cmd/Ctrl+K` val **també escrivint**.
+     *
+     * És l'única amb modificador i l'única que no és una lletra solta: no hi ha manera
+     * de teclejar-la sense voler, i qui l'usa la vol des d'on sigui.
+     */
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+      event.preventDefault();
+      handlers.onPalette();
+      return;
+    }
+
     if (typing(event.target)) return;
     if (event.metaKey || event.ctrlKey || event.altKey) return;
 

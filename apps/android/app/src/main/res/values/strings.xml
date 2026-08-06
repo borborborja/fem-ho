@@ -134,6 +134,10 @@
     <string name="nav_search">Cercar</string>
     <string name="nav_settings">Ajustos</string>
     <string name="nav_tasks">Tasques</string>
+    <string name="palette_empty">Res que coincideixi.</string>
+    <string name="palette_go">Anar a</string>
+    <string name="palette_placeholder">Escriu per anar a un lloc o buscar una tasca…</string>
+    <string name="palette_tasks">Tasques</string>
     <string name="settings_accent">Accent</string>
     <string name="settings_accent_default">Per defecte</string>
     <string name="settings_accent_mono_cool">Fred</string>
