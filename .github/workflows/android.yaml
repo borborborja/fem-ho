@@ -1,0 +1,130 @@
+name: App Android
+
+# L'APK es construeix a cada canvi i **es penja com a artefacte**: així es pot instal·lar
+# en un telèfon sense muntar l'entorn d'Android, que és el que fa que algú altre pugui
+# provar un canvi.
+#
+# `docs/13` M13 demana `test: android-parser-parity`, que és el que comprova que el
+# parser d'afegida ràpida i l'índex fraccional donin el MATEIX que a la web amb els
+# mateixos fixtures. Divergir-hi no dona cap error a cap de les dues bandes.
+
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Instal·lar
+        run: npm ci
+
+      # Les cadenes d'Android i els tokens de Compose es GENEREN des del catàleg i des
+      # del CSS de Plou. Es regeneren aquí i es comprova que no canviï res: si algú ha
+      # tocat un text o un color i no ha regenerat, l'app ensenyaria el valor vell i cap
+      # prova ho diria (docs/03 §1, D7).
+      - name: El generat està al dia
+        run: |
+          npm run check:i18n-lint
+          npm run check:tokens-parity
+
+      - name: Proves de Kotlin
+        run: npm run test:android
+
+      - name: APK de depuració
+        run: npm run android:build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: femho-debug-apk
+          path: apps/android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 30
+
+  # La signada va a part i **només a les etiquetes**: necessita la clau, i una clau que
+  # s'usa a cada push d'una branca qualsevol és una clau que acaba signant coses que
+  # ningú ha revisat.
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Instal·lar
+        run: npm ci
+
+      # Sense clau, no es signa i **es diu**: publicar un APK sense signar com si ho
+      # estigués faria que ningú el pogués actualitzar després.
+      - name: Hi ha clau de signatura?
+        id: key
+        run: |
+          if [ -n "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Sense ANDROID_KEYSTORE_BASE64: es publica l'APK de depuració."
+          fi
+
+      - name: Desar la clau
+        if: steps.key.outputs.present == 'true'
+        run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > apps/android/release.jks
+
+      - name: Construir
+        env:
+          FEMHO_KEYSTORE: ${{ steps.key.outputs.present == 'true' && 'release.jks' || '' }}
+          FEMHO_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          FEMHO_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          FEMHO_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          cd apps/android
+          if [ "${{ steps.key.outputs.present }}" = "true" ]; then
+            ./gradlew assembleRelease --console=plain
+          else
+            ./gradlew assembleDebug --console=plain
+          fi
+
+      # La clau no es queda al disc del runner ni un pas més del que cal.
+      - name: Esborrar la clau
+        if: always()
+        run: rm -f apps/android/release.jks
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: apps/android/app/build/outputs/apk/*/*.apk
+          fail_on_unmatched_files: true

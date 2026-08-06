@@ -24,11 +24,33 @@ android {
 
     buildFeatures { compose = true }
 
+    /**
+     * La clau de signatura ve de l'entorn, mai del repositori.
+     *
+     * Sense les variables, `signingConfig` es queda nul i `assembleRelease` dona un APK
+     * **sense signar**, que Android no instal·la. És el comportament que es vol: val més
+     * que falli a la instal·lació que no pas publicar-ne un que sembla bo i que després
+     * ningú pot actualitzar, perquè una actualització d'Android exigeix la mateixa clau
+     * que la instal·lació original.
+     */
+    val keystore = System.getenv("FEMHO_KEYSTORE")
+    signingConfigs {
+        if (!keystore.isNullOrBlank()) {
+            create("release") {
+                storeFile = file(keystore)
+                storePassword = System.getenv("FEMHO_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("FEMHO_KEY_ALIAS")
+                keyPassword = System.getenv("FEMHO_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            if (!keystore.isNullOrBlank()) signingConfig = signingConfigs.getByName("release")
         }
     }
 

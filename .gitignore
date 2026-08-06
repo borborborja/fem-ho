@@ -20,6 +20,9 @@ apps/android/build/
 apps/android/**/build/
 .idea/
 
+# Estat local de l'agent: identificadors de sessió i panys, res que hagi de viatjar
+.claude/
+
 # Playwright
 test-results/
 playwright-report/

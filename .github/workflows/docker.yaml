@@ -1,0 +1,87 @@
+name: Imatge Docker
+
+# `docs/12` §1 demana una imatge **multi-arquitectura**: qui s'autoallotja Fem-ho ho fa
+# tant en un servidor x86 com en una Raspberry Pi, i publicar-ne només una vol dir que
+# la meitat de la gent no la pot fer servir.
+#
+# Es publica a GHCR i no a Docker Hub: va amb el repositori, no necessita cap compte ni
+# cap secret afegit, i les credencials són les que GitHub ja dona a cada execució.
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  # A les propostes es CONSTRUEIX però no es publica: que una branca qualsevol pugui
+  # escriure al registre és com es publiquen imatges que ningú ha revisat.
+  pull_request:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE: ${{ github.repository }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # `arm64` es construeix per emulació. És lent —uns quants minuts— i és el preu de
+      # no tenir un runner ARM; l'alternativa és no publicar-la, que no és alternativa.
+      - name: QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Entrar al registre
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # `latest` només a `main`, i una etiqueta per versió a cada `v*`. Sense la segona,
+      # tornar enrere vol dir reconstruir, i no hi ha manera de dir "la de dijous".
+      - name: Etiquetes
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE }}
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Construir i publicar
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # La imatge ha d'arrencar, no només construir-se. Un `healthz` que respon és el
+      # mínim que distingeix una imatge publicada d'una que no serveix de res.
+      - name: Comprovar que arrenca
+        if: github.event_name == 'pull_request'
+        run: |
+          docker buildx build --load --platform linux/amd64 -t femho:ci .
+          docker run -d --name femho-ci -p 8080:8080 \
+            -e FEMHO_DATABASE_URL=sqlite:///data/femho.db femho:ci
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:8080/healthz; then echo; exit 0; fi
+            sleep 2
+          done
+          echo "La imatge no ha arrencat:"
+          docker logs femho-ci
+          exit 1
