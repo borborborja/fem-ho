@@ -30,6 +30,9 @@ export type AuditVerb =
   | 'completed'
   | 'reopened'
   | 'cascade_complete'
+  // Un refresc d'un origen extern. Es distingeix d'una edició perquè no l'ha fet ningú
+  // d'aquí: ve d'un calendari de fora, i a l'historial s'ha de poder llegir així.
+  | 'refreshed'
   | 'deleted'
   | 'restored'
   | 'shared'

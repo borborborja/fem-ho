@@ -1,0 +1,33 @@
+# Implementacions de referència per comparar-hi les respostes (docs/07 §11).
+#
+# "És la manera més ràpida de trobar què respons diferent." No és una suite de
+# conformitat: és un mirall. Es llancen les mateixes peticions a Fem-ho i a aquests, i
+# el que no coincideix es mira a mà.
+#
+#   sudo docker compose -f tools/caldav-reference/compose.yaml up -d
+#   npx vitest run apps/server/src/dav/reference.test.ts
+#   sudo docker compose -f tools/caldav-reference/compose.yaml down
+#
+# Les dades són efímeres a posta: cada aixecada parteix de zero.
+
+services:
+  radicale:
+    image: tomsquest/docker-radicale:latest
+    container_name: femho-ref-radicale
+    ports:
+      - '15232:5232'
+    tmpfs:
+      # `mode` explícit: sense ell el tmpfs és de root i la imatge, que corre com a
+      # usuari sense privilegis, no hi pot escriure i el contenidor mor a l'arrencada.
+      - /data:mode=1777
+    volumes:
+      - ./radicale.conf:/config/config:ro
+
+  xandikos:
+    image: ghcr.io/jelmer/xandikos:latest
+    container_name: femho-ref-xandikos
+    ports:
+      - '15233:8000'
+    tmpfs:
+      - /data:mode=1777
+    command: ['--listen-address=0.0.0.0', '--port=8000', '-d/data', '--autocreate', '--defaults']
