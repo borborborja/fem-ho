@@ -13,6 +13,7 @@ import type { Config } from './config.js';
 import type { Connection } from './db/connection.js';
 import { registerAuthRoutes } from './http/auth.js';
 import { registerInstanceRoutes } from './http/instance.js';
+import { registerMcpRoutes } from './http/mcp.js';
 import { registerSyncRoutes } from './http/sync.js';
 import { registerChecklistRoutes, registerEventRoutes, registerTaskRoutes } from './http/tasks.js';
 
@@ -52,6 +53,7 @@ export function buildApp(config: Config, options: BuildOptions = {}): FastifyIns
   registerEventRoutes(app);
   registerChecklistRoutes(app);
   registerSyncRoutes(app);
+  registerMcpRoutes(app);
 
   return app;
 }

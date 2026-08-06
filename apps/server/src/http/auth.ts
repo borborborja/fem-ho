@@ -16,6 +16,7 @@ import { createSession, revokeSession, rotateRefreshToken } from '../auth/sessio
 import { generateAccessToken, isApiToken } from '../auth/tokens.js';
 import { PolicyError, unauthenticated } from '../policy/errors.js';
 import { bearerFrom, resolveApiToken, resolveSession, scopeIdsOwnedBy } from '../policy/resolve.js';
+import type { Source } from '@fem-ho/contracts';
 import type { Principal } from '../policy/principal.js';
 
 type LoginRequest = components['schemas']['LoginRequest'];
@@ -61,6 +62,15 @@ export const lockout = new LoginLockout();
 export async function principalOf(
   app: FastifyInstance,
   request: FastifyRequest,
+  /**
+   * El canal, quan la ruta el sap millor que la petició.
+   *
+   * El camí MCP el passa explícitament. Abans es deduïa d'una capçalera
+   * `X-Femho-Source`, i això era doblement dolent: un client MCP real no l'envia —o
+   * sigui que les seves escriptures quedaven registrades com a `api`— i qualsevol client
+   * podia mentir sobre quin canal era per falsejar l'historial.
+   */
+  channel?: Source,
 ): Promise<Principal> {
   const conn = app.connection;
   if (conn === undefined) throw unauthenticated('La instància no té base de dades.');
@@ -71,13 +81,12 @@ export async function principalOf(
 
   // Un token d'API es reconeix pel prefix llegible, que és per a què hi és.
   if (isApiToken(bearer)) {
-    const source = request.headers['x-femho-source'] === 'mcp' ? 'mcp' : 'api';
-    return resolveApiToken(conn.db, bearer, source, now);
+    return resolveApiToken(conn.db, bearer, channel ?? 'api', now);
   }
 
   const sessionId = sessionIdOfAccessToken(bearer, Date.now());
   if (sessionId === null) throw unauthenticated("Token d'accés no vàlid o caducat.");
-  return resolveSession(conn.db, sessionId, sourceOf(request), now);
+  return resolveSession(conn.db, sessionId, channel ?? sourceOf(request), now);
 }
 
 /** El canal, que es propaga fins a activity_log sense que cap servei l'hagi de passar. */

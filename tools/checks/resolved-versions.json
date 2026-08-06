@@ -21,6 +21,11 @@
       "version": "10.0.1",
       "checkedAt": "2026-08-05"
     },
+    "@modelcontextprotocol/sdk": {
+      "version": "1.30.0",
+      "checkedAt": "2026-08-06",
+      "note": "El paquet és UN de sol i no la família @modelcontextprotocol/{core,server,client} a 2.0.0 que deia el research (docs/14 Part 3 ho marcava com a sospitós, i tenia raó). Serveix LES DUES ERES del protocol des del mateix transport: `StreamableHTTPServerTransport` amb `sessionIdGenerator: undefined` va sense sessió (revisió de mitjan 2026) i amb un generador manté la de sessió; a més hi ha `server/sse.js` per al transport antic. Això tanca la pregunta oberta de docs/08 §1."
+    },
     "@node-rs/argon2": {
       "version": "2.0.2",
       "checkedAt": "2026-08-05"
@@ -154,6 +159,11 @@
     "vitest": {
       "version": "4.1.10",
       "checkedAt": "2026-08-05"
+    },
+    "zod": {
+      "version": "4.4.3",
+      "checkedAt": "2026-08-06",
+      "note": "Esquemes d'entrada de les tools d'MCP. Ve com a dependència de l'SDK i es fixa explícita perquè el catàleg l'importa directament."
     }
   },
   "verifiedAvailableForLaterMilestones": {

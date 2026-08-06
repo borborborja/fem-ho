@@ -14,6 +14,7 @@ import type { AuditContext } from '../audit/audited-transaction.js';
 import type { MigrationDb } from '../db/migration-db.js';
 import { PolicyError, missingCapability, notFound } from '../policy/errors.js';
 import { hasCapability, type Principal } from '../policy/principal.js';
+import { normalizeForSearch, normalizeQuery } from '../text/search-text.js';
 import { assertScopeAccess, listScopes } from './scopes.js';
 
 export interface TaskRow {
@@ -88,6 +89,8 @@ export interface ListTasksFilters {
   statuses?: TaskStatus[] | undefined;
   limit?: number | undefined;
   cursor?: string | undefined;
+  /** Text a buscar. Es normalitza igual que `search_text` (docs/01 §11). */
+  search?: string | undefined;
 }
 
 export interface TaskPage {
@@ -122,6 +125,7 @@ export async function listTasks(
       AND status IN (${sql.join(statuses)})
       ${filters.projectId === undefined ? sql`` : sql`AND project_id = ${filters.projectId}`}
       ${cursor === '' ? sql`` : sql`AND position > ${cursor}`}
+      ${searchFilter(filters.search)}
     ORDER BY position
     LIMIT ${limit + 1}
   `.execute(db);
@@ -134,6 +138,30 @@ export async function listTasks(
     next_cursor: hasMore ? (page[page.length - 1]?.position ?? null) : null,
     has_more: hasMore,
   };
+}
+
+/**
+ * El filtre de text.
+ *
+ * Es compara contra `search_text`, que ja està normalitzat, amb la **mateixa** funció
+ * que el va generar. Si la consulta es normalitzés diferent, la cerca fallaria
+ * justament en les paraules que la normalització existeix per arreglar: "col·legi",
+ * "Barça", "l'aigua".
+ *
+ * Cada paraula ha de sortir-hi: buscar "pa vi" no ha de trobar tot el que porti "pa".
+ */
+function searchFilter(search: string | undefined): ReturnType<typeof sql> {
+  if (search === undefined || search.trim() === '') return sql``;
+
+  const words = normalizeQuery(search)
+    .split(' ')
+    .filter((word) => word !== '');
+  if (words.length === 0) return sql``;
+
+  return sql`AND ${sql.join(
+    words.map((word) => sql`search_text LIKE ${`%${word}%`}`),
+    sql` AND `,
+  )}`;
 }
 
 export interface CreateTaskInput {
@@ -199,12 +227,13 @@ export async function createTask(
 
   await sql`
     INSERT INTO tasks (id, scope_id, project_id, title, description, status, position,
-                       due_date, due_time, view_mode, ai_mode, origin, created_by,
-                       created_at, updated_at, version)
+                       due_date, due_time, view_mode, ai_mode, origin, search_text,
+                       created_by, created_at, updated_at, version)
     VALUES (${id}, ${input.scope_id}, ${input.project_id ?? null}, ${input.title.trim()},
             ${input.description ?? null}, ${status}, ${position}, ${input.due_date ?? null},
-            ${input.due_time ?? null}, 'card', 'manual', 'native', ${principal.userId},
-            ${ctx.now}, ${ctx.now}, 1)
+            ${input.due_time ?? null}, 'card', 'manual', 'native',
+            ${normalizeForSearch(input.title, input.description)},
+            ${principal.userId}, ${ctx.now}, ${ctx.now}, 1)
   `.execute(ctx.tx);
 
   /**
@@ -430,4 +459,102 @@ export async function getBoard(
   }
 
   return { columns };
+}
+
+export interface UpdateTaskInput {
+  title?: string | undefined;
+  description?: string | null | undefined;
+  due_date?: string | null | undefined;
+  due_time?: string | null | undefined;
+  ai_mode?: 'manual' | 'assisted' | 'delegated' | undefined;
+  ai_instructions?: string | null | undefined;
+}
+
+/**
+ * Modifica els camps d'una tasca.
+ *
+ * **Només els que es donin.** `undefined` vol dir "no el toquis" i `null` vol dir
+ * "buida'l": si no es distingissin, buidar una data seria impossible des d'un client que
+ * envia només el que ha canviat.
+ */
+export async function updateTask(
+  ctx: AuditContext,
+  principal: Principal,
+  id: string,
+  input: UpdateTaskInput,
+): Promise<Task> {
+  if (!hasCapability(principal, 'tasks:write')) throw missingCapability('tasks:write');
+
+  const found = await sql<TaskRow>`
+    SELECT ${TASK_COLUMNS} FROM tasks WHERE id = ${id} AND deleted_at IS NULL
+  `.execute(ctx.tx);
+  const before = found.rows[0];
+  if (before === undefined) throw notFound('task', id);
+
+  await assertScopeAccess(ctx.tx, principal, before.scope_id);
+
+  const fields: Record<string, unknown> = {};
+  if (input.title !== undefined) {
+    if (input.title.trim() === '') {
+      throw new PolicyError(
+        'title-required',
+        'Title required',
+        422,
+        'El títol no pot quedar buit.',
+      );
+    }
+    fields.title = input.title.trim();
+  }
+  for (const key of [
+    'description',
+    'due_date',
+    'due_time',
+    'ai_mode',
+    'ai_instructions',
+  ] as const) {
+    if (input[key] !== undefined) fields[key] = input[key];
+  }
+
+  if (Object.keys(fields).length === 0) {
+    // Res a canviar: es declara explícitament perquè l'embolcall d'auditoria no es
+    // queixi que una transacció d'escriptura no ha deixat rastre.
+    ctx.noChange();
+    const [task] = await withAssignees(ctx.tx, [before]);
+    return task!;
+  }
+
+  // El text de cerca es refà amb els valors NOUS, no amb els que hi havia.
+  fields.search_text = normalizeForSearch(
+    (fields.title as string | undefined) ?? before.title,
+    (fields.description as string | null | undefined) ?? before.description,
+  );
+
+  const assignments = Object.entries(fields).map(
+    ([field, value]) => sql`${sql.raw(field)} = ${value}`,
+  );
+  await sql`
+    UPDATE tasks SET ${sql.join(assignments)}, updated_at = ${ctx.now}, version = version + 1
+    WHERE id = ${id}
+  `.execute(ctx.tx);
+
+  ctx.record({
+    entityType: 'task',
+    entityId: id,
+    scopeId: before.scope_id,
+    verb: 'updated',
+    changes: Object.fromEntries(
+      Object.keys(fields)
+        .filter((field) => field !== 'search_text')
+        .map((field) => [
+          field,
+          { from: (before as unknown as Record<string, unknown>)[field], to: fields[field] },
+        ]),
+    ),
+  });
+
+  const after = await sql<TaskRow>`
+    SELECT ${TASK_COLUMNS} FROM tasks WHERE id = ${id}
+  `.execute(ctx.tx);
+  const [task] = await withAssignees(ctx.tx, after.rows);
+  return task!;
 }

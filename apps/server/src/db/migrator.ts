@@ -19,6 +19,7 @@ import { sql } from 'kysely';
 import type { Engine } from './dialect.js';
 import type { MigrationDb } from './migration-db.js';
 import * as initialSchema from './migrations/001-initial-schema.js';
+import * as taskLeases from './migrations/002-task-leases.js';
 
 export interface Migration {
   name: string;
@@ -32,6 +33,7 @@ export interface Migration {
  */
 export const MIGRATIONS: Migration[] = [
   { name: '001-initial-schema', up: initialSchema.up, down: initialSchema.down },
+  { name: '002-task-leases', up: taskLeases.up, down: taskLeases.down },
 ];
 
 const MIGRATIONS_TABLE = 'schema_migrations';

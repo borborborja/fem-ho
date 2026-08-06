@@ -134,8 +134,13 @@ describe.each(motors)('migracions · $engine', (motor) => {
   });
 
   it('down deixa la base neta i up la torna a construir', async () => {
-    const desfeta = await migrateDown(conn.db, motor.engine);
-    expect(desfeta).toBe('001-initial-schema');
+    // Es desfan TOTES, no una: fixar aquí el nom de l'última faria que aquesta prova es
+    // trenqués cada cop que s'afegeix una migració, que no és el que vol comprovar.
+    for (let i = MIGRATIONS.length; i > 0; i -= 1) {
+      const desfeta = await migrateDown(conn.db, motor.engine);
+      expect(desfeta).toBe(MIGRATIONS[i - 1]!.name);
+    }
+    expect(await migrateDown(conn.db, motor.engine)).toBeNull();
 
     const buida = await tableNames(conn);
     for (const t of TAULES_ESPERADES) {
