@@ -22,6 +22,7 @@ export type ChecklistItem = S['ChecklistItem'];
 export type Calendar = S['Calendar'];
 export type EventOccurrence = S['EventOccurrence'];
 export type Board = S['Board'];
+export type TaskPage = S['TaskPage'];
 export type Inbox = S['Inbox'];
 export type Dashboard = S['Dashboard'];
 export type ActivityEntry = S['ActivityEntry'];

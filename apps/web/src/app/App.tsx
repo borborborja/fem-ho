@@ -23,6 +23,7 @@ import { InviteScreen, SetupScreen } from '../screens/GateScreens.js';
 import { ListScreen } from '../screens/ListScreen.js';
 import { LoginScreen } from '../screens/LoginScreen.js';
 import { PublicShareScreen } from '../screens/PublicShareScreen.js';
+import { SearchScreen } from '../screens/SearchScreen.js';
 import { SettingsScreen } from '../screens/SettingsScreen.js';
 import { TaskModal } from '../screens/TaskModal.js';
 import { ShareTaskDialog } from '../screens/ShareTaskDialog.js';
@@ -189,6 +190,8 @@ function AppShell() {
 
         {list !== null ? (
           <ListScreen checklistId={list.id!} onOpenTask={setOpenTask} />
+        ) : route.path === '/search' ? (
+          <SearchScreen onOpenTask={setOpenTask} />
         ) : route.path === '/dashboard' ? (
           <DashboardScreen
             onOpenTask={setOpenTask}
