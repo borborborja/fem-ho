@@ -1628,14 +1628,41 @@ export interface components {
             kind?: "events" | "todos";
             /** @enum {string} */
             origin?: "local" | "subscription";
+            /**
+             * @description Obligatori a la pràctica si `origin` és `subscription`: sense, es tracta com
+             *     a `ical`, que és la tria segura —un document es baixa sencer i funciona
+             *     igualment contra un CalDAV que el serveixi per `GET`, i a l'inrevés no.
+             * @enum {string}
+             */
+            source_kind?: "caldav" | "ical" | "rss";
             /** @description Obligatòria si `origin` és `subscription`. */
             source_url?: string;
+            source_username?: string;
+            /**
+             * @description La contrasenya de l'origen. **Es xifra en repòs** (docs/07 §9) i no torna mai
+             *     a sortir del servidor: les respostes no la porten en cap forma.
+             */
+            source_secret?: string;
+            /**
+             * @description Demana que la font sigui bidireccional. **Només s'atorga amb `caldav`**: a un
+             *     `.ics` o un RSS s'ignora, perquè deixar editar una cosa que no arribarà mai a
+             *     l'origen és pitjor que no deixar-ho.
+             */
+            writable?: boolean;
             refresh_interval?: number;
             strip_alarms?: boolean;
         };
         CalendarPatch: {
             name?: string;
             color?: string | null;
+            source_url?: string;
+            source_username?: string;
+            /**
+             * @description Absent vol dir **"no la toquis"**, no "esborra-la": el formulari no la torna
+             *     a ensenyar mai, i desar el nom d'una font no ha de perdre'n les credencials.
+             */
+            source_secret?: string;
+            writable?: boolean;
             refresh_interval?: number | null;
             strip_alarms?: boolean;
         };
@@ -1649,6 +1676,12 @@ export interface components {
             inbox_position?: "left" | "right" | "below";
             inbox_show_overdue?: boolean;
             collapsed_groups?: string[];
+            /**
+             * @description Fonts del calendari que aquest usuari no vol veure. **S'hi guarda el que
+             *     s'amaga i no el que es veu**: així una font nova surt sola, que és el que ha
+             *     de passar quan algú de la casa n'afegeix una.
+             */
+            hidden_calendar_ids?: string[];
             show_calendar_widget?: boolean;
             show_overdue_section?: boolean;
             quiet_hours_start?: string | null;
@@ -1937,6 +1970,32 @@ export interface components {
              * @enum {string}
              */
             origin: "local" | "subscription";
+            /**
+             * @description De quina mena és la font externa. `caldav` és una col·lecció; `ical`, un
+             *     document publicat; `rss`, un canal on **cada element és un instant** —no una
+             *     durada— i es converteix en un VEVENT sense hora de final.
+             * @enum {string|null}
+             */
+            source_kind?: "caldav" | "ical" | "rss" | null;
+            source_url?: string | null;
+            source_username?: string | null;
+            /**
+             * @description La font és **bidireccional**. Només un CalDAV pot ser-ho: un `.ics` publicat
+             *     i un RSS són documents, no col·leccions on es pugui escriure. Amb `false`,
+             *     el calendari és de només lectura a la capa de repositori.
+             * @default false
+             */
+            writable: boolean;
+            refresh_interval?: number | null;
+            /** Format: date-time */
+            last_refreshed_at?: string | null;
+            /**
+             * @description Per què va fallar l'últim refresc. Sense això, una font caiguda es veu
+             *     exactament igual que una que no té esdeveniments.
+             */
+            last_error?: string | null;
+            /** Format: date-time */
+            last_error_at?: string | null;
         };
         Event: {
             id: string;

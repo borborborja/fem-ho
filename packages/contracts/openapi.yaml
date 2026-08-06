@@ -2551,9 +2551,29 @@ components:
             D9 · dues col·leccions per contenidor, sempre. RFC 4791 §5.2 prohibeix
             recursos de components mixtos.
         origin: { type: string, enum: [local, subscription] }
+        source_kind:
+          type: string
+          enum: [caldav, ical, rss]
+          description: |
+            Obligatori a la pràctica si `origin` és `subscription`: sense, es tracta com
+            a `ical`, que és la tria segura —un document es baixa sencer i funciona
+            igualment contra un CalDAV que el serveixi per `GET`, i a l'inrevés no.
         source_url:
           type: string
           description: Obligatòria si `origin` és `subscription`.
+        source_username: { type: string }
+        source_secret:
+          type: string
+          writeOnly: true
+          description: |
+            La contrasenya de l'origen. **Es xifra en repòs** (docs/07 §9) i no torna mai
+            a sortir del servidor: les respostes no la porten en cap forma.
+        writable:
+          type: boolean
+          description: |
+            Demana que la font sigui bidireccional. **Només s'atorga amb `caldav`**: a un
+            `.ics` o un RSS s'ignora, perquè deixar editar una cosa que no arribarà mai a
+            l'origen és pitjor que no deixar-ho.
         refresh_interval: { type: integer }
         strip_alarms: { type: boolean }
 
@@ -2562,6 +2582,15 @@ components:
       properties:
         name: { type: string }
         color: { type: [string, 'null'] }
+        source_url: { type: string }
+        source_username: { type: string }
+        source_secret:
+          type: string
+          writeOnly: true
+          description: |
+            Absent vol dir **"no la toquis"**, no "esborra-la": el formulari no la torna
+            a ensenyar mai, i desar el nom d'una font no ha de perdre'n les credencials.
+        writable: { type: boolean }
         refresh_interval: { type: [integer, 'null'] }
         strip_alarms: { type: boolean }
 
@@ -2577,6 +2606,13 @@ components:
         collapsed_groups:
           type: array
           items: { type: string }
+        hidden_calendar_ids:
+          type: array
+          items: { type: string }
+          description: |
+            Fonts del calendari que aquest usuari no vol veure. **S'hi guarda el que
+            s'amaga i no el que es veu**: així una font nova surt sola, que és el que ha
+            de passar quan algú de la casa n'afegeix una.
         show_calendar_widget: { type: boolean }
         show_overdue_section: { type: boolean }
         quiet_hours_start: { type: [string, 'null'] }
@@ -2948,7 +2984,7 @@ components:
     Calendar:
       type: object
       additionalProperties: false
-      required: [id, scope_id, name, kind, origin]
+      required: [id, scope_id, name, kind, origin, writable]
       properties:
         id: { type: string }
         scope_id: { type: string }
@@ -2963,6 +2999,30 @@ components:
           type: string
           enum: [local, subscription]
           description: Les subscripcions són de només lectura a la capa de repositori.
+        source_kind:
+          type: [string, 'null']
+          enum: [caldav, ical, rss, null]
+          description: |
+            De quina mena és la font externa. `caldav` és una col·lecció; `ical`, un
+            document publicat; `rss`, un canal on **cada element és un instant** —no una
+            durada— i es converteix en un VEVENT sense hora de final.
+        source_url: { type: [string, 'null'] }
+        source_username: { type: [string, 'null'] }
+        writable:
+          type: boolean
+          default: false
+          description: |
+            La font és **bidireccional**. Només un CalDAV pot ser-ho: un `.ics` publicat
+            i un RSS són documents, no col·leccions on es pugui escriure. Amb `false`,
+            el calendari és de només lectura a la capa de repositori.
+        refresh_interval: { type: [integer, 'null'] }
+        last_refreshed_at: { type: [string, 'null'], format: date-time }
+        last_error:
+          type: [string, 'null']
+          description: |
+            Per què va fallar l'últim refresc. Sense això, una font caiguda es veu
+            exactament igual que una que no té esdeveniments.
+        last_error_at: { type: [string, 'null'], format: date-time }
 
     Event:
       type: object

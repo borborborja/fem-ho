@@ -77,14 +77,6 @@ export function buildApp(config: Config, options: BuildOptions = {}): FastifyIns
   registerMeRoutes(app);
   registerScopeRoutes(app);
   registerAgentRoutes(app);
-  registerTaskRoutes(app);
-  registerEventRoutes(app);
-  registerChecklistRoutes(app);
-  registerSyncRoutes(app);
-  registerMcpRoutes(app);
-  registerTokenRoutes(app);
-  registerPushRoutes(app);
-  registerSetupRoutes(app);
   /**
    * El secret es resol **quan es necessita**, no en construir l'app: `buildApp` no ha de
    * tocar el disc. Una instància que només serveixi `/healthz` no ha de crear cap fitxer,
@@ -95,6 +87,15 @@ export function buildApp(config: Config, options: BuildOptions = {}): FastifyIns
     secret ??= ensureInstanceSecret(config.dataDir, config.secret);
     return secret;
   };
+
+  registerTaskRoutes(app);
+  registerEventRoutes(app, instanceSecret);
+  registerChecklistRoutes(app);
+  registerSyncRoutes(app);
+  registerMcpRoutes(app);
+  registerTokenRoutes(app);
+  registerPushRoutes(app);
+  registerSetupRoutes(app);
   registerShareRoutes(app, instanceSecret);
   registerAdminRoutes(app, instanceSecret);
 

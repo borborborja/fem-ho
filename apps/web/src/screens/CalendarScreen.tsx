@@ -14,9 +14,9 @@ import { useMemo, useState } from 'react';
 import { t } from '@fem-ho/contracts';
 import { DayView, MonthView, WeekView, useIsMobile } from '@fem-ho/design-system/femho';
 import { api } from '../app/api.js';
-import { useSessionData } from '../app/session.js';
+import { useSession, useSessionData } from '../app/session.js';
 import { useApi } from '../app/useApi.js';
-import type { EventOccurrence, Inbox } from '../app/types.js';
+import type { Calendar, EventOccurrence, Inbox } from '../app/types.js';
 import { InboxRail } from '../board/InboxRail.js';
 import { ErrorBanner } from './BoardScreen.js';
 
@@ -47,6 +47,7 @@ export interface CalendarScreenProps {
 
 export function CalendarScreen({ activeScopeIds, onOpenTask }: CalendarScreenProps) {
   const { scopes, settings } = useSessionData();
+  const { updateSettings } = useSession();
   const mobile = useIsMobile();
   const [mode, setMode] = useState<Mode>('month');
   const [selected, setSelected] = useState<string>(() => iso(new Date()));
@@ -77,7 +78,34 @@ export function CalendarScreen({ activeScopeIds, onOpenTask }: CalendarScreenPro
     return scope === undefined ? 'var(--ink-faint)' : `var(${scope.color})`;
   };
 
-  const occurrences = events.data ?? [];
+  /**
+   * Les fonts de dades dels àmbits actius, i quines es veuen.
+   *
+   * **S'amaga, no s'esborra**: la font és de l'àmbit i la comparteix tothom qui hi és.
+   * Que algú deixi de mirar el calendari de festius no vol dir que ningú més el vulgui.
+   * I es guarda el que s'amaga, no el que es veu: així una font nova surt sola, que és
+   * el que ha de passar quan algú de la casa n'afegeix una.
+   */
+  const calendars = useApi<Calendar[]>('/api/v1/calendars');
+  const hidden = settings.hidden_calendar_ids ?? [];
+  const sources = (calendars.data ?? []).filter(
+    (calendar) =>
+      calendar.kind === 'events' &&
+      (activeScopeIds.length === 0 || activeScopeIds.includes(calendar.scope_id)),
+  );
+
+  const occurrences = (events.data ?? []).filter(
+    (occurrence) =>
+      occurrence.calendar_id === undefined || !hidden.includes(occurrence.calendar_id),
+  );
+
+  const toggleSource = (id: string): void => {
+    void updateSettings({
+      hidden_calendar_ids: hidden.includes(id)
+        ? hidden.filter((value) => value !== id)
+        : [...hidden, id],
+    });
+  };
 
   const dotsByDate = useMemo<Record<string, string[]>>(() => {
     const map: Record<string, string[]> = {};
@@ -205,6 +233,65 @@ export function CalendarScreen({ activeScopeIds, onOpenTask }: CalendarScreenPro
           </button>
         ))}
       </div>
+
+      {/*
+        Les fonts de l'àmbit actiu, per encendre i apagar.
+        Amb una sola no hi ha res a triar, i una fila de commutadors d'un element és
+        soroll: només surt quan n'hi ha més d'una.
+      */}
+      {sources.length < 2 ? null : (
+        <div
+          data-testid="calendar-sources"
+          style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}
+        >
+          <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--ink-soft)' }}>
+            {t('calendar.sources')}
+          </span>
+          {sources.map((source) => {
+            const on = !hidden.includes(source.id);
+            return (
+              <button
+                key={source.id}
+                type="button"
+                data-testid={`calendar-source-${source.id}`}
+                aria-pressed={on}
+                aria-label={t(on ? 'calendar.sources.hide' : 'calendar.sources.show', {
+                  name: source.name,
+                })}
+                onClick={() => toggleSource(source.id)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '4px 11px',
+                  borderRadius: 100,
+                  border: 'none',
+                  cursor: 'pointer',
+                  font: 'inherit',
+                  fontSize: 11.5,
+                  fontWeight: on ? 700 : 500,
+                  background: on ? 'var(--ghost-bg)' : 'transparent',
+                  // El color no és mai l'únic senyal (docs/02 §12): el punt s'apaga i
+                  // el text també.
+                  color: on ? 'var(--ink)' : 'var(--ink-faint)',
+                }}
+              >
+                <span
+                  aria-hidden="true"
+                  style={{
+                    width: 7,
+                    height: 7,
+                    borderRadius: '50%',
+                    background: on ? colorOf(source.scope_id) : 'var(--ink-faint)',
+                    opacity: on ? 1 : 0.4,
+                  }}
+                />
+                {source.name}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {events.error !== undefined ? <ErrorBanner onRetry={events.reload} /> : null}
 

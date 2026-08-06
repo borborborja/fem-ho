@@ -7,10 +7,12 @@
  */
 
 import { sql } from 'kysely';
+import { v7 as uuidv7 } from 'uuid';
 import type { FastifyInstance } from 'fastify';
 import type { TaskStatus } from '@fem-ho/contracts';
 import { TASK_STATUSES, parseQuickAdd } from '@fem-ho/contracts';
 import { auditedTransaction } from '../audit/audited-transaction.js';
+import { seal } from '../crypto/secret-box.js';
 import { addComment, listComments } from '../services/comments.js';
 import {
   createChecklist,
@@ -68,6 +70,11 @@ function parseStatuses(raw: unknown): TaskStatus[] | undefined {
 
 function parseSeriesMode(raw: unknown): SeriesMode {
   return raw === 'future' || raw === 'all' ? raw : 'single';
+}
+
+/** `caldav`, `ical` o `rss`; qualsevol altra cosa no és una font que sapiguem llegir. */
+function sourceKind(value: unknown): 'caldav' | 'ical' | 'rss' | undefined {
+  return value === 'caldav' || value === 'ical' || value === 'rss' ? value : undefined;
 }
 
 export function registerTaskRoutes(app: FastifyInstance): void {
@@ -382,7 +389,7 @@ export function registerTaskRoutes(app: FastifyInstance): void {
  *
  * **Un esdeveniment no és una tasca** (D8) i no surt mai al kanban.
  */
-export function registerEventRoutes(app: FastifyInstance): void {
+export function registerEventRoutes(app: FastifyInstance, secret: () => string): void {
   const db = (): NonNullable<FastifyInstance['connection']> => app.connection!;
 
   app.get('/api/v1/calendars', async (request, reply) =>
@@ -392,16 +399,38 @@ export function registerEventRoutes(app: FastifyInstance): void {
   app.post('/api/v1/calendars', async (request, reply) =>
     handle(app, request, reply, async (principal) => {
       const input = body(request);
+      /**
+       * L'identificador es fixa **abans** de xifrar.
+       *
+       * El secret de la contrasenya es lliga a `calendar:<id>` (és el que fa servir el
+       * refresc per obrir-lo), o sigui que si el servei en generés un altre després,
+       * la contrasenya no es podria desxifrar mai més i la font fallaria en silenci.
+       */
+      const calendarId = str(input.id) ?? uuidv7();
       const result = await auditedTransaction(db().db, principal, (ctx) =>
         createCalendar(ctx, principal, {
-          id: str(input.id),
+          id: calendarId,
           scope_id: str(input.scope_id),
           project_id: nullable(input, 'project_id'),
           name: str(input.name),
           color: str(input.color),
           kind: input.kind === 'todos' ? 'todos' : 'events',
           origin: input.origin === 'subscription' ? 'subscription' : 'local',
+          source_kind: sourceKind(input.source_kind),
           source_url: str(input.source_url),
+          source_username: str(input.source_username),
+          /**
+           * **La contrasenya es xifra aquí i no viatja mai més.**
+           *
+           * `docs/07` §9 la vol xifrada en repòs. Es segella a la ruta i no al servei
+           * perquè el secret de la instància és de l'app: el servei no ha de conèixer
+           * ni la configuració ni el disc.
+           */
+          source_secret_enc:
+            typeof input.source_secret === 'string' && input.source_secret !== ''
+              ? seal(secret(), `calendar:${calendarId}`, input.source_secret)
+              : undefined,
+          writable: input.writable === true,
           refresh_interval: num(input.refresh_interval),
           strip_alarms: typeof input.strip_alarms === 'boolean' ? input.strip_alarms : undefined,
         }),
@@ -418,6 +447,15 @@ export function registerEventRoutes(app: FastifyInstance): void {
         updateCalendar(ctx, principal, request.params.id, {
           name: str(input.name),
           color: nullable(input, 'color'),
+          source_url: str(input.source_url),
+          source_username: str(input.source_username),
+          // Una contrasenya buida vol dir "no la toquis", no "esborra-la": el formulari
+          // no la torna a ensenyar mai i desar el nom no ha de perdre les credencials.
+          source_secret_enc:
+            typeof input.source_secret === 'string' && input.source_secret !== ''
+              ? seal(secret(), `calendar:${request.params.id}`, input.source_secret)
+              : undefined,
+          writable: typeof input.writable === 'boolean' ? input.writable : undefined,
           refresh_interval: 'refresh_interval' in input ? (num(input.refresh_interval) ?? null) : undefined,
           strip_alarms: typeof input.strip_alarms === 'boolean' ? input.strip_alarms : undefined,
         }),

@@ -17,14 +17,7 @@ import { api } from '../app/api.js';
 import { useRouter } from '../app/router.js';
 import { useSession, useSessionData } from '../app/session.js';
 import { useApi, useMutation } from '../app/useApi.js';
-import type {
-  AdminUser,
-  Agent,
-  ApiTokenSummary,
-  Calendar,
-  Member,
-  ShareSummary,
-} from '../app/types.js';
+import type { AdminUser, Agent, ApiTokenSummary, Calendar, Member, Scope, ShareSummary } from '../app/types.js';
 import { ErrorBanner } from './BoardScreen.js';
 
 const TABS = [
@@ -431,6 +424,8 @@ function CalendarsTab() {
               ))
             )}
 
+            <SourcesForScope scope={scope} calendars={calendars} />
+
             {/*
               Cada àmbit en publica DUES (D9): esdeveniments i tasques. Han d'estar
               etiquetades perquè s'entengui quina és quina; una llista de dues URL
@@ -460,6 +455,185 @@ function CalendarsTab() {
         );
       })}
     </>
+  );
+}
+
+/**
+ * Les fonts de dades d'un àmbit: CalDAV, iCal o RSS.
+ *
+ * `docs/07` §9 ja preveu un CalDAV o un `.ics` com a origen; el disseny validat hi
+ * afegeix l'RSS. Els tres s'afegeixen igual i es veuen al calendari, on cadascú els pot
+ * apagar sense treure'ls a ningú.
+ *
+ * **La contrasenya no es torna a ensenyar mai.** El camp es queda buit en carregar i
+ * enviar-lo buit vol dir "no la toquis": desar el nom d'una font no ha de perdre'n les
+ * credencials, i tornar-la a pintar la posaria al DOM de qualsevol pestanya oberta.
+ */
+function SourcesForScope({
+  scope,
+  calendars,
+}: {
+  scope: Scope;
+  calendars: ReturnType<typeof useApi<Calendar[]>>;
+}) {
+  const [kind, setKind] = useState<'caldav' | 'ical' | 'rss'>('ical');
+  const [name, setName] = useState('');
+  const [url, setUrl] = useState('');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  const sources = (calendars.data ?? []).filter(
+    (calendar) => calendar.scope_id === scope.id && calendar.origin === 'subscription',
+  );
+
+  const add = useMutation(async () => {
+    if (url.trim() === '') {
+      setError(t('settings.sources.urlRequired'));
+      return;
+    }
+    setError(null);
+    await api.post('/api/v1/calendars', {
+      id: uuidv7(),
+      scope_id: scope.id,
+      name: name.trim() === '' ? url.trim() : name.trim(),
+      kind: 'events',
+      origin: 'subscription',
+      source_kind: kind,
+      source_url: url.trim(),
+      source_username: kind === 'caldav' && username !== '' ? username : undefined,
+      source_secret: kind === 'caldav' && password !== '' ? password : undefined,
+    });
+    setName('');
+    setUrl('');
+    setUsername('');
+    setPassword('');
+    calendars.reload();
+  });
+
+  return (
+    <div style={{ display: 'grid', gap: 8 }} data-testid={`sources-${scope.id}`}>
+      <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--ink-soft)' }}>
+        {t('settings.sources')}
+      </span>
+
+      {sources.length === 0 ? (
+        <EmptyState>{t('settings.sources.empty')}</EmptyState>
+      ) : (
+        sources.map((source) => (
+          <div
+            key={source.id}
+            data-testid={`source-${source.id}`}
+            style={{
+              display: 'flex',
+              gap: 8,
+              alignItems: 'center',
+              padding: '8px 10px',
+              borderRadius: 12,
+              background: 'var(--tag-bg)',
+            }}
+          >
+            <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--ink-soft)' }}>
+              {t(`settings.sources.kind.${source.source_kind ?? 'ical'}`)}
+            </span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink)' }}>
+                {source.name}
+              </div>
+              {/*
+                L'estat de l'últim refresc. Una font caiguda es veu exactament igual que
+                una que no té esdeveniments —buida—, i sense dir-ho aquí ningú se
+                n'assabenta fins que troba a faltar alguna cosa.
+              */}
+              <div
+                style={{
+                  fontSize: 11,
+                  color: source.last_error == null ? 'var(--ink-faint)' : 'var(--danger-text)',
+                }}
+              >
+                {source.last_error != null
+                  ? t('settings.sources.failed', { reason: source.last_error })
+                  : source.last_refreshed_at == null
+                    ? t('settings.sources.never')
+                    : t('settings.sources.refreshed', {
+                        when: new Date(source.last_refreshed_at).toLocaleString('ca'),
+                      })}
+              </div>
+            </div>
+            <button
+              type="button"
+              className="plou-btn plou-btn-ghost"
+              data-testid={`source-remove-${source.id}`}
+              onClick={() => {
+                void api.delete(`/api/v1/calendars/${source.id}`).then(() => calendars.reload());
+              }}
+              style={{ fontSize: 11.5, padding: '4px 10px' }}
+            >
+              {t('settings.sources.remove')}
+            </button>
+          </div>
+        ))
+      )}
+
+      <Chips
+        testId={`source-kind-${scope.id}`}
+        value={kind}
+        options={[
+          { key: 'caldav' as const, label: t('settings.sources.kind.caldav') },
+          { key: 'ical' as const, label: t('settings.sources.kind.ical') },
+          { key: 'rss' as const, label: t('settings.sources.kind.rss') },
+        ]}
+        onChange={setKind}
+      />
+      <input
+        className="plou-input"
+        data-testid={`source-name-${scope.id}`}
+        placeholder={t('settings.sources.name')}
+        value={name}
+        onChange={(event) => setName(event.target.value)}
+      />
+      <input
+        className="plou-input"
+        data-testid={`source-url-${scope.id}`}
+        placeholder={t('settings.sources.url')}
+        value={url}
+        onChange={(event) => setUrl(event.target.value)}
+      />
+      {/* Usuari i contrasenya només tenen sentit amb CalDAV: un `.ics` publicat i un RSS
+          es baixen sense credencials. */}
+      {kind === 'caldav' ? (
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input
+            className="plou-input"
+            data-testid={`source-user-${scope.id}`}
+            placeholder={t('settings.sources.username')}
+            value={username}
+            onChange={(event) => setUsername(event.target.value)}
+          />
+          <input
+            className="plou-input"
+            type="password"
+            data-testid={`source-pass-${scope.id}`}
+            placeholder={t('settings.sources.password')}
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+          />
+        </div>
+      ) : null}
+      {error === null ? null : (
+        <span style={{ fontSize: 11, color: 'var(--danger-text)' }}>{error}</span>
+      )}
+      <button
+        type="button"
+        className="plou-btn plou-btn-primary"
+        data-testid={`source-add-${scope.id}`}
+        disabled={add.busy}
+        onClick={() => void add.run()}
+        style={{ justifySelf: 'start' }}
+      >
+        {t('settings.sources.add')}
+      </button>
+    </div>
   );
 }
 

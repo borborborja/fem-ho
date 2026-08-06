@@ -11,7 +11,7 @@
 
 import { sql } from 'kysely';
 import { v7 as uuidv7 } from 'uuid';
-import { dbBool } from '../db/bool.js';
+import { dbBool, isTrue } from '../db/bool.js';
 import type { AuditContext } from '../audit/audited-transaction.js';
 import type { MigrationDb } from '../db/migration-db.js';
 import { expandOccurrences, splitSeries } from '../events/recurrence.js';
@@ -27,7 +27,56 @@ export interface CalendarRow {
   color: string | null;
   kind: 'events' | 'todos';
   origin: 'local' | 'subscription';
+  /** De quina mena és la font externa: `caldav`, `ical` o `rss`. `null` si és local. */
+  source_kind: 'caldav' | 'ical' | 'rss' | null;
+  source_url: string | null;
+  source_username: string | null;
+  /**
+   * **Bidireccional.** Només un CalDAV pot ser-ho: un `.ics` publicat i un RSS són
+   * documents, no col·leccions on es pugui escriure.
+   */
+  writable: boolean;
+  refresh_interval: number | null;
+  last_refreshed_at: string | null;
+  /** Per què va fallar l'últim refresc. Una font caiguda es veu igual que una buida. */
+  last_error: string | null;
+  last_error_at: string | null;
 }
+
+/**
+ * Les columnes que descriuen una font. Es llegeixen a tot arreu igual.
+ *
+ * **El secret no hi és.** `source_secret_enc` no surt mai del servei: una contrasenya
+ * de CalDAV que viatgi a la interfície és una contrasenya que acaba a un registre.
+ */
+/**
+ * Es pot escriure en aquest calendari?
+ *
+ * Un calendari subscrit és de només lectura **a la capa de repositori**, no només a la
+ * interfície (docs/01 §5): si la regla només fos a la pantalla, el CalDAV i el sync hi
+ * podrien escriure igualment i l'origen es trobaria coses que ningú hi ha posat.
+ *
+ * **L'excepció és una font bidireccional.** Un CalDAV amb credencials d'escriptura és
+ * una col·lecció on Fem-ho pot escriure de veritat, i llavors bloquejar-ho aquí seria
+ * fer de menys una cosa que l'usuari ha configurat expressament. Un `.ics` publicat i
+ * un RSS no ho poden ser mai: són documents, no col·leccions.
+ */
+export function assertWritable(calendar: CalendarRow): void {
+  if (calendar.origin !== 'subscription') return;
+  if (isTrue(calendar.writable) && calendar.source_kind === 'caldav') return;
+
+  throw new PolicyError(
+    'calendar-read-only',
+    'Calendar is read-only',
+    403,
+    `El calendari "${calendar.name}" és una font de només lectura i no s'hi pot escriure.`,
+  );
+}
+
+const CALENDAR_COLUMNS = sql`
+  id, scope_id, project_id, name, color, kind, origin, source_kind, source_url,
+  source_username, writable, refresh_interval, last_refreshed_at, last_error, last_error_at
+`;
 
 export interface EventRow {
   id: string;
@@ -56,7 +105,7 @@ export async function listCalendars(db: MigrationDb, principal: Principal): Prom
   if (scopes.length === 0) return [];
 
   const rows = await sql<CalendarRow>`
-    SELECT id, scope_id, project_id, name, color, kind, origin
+    SELECT ${CALENDAR_COLUMNS}
     FROM calendars
     WHERE deleted_at IS NULL AND scope_id IN (${sql.join(scopes.map((s) => s.id))})
     ORDER BY name
@@ -273,16 +322,7 @@ export async function createEvent(
   const calendar = await loadCalendar(ctx.tx, input.calendar_id);
   await assertScopeAccess(ctx.tx, principal, calendar.scope_id);
 
-  // Un calendari subscrit és de només lectura A LA CAPA DE REPOSITORI, no només a la
-  // interfície (docs/01 §5): si no, el CalDAV i el sync hi podrien escriure igualment.
-  if (calendar.origin === 'subscription') {
-    throw new PolicyError(
-      'calendar-read-only',
-      'Calendar is read-only',
-      403,
-      `El calendari "${calendar.name}" és una subscripció i no s'hi pot escriure.`,
-    );
-  }
+  assertWritable(calendar);
   if (calendar.kind !== 'events') {
     // RFC 4791 §5.2 prohibeix recursos de components mixtos (D9).
     throw new PolicyError(
@@ -483,7 +523,7 @@ async function bumpSyncSeq(tx: MigrationDb, calendarId: string): Promise<void> {
 
 async function loadCalendar(tx: MigrationDb, id: string): Promise<CalendarRow & { name: string }> {
   const found = await sql<CalendarRow>`
-    SELECT id, scope_id, project_id, name, color, kind, origin
+    SELECT ${CALENDAR_COLUMNS}
     FROM calendars WHERE id = ${id} AND deleted_at IS NULL
   `.execute(tx);
   const row = found.rows[0];
@@ -543,14 +583,7 @@ export async function deleteEvent(
   const calendar = await loadCalendar(ctx.tx, event.calendar_id);
   await assertScopeAccess(ctx.tx, principal, calendar.scope_id, { type: "L'esdeveniment", id });
 
-  if (calendar.origin === 'subscription') {
-    throw new PolicyError(
-      'calendar-read-only',
-      'Calendar is read-only',
-      403,
-      `El calendari "${calendar.name}" és una subscripció i no s'hi pot escriure.`,
-    );
-  }
+  assertWritable(calendar);
 
   const esBorrarTot = mode === 'all' || event.rrule === null;
 
@@ -614,7 +647,14 @@ export interface CreateCalendarInput {
   color?: string | undefined;
   kind?: 'events' | 'todos' | undefined;
   origin?: 'local' | 'subscription' | undefined;
+  /** `caldav`, `ical` o `rss`. Obligatori si `origin='subscription'`. */
+  source_kind?: 'caldav' | 'ical' | 'rss' | undefined;
   source_url?: string | undefined;
+  source_username?: string | undefined;
+  /** Ja xifrat per qui crida: el servei no toca el secret de la instància. */
+  source_secret_enc?: string | undefined;
+  /** Bidireccional. Només un CalDAV pot ser-ho. */
+  writable?: boolean | undefined;
   refresh_interval?: number | undefined;
   strip_alarms?: boolean | undefined;
 }
@@ -649,9 +689,19 @@ export async function createCalendar(
     );
   }
 
+  const sourceKind = origin === 'subscription' ? (input.source_kind ?? 'ical') : null;
+  /**
+   * **Bidireccional només amb CalDAV.**
+   *
+   * Un `.ics` publicat i un canal RSS són documents: es baixen i prou. Acceptar-hi
+   * `writable` faria que la interfície deixés editar una cosa que no arribarà mai a
+   * l'origen, que és pitjor que no deixar-ho.
+   */
+  const writable = sourceKind === 'caldav' && input.writable === true;
+
   const id = input.id ?? uuidv7();
   const existing = await sql<CalendarRow>`
-    SELECT id, scope_id, project_id, name, color, kind, origin FROM calendars WHERE id = ${id}
+    SELECT ${CALENDAR_COLUMNS} FROM calendars WHERE id = ${id}
   `.execute(ctx.tx);
   if (existing.rows[0] !== undefined) {
     ctx.noChange();
@@ -659,11 +709,14 @@ export async function createCalendar(
   }
 
   await sql`
-    INSERT INTO calendars (id, scope_id, project_id, name, color, kind, origin, source_url,
+    INSERT INTO calendars (id, scope_id, project_id, name, color, kind, origin, source_kind,
+                           source_url, source_username, source_secret_enc, writable,
                            refresh_interval, strip_alarms, sync_seq, created_at, updated_at)
     VALUES (${id}, ${input.scope_id}, ${input.project_id ?? null}, ${input.name.trim()},
-            ${input.color ?? null}, ${input.kind ?? 'events'}, ${origin},
-            ${input.source_url ?? null}, ${input.refresh_interval ?? null},
+            ${input.color ?? null}, ${input.kind ?? 'events'}, ${origin}, ${sourceKind},
+            ${input.source_url ?? null}, ${input.source_username ?? null},
+            ${input.source_secret_enc ?? null}, ${dbBool(writable)},
+            ${input.refresh_interval ?? null},
             ${dbBool(input.strip_alarms !== false)}, 0, ${ctx.now}, ${ctx.now})
   `.execute(ctx.tx);
 
@@ -675,7 +728,7 @@ export async function createCalendar(
   });
 
   const created = await sql<CalendarRow>`
-    SELECT id, scope_id, project_id, name, color, kind, origin FROM calendars WHERE id = ${id}
+    SELECT ${CALENDAR_COLUMNS} FROM calendars WHERE id = ${id}
   `.execute(ctx.tx);
   return { calendar: created.rows[0]!, created: true };
 }
@@ -684,7 +737,17 @@ export async function updateCalendar(
   ctx: AuditContext,
   principal: Principal,
   id: string,
-  input: { name?: string | undefined; color?: string | null | undefined; refresh_interval?: number | null | undefined; strip_alarms?: boolean | undefined },
+  input: {
+    name?: string | undefined;
+    color?: string | null | undefined;
+    source_url?: string | undefined;
+    source_username?: string | undefined;
+    /** Ja xifrat. Absent vol dir "no la toquis", no "esborra-la". */
+    source_secret_enc?: string | undefined;
+    writable?: boolean | undefined;
+    refresh_interval?: number | null | undefined;
+    strip_alarms?: boolean | undefined;
+  },
 ): Promise<CalendarRow> {
   if (!hasCapability(principal, 'events:write')) throw missingCapability('events:write');
 
@@ -698,8 +761,24 @@ export async function updateCalendar(
   const name = input.name?.trim() ?? calendar.name;
   const color = input.color === undefined ? calendar.color : input.color;
 
+  /**
+   * `writable` només es concedeix a un CalDAV.
+   *
+   * La ruta ja no ho hauria de deixar passar, però la regla viu **aquí**: el servei és
+   * l'únic camí que tot travessa —REST, sync i MCP— i una invariant que només es
+   * comprova a la porta no és una invariant.
+   */
+  const writable =
+    input.writable === undefined
+      ? undefined
+      : input.writable && calendar.source_kind === 'caldav';
+
   await sql`
     UPDATE calendars SET name = ${name}, color = ${color},
+      ${input.source_url === undefined ? sql`source_url = source_url` : sql`source_url = ${input.source_url}`},
+      ${input.source_username === undefined ? sql`source_username = source_username` : sql`source_username = ${input.source_username}`},
+      ${input.source_secret_enc === undefined ? sql`source_secret_enc = source_secret_enc` : sql`source_secret_enc = ${input.source_secret_enc}`},
+      ${writable === undefined ? sql`writable = writable` : sql`writable = ${dbBool(writable)}`},
       ${input.refresh_interval === undefined ? sql`refresh_interval = refresh_interval` : sql`refresh_interval = ${input.refresh_interval}`},
       ${input.strip_alarms === undefined ? sql`strip_alarms = strip_alarms` : sql`strip_alarms = ${dbBool(input.strip_alarms)}`},
       updated_at = ${ctx.now}

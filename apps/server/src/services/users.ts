@@ -40,6 +40,8 @@ export interface UserSettings {
   inbox_position: InboxPosition;
   inbox_show_overdue: boolean;
   collapsed_groups: string[];
+  /** Fonts que aquest usuari no vol veure al calendari. Veure la migració 006. */
+  hidden_calendar_ids: string[];
   show_calendar_widget: boolean;
   show_overdue_section: boolean;
   quiet_hours_start: string | null;
@@ -226,6 +228,7 @@ const DEFAULT_SETTINGS: UserSettings = {
   inbox_position: 'right',
   inbox_show_overdue: true,
   collapsed_groups: [],
+  hidden_calendar_ids: [],
   show_calendar_widget: true,
   show_overdue_section: true,
   quiet_hours_start: null,
@@ -245,12 +248,14 @@ export async function getSettings(db: MigrationDb, userId: string): Promise<User
     inbox_position: InboxPosition;
     inbox_show_overdue: unknown;
     collapsed_groups: string | null;
+    hidden_calendar_ids: string | null;
     show_calendar_widget: unknown;
     show_overdue_section: unknown;
     quiet_hours_start: string | null;
     quiet_hours_end: string | null;
     daily_digest_at: string | null;
   }>`SELECT done_cleared_at, inbox_position, inbox_show_overdue, collapsed_groups,
+            hidden_calendar_ids,
             show_calendar_widget, show_overdue_section, quiet_hours_start, quiet_hours_end,
             daily_digest_at
      FROM user_settings WHERE user_id = ${userId}`.execute(db);
@@ -263,6 +268,7 @@ export async function getSettings(db: MigrationDb, userId: string): Promise<User
     inbox_position: row.inbox_position,
     inbox_show_overdue: isTrue(row.inbox_show_overdue),
     collapsed_groups: parseGroups(row.collapsed_groups),
+    hidden_calendar_ids: parseGroups(row.hidden_calendar_ids),
     show_calendar_widget: isTrue(row.show_calendar_widget),
     show_overdue_section: isTrue(row.show_overdue_section),
     quiet_hours_start: row.quiet_hours_start,
@@ -287,6 +293,7 @@ export interface UpdateSettingsInput {
   inbox_position?: string | undefined;
   inbox_show_overdue?: boolean | undefined;
   collapsed_groups?: string[] | undefined;
+  hidden_calendar_ids?: string[] | undefined;
   show_calendar_widget?: boolean | undefined;
   show_overdue_section?: boolean | undefined;
   quiet_hours_start?: string | null | undefined;
@@ -312,6 +319,7 @@ export async function updateSettings(
     ),
     inbox_show_overdue: input.inbox_show_overdue ?? before.inbox_show_overdue,
     collapsed_groups: input.collapsed_groups ?? before.collapsed_groups,
+    hidden_calendar_ids: input.hidden_calendar_ids ?? before.hidden_calendar_ids,
     show_calendar_widget: input.show_calendar_widget ?? before.show_calendar_widget,
     show_overdue_section: input.show_overdue_section ?? before.show_overdue_section,
     quiet_hours_start:
@@ -331,11 +339,13 @@ export async function updateSettings(
   // que canviessin preferències alhora es trepitjarien amb una violació de clau primària.
   await sql`
     INSERT INTO user_settings (user_id, done_cleared_at, inbox_position, inbox_show_overdue,
-                               collapsed_groups, show_calendar_widget, show_overdue_section,
+                               collapsed_groups, hidden_calendar_ids,
+                               show_calendar_widget, show_overdue_section,
                                quiet_hours_start, quiet_hours_end, daily_digest_at,
                                notify_prefs, updated_at)
     VALUES (${principal.userId}, ${next.done_cleared_at}, ${next.inbox_position},
             ${dbBool(next.inbox_show_overdue)}, ${JSON.stringify(next.collapsed_groups)},
+            ${JSON.stringify(next.hidden_calendar_ids)},
             ${dbBool(next.show_calendar_widget)}, ${dbBool(next.show_overdue_section)},
             ${next.quiet_hours_start}, ${next.quiet_hours_end}, ${next.daily_digest_at},
             '{}', ${ctx.now})
@@ -344,6 +354,7 @@ export async function updateSettings(
       inbox_position = excluded.inbox_position,
       inbox_show_overdue = excluded.inbox_show_overdue,
       collapsed_groups = excluded.collapsed_groups,
+      hidden_calendar_ids = excluded.hidden_calendar_ids,
       show_calendar_widget = excluded.show_calendar_widget,
       show_overdue_section = excluded.show_overdue_section,
       quiet_hours_start = excluded.quiet_hours_start,

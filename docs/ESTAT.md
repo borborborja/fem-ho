@@ -27,10 +27,10 @@ npm run test:proxy-matrix    # CalDAV i SSE darrere de nginx i Caddy
 | --- | --- |
 | Construcció des de zero | contracts → server → web |
 | Tipus · estil | 0 · 0 |
-| Proves unitàries · SQLite | 640 |
-| Proves unitàries · Postgres | 661 |
+| Proves unitàries · SQLite | 649 |
+| Proves unitàries · Postgres | 670 |
 | Comprovacions permanents | 10 de 10 |
-| Proves de navegador | 85, de les quals 36 contra el servidor real |
+| Proves de navegador | 88, de les quals 39 contra el servidor real |
 | Proves de Kotlin | 40 |
 | APK de depuració | es construeix |
 | Primer arrencament amb Compose | 13 comprovacions |
@@ -185,6 +185,42 @@ No es pot verificar en aquesta màquina i **no s'ha verificat**:
   Evolution, Nextcloud Tasks. Veure [`CALDAV-CLIENTS.md`](CALDAV-CLIENTS.md).
 - La preservació de les propietats `X-FEMHO-*` en servidors de tercers. `docs/07` §7
   ja diu que és una suposició.
+
+## Fonts de dades del calendari
+
+Un àmbit pot tenir fonts externes de tres menes, que s'afegeixen a **Ajustos ▸
+Calendaris** i es veuen al calendari:
+
+| Mena | Què és | Escriptura |
+| --- | --- | --- |
+| `caldav` | Una col·lecció CalDAV | Pendent, veure sota |
+| `ical` | Un `.ics` publicat | Només lectura |
+| `rss` | Un canal RSS o Atom | Només lectura |
+
+De l'RSS, **cada element és un instant i no una durada**: un titular publicat a les 14:32
+no dura res, i donar-li mitja hora perquè es vegi millor seria inventar-se una dada. Els
+elements sense data llegible no arriben al calendari.
+
+A la vista de calendari, cada font es pot apagar i encendre. **S'amaga, no s'esborra**: la
+font és de l'àmbit i la comparteix tothom qui hi és. Es guarda el que s'amaga i no el que
+es veu, perquè una font nova ha de sortir sola.
+
+L'estat de l'últim refresc surt a Ajustos amb el motiu si va fallar: una font caiguda es
+veu exactament igual que una que no té esdeveniments, i sense dir-ho ningú se n'assabenta.
+
+### El que falta: l'escriptura cap a l'origen
+
+`calendars.writable` existeix i el servei ja hi confia —una font marcada com a
+bidireccional deixa d'estar bloquejada a la capa de repositori— **però l'empenta cap a
+l'origen no està feta**: `docs/07` §9 la descriu (PUT amb `If-Match`, comparació d'etag,
+etiquetatge `source='caldav'` per no rebotar), i el lloc correcte és una feina del
+planificador i no una crida de xarxa dins d'una transacció.
+
+Per això **el commutador no surt a la interfície**. Oferir-lo ara voldria dir deixar
+editar una cosa que no arribaria mai a l'altre costat, i una edició que es perd en
+silenci és pitjor que una que no es deixa fer.
+
+---
 
 ## Decisions obertes
 

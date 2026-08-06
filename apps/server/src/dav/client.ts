@@ -18,6 +18,7 @@ import type { MigrationDb } from '../db/migration-db.js';
 import type { Principal } from '../policy/principal.js';
 import { safeFetch, type SafeFetchOptions } from './fetch-safe.js';
 import { etagOf } from './objects.js';
+import { extractFeedEvents } from './rss.js';
 
 /**
  * L'interval mínim entre refrescos.
@@ -33,6 +34,12 @@ export interface SubscriptionRow {
   id: string;
   scope_id: string;
   name: string;
+  /**
+   * De quina mena és la font: `caldav`, `ical` o `rss`.
+   *
+   * `null` a les files velles, que es tracten com a `ical` — veure la migració 006.
+   */
+  source_kind?: string | null;
   source_url: string;
   source_username: string | null;
   source_secret_enc: string | null;
@@ -92,6 +99,7 @@ export function stripAlarms(component: ICAL.Component): void {
   }
 }
 
+/** Un component tal com arriba d'un origen, sigui un `.ics` o un canal RSS. */
 export interface FetchedComponent {
   uid: string;
   summary: string;
@@ -178,8 +186,18 @@ export async function refreshSubscription(
     throw new Error(`L'origen ha respost ${String(response.status)}.`);
   }
 
+  /**
+   * Un RSS es llegeix diferent, però **a partir d'aquí és igual**.
+   *
+   * `extractFeedEvents` torna els mateixos components que `extractEvents`, o sigui que
+   * tot el que ve després —comparar UID, esborrar el que ha desaparegut, guardar el
+   * `raw_ical`— no sap ni li cal saber d'on venen.
+   */
   const strip = isTrue(subscription.strip_alarms);
-  const components = extractEvents(response.body, { stripAlarms: strip });
+  const components =
+    subscription.source_kind === 'rss'
+      ? extractFeedEvents(response.body, subscription.id)
+      : extractEvents(response.body, { stripAlarms: strip });
 
   return auditedTransaction(
     db,

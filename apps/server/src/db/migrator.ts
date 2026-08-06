@@ -23,6 +23,7 @@ import * as taskLeases from './migrations/002-task-leases.js';
 import * as instanceSettings from './migrations/003-instance-settings.js';
 import * as aiUser from './migrations/004-ai-user.js';
 import * as userInvites from './migrations/005-user-invites.js';
+import * as calendarSources from './migrations/006-calendar-sources.js';
 
 export interface Migration {
   name: string;
@@ -40,6 +41,7 @@ export const MIGRATIONS: Migration[] = [
   { name: '003-instance-settings', up: instanceSettings.up, down: instanceSettings.down },
   { name: '004-ai-user', up: aiUser.up, down: aiUser.down },
   { name: '005-user-invites', up: userInvites.up, down: userInvites.down },
+  { name: '006-calendar-sources', up: calendarSources.up, down: calendarSources.down },
 ];
 
 const MIGRATIONS_TABLE = 'schema_migrations';

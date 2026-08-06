@@ -170,7 +170,7 @@ async function runRefreshes(
   const log = options.log ?? (() => undefined);
 
   const found = await sql<SubscriptionRow>`
-    SELECT id, scope_id, name, source_url, source_username, source_secret_enc,
+    SELECT id, scope_id, name, source_kind, source_url, source_username, source_secret_enc,
            refresh_interval, last_refreshed_at, strip_alarms
     FROM calendars
     WHERE origin = 'subscription' AND source_url IS NOT NULL AND deleted_at IS NULL
@@ -186,8 +186,25 @@ async function runRefreshes(
         engine: options.connection.engine,
       });
       refreshed += 1;
+      await sql`
+        UPDATE calendars SET last_error = NULL, last_error_at = NULL WHERE id = ${subscription.id}
+      `.execute(db);
     } catch (error) {
       log(`No s'ha pogut refrescar "${subscription.name}"`, error);
+      /**
+       * **El motiu es guarda a la fila**, no només al registre.
+       *
+       * Una font que ha deixat d'anar es veu exactament igual que una que no té
+       * esdeveniments: buida. Sense el motiu a mà, l'usuari no té cap manera de saber
+       * que el que mira ja no és el que hi ha a l'origen, i el registre del servidor
+       * no el llegirà mai ningú d'una casa.
+       */
+      await sql`
+        UPDATE calendars
+        SET last_error = ${error instanceof Error ? error.message : String(error)},
+            last_error_at = ${now}
+        WHERE id = ${subscription.id}
+      `.execute(db);
     }
   }
 
