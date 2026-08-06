@@ -22,6 +22,7 @@ const CHECKS = [
   { name: 'contrast-check', script: 'contrast-check.mjs' },
   { name: 'audit-coverage', script: 'audit-coverage.mjs' },
   { name: 'parser-parity', script: 'parser-parity.mjs' },
+  { name: 'tokens-parity', script: 'tokens-parity.mjs' },
 ];
 
 const results = [];

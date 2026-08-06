@@ -1,0 +1,170 @@
+package ho.fem.model
+
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+
+/**
+ * Els models de domini. docs/01, docs/05 §4.
+ *
+ * **El vocabulari és el canònic** (regla 3, D2): `status` amb valors anglesos
+ * `inbox·todo·doing·done`, `ai_mode` amb `manual·assisted·delegated`. Cap `column`, cap
+ * valor d'enum en català. El que es tradueix és el que es veu, i això surt de
+ * `strings.xml`.
+ *
+ * Els noms de camp són **els del JSON de l'API**, amb guió baix, i no els de Kotlin:
+ * `@SerialName` a cada camp seria una llista d'oportunitats d'equivocar-se, i el dia que
+ * una es perdi el camp arribarà nul sense que res falli.
+ *
+ * `AiMode` i `InstanceInfo` **no són aquí**: ja existien a `QuickAdd.kt` i a
+ * `ServerUrl.kt`, que són anteriors i els fan servir. Declarar-los una segona vegada
+ * hauria donat dos tipus amb el mateix nom i una conversió pel mig.
+ */
+
+@Serializable
+enum class TaskStatus {
+    @SerialName("inbox") INBOX,
+    @SerialName("todo") TODO,
+    @SerialName("doing") DOING,
+    @SerialName("done") DONE,
+}
+
+@Serializable
+enum class ScopeKind {
+    @SerialName("individual") INDIVIDUAL,
+    @SerialName("collective") COLLECTIVE,
+}
+
+@Serializable
+data class Scope(
+    val id: String,
+    val name: String,
+    val kind: ScopeKind = ScopeKind.INDIVIDUAL,
+    /** Nom de token (`--plou-blue`), mai un literal de color (regla 5). */
+    val color: String,
+    val icon: String? = null,
+    val position: String,
+    @SerialName("owner_id") val ownerId: String,
+    val version: Int = 1,
+)
+
+@Serializable
+data class Project(
+    val id: String,
+    @SerialName("scope_id") val scopeId: String,
+    val name: String,
+    val position: String,
+    @SerialName("archived_at") val archivedAt: String? = null,
+    val version: Int = 1,
+)
+
+@Serializable
+data class Task(
+    val id: String,
+    @SerialName("scope_id") val scopeId: String,
+    @SerialName("project_id") val projectId: String? = null,
+    val title: String,
+    val description: String? = null,
+    val status: TaskStatus = TaskStatus.INBOX,
+    /** Índex fraccional calculat al client (D3). Veure `Position.kt`. */
+    val position: String,
+    @SerialName("due_date") val dueDate: String? = null,
+    @SerialName("due_time") val dueTime: String? = null,
+    @SerialName("completed_at") val completedAt: String? = null,
+    @SerialName("ai_mode") val aiMode: AiMode = AiMode.MANUAL,
+    @SerialName("delegate_agent_id") val delegateAgentId: String? = null,
+    @SerialName("assignee_ids") val assigneeIds: List<String> = emptyList(),
+    val version: Int = 1,
+)
+
+@Serializable
+data class Subtask(
+    val id: String,
+    @SerialName("task_id") val taskId: String,
+    val title: String,
+    val done: Boolean = false,
+    val position: String,
+    val version: Int = 1,
+)
+
+@Serializable
+data class ChecklistItem(
+    val id: String,
+    @SerialName("checklist_id") val checklistId: String,
+    val text: String,
+    val done: Boolean = false,
+    val position: String,
+)
+
+@Serializable
+data class Checklist(
+    val id: String,
+    @SerialName("task_id") val taskId: String,
+    @SerialName("subtask_id") val subtaskId: String? = null,
+    val name: String,
+    val pinned: Boolean = false,
+    @SerialName("show_completed_inline") val showCompletedInline: Boolean = true,
+    val position: String,
+    val items: List<ChecklistItem> = emptyList(),
+    val version: Int = 1,
+)
+
+@Serializable
+data class EventOccurrence(
+    @SerialName("event_id") val eventId: String,
+    val uid: String,
+    val summary: String,
+    val location: String? = null,
+    @SerialName("starts_at") val startsAt: String,
+    @SerialName("ends_at") val endsAt: String,
+    @SerialName("all_day") val allDay: Boolean = false,
+    @SerialName("scope_id") val scopeId: String,
+) {
+    /**
+     * Una ocurrència **no té identitat pròpia**: dues del mateix mestre comparteixen
+     * `event_id` (D8). La clau és l'esdeveniment més l'instant.
+     */
+    val key: String get() = "$eventId@$startsAt"
+}
+
+@Serializable
+data class UserProfile(
+    val id: String,
+    val email: String? = null,
+    val name: String,
+    val role: String = "member",
+    val timezone: String = "Europe/Madrid",
+    val theme: String = "system",
+    val accent: String = "default",
+)
+
+@Serializable
+data class Person(val id: String, val name: String)
+
+@Serializable
+data class BoardGroup(
+    @SerialName("scope_id") val scopeId: String,
+    val tasks: List<Task> = emptyList(),
+)
+
+@Serializable
+data class BoardColumn(val status: TaskStatus, val groups: List<BoardGroup> = emptyList())
+
+@Serializable
+data class Board(val columns: List<BoardColumn> = emptyList()) {
+    /** Totes les tasques, planes. La pantalla les torna a agrupar com li convingui. */
+    val tasks: List<Task> get() = columns.flatMap { column -> column.groups.flatMap { it.tasks } }
+}
+
+@Serializable
+data class Inbox(
+    val date: String,
+    val dated: List<Task> = emptyList(),
+    val overdue: List<Task> = emptyList(),
+    val undated: List<Task> = emptyList(),
+)
+
+@Serializable
+data class AuthTokens(
+    @SerialName("access_token") val accessToken: String,
+    @SerialName("refresh_token") val refreshToken: String,
+)

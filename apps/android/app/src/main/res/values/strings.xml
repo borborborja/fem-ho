@@ -32,6 +32,7 @@
     <string name="ai_proof_tasktitle">Preparar la reunió de dilluns</string>
     <string name="ai_proof_togglelease">Reserva</string>
     <string name="ai_unseen">Hi ha hagut un canvi autònom que no has vist</string>
+    <string name="app_name">Fem-ho</string>
     <string name="board_card_todoing">→ Fent</string>
     <string name="board_card_totodo">→ Per fer</string>
     <string name="board_column_doing">Fent</string>
@@ -95,11 +96,16 @@
     <string name="invite_subtitle">Aquest enllaç serveix un sol cop.</string>
     <string name="invite_title">Tria la teva contrasenya</string>
     <string name="invite_tooshort">Ha de tenir com a mínim 10 caràcters.</string>
+    <string name="login_checkserver">Comprovar</string>
     <string name="login_email">Correu</string>
     <string name="login_error">Correu o contrasenya incorrectes.</string>
     <string name="login_forgot">Has oblidat la contrasenya?</string>
+    <string name="login_insecure">Aquesta adreça no va xifrada. Qualsevol de la xarxa pot llegir el que hi passi.</string>
     <string name="login_password">Contrasenya</string>
     <string name="login_server">Servidor</string>
+    <string name="login_serverhint">L\'adreça del teu servidor de Fem-ho</string>
+    <string name="login_servernewer">El servidor és més nou que aquesta app. Actualitza-la.</string>
+    <string name="login_serverunreachable">No hi ha cap Fem-ho en aquesta adreça.</string>
     <string name="login_submit">Entrar</string>
     <string name="login_subtitle">El gestor de tasques per a tu i la família</string>
     <string name="nav_add">Afegir</string>
@@ -121,6 +127,7 @@
     <string name="nav_pinned">Llistes pinejades</string>
     <string name="nav_profile">El teu compte</string>
     <string name="nav_rename">Reanomena</string>
+    <string name="nav_retry">Reintentar</string>
     <string name="nav_save">Desa</string>
     <string name="nav_scopetoggle">Mostra o amaga l\'àmbit {name}</string>
     <string name="nav_search">Cercar</string>

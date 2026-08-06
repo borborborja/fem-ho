@@ -5,7 +5,11 @@
     "El check `no-pinned-from-research` falla si una dependència directa de qualsevol",
     "package.json no té entrada aquí, o si la versió fixada no hi coincideix.",
     "Per afegir una dependència: `npm view <pkg> version`, anota-la aquí amb la data, i",
-    "després instal·la-la. Mai al revés."
+    "després instal·la-la. Mai al revés.",
+    "",
+    "Les dependències d'Android no van a `resolved` —el check només mira els package.json—",
+    "però la regla 2 val igual: `resolvedMaven` diu quina versió van donar Maven Central i",
+    "el Maven de Google, i quan es van consultar."
   ],
   "registry": "https://registry.npmjs.org",
   "resolved": {
@@ -205,15 +209,35 @@
     "conclusió": "La regla 2 es manté igual, però el motiu no és que research/ menteixi: és que cap versió pot entrar sense procedència comprovable. Aquest fitxer és aquesta procedència."
   },
   "resolvedMaven": {
-    "org.jetbrains.kotlin:kotlin-gradle-plugin": {
-      "version": "2.2.0",
-      "checkedAt": "2026-08-06",
-      "note": "Consultat a Maven Central. El primer intent va ser 2.1.0, que em vaig inventar i no resolia: la regla 2 val també per a Maven."
+    "registries": [
+      "https://repo1.maven.org/maven2",
+      "https://dl.google.com/dl/android/maven2"
+    ],
+    "checkedAt": "2026-08-06",
+    "resolved": {
+      "com.android.tools.build:gradle": "8.13.2",
+      "org.jetbrains.kotlin:kotlin-gradle-plugin": "2.2.0",
+      "com.google.devtools.ksp": "2.2.0-2.0.2",
+      "gradle": "8.14.3",
+      "androidx.compose:compose-bom": "2026.03.01",
+      "androidx.core:core-ktx": "1.17.0",
+      "androidx.activity:activity-compose": "1.12.4",
+      "androidx.lifecycle:lifecycle-viewmodel-compose": "2.9.4",
+      "androidx.navigation:navigation-compose": "2.9.6",
+      "androidx.room:room-runtime": "2.8.4",
+      "androidx.datastore:datastore-preferences": "1.2.1",
+      "androidx.security:security-crypto": "1.1.0",
+      "androidx.work:work-runtime-ktx": "2.11.2",
+      "com.squareup.okhttp3:okhttp": "5.4.0",
+      "org.jetbrains.kotlinx:kotlinx-serialization-json": "1.11.0",
+      "org.jetbrains.kotlinx:kotlinx-coroutines-android": "1.11.0"
     },
-    "org.jetbrains.kotlinx:kotlinx-serialization-json": {
-      "version": "1.11.0",
-      "checkedAt": "2026-08-06",
-      "note": "Només a les proves, per llegir els fixtures compartits. El codi de producció no depèn de cap llibreria de JSON."
-    }
+    "$note": [
+      "Els últims de cada llibreria eren més nous (core-ktx 1.19.0, lifecycle 2.11.0,",
+      "activity 1.13.0, bom 2026.06.01) i exigeixen AGP 9.1+. AGP 9 porta suport de Kotlin",
+      "integrat i xoca amb el plugin `kotlin(\"android\")`: aplicar-los tots dos falla amb",
+      "'Cannot add extension with name kotlin'. S'ha triat la línia estable d'AGP 8 i les",
+      "versions d'AndroidX que hi van, en comptes de reestructurar els vuit mòduls."
+    ]
   }
 }

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  HTTP en clar està PROHIBIT per defecte.
+
+  docs/03 §2: la pantalla de login ofereix `https://` primer i `http://` només amb un
+  avís explícit. Aquesta configuració és el que fa que l'avís no sigui decoratiu: sense
+  ella, l'app parlaria en clar amb qualsevol servidor sense dir res.
+
+  Les adreces de xarxa local hi són com a excepció perquè és el cas real d'una casa que
+  s'autoallotja i encara no té certificat. Qualsevol altra adreça exigeix TLS.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">localhost</domain>
+        <domain includeSubdomains="true">10.0.2.2</domain>
+        <domain includeSubdomains="true">192.168.0.0</domain>
+        <domain includeSubdomains="true">.local</domain>
+    </domain-config>
+</network-security-config>

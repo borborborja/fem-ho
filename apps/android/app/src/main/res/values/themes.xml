@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  El tema d'Android només serveix per a la finestra abans que Compose pinti.
+  Els colors de veritat surten de `Tokens.kt`, que es genera des del CSS de Plou (D7).
+-->
+<resources>
+    <style name="Theme.Femho" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+</resources>
