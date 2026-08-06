@@ -9,11 +9,15 @@
  * ha de petar — que és tot el sentit de la regla 5.
  */
 
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { buildApp } from '../app.js';
 import { loadConfig } from '../config.js';
+import { connect } from '../db/connection.js';
+import { migrateToLatest } from '../db/migrator.js';
 
 /** Lector mínim de l'esquema: en treu les propietats requerides i les permeses. */
 function schemaOf(name: string): { required: string[]; properties: string[]; additional: boolean } {
@@ -119,5 +123,55 @@ describe('capçaleres de seguretat', () => {
     expect(res.headers['referrer-policy']).toBe('strict-origin-when-cross-origin');
 
     await app.close();
+  });
+});
+
+/**
+ * `setup_required` deia `true` sempre.
+ *
+ * El comentari ho justificava "mentre no hi hagi taula d'usuaris (M2)", i M2 va arribar
+ * vuit fites enrere. **Android fa servir aquesta ruta per validar el servidor**
+ * (docs/03 §2): amb un `true` fix, una instància ja configurada li hauria dit per sempre
+ * que li cal configuració.
+ */
+describe('setup_required diu la veritat', () => {
+  it('sense base de dades, es diu que sí que cal', async () => {
+    // Entre enviar algú a una configuració que es tancarà sola i deixar-lo mirant el
+    // login d'una instància que potser no existeix, la primera és recuperable.
+    const app = appForTest();
+    const res = await app.inject({ method: 'GET', url: '/info' });
+    expect(res.json<{ setup_required: boolean }>().setup_required).toBe(true);
+    await app.close();
+  });
+
+  it('amb la base buida sí, i amb un administrador creat ja no', async () => {
+    const tmp = mkdtempSync(join(tmpdir(), 'femho-info-'));
+    const conn = connect(`sqlite://${join(tmp, 'test.db')}`);
+    await migrateToLatest(conn.db, { engine: 'sqlite' });
+
+    const app = buildApp(
+      { ...loadConfig('0.1.0-test'), logLevel: 'silent', dataDir: tmp },
+      { connection: conn, secret: 'x'.repeat(40) },
+    );
+
+    const abans = await app.inject({ method: 'GET', url: '/info' });
+    expect(abans.json<{ setup_required: boolean }>().setup_required).toBe(true);
+
+    await app.inject({
+      method: 'POST',
+      url: '/setup',
+      payload: {
+        name: 'Borja',
+        email: 'borja@example.com',
+        password: 'la-contrasenya-de-prova',
+      },
+    });
+
+    const després = await app.inject({ method: 'GET', url: '/info' });
+    expect(després.json<{ setup_required: boolean }>().setup_required).toBe(false);
+
+    await app.close();
+    await conn.close();
+    rmSync(tmp, { recursive: true, force: true });
   });
 });

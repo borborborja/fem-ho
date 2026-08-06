@@ -9,6 +9,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { components } from '@fem-ho/contracts';
 import { sql } from 'kysely';
+import { setupIsOpen } from '../services/setup.js';
 
 type Info = components['schemas']['Info'];
 type Health = components['schemas']['Health'];
@@ -21,13 +22,28 @@ export function registerInstanceRoutes(app: FastifyInstance): void {
    * que ha encertat abans d'escriure la contrasenya.
    */
   app.get('/info', async (): Promise<Info> => {
+    /**
+     * **Es pregunta a la base, no es dona per fet.**
+     *
+     * Això deia `true` sempre, amb un comentari que ho justificava "mentre no hi hagi
+     * taula d'usuaris (M2)" — i M2 va arribar fa vuit fites. El resultat és que una
+     * instància ja configurada seguia dient que li calia configuració, i Android, que
+     * fa servir justament aquesta ruta per validar el servidor (docs/03 §2), hauria
+     * ensenyat el missatge equivocat per sempre.
+     *
+     * Si la base no respon **es diu que sí que cal**: entre enviar algú a una pantalla
+     * de configuració que es tancarà sola i deixar-lo mirant un login d'una instància
+     * que potser no existeix, la primera és recuperable.
+     */
+    const conn = app.connection;
+    const setupRequired =
+      conn === undefined ? true : await setupIsOpen(conn.db).catch(() => true);
+
     return {
       name: app.config.instanceName,
       version: app.config.version,
       registration: app.config.registration,
-      // Mentre no hi hagi taula d'usuaris (M2), no hi ha cap administrador i per tant
-      // la instància sempre necessita configuració inicial.
-      setup_required: true,
+      setup_required: setupRequired,
     };
   });
 
