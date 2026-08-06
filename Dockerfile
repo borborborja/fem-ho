@@ -35,11 +35,13 @@ RUN npm ci
 
 COPY . .
 
-# `--workspaces --if-present`, i no una llista de paquets escrita a mà: `contracts` i
-# `design-system` no tenen script `build` —el primer genera tipus i el segon es
-# vendoritza tal com ve— i nomenar-los aquí feia petar la construcció. Escrit així,
-# afegir un paquet nou no obliga a tocar el Dockerfile.
-RUN npm run build --workspaces --if-present
+# `npm run build` de l'arrel, que compila `contracts` PRIMER.
+#
+# `--workspaces --if-present` corre en ordre de declaració i no de dependència: el
+# servidor i la web importen els tipus compilats de `contracts`, i sense ell fet abans
+# la construcció peta amb un "Cannot find module @fem-ho/contracts" que no apunta
+# enlloc. Aquí va funcionar per l'ordre que va tocar, i això és pitjor que fallar.
+RUN npm run build
 
 # Es reinstal·len només les de producció: les de desenvolupament no han d'anar a la
 # imatge final ni per mida ni per superfície d'atac.

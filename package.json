@@ -15,7 +15,7 @@
     "packages/design-system"
   ],
   "scripts": {
-    "build": "npm run build --workspaces --if-present",
+    "build": "npm run build --workspace @fem-ho/contracts && npm run build --workspace @fem-ho/server && npm run build --workspace @fem-ho/web",
     "check": "node tools/checks/run-all.mjs",
     "check:audit-coverage": "node tools/checks/audit-coverage.mjs",
     "check:contrast": "node tools/checks/contrast-check.mjs",
