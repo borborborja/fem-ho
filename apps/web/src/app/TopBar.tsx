@@ -197,7 +197,9 @@ export function TopBar({
         minWidth: 200,
         maxHeight: 260,
         overflowY: 'auto',
-        background: 'var(--card-bg)',
+        // Flota per damunt del contingut: ha de ser opac. `--card-bg` és translúcid en
+        // tema fosc i deixaria llegir el que hi ha a sota.
+        background: 'var(--panel-bg)',
         border: '1px solid var(--card-border)',
         borderRadius: 14,
         boxShadow: 'var(--card-shadow)',

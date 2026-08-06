@@ -258,3 +258,42 @@ test('i amb el teclat també, sense ratolí', async ({ page }) => {
   await pencil.focus();
   await expect(pencil).toHaveCSS('opacity', '1');
 });
+
+/**
+ * **Res del que flota pot ser translúcid en tema fosc.**
+ *
+ * `--card-bg` és, en tema fosc, un vel blanc del 6%: està fet per posar-se damunt d'una
+ * superfície opaca, no per ser-ne una. Com a fons del modal d'edició deixava veure el
+ * tauler a través i **l'editor no es podia fer servir**. El mateix token estava a la
+ * paleta d'ordres, al diàleg de compartir i als dos desplegables de la barra.
+ *
+ * La prova mira el símptoma i no el token: quin color efectiu té el panell. Un
+ * `rgba(...)` amb alfa per sota d'1 és exactament el que es veia malament.
+ */
+async function alphaOf(page: Page, selector: string): Promise<number> {
+  return page.locator(selector).evaluate((node) => {
+    const colour = getComputedStyle(node).backgroundColor;
+    const match = /^rgba?\(([^)]+)\)$/u.exec(colour);
+    if (match === null) return 0;
+    const parts = match[1]!.split(',').map((part) => Number(part.trim()));
+    return parts.length < 4 ? 1 : (parts[3] ?? 1);
+  });
+}
+
+test('en tema fosc, el modal i la paleta són opacs', async ({ page }) => {
+  await enter(page);
+  await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
+
+  const card = page.locator('[data-testid^="task-"]').first();
+  await card.hover();
+  await card.locator('[data-testid="card-edit"]').click();
+  await expect(page.locator('[data-testid="task-modal"]')).toBeVisible();
+
+  // El panell és el fill del vel: el vel sí que ha de ser translúcid, el panell no.
+  expect(await alphaOf(page, '[data-testid="task-modal"] > div')).toBe(1);
+  await page.locator('[data-testid="task-cancel"]').click();
+
+  await page.keyboard.press('Control+k');
+  await expect(page.locator('[data-testid="command-palette"]')).toBeVisible();
+  expect(await alphaOf(page, '[data-testid="command-palette"] > div')).toBe(1);
+});

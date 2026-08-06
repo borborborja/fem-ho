@@ -74,7 +74,9 @@ export function MentionPopover({
         listStyle: 'none',
         margin: '4px 0 0',
         padding: 4,
-        background: 'var(--card-bg)',
+        // Flota per damunt del contingut: ha de ser opac. `--card-bg` és translúcid en
+        // tema fosc i deixaria llegir el que hi ha a sota.
+        background: 'var(--panel-bg)',
         border: '1px solid var(--card-border)',
         borderRadius: 14,
         boxShadow: 'var(--card-shadow)',

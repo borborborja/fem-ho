@@ -96,10 +96,18 @@ export function CommandPalette({
         style={{
           width: '100%',
           maxWidth: 520,
-          background: 'var(--card-bg)',
+          /**
+           * `--panel-bg` i no `--card-bg`.
+           *
+           * En tema fosc, `--card-bg` és un vel blanc del 6%: està fet per posar-se
+           * **damunt d'una superfície opaca**, no per ser-ne una. Com a fons d'un
+           * diàleg deixava veure el tauler a través i l'editor no es podia fer servir.
+           * `--panel-bg` és opac als dos temes, i és el que el disseny validat hi posa.
+           */
+          background: 'var(--panel-bg)',
           border: '1px solid var(--card-border)',
           borderRadius: 'var(--radius-card)',
-          boxShadow: 'var(--card-shadow)',
+          boxShadow: 'var(--shadow-dialog)',
           overflow: 'hidden',
         }}
       >
