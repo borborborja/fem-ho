@@ -124,7 +124,7 @@ export async function listCollections(
         collections.push({
           name,
           kind,
-          displayName: kind === 'events' ? displayBase : `${displayBase} · tasques`,
+          displayName: kind === 'events' ? displayBase : `${displayBase} · tasks`,
           scopeId: scope.id,
           projectId: project?.id ?? null,
           color: scope.color,

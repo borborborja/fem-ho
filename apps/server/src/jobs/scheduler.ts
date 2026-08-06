@@ -19,6 +19,7 @@ import { sql } from 'kysely';
 import { auditedTransaction } from '../audit/audited-transaction.js';
 import type { Connection } from '../db/connection.js';
 import type { MigrationDb } from '../db/migration-db.js';
+import { FALLBACK, catalogOf, isLocale, type Locale } from '@fem-ho/contracts';
 import { isDue, refreshSubscription, type SubscriptionRow } from '../dav/client.js';
 import type { Principal } from '../policy/principal.js';
 import {
@@ -119,7 +120,15 @@ async function runReminders(
         // `ctx.tx` i no la connexió principal: amb SQLite, consultar la connexió mentre
         // la transacció la té agafada penja el procés fins que salta el temps d'espera.
         // És un bloqueig, no una lentitud, i des de fora sembla que el tic no faci res.
-        const title = await titleFor(ctx.tx, reminder);
+        /**
+         * **En l'idioma de qui la rep.**
+         *
+         * Una notificació push la pinta el sistema operatiu: quan arriba al telèfon ja
+         * és text, i el client no la pot traduir després. És l'única cosa per la qual
+         * el servidor importa el catàleg, i és justificada.
+         */
+        const locale = await localeOf(ctx.tx, reminder.userId);
+        const title = await titleFor(ctx.tx, reminder, locale);
         await sendToUser(
           ctx,
           reminder.userId,
@@ -136,23 +145,40 @@ async function runReminders(
   );
 }
 
+/** L'idioma d'una persona. `ca` si la fila no hi és o porta res que no coneguem. */
+async function localeOf(db: MigrationDb, userId: string): Promise<Locale> {
+  const found = await sql<{ locale: string }>`
+    SELECT locale FROM users WHERE id = ${userId}
+  `.execute(db);
+  const value = found.rows[0]?.locale;
+  return isLocale(value) ? value : FALLBACK;
+}
+
 async function titleFor(
   db: MigrationDb,
   reminder: { taskId: string | null; eventId: string | null },
+  locale: Locale,
 ): Promise<string> {
+  /**
+   * El títol és el de la tasca o l'esdeveniment, que **no es tradueix**: és el que ha
+   * escrit una persona. El que sí que es tradueix és el text de reserva, per al cas
+   * rar que la cosa recordada s'hagi esborrat entremig.
+   */
+  const fallback = catalogOf(locale)['notify.reminder'] ?? 'Recordatori';
+
   if (reminder.taskId !== null) {
     const found = await sql<{ title: string }>`
       SELECT title FROM tasks WHERE id = ${reminder.taskId}
     `.execute(db);
-    return found.rows[0]?.title ?? 'Recordatori';
+    return found.rows[0]?.title ?? fallback;
   }
   if (reminder.eventId !== null) {
     const found = await sql<{ summary: string }>`
       SELECT summary FROM events WHERE id = ${reminder.eventId}
     `.execute(db);
-    return found.rows[0]?.summary ?? 'Recordatori';
+    return found.rows[0]?.summary ?? fallback;
   }
-  return 'Recordatori';
+  return fallback;
 }
 
 /**

@@ -20,7 +20,7 @@ import { buildApp } from '../app.js';
 import { loadConfig } from '../config.js';
 import { connect, type Connection } from '../db/connection.js';
 import { migrateToLatest } from '../db/migrator.js';
-import { INITIAL_SCOPES } from '../services/setup.js';
+import { initialScopes } from '../services/setup.js';
 
 let tmp: string;
 let conn: Connection;
@@ -79,7 +79,8 @@ describe('amb la base buida', () => {
     const scopes = await sql<{ name: string; color: string }>`
       SELECT name, color FROM scopes ORDER BY position
     `.execute(conn.db);
-    expect(scopes.rows.map((s) => s.name)).toEqual(INITIAL_SCOPES.map((s) => s.name));
+    // Sense idioma a la petició, el català: és la reserva de `negotiate`.
+    expect(scopes.rows.map((s) => s.name)).toEqual(initialScopes('ca').map((s) => s.name));
     // Els colors de la tríada, com a nom de token i no com a literal.
     for (const row of scopes.rows) expect(row.color).toMatch(/^--plou-/u);
   });

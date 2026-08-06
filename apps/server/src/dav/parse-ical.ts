@@ -114,7 +114,7 @@ function toTodo(component: ICAL.Component): ParsedTodo {
 
   return {
     uid,
-    summary: text(component, 'summary') ?? '(sense títol)',
+    summary: text(component, 'summary') ?? '(untitled)',
     description: text(component, 'description'),
     status: statusIn(text(component, 'status'), femhoStatus),
     // `VALUE=DATE` és tot el dia i **no té fus**: es guarda la data nua i prou.
@@ -195,7 +195,7 @@ function toEvent(component: ICAL.Component): ParsedEvent {
   return {
     uid,
     recurrenceId: recurrenceId === null ? null : toIso(recurrenceId.getFirstValue() as ICAL.Time),
-    summary: text(component, 'summary') ?? '(sense títol)',
+    summary: text(component, 'summary') ?? '(untitled)',
     description: text(component, 'description'),
     location: text(component, 'location'),
     startsAt: toIso(start),

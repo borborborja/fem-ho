@@ -288,10 +288,35 @@ Són 53 tipus d'error, tots amb clau als tres idiomes. `notFound()` rebia la par
 traduïda i barrejada —`notFound('tasca')` tretze cops i `notFound('task')` sis— i ara rep
 el nom canònic en anglès.
 
+### Les notificacions i les dades sembrades
+
+Una notificació push **la pinta el sistema operatiu**: quan arriba al telèfon ja és text i
+el client no la pot traduir després. Per això el planificador llegeix `users.locale` del
+destinatari i el text surt del catàleg compartit. És l'única cosa per la qual el servidor
+importa `@fem-ho/contracts`, i és justificada.
+
+Els tres àmbits inicials es creen **en l'idioma de qui crea el compte**: trobar-se "Feina"
+i "Família" en obrir una app que has demanat en anglès és la primera cosa que veus, i diu
+que el producte no és teu.
+
+### Les superfícies de màquina, a l'anglès
+
+Els llegeixen agents d'MCP, DAVx⁵, Thunderbird i qui programi contra l'API — cap d'ells té
+catàleg ni idioma:
+
+- Les 16 tools d'MCP: títols, descripcions i tots els `.describe()`. Traduir-les per
+  idioma d'usuari no tindria on mirar-se —un token no és una persona— i faria que el
+  mateix servidor descrivís les seves eines diferent segons qui preguntés.
+- Els ~20 missatges `text/plain` del camí DAV.
+- El `PRODID` (`-//Fem-ho//CalDAV//EN`) i el sufix de la col·lecció de tasques.
+
+Els errors d'arrencada i els que llança `assertCatalogue` es queden en català: els llegeix
+qui manté la instància, no cap client.
+
 ### El que encara és en català
 
-- **Notificacions** en l'idioma de qui les rep, llegint `users.locale`.
-- **MCP i CalDAV** a l'anglès: els llegeixen agents, DAVx⁵ i Thunderbird.
+Res de cara a l'usuari. Queden els registres del servidor i els missatges d'arrencada, que
+`i18n-lint` ja deixa fora de l'abast a posta.
 
 ### Els límits coneguts
 

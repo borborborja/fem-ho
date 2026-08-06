@@ -46,8 +46,8 @@ const MODIFY: ToolAnnotations = {
   idempotentHint: true,
 };
 
-const scopeId = z.string().describe("Identificador d'àmbit. UUID nu, sense prefix.");
-const taskId = z.string().describe('Identificador de tasca. UUID nu, sense prefix.');
+const scopeId = z.string().describe('Scope identifier. A bare UUID, no prefix.');
+const taskId = z.string().describe('Task identifier. A bare UUID, no prefix.');
 
 /**
  * El catàleg, **ordenat alfabèticament**.
@@ -59,80 +59,80 @@ const taskId = z.string().describe('Identificador de tasca. UUID nu, sense prefi
 export const TOOLS: ToolSpec[] = [
   {
     name: 'add_comment',
-    title: 'Comentar una tasca',
+    title: 'Comment on a task',
     description:
-      'Afegeix un comentari a una tasca. **És la via principal perquè un agent reporti** el que ha fet o el que li falta per poder continuar.',
-    inputSchema: { task_id: taskId, body: z.string().describe('El text del comentari.') },
+      'Adds a comment to a task. **This is the main way for an agent to report** what it has done or what it is missing in order to continue.',
+    inputSchema: { task_id: taskId, body: z.string().describe('The comment text.') },
     annotations: CREATE,
   },
   {
     name: 'complete_task',
-    title: 'Completar una tasca',
+    title: 'Complete a task',
     description:
-      'Marca una tasca com a feta. Aplica la cascada amunt i genera la instància següent si es repeteix.',
+      'Marks a task as done. Applies the upward cascade and generates the next instance if it repeats.',
     inputSchema: { task_id: taskId },
     annotations: MODIFY,
   },
   {
     name: 'create_task',
-    title: 'Crear una tasca',
+    title: 'Create a task',
     description:
-      "Crea una tasca. Sempre ha de tenir àmbit; pot no tenir projecte. Respecta `can_create_tasks` de l'agent.",
+      'Creates a task. It always has to have a scope; it may have no project. Respects the agent\'s `can_create_tasks`.',
     inputSchema: {
       scope_id: scopeId,
-      title: z.string().describe('El títol, ja net de sigils.'),
+      title: z.string().describe('The title, already free of sigils.'),
       project_id: z.string().optional(),
       description: z.string().optional(),
-      due_date: z.string().optional().describe('Data en format ISO, sense hora.'),
+      due_date: z.string().optional().describe('Date in ISO format, without a time.'),
     },
     annotations: CREATE,
   },
   {
     name: 'get_briefing',
-    title: 'Resum per a agents',
+    title: 'Briefing for agents',
     description:
-      'Àmbits amb les seves instruccions, projectes, què hi ha pendent i què està delegat. **Estalvia sis crides**: és la segona que hauria de cridar un agent, després de `whoami`.',
+      'Scopes with their instructions, projects, what is pending and what is delegated. **Saves six calls**: it is the second one an agent should call, after `whoami`.',
     inputSchema: { scope_id: z.string().optional() },
     annotations: READ,
   },
   {
     name: 'get_task',
-    title: 'Una tasca sencera',
-    description: 'Una tasca amb subtasques, llistes, comentaris, adjunts i historial.',
+    title: 'A whole task',
+    description: 'A task with its subtasks, checklists, comments, attachments and history.',
     inputSchema: { task_id: taskId },
     annotations: READ,
   },
   {
     name: 'list_events',
-    title: 'Esdeveniments en una finestra',
+    title: 'Events in a window',
     description:
-      "Esdeveniments entre dues dates. **`from` i `to` són obligatoris**: sense finestra, un calendari amb repeticions no té un nombre finit d'esdeveniments.",
+      'Events between two dates. **`from` and `to` are required**: without a window, a calendar with recurrences does not have a finite number of events.',
     inputSchema: {
-      from: z.string().describe('Inici de la finestra, ISO.'),
-      to: z.string().describe('Final de la finestra, ISO.'),
+      from: z.string().describe('Start of the window, ISO.'),
+      to: z.string().describe('End of the window, ISO.'),
       scope_id: z.string().optional(),
     },
     annotations: READ,
   },
   {
     name: 'list_projects',
-    title: 'Projectes',
-    description: 'Projectes, filtrables per àmbit.',
+    title: 'Projects',
+    description: 'Projects, filterable by scope.',
     inputSchema: { scope_id: z.string().optional() },
     annotations: READ,
   },
   {
     name: 'list_scopes',
-    title: 'Àmbits',
+    title: 'Scopes',
     description:
-      'Àmbits accessibles, amb la descripció i les instruccions per a la IA de cadascun.',
+      'Accessible scopes, with the description and AI instructions of each one.',
     inputSchema: {},
     annotations: READ,
   },
   {
     name: 'list_tasks',
-    title: 'Tasques',
-    description: 'Tasques amb filtres i paginació.',
+    title: 'Tasks',
+    description: 'Tasks with filters and pagination.',
     inputSchema: {
       scope_id: z.string().optional(),
       project_id: z.string().optional(),
@@ -144,50 +144,50 @@ export const TOOLS: ToolSpec[] = [
   },
   {
     name: 'move_task',
-    title: 'Moure una tasca',
-    description: "Canvia la columna i la posició d'una tasca.",
+    title: 'Move a task',
+    description: 'Changes the column and the position of a task.',
     inputSchema: {
       task_id: taskId,
       status: z.enum(['inbox', 'todo', 'doing', 'done']),
-      position: z.string().optional().describe("L'índex fraccional. Si no es dona, va al final."),
+      position: z.string().optional().describe('The fractional index. If not given, it goes to the end.'),
     },
     annotations: MODIFY,
   },
   {
     name: 'next_task',
-    title: 'La següent tasca delegada',
+    title: 'The next delegated task',
     description:
-      'Retorna la següent tasca delegada disponible **i la reserva** durant 30 minuts. És el que evita que dos agents facin la mateixa feina. Crida `release_task` si no la pots fer.',
+      'Returns the next available delegated task **and claims it** for 30 minutes. This is what stops two agents doing the same work. Call `release_task` if you cannot do it.',
     inputSchema: { scope_id: z.string().optional() },
     // **No idempotent**: cada crida reserva una tasca diferent.
     annotations: CREATE,
   },
   {
     name: 'release_task',
-    title: 'Alliberar una reserva',
-    description: "Allibera la reserva d'una tasca, amb un motiu que queda a l'historial.",
-    inputSchema: { task_id: taskId, reason: z.string().describe('Per què no la pots fer.') },
+    title: 'Release a claim',
+    description: 'Releases the claim on a task, with a reason that stays in the history.',
+    inputSchema: { task_id: taskId, reason: z.string().describe('Why you cannot do it.') },
     annotations: MODIFY,
   },
   {
     name: 'search_tasks',
-    title: 'Cercar tasques',
-    description: 'Cerca de text sobre títols i descripcions.',
+    title: 'Search tasks',
+    description: 'Text search over titles and descriptions.',
     inputSchema: { query: z.string(), scope_id: z.string().optional() },
     annotations: READ,
   },
   {
     name: 'update_checklist_item',
-    title: "Marcar un ítem d'una llista",
+    title: 'Check an item of a checklist',
     description:
-      "Marca o desmarca un ítem. Si és l'últim que faltava, la cascada amunt pot completar la subtasca i la tasca.",
+      'Checks or unchecks an item. If it is the last one missing, the upward cascade can complete the subtask and the task.',
     inputSchema: { item_id: z.string(), done: z.boolean() },
     annotations: MODIFY,
   },
   {
     name: 'update_task',
-    title: 'Modificar una tasca',
-    description: "Canvia camps d'una tasca. Només els que es donin.",
+    title: 'Modify a task',
+    description: 'Changes fields of a task. Only the ones given.',
     inputSchema: {
       task_id: taskId,
       title: z.string().optional(),
@@ -198,9 +198,9 @@ export const TOOLS: ToolSpec[] = [
   },
   {
     name: 'whoami',
-    title: 'Qui sóc',
+    title: 'Who am I',
     description:
-      'Qui és aquest token, què pot fer i **quins àmbits veu**. La primera que hauria de cridar un agent: sense això no sap on pot escriure i acaba provant a cegues.',
+      'Who this token is, what it can do and **which scopes it sees**. The first one an agent should call: without it, it does not know where it can write and ends up guessing.',
     inputSchema: {},
     annotations: READ,
   },

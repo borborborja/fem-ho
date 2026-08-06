@@ -131,13 +131,13 @@ export function extractEvents(
     // tal com està.
     const wrapper = new ICAL.Component('vcalendar');
     wrapper.updatePropertyWithValue('version', '2.0');
-    wrapper.updatePropertyWithValue('prodid', '-//Fem-ho//CalDAV//CA');
+    wrapper.updatePropertyWithValue('prodid', '-//Fem-ho//CalDAV//EN');
     wrapper.addSubcomponent(event);
     const raw = wrapper.toString();
 
     return {
       uid: String(event.getFirstPropertyValue('uid') ?? ''),
-      summary: String(event.getFirstPropertyValue('summary') ?? '(sense títol)'),
+      summary: String(event.getFirstPropertyValue('summary') ?? '(untitled)'),
       startsAt: start === undefined ? new Date(0).toISOString() : start.toJSDate().toISOString(),
       endsAt: end === undefined ? null : end.toJSDate().toISOString(),
       allDay: start?.isDate === true,

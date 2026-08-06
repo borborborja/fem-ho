@@ -136,7 +136,12 @@ test('arrossegar entre columnes persisteix', async ({ page }) => {
 
   await page.mouse.move(from.x + from.width / 2, from.y + 20);
   await page.mouse.down();
+  // dnd-kit no considera que s'arrossegui fins que el cursor ha fet 6px, i sota càrrega
+  // el navegador pot ajuntar els moviments intermedis. Amb la pausa, el sensor rep el
+  // primer desplaçament sempre; sense, la prova falla una vegada de cada moltes.
+  await page.waitForTimeout(50);
   await page.mouse.move(from.x + from.width / 2 + 40, from.y + 40, { steps: 10 });
+  await page.waitForTimeout(50);
   await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 10 });
   await page.mouse.up();
 
@@ -294,7 +299,9 @@ test("arrossegar no amaga la targeta en sortir de la columna", async ({ page }) 
 
   await page.mouse.move(from.x + from.width / 2, from.y + 20);
   await page.mouse.down();
+  await page.waitForTimeout(50);
   await page.mouse.move(from.x + from.width / 2 + 40, from.y + 40, { steps: 5 });
+  await page.waitForTimeout(50);
   // Fins a l'última columna: el camí travessa totes les vores que abans la retallaven.
   await page.mouse.move(to.x + to.width / 2, to.y + 60, { steps: 12 });
 

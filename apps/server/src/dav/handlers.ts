@@ -32,7 +32,7 @@ export const propfind: DavHandler = async (context) => {
   );
 
   if (result.status === 404) {
-    plain(context.response, 404, 'Aquest recurs no existeix.');
+    plain(context.response, 404, 'This resource does not exist.');
     return;
   }
 
@@ -47,7 +47,7 @@ export const reportHandler: DavHandler = async (context) => {
 /** `GET` d'un recurs: els bytes de l'iCalendar amb el seu etag. */
 export const get: DavHandler = async (context) => {
   if (context.resource.type !== 'object') {
-    plain(context.response, 405, 'Això no és un recurs de calendari.');
+    plain(context.response, 405, 'This is not a calendar resource.');
     return;
   }
 
@@ -57,7 +57,7 @@ export const get: DavHandler = async (context) => {
     context.resource.collection,
   );
   if (collection === undefined) {
-    plain(context.response, 404, 'Aquesta col·lecció no existeix.');
+    plain(context.response, 404, 'This collection does not exist.');
     return;
   }
 
@@ -68,7 +68,7 @@ export const get: DavHandler = async (context) => {
     context.resource.uid,
   );
   if (object === undefined) {
-    plain(context.response, 404, 'Aquest recurs no existeix.');
+    plain(context.response, 404, 'This resource does not exist.');
     return;
   }
 

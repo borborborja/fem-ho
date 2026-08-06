@@ -197,6 +197,7 @@
     <string name="nav_search">Cercar</string>
     <string name="nav_settings">Ajustos</string>
     <string name="nav_tasks">Tasques</string>
+    <string name="notify_reminder">Recordatori</string>
     <string name="palette_empty">Res que coincideixi.</string>
     <string name="palette_go">Anar a</string>
     <string name="palette_placeholder">Escriu per anar a un lloc o buscar una tasca…</string>
@@ -291,6 +292,9 @@
     <string name="settings_wipeconfirm">Escriu «{name}» per confirmar</string>
     <string name="settings_wipewarning">Això esborra totes les tasques, esdeveniments, llistes i l\'historial. Els comptes es queden.</string>
     <string name="setup_name">El teu nom</string>
+    <string name="setup_scope_family">Família</string>
+    <string name="setup_scope_personal">Personal</string>
+    <string name="setup_scope_work">Feina</string>
     <string name="setup_submit">Crear el compte</string>
     <string name="setup_subtitle">Crea el primer compte d\'administrador d\'aquesta instància.</string>
     <string name="setup_title">Comencem</string>

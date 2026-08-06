@@ -197,6 +197,7 @@
     <string name="nav_search">Buscar</string>
     <string name="nav_settings">Ajustes</string>
     <string name="nav_tasks">Tareas</string>
+    <string name="notify_reminder">Recordatorio</string>
     <string name="palette_empty">Nada que coincida.</string>
     <string name="palette_go">Ir a</string>
     <string name="palette_placeholder">Escribe para ir a un sitio o buscar una tarea…</string>
@@ -291,6 +292,9 @@
     <string name="settings_wipeconfirm">Escribe «{name}» para confirmar</string>
     <string name="settings_wipewarning">Esto borra todas las tareas, eventos, listas y el historial. Las cuentas se quedan.</string>
     <string name="setup_name">Tu nombre</string>
+    <string name="setup_scope_family">Familia</string>
+    <string name="setup_scope_personal">Personal</string>
+    <string name="setup_scope_work">Trabajo</string>
     <string name="setup_submit">Crear la cuenta</string>
     <string name="setup_subtitle">Crea la primera cuenta de administrador de esta instancia.</string>
     <string name="setup_title">Empecemos</string>

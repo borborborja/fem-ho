@@ -15,7 +15,7 @@ import { sql } from 'kysely';
 import { isTrue } from '../db/bool.js';
 import type { MigrationDb } from '../db/migration-db.js';
 
-export const PRODID = '-//Fem-ho//CalDAV//CA';
+export const PRODID = '-//Fem-ho//CalDAV//EN';
 
 /** L'estat d'un VTODO i el del kanban no són el mateix (docs/07 §6). */
 const STATUS_OUT: Record<string, string> = {

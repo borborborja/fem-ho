@@ -30,12 +30,12 @@ import {
 export async function report(context: DavContext): Promise<void> {
   const root = parseXml(context.body);
   if (root === undefined) {
-    plain(context.response, 400, 'Un REPORT necessita un cos.');
+    plain(context.response, 400, 'A REPORT needs a body.');
     return;
   }
 
   if (context.resource.type !== 'collection') {
-    plain(context.response, 403, 'Aquest REPORT només va sobre una col·lecció.');
+    plain(context.response, 403, 'This REPORT only applies to a collection.');
     return;
   }
 
@@ -45,7 +45,7 @@ export async function report(context: DavContext): Promise<void> {
     context.resource.collection,
   );
   if (collection === undefined) {
-    plain(context.response, 404, 'Aquesta col·lecció no existeix.');
+    plain(context.response, 404, 'This collection does not exist.');
     return;
   }
 
@@ -62,7 +62,7 @@ export async function report(context: DavContext): Promise<void> {
       await syncCollection(context, collection, root, wantsData);
       return;
     default:
-      plain(context.response, 400, `El REPORT "${root.local}" no existeix aquí.`);
+      plain(context.response, 400, `The "${root.local}" REPORT does not exist here.`);
   }
 }
 
@@ -278,7 +278,7 @@ async function syncCollection(
     if (parsed === undefined) {
       // 507 i no 400: el client sap què fer amb un 507 —tornar a baixar-ho tot— i amb
       // un 400 només sap que alguna cosa ha anat malament.
-      plain(context.response, 507, 'Aquest sync-token ja no val. Cal una sincronització completa.');
+      plain(context.response, 507, 'This sync-token is no longer valid. A full sync is needed.');
       return;
     }
     since = parsed;

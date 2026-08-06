@@ -62,7 +62,7 @@ function header(value: string | string[] | undefined): string | undefined {
 
 export const put: DavHandler = async (context) => {
   if (context.resource.type !== 'object') {
-    plain(context.response, 405, 'Un PUT només va sobre un recurs de calendari.');
+    plain(context.response, 405, 'A PUT only applies to a calendar resource.');
     return;
   }
 
@@ -72,7 +72,7 @@ export const put: DavHandler = async (context) => {
     context.resource.collection,
   );
   if (collection === undefined) {
-    plain(context.response, 404, 'Aquesta col·lecció no existeix.');
+    plain(context.response, 404, 'This collection does not exist.');
     return;
   }
 
@@ -81,7 +81,7 @@ export const put: DavHandler = async (context) => {
   try {
     parsed = parseResource(context.body);
   } catch (error) {
-    plain(context.response, 400, error instanceof IcalError ? error.message : 'iCalendar invàlid.');
+    plain(context.response, 400, error instanceof IcalError ? error.message : 'Invalid iCalendar.');
     return;
   }
 
@@ -109,17 +109,17 @@ export const put: DavHandler = async (context) => {
   const existing = await getObject(context.connection.db, context.principal, collection, uid);
 
   if (precondition.type === 'must-not-exist' && existing !== undefined) {
-    plain(context.response, 412, 'Aquest recurs ja existeix.');
+    plain(context.response, 412, 'This resource already exists.');
     return;
   }
   if (precondition.type === 'must-match') {
     if (existing === undefined) {
-      plain(context.response, 412, 'Aquest recurs no existeix.');
+      plain(context.response, 412, 'This resource does not exist.');
       return;
     }
     if (!precondition.etags.includes(existing.etag)) {
       // Algú altre l'ha canviat des que el client se'l va emportar.
-      plain(context.response, 412, "L'etag no coincideix: algú l'ha canviat mentrestant.");
+      plain(context.response, 412, 'The etag does not match: someone changed it in the meantime.');
       return;
     }
   }
@@ -145,7 +145,7 @@ export const put: DavHandler = async (context) => {
       { engine: context.connection.engine },
     );
   } catch (error) {
-    plain(context.response, 409, `No s'ha pogut guardar: ${String(error)}`);
+    plain(context.response, 409, `Could not save: ${String(error)}`);
     return;
   }
 
@@ -381,7 +381,7 @@ async function bumpCalendar(ctx: AuditContext, calendarId: string): Promise<void
 
 export const del: DavHandler = async (context: DavContext) => {
   if (context.resource.type !== 'object') {
-    plain(context.response, 405, 'Un DELETE només va sobre un recurs de calendari.');
+    plain(context.response, 405, 'A DELETE only applies to a calendar resource.');
     return;
   }
 
@@ -391,7 +391,7 @@ export const del: DavHandler = async (context: DavContext) => {
     context.resource.collection,
   );
   if (collection === undefined) {
-    plain(context.response, 404, 'Aquesta col·lecció no existeix.');
+    plain(context.response, 404, 'This collection does not exist.');
     return;
   }
 
@@ -402,13 +402,13 @@ export const del: DavHandler = async (context: DavContext) => {
     context.resource.uid,
   );
   if (existing === undefined) {
-    plain(context.response, 404, 'Aquest recurs no existeix.');
+    plain(context.response, 404, 'This resource does not exist.');
     return;
   }
 
   const precondition = parsePrecondition(context.request.headers);
   if (precondition.type === 'must-match' && !precondition.etags.includes(existing.etag)) {
-    plain(context.response, 412, "L'etag no coincideix: algú l'ha canviat mentrestant.");
+    plain(context.response, 412, 'The etag does not match: someone changed it in the meantime.');
     return;
   }
 

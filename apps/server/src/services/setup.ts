@@ -17,7 +17,7 @@ import { generatePosition } from '@fem-ho/contracts';
 import type { AuditContext } from '../audit/audited-transaction.js';
 import { hashPassword } from '../auth/password.js';
 import type { MigrationDb } from '../db/migration-db.js';
-import { FALLBACK, isLocale } from '@fem-ho/contracts';
+import { FALLBACK, catalogOf, isLocale, type Locale } from '@fem-ho/contracts';
 import { PolicyError } from '../policy/errors.js';
 import type { Principal } from '../policy/principal.js';
 
@@ -27,11 +27,23 @@ import type { Principal } from '../policy/principal.js';
  * **No són especials** (docs/12 §7): es poden reanomenar i esborrar com qualsevol. Són
  * un punt de partida, no una estructura del producte.
  */
-export const INITIAL_SCOPES = [
-  { name: 'Personal', color: '--plou-blue' },
-  { name: 'Feina', color: '--plou-orange' },
-  { name: 'Família', color: '--plou-pink' },
+const INITIAL_SCOPE_KEYS = [
+  { key: 'setup.scope.personal', color: '--plou-blue' },
+  { key: 'setup.scope.work', color: '--plou-orange' },
+  { key: 'setup.scope.family', color: '--plou-pink' },
 ] as const;
+
+/**
+ * Els tres àmbits inicials, **en l'idioma de qui crea el compte**.
+ *
+ * Trobar-se "Feina" i "Família" en obrir una app que has demanat en anglès és la primera
+ * cosa que veus, i diu que el producte no és teu. Es poden reanomenar i esborrar com
+ * qualsevol (docs/12 §7): són un punt de partida, no una estructura del producte.
+ */
+export function initialScopes(locale: Locale): { name: string; color: string }[] {
+  const catalog = catalogOf(locale);
+  return INITIAL_SCOPE_KEYS.map(({ key, color }) => ({ name: catalog[key] ?? key, color }));
+}
 
 /**
  * Encara es pot fer el primer arrencament?
@@ -100,12 +112,14 @@ export async function createFirstAdmin(ctx: AuditContext, input: SetupInput): Pr
   // aquí voldria dir que un dia divergirien.
   const passwordHash = await hashPassword(input.password);
 
+  // L'idioma de qui crea el compte: val per al seu perfil i per als tres àmbits.
+  const locale: Locale = isLocale(input.locale) ? input.locale : FALLBACK;
   const userId = uuidv7();
   await sql`
     INSERT INTO users (id, email, name, password_hash, kind, role, locale,
                        created_at, updated_at)
     VALUES (${userId}, ${email}, ${input.name.trim()}, ${passwordHash}, 'human', 'admin',
-            ${isLocale(input.locale) ? input.locale : FALLBACK}, ${ctx.now}, ${ctx.now})
+            ${locale}, ${ctx.now}, ${ctx.now})
   `.execute(ctx.tx);
 
   ctx.record({
@@ -119,7 +133,7 @@ export async function createFirstAdmin(ctx: AuditContext, input: SetupInput): Pr
   const scopeIds: string[] = [];
   let previous: string | null = null;
 
-  for (const scope of INITIAL_SCOPES) {
+  for (const scope of initialScopes(locale)) {
     const id = uuidv7();
     const position = generatePosition(previous, null);
     previous = position;
