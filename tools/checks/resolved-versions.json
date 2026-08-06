@@ -58,6 +58,11 @@
       "version": "19.2.4",
       "checkedAt": "2026-08-05"
     },
+    "@types/web-push": {
+      "version": "3.6.4",
+      "checkedAt": "2026-08-06",
+      "note": "Tipus de `web-push`, que no en porta de propis."
+    },
     "@vitejs/plugin-react": {
       "version": "6.0.5",
       "checkedAt": "2026-08-05"
@@ -159,6 +164,11 @@
     "vitest": {
       "version": "4.1.10",
       "checkedAt": "2026-08-05"
+    },
+    "web-push": {
+      "version": "3.6.7",
+      "checkedAt": "2026-08-06",
+      "note": "Web Push i UnifiedPush comparteixen RFC i xifratge: una sola taula i una sola crida per als dos clients (docs/11 §1)."
     },
     "zod": {
       "version": "4.4.3",

@@ -23,11 +23,13 @@
     "pg": "8.22.0",
     "saxes": "6.0.0",
     "uuid": "14.0.1",
+    "web-push": "3.6.7",
     "zod": "4.4.3"
   },
   "devDependencies": {
     "@types/better-sqlite3": "9.6.0",
     "@types/pg": "8.20.4",
+    "@types/web-push": "3.6.4",
     "kysely-codegen": "0.20.0"
   }
 }
