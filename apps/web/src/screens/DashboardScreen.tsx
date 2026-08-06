@@ -9,7 +9,14 @@
  */
 
 import { useMemo } from 'react';
-import { t, type QuickAddContext } from '@fem-ho/contracts';
+import {
+  getLocale,
+  monthName,
+  resolveWeekStart,
+  t,
+  weekdayNames,
+  type QuickAddContext,
+} from '@fem-ho/contracts';
 import { v7 as uuidv7 } from 'uuid';
 import { EmptyState, MonthView, TaskCard } from '@fem-ho/design-system/femho';
 import { api } from '../app/api.js';
@@ -29,6 +36,7 @@ export interface DashboardScreenProps {
 
 export function DashboardScreen({ onOpenTask, onPickScope, onNewTask }: DashboardScreenProps) {
   const { scopes, projects, people, settings } = useSessionData();
+  const weekStart = resolveWeekStart(settings.week_start, getLocale());
   const dashboard = useApi<Dashboard>('/api/v1/dashboard');
 
   const colorOf = (scopeId: string): string => {
@@ -191,8 +199,9 @@ export function DashboardScreen({ onOpenTask, onPickScope, onNewTask }: Dashboar
           <MonthView
             year={now.getFullYear()}
             month={now.getMonth()}
-            monthLabel={t('calendar.months').split(',')[now.getMonth()] ?? ''}
-            weekdayLabels={{ days: t('calendar.weekdays').split(',') }}
+            monthLabel={monthName(getLocale(), now.getMonth())}
+            weekStart={weekStart}
+            weekdayLabels={{ days: weekdayNames(getLocale(), weekStart) }}
             today={now.toISOString().slice(0, 10)}
           />
         </div>

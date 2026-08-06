@@ -2615,6 +2615,17 @@ components:
             Fonts del calendari que aquest usuari no vol veure. **S'hi guarda el que
             s'amaga i no el que es veu**: així una font nova surt sola, que és el que ha
             de passar quan algú de la casa n'afegeix una.
+        week_start:
+          type: string
+          enum: [auto, monday, sunday]
+          default: auto
+          description: |
+            Amb quin dia comença la setmana. `auto` segueix l'idioma —dilluns en català
+            i castellà, diumenge en anglès— i és el que hi ha per defecte.
+
+            Es pot canviar perquè **el primer dia de la setmana no és només una
+            convenció lingüística**: qui treballa el cap de setmana el vol d'una manera
+            i qui no, d'una altra, i tots dos poden tenir la mateixa llengua.
         show_calendar_widget: { type: boolean }
         show_overdue_section: { type: boolean }
         quiet_hours_start: { type: [string, 'null'] }

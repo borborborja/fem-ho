@@ -1682,6 +1682,17 @@ export interface components {
              *     de passar quan algú de la casa n'afegeix una.
              */
             hidden_calendar_ids?: string[];
+            /**
+             * @description Amb quin dia comença la setmana. `auto` segueix l'idioma —dilluns en català
+             *     i castellà, diumenge en anglès— i és el que hi ha per defecte.
+             *
+             *     Es pot canviar perquè **el primer dia de la setmana no és només una
+             *     convenció lingüística**: qui treballa el cap de setmana el vol d'una manera
+             *     i qui no, d'una altra, i tots dos poden tenir la mateixa llengua.
+             * @default auto
+             * @enum {string}
+             */
+            week_start: "auto" | "monday" | "sunday";
             show_calendar_widget?: boolean;
             show_overdue_section?: boolean;
             quiet_hours_start?: string | null;

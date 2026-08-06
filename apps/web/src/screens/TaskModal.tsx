@@ -12,7 +12,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { t, type TaskStatus } from '@fem-ho/contracts';
+import { dateTime, getLocale, t, type TaskStatus } from '@fem-ho/contracts';
 import { v7 as uuidv7 } from 'uuid';
 import { ActivityTimeline, ChecklistRow, EmptyState } from '@fem-ho/design-system/femho';
 import { api } from '../app/api.js';
@@ -724,11 +724,7 @@ export function TaskModal({
                     ),
                     undo: t('activity.undo'),
                   }}
-                  formatTime={(iso) =>
-                    new Intl.DateTimeFormat('ca', {
-                      dateStyle: 'short',
-                      timeStyle: 'short',
-                    }).format(new Date(iso))
+                  formatTime={(iso) => dateTime(getLocale(), new Date(iso))
                   }
                   onUndo={(id: string) => {
                     void api.post(`/api/v1/activity/${id}/undo`).then(() => {

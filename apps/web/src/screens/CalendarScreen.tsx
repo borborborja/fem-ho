@@ -11,7 +11,15 @@
  */
 
 import { useMemo, useState } from 'react';
-import { t } from '@fem-ho/contracts';
+import {
+  getLocale,
+  longDay,
+  monthName,
+  resolveWeekStart,
+  shortTime,
+  t,
+  weekdayNames,
+} from '@fem-ho/contracts';
 import { DayView, MonthView, WeekView, useIsMobile } from '@fem-ho/design-system/femho';
 import { api } from '../app/api.js';
 import { useSession, useSessionData } from '../app/session.js';
@@ -35,9 +43,16 @@ function addDays(date: Date, days: number): Date {
   return next;
 }
 
-/** El dilluns de la setmana d'una data. La setmana comença en dilluns (docs/00). */
-function mondayOf(date: Date): Date {
-  return addDays(date, -((date.getDay() + 6) % 7));
+/**
+ * El primer dia de la setmana d'una data.
+ *
+ * Amb quin dia comença ho decideix l'idioma i la preferència de la persona: ho resol
+ * `resolveWeekStart` a `@fem-ho/contracts`, que és **un sol lloc per a les dues apps**
+ * perquè si cadascú el calculés pel seu compte el calendari es desplaçaria un dia i no
+ * donaria cap error.
+ */
+function weekStartOf(date: Date, start: 0 | 1): Date {
+  return addDays(date, -((date.getDay() - start + 7) % 7));
 }
 
 export interface CalendarScreenProps {
@@ -53,19 +68,29 @@ export function CalendarScreen({ activeScopeIds, onOpenTask }: CalendarScreenPro
   const [selected, setSelected] = useState<string>(() => iso(new Date()));
   const [cursor, setCursor] = useState<Date>(() => new Date());
 
+  /**
+   * Amb quin dia comença la setmana.
+   *
+   * `auto` el treu de l'idioma —dilluns en català i castellà, diumenge en anglès— i la
+   * tria de la persona mana per damunt: el primer dia de la setmana no és només una
+   * convenció lingüística.
+   */
+  const locale = getLocale();
+  const start = resolveWeekStart(settings.week_start, locale);
+
   // La finestra que es demana depèn de la vista: el mes sencer per a la graella, la
   // setmana per a la setmanal, el dia per a la diària. Demanar sempre el mes seria
   // portar trenta dies de dades per pintar-ne un.
   const [from, to] = useMemo<[string, string]>(() => {
     if (mode === 'day') return [selected, selected];
     if (mode === 'week') {
-      const monday = mondayOf(new Date(`${selected}T12:00:00`));
-      return [iso(monday), iso(addDays(monday, 6))];
+      const first = weekStartOf(new Date(`${selected}T12:00:00`), start);
+      return [iso(first), iso(addDays(first, 6))];
     }
     const first = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
     const last = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0);
     return [iso(addDays(first, -7)), iso(addDays(last, 7))];
-  }, [mode, selected, cursor]);
+  }, [mode, selected, cursor, start]);
 
   const scopeQuery = activeScopeIds.length > 0 ? `&scope_ids=${activeScopeIds.join(',')}` : '';
   const events = useApi<EventOccurrence[]>(`/api/v1/events?from=${from}&to=${to}${scopeQuery}`);
@@ -120,8 +145,15 @@ export function CalendarScreen({ activeScopeIds, onOpenTask }: CalendarScreenPro
     return map;
   }, [occurrences, scopes]);
 
-  const months = t('calendar.months').split(',');
-  const weekdays = t('calendar.weekdays').split(',');
+  /**
+   * Els noms surten d'`Intl`, no del catàleg.
+   *
+   * Eren dues claus amb els dotze mesos separats per comes i indexats per posició: es
+   * trencaven amb qualsevol llengua que porti una coma dins d'un nom de mes, i ningú en
+   * validava la llargada. `Intl` porta CLDR, igual que `java.time` d'Android, o sigui
+   * que les dues apps diuen el mateix sense escriure-ho dues vegades.
+   */
+  const weekdays = weekdayNames(locale, start);
 
   const dayItems = occurrences
     .filter((occurrence) => occurrence.starts_at.slice(0, 10) === selected)
@@ -131,13 +163,13 @@ export function CalendarScreen({ activeScopeIds, onOpenTask }: CalendarScreenPro
       id: `${occurrence.event_id}@${occurrence.starts_at}`,
       title: occurrence.summary,
       color: colorOf(occurrence.scope_id),
-      time: occurrence.all_day ? undefined : occurrence.starts_at.slice(11, 16),
+      time: occurrence.all_day ? undefined : shortTime(locale, new Date(occurrence.starts_at)),
     }));
 
   const weekDays = useMemo(() => {
-    const monday = mondayOf(new Date(`${selected}T12:00:00`));
+    const first = weekStartOf(new Date(`${selected}T12:00:00`), start);
     return Array.from({ length: 7 }, (_, index) => {
-      const date = addDays(monday, index);
+      const date = addDays(first, index);
       const key = iso(date);
       return {
         iso: key,
@@ -175,10 +207,7 @@ export function CalendarScreen({ activeScopeIds, onOpenTask }: CalendarScreenPro
         .filter((scope) => activeScopeIds.includes(scope.id))
         .map((scope) => ({ id: scope.id, name: scope.name, color: `var(${scope.color})` }))}
       placement="rail"
-      dayLabel={t('calendar.selectedDay', {
-        day: String(Number(selected.slice(8, 10))),
-        month: months[Number(selected.slice(5, 7)) - 1] ?? '',
-      })}
+      dayLabel={longDay(locale, new Date(`${selected}T12:00:00`))}
       onOpen={onOpenTask}
       onChanged={inbox.reload}
       onMove={(taskId, status) => {
@@ -300,7 +329,8 @@ export function CalendarScreen({ activeScopeIds, onOpenTask }: CalendarScreenPro
           <MonthView
             year={cursor.getFullYear()}
             month={cursor.getMonth()}
-            monthLabel={months[cursor.getMonth()] ?? ''}
+            monthLabel={`${monthName(locale, cursor.getMonth())} ${String(cursor.getFullYear())}`}
+            weekStart={start}
             weekdayLabels={{
               days: weekdays,
               prevLabel: t('calendar.prevMonth'),
@@ -322,10 +352,14 @@ export function CalendarScreen({ activeScopeIds, onOpenTask }: CalendarScreenPro
           />
         ) : (
           <DayView
-            label={t('calendar.selectedDay', {
-              day: String(Number(selected.slice(8, 10))),
-              month: months[Number(selected.slice(5, 7)) - 1] ?? '',
-            })}
+            /**
+             * "6 d'agost", "6 de agosto", "August 6".
+             *
+             * Era una plantilla del catàleg, `"{day} de {month}"`, que no podia
+             * expressar ni l'elisió catalana —"1 d'agost" i no "1 de agost"— ni l'ordre
+             * anglès. `Intl` la resol i, de propina, hi posa l'apòstrof tipogràfic bo.
+             */
+            label={longDay(locale, new Date(`${selected}T12:00:00`))}
             items={dayItems}
             emptyLabel={t('calendar.empty.day')}
           />

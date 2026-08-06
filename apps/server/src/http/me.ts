@@ -75,6 +75,7 @@ export function registerMeRoutes(app: FastifyInstance): void {
           collapsed_groups: Array.isArray(input.collapsed_groups)
             ? input.collapsed_groups.filter((v): v is string => typeof v === 'string')
             : undefined,
+          week_start: typeof input.week_start === 'string' ? input.week_start : undefined,
           hidden_calendar_ids: Array.isArray(input.hidden_calendar_ids)
             ? input.hidden_calendar_ids.filter((v): v is string => typeof v === 'string')
             : undefined,

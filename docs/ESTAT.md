@@ -27,11 +27,11 @@ npm run test:proxy-matrix    # CalDAV i SSE darrere de nginx i Caddy
 | --- | --- |
 | Construcció des de zero | contracts → server → web |
 | Tipus · estil | 0 · 0 |
-| Proves unitàries · SQLite | 649 |
-| Proves unitàries · Postgres | 670 |
+| Proves unitàries · SQLite | 657 |
+| Proves unitàries · Postgres | 678 |
 | Comprovacions permanents | 12 de 12 |
-| Proves de navegador | 94, de les quals 42 contra el servidor real |
-| Proves de Kotlin | 40 |
+| Proves de navegador | 96, de les quals 44 contra el servidor real |
+| Proves de Kotlin | 44 |
 | APK de depuració | es construeix |
 | Primer arrencament amb Compose | 13 comprovacions |
 | Matriu de proxies | 24 comprovacions, nginx i Caddy |
@@ -246,14 +246,37 @@ que hi ha.
 | `i18n-keys-exist` | Una errata a `t('...')`, que compila i passa tots els altres linters |
 | `i18n-lint` | Ampliada amb `ñ`, `¿` i `¡`: sense, el castellà escrit a mà tornaria a colar-se fora del catàleg |
 
+### Dates i hores
+
+Segueixen l'idioma. Els noms dels mesos i dels dies **ja no són al catàleg**: els dona
+CLDR, per `Intl` a la web i `java.time` a Android, que porten la mateixa base. Eren dues
+claus amb els dotze mesos separats per comes i indexats per posició — es trencaven amb
+qualsevol llengua que porti una coma dins d'un nom de mes, i ningú en validava la
+llargada.
+
+| | ca | es | en |
+| --- | --- | --- | --- |
+| Comença la setmana | dilluns | dilluns | diumenge |
+| Hora | 24 h | 24 h | 12 h |
+| Un dia sencer | 6 d'agost | 6 de agosto | August 6 |
+
+El dia sencer era la plantilla `"{day} de {month}"`, que no podia expressar ni l'elisió
+catalana ni l'ordre anglès. `Intl` les resol i, de propina, hi posa l'apòstrof tipogràfic
+bo.
+
+**El primer dia de la setmana es pot canviar a mà**, a Ajustos ▸ General sota l'idioma:
+no és només una convenció lingüística, i qui treballa el cap de setmana el vol d'una
+manera i qui no, d'una altra, amb la mateixa llengua. La taula per idioma viu a
+`packages/contracts/src/dates.ts` i **està escrita, no derivada d'`Intl.Locale#weekInfo`**:
+Firefox no la porta, i el valor ha de ser idèntic a les dues apps. El port de Kotlin fixa
+la mateixa taula amb els mateixos casos.
+
 ### El que encara és en català
 
 Per fases, i cada una es pot desplegar sola:
 
 - **Els errors del servidor** (~225 punts, ~100 cadenes). Passaran a `type` + `params`, i
   cada app els pintarà en el seu idioma; el `detail` es queda en anglès per a màquines.
-- **Dates i hores segons l'idioma**: `Intl` per als mesos i els dies, i el primer dia de
-  la setmana per idioma. Avui és dilluns per constant a tot arreu.
 - **Notificacions** en l'idioma de qui les rep, llegint `users.locale`.
 - **MCP i CalDAV** a l'anglès: els llegeixen agents, DAVx⁵ i Thunderbird.
 

@@ -22,7 +22,12 @@ test('les tres vistes existeixen i es poden canviar', async ({ page }) => {
   await expect(page.locator('[data-testid="calendar-day"]')).toBeVisible();
 });
 
-test('AQUESTA és la de docs/00: la setmana comença en dilluns', async ({ page }) => {
+/**
+ * El primer dia de la setmana ja **no és una constant**: depèn de l'idioma i de la
+ * preferència. La pàgina de prova fixa el català i dilluns, que és el que docs/00
+ * demanava quan hi havia un sol idioma; la variació per idioma la prova `i18n.spec`.
+ */
+test('en català, la setmana comença en dilluns', async ({ page }) => {
   await page.goto('/proof/calendar');
 
   // Els encapçalaments, en ordre i en minúscula (docs/00).

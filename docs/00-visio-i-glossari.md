@@ -77,17 +77,25 @@ La columna **Codi** és el nom canònic. **Un concepte, un nom, arreu.** Si un d
 | Enllaç compartit | `share` | Accés públic a una tasca o llista senzilla. |
 | Registre d'activitat | `activity_log` | Historial append-only de tot canvi. |
 
-## Convencions de format (català)
+## Convencions de format
 
 Aquestes són les que ja fa servir el prototip. Mantingues-les.
 
-**Dies de la setmana, abreujats i en minúscula**, començant en dilluns: `dl` `dt` `dc` `dj` `dv` `ds` `dg`.
+> **Actualitzat l'agost del 2026.** Quan es va escriure això, Fem-ho tenia un sol idioma
+> i aquestes convencions eren constants del codi. Ara en té tres —català, anglès i
+> castellà— i **el que depèn de la llengua el dona CLDR**, a través d'`Intl` a la web i
+> de `java.time` a Android, que porten la mateixa base i per tant no divergeixen.
+> El que no depèn de la llengua es queda escrit aquí.
 
-**Mesos en minúscula**: gener, febrer, març, abril, maig, juny, juliol, agost, setembre, octubre, novembre, desembre. Amb majúscula només si obren frase o etiqueta ("Agost 2026").
+**Dies de la setmana, abreujats i en minúscula**: en català `dl` `dt` `dc` `dj` `dv` `ds` `dg`. Els noms els dona CLDR; el que hi posa el producte és la minúscula i que no portin punt final, que la capçalera d'una columna de dues lletres no en vol.
 
-**La setmana comença en dilluns.** Sempre.
+**Mesos en minúscula** on la llengua ho faci: en català i castellà sí, en anglès no ("August"). Amb majúscula només si obren frase o etiqueta.
 
-**Hores en 24 h**, amb dos punts: `17:30`. Mai AM/PM.
+**La setmana comença on digui la llengua**: dilluns en català i castellà, diumenge en anglès. La taula viu a `packages/contracts/src/dates.ts` i **està escrita, no derivada**: ha de donar el mateix a la web i a Android, i si cadascú l'endevinés el calendari es desplaçaria un dia sense donar cap error.
+
+I **es pot canviar a mà** a Ajustos ▸ General, just sota l'idioma. El primer dia de la setmana no és només una convenció lingüística: qui treballa el cap de setmana el vol d'una manera i qui no, d'una altra, i tots dos poden tenir la mateixa llengua.
+
+**Hores en el format de la llengua**: 24 h amb dos punts en català i castellà (`17:30`), 12 h amb AM/PM en anglès (`5:30 PM`).
 
 **El separador és el punt volat `·`**, amb espai a banda i banda: "Feina · Client Salt", "Delegada · fa 5 min". És el que fa servir el design system Plou i no s'ha de substituir per guions ni barres.
 

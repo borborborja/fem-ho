@@ -35,6 +35,19 @@ export {
   setLocale,
   t,
 } from './i18n.js';
+export {
+  WEEK_START_CHOICES,
+  dateTime,
+  longDay,
+  monthName,
+  resolveWeekStart,
+  shortTime,
+  startOfWeek,
+  weekIndex,
+  weekStart,
+  weekdayNames,
+} from './dates.js';
+export type { WeekStart, WeekStartChoice } from './dates.js';
 export { parseQuickAdd, revertToken } from './quickadd.js';
 export type {
   QuickAddContext,

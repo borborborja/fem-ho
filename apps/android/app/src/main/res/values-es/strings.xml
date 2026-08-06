@@ -63,16 +63,13 @@
     <string name="calendar_empty_day">Sin eventos ni tareas este día.</string>
     <string name="calendar_empty_week">Sin nada</string>
     <string name="calendar_month">Mensual</string>
-    <string name="calendar_months">enero,febrero,marzo,abril,mayo,junio,julio,agosto,septiembre,octubre,noviembre,diciembre</string>
     <string name="calendar_nextmonth">Mes siguiente</string>
     <string name="calendar_nodate">SIN DÍA</string>
     <string name="calendar_prevmonth">Mes anterior</string>
-    <string name="calendar_selectedday">{day} de {month}</string>
     <string name="calendar_sources">Fuentes</string>
     <string name="calendar_sources_hide">Ocultar «{name}» del calendario</string>
     <string name="calendar_sources_show">Ver «{name}» en el calendario</string>
     <string name="calendar_week">Semanal</string>
-    <string name="calendar_weekdays">lu,ma,mi,ju,vi,sá,do</string>
     <string name="card_add">Añadir subtarea o lista</string>
     <string name="card_addplaceholder">Nueva subtarea… o #Lista elemento</string>
     <string name="card_lists_collapsed">▸ Listas ({count})</string>
@@ -234,6 +231,8 @@
     <string name="settings_timezone">Zona horaria</string>
     <string name="settings_title">Ajustes</string>
     <string name="settings_users">Miembros del hogar</string>
+    <string name="settings_weekstart">Primer día de la semana</string>
+    <string name="settings_weekstart_auto">Según el idioma ({day})</string>
     <string name="settings_wipe">Vaciar instancia</string>
     <string name="settings_wipeconfirm">Escribe «{name}» para confirmar</string>
     <string name="settings_wipewarning">Esto borra todas las tareas, eventos, listas y el historial. Las cuentas se quedan.</string>

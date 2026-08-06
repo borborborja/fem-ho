@@ -63,16 +63,13 @@
     <string name="calendar_empty_day">No events or tasks on this day.</string>
     <string name="calendar_empty_week">Nothing</string>
     <string name="calendar_month">Month</string>
-    <string name="calendar_months">January,February,March,April,May,June,July,August,September,October,November,December</string>
     <string name="calendar_nextmonth">Next month</string>
     <string name="calendar_nodate">NO DATE</string>
     <string name="calendar_prevmonth">Previous month</string>
-    <string name="calendar_selectedday">{day} {month}</string>
     <string name="calendar_sources">Sources</string>
     <string name="calendar_sources_hide">Hide “{name}” from the calendar</string>
     <string name="calendar_sources_show">Show “{name}” in the calendar</string>
     <string name="calendar_week">Week</string>
-    <string name="calendar_weekdays">Mo,Tu,We,Th,Fr,Sa,Su</string>
     <string name="card_add">Add a subtask or a list</string>
     <string name="card_addplaceholder">New subtask… or #List item</string>
     <string name="card_lists_collapsed">▸ Lists ({count})</string>
@@ -234,6 +231,8 @@
     <string name="settings_timezone">Time zone</string>
     <string name="settings_title">Settings</string>
     <string name="settings_users">Household members</string>
+    <string name="settings_weekstart">First day of the week</string>
+    <string name="settings_weekstart_auto">Follow the language ({day})</string>
     <string name="settings_wipe">Wipe the instance</string>
     <string name="settings_wipeconfirm">Type “{name}” to confirm</string>
     <string name="settings_wipewarning">This deletes every task, event, list and the history. The accounts stay.</string>

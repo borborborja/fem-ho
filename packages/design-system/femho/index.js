@@ -16,7 +16,7 @@ export { KanbanColumn, KanbanGroup, ScopeGroupHeader } from './KanbanColumn.jsx'
 export { EmptyState } from './EmptyState.jsx';
 export { ScopeChip } from './ScopeChip.jsx';
 export { QuickAddInput } from './QuickAddInput.jsx';
-export { MonthView, WeekView, DayView, monthCells, mondayIndex } from './CalendarGrid.jsx';
+export { MonthView, WeekView, DayView, monthCells, weekIndex } from './CalendarGrid.jsx';
 export { AiModeBadge, UnseenAiDot } from './AiModeBadge.jsx';
 export { ActivityTimeline } from './ActivityTimeline.jsx';
 export { ChecklistRow } from './ChecklistRow.jsx';

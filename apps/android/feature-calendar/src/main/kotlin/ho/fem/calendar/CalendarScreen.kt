@@ -27,6 +27,7 @@ import ho.fem.designsystem.EmptyState
 import ho.fem.designsystem.Femho
 import ho.fem.designsystem.FemhoShape
 import ho.fem.designsystem.FemhoText
+import ho.fem.model.Dates
 import ho.fem.model.EventOccurrence
 import java.time.LocalDate
 
@@ -37,9 +38,11 @@ import java.time.LocalDate
  * telèfon, set columnes donen columnes de 50px on no hi cap cap títol, i el que la gent
  * fa al mòbil és recórrer, no comparar.
  *
- * La graella mensual sí que és graella, i **comença en dilluns** com a tot arreu
- * (docs/00): `(getDay()+6)%7` a la web, `dayOfWeek.value - 1` aquí, que és el mateix
- * perquè `DayOfWeek.MONDAY.value` és 1.
+ * La graella mensual sí que és graella, i **amb quin dia comença ho decideix l'idioma i
+ * la preferència de la persona**, no una constant. El valor arriba per `weekStart`
+ * (0 diumenge, 1 dilluns) i el resol `resolveWeekStart` de `:core-model`, que és el
+ * mateix codi que fa servir la web: si cadascú el calculés pel seu compte, el calendari
+ * es desplaçaria un dia i **no donaria cap error**.
  */
 
 data class CalendarLabels(
@@ -49,10 +52,18 @@ data class CalendarLabels(
     val emptyWeek: String,
 )
 
+/**
+ * L'índex d'un dia dins de la setmana, comptant des del primer dia que toqui.
+ *
+ * `DayOfWeek.MONDAY.value` és 1 i `Date#getDay()` de la web posa diumenge a 0: aquesta
+ * conversió és la que fa que les dues apps comptin igual.
+ */
+fun weekIndex(date: LocalDate, weekStart: Int): Int = (date.dayOfWeek.value % 7 - weekStart + 7) % 7
+
 /** Les cel·les d'un mes, sempre en setmanes senceres. */
-fun monthCells(year: Int, month: Int): List<LocalDate?> {
+fun monthCells(year: Int, month: Int, weekStart: Int = 1): List<LocalDate?> {
     val first = LocalDate.of(year, month, 1)
-    val lead = first.dayOfWeek.value - 1
+    val lead = weekIndex(first, weekStart)
     val days = first.lengthOfMonth()
     val total = ((lead + days + 6) / 7) * 7
 
@@ -72,6 +83,8 @@ fun MonthView(
     labels: CalendarLabels,
     onSelect: (LocalDate) -> Unit,
     modifier: Modifier = Modifier,
+    /** 0 diumenge, 1 dilluns. El resol `Dates.resolveWeekStart`. */
+    weekStart: Int = 1,
 ) {
     Column(
         modifier = modifier.fillMaxWidth().padding(12.dp).testTag("calendar-month"),
@@ -94,7 +107,7 @@ fun MonthView(
             }
         }
 
-        monthCells(year, month).chunked(7).forEach { week ->
+        monthCells(year, month, weekStart).chunked(7).forEach { week ->
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -168,6 +181,7 @@ fun WeekList(
     labels: CalendarLabels,
     onSelect: (LocalDate) -> Unit,
     modifier: Modifier = Modifier,
+    weekStart: Int = 1,
 ) {
     LazyColumn(
         modifier = modifier.fillMaxWidth().testTag("calendar-week"),
@@ -184,7 +198,7 @@ fun WeekList(
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Text(
-                    text = "${labels.weekdays.getOrElse(date.dayOfWeek.value - 1) { "" }} ${date.dayOfMonth}",
+                    text = "${labels.weekdays.getOrElse(weekIndex(date, weekStart)) { "" }} ${date.dayOfMonth}",
                     color = Femho.colors.ink,
                     fontWeight = FontWeight.Bold,
                 )

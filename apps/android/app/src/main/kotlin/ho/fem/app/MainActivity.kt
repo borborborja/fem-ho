@@ -62,6 +62,7 @@ import ho.fem.tasks.QuickAddField
 import ho.fem.tasks.TaskDetail
 import ho.fem.tasks.TaskDetailLabels
 import ho.fem.model.AiMode
+import ho.fem.model.Dates
 import ho.fem.model.QuickAddContext
 import ho.fem.model.QuickAddPerson
 import ho.fem.model.QuickAddProject
@@ -549,9 +550,22 @@ private fun CalendarHost(model: AppViewModel, onSettings: () -> Unit, onBoard: (
         )
     }
 
+    /**
+     * L'idioma i el primer dia de la setmana d'aquesta pantalla.
+     *
+     * L'idioma surt de la configuració efectiva —que ja és la del perfil si Android 13+
+     * l'ha aplicada— i el primer dia, de `Dates`, el mateix codi que la web.
+     */
+    val appLocale = androidx.compose.ui.platform.LocalConfiguration.current.locales[0]
+        ?.language ?: "ca"
+    val weekStart = Dates.weekStart(appLocale)
+
     val labels = CalendarLabels(
-        weekdays = stringResource(R.string.calendar_weekdays).split(","),
-        months = stringResource(R.string.calendar_months).split(","),
+        // Els noms surten del CLDR i no del catàleg: `java.time` i `Intl` porten la
+        // mateixa base, o sigui que les dues apps diuen el mateix sense escriure-ho dues
+        // vegades. Abans eren dues claus amb els dotze mesos separats per comes.
+        weekdays = Dates.weekdayNames(appLocale, weekStart),
+        months = (1..12).map { Dates.monthName(appLocale, it) },
         emptyDay = stringResource(R.string.calendar_empty_day),
         emptyWeek = stringResource(R.string.calendar_empty_week),
     )
@@ -611,6 +625,7 @@ private fun CalendarHost(model: AppViewModel, onSettings: () -> Unit, onBoard: (
                             list.mapNotNull { colors[it.scopeId] }.distinct().take(3)
                         },
                     labels = labels,
+                    weekStart = weekStart,
                     onSelect = { selected = it },
                 )
 
@@ -623,12 +638,12 @@ private fun CalendarHost(model: AppViewModel, onSettings: () -> Unit, onBoard: (
             }
 
             CalendarMode.WEEK -> {
-                // La setmana comença en DILLUNS (docs/00): `dayOfWeek.value` és 1 per a
-                // dilluns, o sigui que se'n resten els dies que han passat des d'ell.
-                val monday = selected.minusDays((selected.dayOfWeek.value - 1).toLong())
+                // Amb quin dia comença la setmana ho decideix l'idioma: `Dates` és el
+                // mateix codi que fa servir la web, i per això no divergeixen.
+                val first = selected.minusDays(Dates.weekIndex(selected, weekStart).toLong())
                 WeekList(
                     days = (0L..6L).map { offset ->
-                        val day = monday.plusDays(offset)
+                        val day = first.plusDays(offset)
                         day to events.filter { it.startsAt.startsWith(day.toString()) }
                     },
                     labels = labels,
@@ -637,6 +652,7 @@ private fun CalendarHost(model: AppViewModel, onSettings: () -> Unit, onBoard: (
                         mode = CalendarMode.DAY
                     },
                     modifier = Modifier.weight(1f).padding(horizontal = 12.dp),
+                    weekStart = weekStart,
                 )
             }
 

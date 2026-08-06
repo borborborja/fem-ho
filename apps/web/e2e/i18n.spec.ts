@@ -127,3 +127,59 @@ test.describe('un idioma que no tenim', () => {
     await expect(page.locator('body')).not.toContainText('login.submit');
   });
 });
+
+/**
+ * El calendari, per idioma.
+ *
+ * En anglès la setmana comença en diumenge i l'hora es veu de 12 h; en català i en
+ * castellà, dilluns i 24 h. Fins ara dilluns era **una constant en tres llocs** i
+ * l'hora un tall de cadena: dues coses que no es podien adaptar a res.
+ */
+test.describe('el calendari segueix l\'idioma', () => {
+  test.use({ locale: 'en-GB' });
+
+  test('en anglès, la setmana comença en diumenge', async ({ page }) => {
+    await enter(page);
+    await page.goto('/settings');
+    await page.locator('[data-testid="language-chips-en"]').click();
+    await page.goto('/calendar');
+
+    const headers = page.locator('[data-testid="calendar-month"] > div:nth-child(2) > div');
+    await expect(headers.first()).toHaveText('sun');
+    // I els mesos surten de CLDR, no de dotze noms separats per comes al catàleg.
+    await expect(page.locator('[data-testid="calendar-month"]')).toContainText(/[A-Z][a-z]+ 20\d\d/u);
+  });
+});
+
+test('i la tria manual mana per damunt de l\'idioma', async ({ page }) => {
+  await enter(page);
+  await page.goto('/settings');
+
+  // Segueix en anglès de la prova anterior: diumenge per idioma.
+  await page.goto('/calendar');
+  await expect(
+    page.locator('[data-testid="calendar-month"] > div:nth-child(2) > div').first(),
+  ).toHaveText('sun');
+
+  /**
+   * El primer dia de la setmana **no és només una convenció lingüística**: qui treballa
+   * el cap de setmana el vol d'una manera i qui no, d'una altra, amb la mateixa llengua.
+   */
+  await page.goto('/settings');
+  await page.locator('[data-testid="week-start-monday"]').click();
+  await page.goto('/calendar');
+  await expect(
+    page.locator('[data-testid="calendar-month"] > div:nth-child(2) > div').first(),
+  ).toHaveText('mon');
+
+  // I sobreviu a una recàrrega: és una preferència, no un estat de pantalla.
+  await page.reload();
+  await expect(
+    page.locator('[data-testid="calendar-month"] > div:nth-child(2) > div').first(),
+  ).toHaveText('mon');
+
+  // Es deixa com estava per no condicionar les proves que vinguin després.
+  await page.goto('/settings');
+  await page.locator('[data-testid="week-start-auto"]').click();
+  await page.locator('[data-testid="language-chips-ca"]').click();
+});

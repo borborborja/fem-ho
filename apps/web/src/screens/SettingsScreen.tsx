@@ -10,7 +10,7 @@
  */
 
 import { useState } from 'react';
-import { t } from '@fem-ho/contracts';
+import { dateTime, getLocale, resolveWeekStart, t, weekdayNames } from '@fem-ho/contracts';
 import { v7 as uuidv7 } from 'uuid';
 import { EmptyState } from '@fem-ho/design-system/femho';
 import { api } from '../app/api.js';
@@ -230,6 +230,7 @@ function Toggle({
 
 function GeneralTab() {
   const { profile, settings } = useSessionData();
+  const weekStart = resolveWeekStart(settings.week_start, getLocale());
   const { updateProfile, updateSettings } = useSession();
 
   return (
@@ -258,6 +259,31 @@ function GeneralTab() {
             { key: 'es' as const, label: 'Español' }, // check-ignore · veure a dalt
           ]}
           onChange={(locale) => void updateProfile({ locale })}
+        />
+      </Group>
+
+      {/*
+        El primer dia de la setmana, just sota l'idioma.
+        `auto` el treu de la llengua —dilluns en català i castellà, diumenge en anglès—
+        i aquí es pot manar per damunt: **no és només una convenció lingüística**, qui
+        treballa el cap de setmana el vol d'una manera i qui no, d'una altra, i tots dos
+        poden tenir la mateixa llengua.
+      */}
+      <Group title={t('settings.weekStart')}>
+        <Chips
+          testId="week-start"
+          value={settings.week_start ?? 'auto'}
+          options={[
+            {
+              key: 'auto' as const,
+              label: t('settings.weekStart.auto', {
+                day: weekdayNames(getLocale(), weekStart)[0] ?? '',
+              }),
+            },
+            { key: 'monday' as const, label: weekdayNames(getLocale(), 1)[0] ?? '' },
+            { key: 'sunday' as const, label: weekdayNames(getLocale(), 0)[0] ?? '' },
+          ]}
+          onChange={(value) => void updateSettings({ week_start: value })}
         />
       </Group>
 
@@ -583,7 +609,7 @@ function SourcesForScope({
                   : source.last_refreshed_at == null
                     ? t('settings.sources.never')
                     : t('settings.sources.refreshed', {
-                        when: new Date(source.last_refreshed_at).toLocaleString('ca'),
+                        when: dateTime(getLocale(), new Date(source.last_refreshed_at)),
                       })}
               </div>
             </div>

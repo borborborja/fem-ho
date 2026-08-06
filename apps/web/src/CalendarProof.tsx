@@ -7,13 +7,14 @@
  */
 
 import { useState } from 'react';
-import { t } from '@fem-ho/contracts';
+import { monthName, t, weekdayNames } from '@fem-ho/contracts';
 import { DayView, MonthView, WeekView } from '@fem-ho/design-system/femho';
 import { InboxRail } from './board/InboxRail.js';
 import { SAMPLE_SCOPES, SAMPLE_TASKS } from './board/fixtures.js';
 
-const WEEKDAYS = t('calendar.weekdays').split(',');
-const MONTHS = t('calendar.months').split(',');
+// La pàgina de prova fixa el català i dilluns: comprova la graella, no l'idioma.
+const WEEK_START = 1;
+const WEEKDAYS = weekdayNames('ca', WEEK_START);
 
 const SCOPE_COLOR: Record<string, string> = {
   personal: 'var(--plou-blue)',
@@ -97,7 +98,7 @@ export function CalendarProof() {
               <MonthView
                 year={year}
                 month={month}
-                monthLabel={`${MONTHS[month] ?? ''} ${year}`}
+                monthLabel={`${monthName('ca', month)} ${year}`}
                 weekdayLabels={{
                   days: WEEKDAYS,
                   prevLabel: t('calendar.prevMonth'),

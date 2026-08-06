@@ -7,19 +7,22 @@ import React from 'react';
  * separació al mes, columnes de 160px mínim i radi 16 a la setmana, files amb punt de
  * 9px al dia.
  *
- * LA SETMANA COMENÇA EN DILLUNS. SEMPRE.
- * --------------------------------------
- * docs/00 ho diu sense matisos, i el prototip ho implementa amb `(getDay() + 6) % 7`:
- * `getDay()` torna 0 per a diumenge, i aquesta rotació el mou al final. És una línia
- * que si es perd, el calendari es desplaça un dia i **no dona cap error**.
+ * AMB QUIN DIA COMENÇA LA SETMANA
+ * -------------------------------
+ * Ho decideix qui munta el calendari i arriba per `weekStart` (0 diumenge, 1 dilluns).
+ * Fins a l'agost del 2026 era dilluns per constant, perquè hi havia un sol idioma;
+ * ara depèn de la llengua i de la preferència de la persona, i el valor el resol
+ * `resolveWeekStart` a `packages/contracts/src/dates.ts` —un sol lloc per a les dues
+ * apps, perquè **si cadascú el calculés pel seu compte el calendari es desplaçaria un
+ * dia i no donaria cap error**.
  *
- * Els noms dels dies i dels mesos arriben com a props des del catàleg (regla 3). Un
- * component del design system no pot portar català a dins.
+ * Els noms dels dies i dels mesos arriben com a props. Un component del design system
+ * no en sap ni d'idiomes ni de catàlegs.
  */
 
-/** L'índex del dia dins d'una setmana que comença en dilluns. */
-export function mondayIndex(date) {
-  return (date.getDay() + 6) % 7;
+/** L'índex del dia dins de la setmana, comptant des del primer dia que toqui. */
+export function weekIndex(date, weekStart = 1) {
+  return (date.getDay() - weekStart + 7) % 7;
 }
 
 /**
@@ -29,9 +32,9 @@ export function mondayIndex(date) {
  * `opacity: 0`, o sigui que ocupen lloc i no es veuen. Treure'ls trencaria l'alineació
  * de les columnes.
  */
-export function monthCells(year, month) {
+export function monthCells(year, month, weekStart = 1) {
   const first = new Date(year, month, 1);
-  const offset = mondayIndex(first);
+  const offset = weekIndex(first, weekStart);
   const cells = [];
 
   for (let i = 0; i < offset; i += 1) {
@@ -63,11 +66,12 @@ export function MonthView({
   selectedDate,
   today,
   dotsByDate = {},
+  weekStart = 1,
   onSelect,
   onPrev,
   onNext,
 }) {
-  const cells = monthCells(year, month);
+  const cells = monthCells(year, month, weekStart);
 
   return (
     <div

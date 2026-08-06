@@ -10,7 +10,8 @@
  */
 
 import { useState } from 'react';
-import { t } from '@fem-ho/contracts';
+import { getLocale, monthName, resolveWeekStart, t, weekdayNames } from '@fem-ho/contracts';
+import { useSessionData } from '../app/session.js';
 import { MonthView } from '@fem-ho/design-system/femho';
 
 export interface DoneHeaderProps {
@@ -28,6 +29,8 @@ function isToday(iso: string | null): boolean {
 }
 
 export function DoneHeader({ clearedAt, onClear, onShowAll, onPickDay }: DoneHeaderProps) {
+  // El mini-calendari segueix la mateixa regla que el gran: idioma i preferència.
+  const weekStart = resolveWeekStart(useSessionData().settings.week_start, getLocale());
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [month, setMonth] = useState(() => new Date());
 
@@ -76,9 +79,10 @@ export function DoneHeader({ clearedAt, onClear, onShowAll, onPickDay }: DoneHea
           <MonthView
             year={month.getFullYear()}
             month={month.getMonth()}
-            monthLabel={t('calendar.months').split(',')[month.getMonth()] ?? ''}
+            monthLabel={monthName(getLocale(), month.getMonth())}
+            weekStart={weekStart}
             weekdayLabels={{
-              days: t('calendar.weekdays').split(','),
+              days: weekdayNames(getLocale(), weekStart),
               prevLabel: t('calendar.prevMonth'),
               nextLabel: t('calendar.nextMonth'),
             }}

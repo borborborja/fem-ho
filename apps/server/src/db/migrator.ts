@@ -24,6 +24,7 @@ import * as instanceSettings from './migrations/003-instance-settings.js';
 import * as aiUser from './migrations/004-ai-user.js';
 import * as userInvites from './migrations/005-user-invites.js';
 import * as calendarSources from './migrations/006-calendar-sources.js';
+import * as weekStart from './migrations/007-week-start.js';
 
 export interface Migration {
   name: string;
@@ -42,6 +43,7 @@ export const MIGRATIONS: Migration[] = [
   { name: '004-ai-user', up: aiUser.up, down: aiUser.down },
   { name: '005-user-invites', up: userInvites.up, down: userInvites.down },
   { name: '006-calendar-sources', up: calendarSources.up, down: calendarSources.down },
+  { name: '007-week-start', up: weekStart.up, down: weekStart.down },
 ];
 
 const MIGRATIONS_TABLE = 'schema_migrations';

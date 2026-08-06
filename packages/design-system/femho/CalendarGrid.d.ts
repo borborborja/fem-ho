@@ -1,7 +1,8 @@
 import type * as React from 'react';
 
 /** L'índex del dia dins d'una setmana que comença en DILLUNS (docs/00). */
-export declare function mondayIndex(date: Date): number;
+/** L'índex del dia dins de la setmana, comptant des del primer dia que toqui. */
+export declare function weekIndex(date: Date, weekStart?: 0 | 1): number;
 
 export interface MonthCell {
   date: Date | null;
@@ -27,6 +28,13 @@ export interface MonthViewProps {
   today?: string | undefined;
   /** Fins a 3 punts per dia, amb els colors dels àmbits que hi tenen res. */
   dotsByDate?: Record<string, string[]> | undefined;
+  /**
+   * Amb quin dia comença la setmana: 0 diumenge, 1 dilluns.
+   *
+   * El resol `resolveWeekStart` de `@fem-ho/contracts` a partir de l'idioma i de la
+   * preferència. Aquí arriba ja decidit: el component no sap d'idiomes.
+   */
+  weekStart?: 0 | 1 | undefined;
   onSelect?: ((iso: string) => void) | undefined;
   onPrev?: (() => void) | undefined;
   onNext?: (() => void) | undefined;
