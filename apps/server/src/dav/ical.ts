@@ -12,6 +12,7 @@
 
 import ICAL from 'ical.js';
 import { sql } from 'kysely';
+import { isTrue } from '../db/bool.js';
 import type { MigrationDb } from '../db/migration-db.js';
 
 export const PRODID = '-//Fem-ho//CalDAV//CA';
@@ -249,7 +250,7 @@ async function renderSubtasks(
     const child = new ICAL.Component('vtodo');
     // `subtasks` guarda si està feta, no quan. El `COMPLETED` d'iCalendar surt de
     // l'últim canvi, que és el més fidel que es pot dir sense inventar-se una data.
-    const done = row.done === true || row.done === 1;
+    const done = isTrue(row.done);
     child.updatePropertyWithValue('uid', row.id);
     child.updatePropertyWithValue('summary', row.title);
     child.updatePropertyWithValue('status', done ? 'COMPLETED' : 'NEEDS-ACTION');
@@ -299,7 +300,7 @@ async function renderChecklist(db: MigrationDb, taskId: string): Promise<string 
       title: list.name,
       items: items.rows
         .filter((item) => item.checklist_id === list.id)
-        .map((item) => ({ text: item.text, done: item.done === true || item.done === 1 })),
+        .map((item) => ({ text: item.text, done: isTrue(item.done) })),
     })),
   );
 }

@@ -154,7 +154,9 @@ describe('crear llistes', () => {
       text: '3 pantalons',
     });
     expect(res.statusCode).toBe(201);
-    expect(res.json<{ done: number }>().done).toBe(0);
+    // Un booleà de veritat, no el 0/1 de la fila: el mateix camp ha de sortir igual
+    // per aquí i per `GET /tasks/{id}/checklists` (docs/05 §3).
+    expect(res.json<{ done: boolean }>().done).toBe(false);
   });
 
   it('una llista sense nom es rebutja', async () => {

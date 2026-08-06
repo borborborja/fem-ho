@@ -17,6 +17,7 @@
 import { sql } from 'kysely';
 import { v7 as uuidv7 } from 'uuid';
 import { generatePosition } from '@fem-ho/contracts';
+import { dbBool } from '../db/bool.js';
 import { auditedTransaction, type AuditContext } from '../audit/audited-transaction.js';
 import { assertScopeAccess } from '../services/scopes.js';
 import { findCollection, type DavCollection } from './collections.js';
@@ -273,7 +274,7 @@ async function syncSubtasks(
 
     // `subtasks` només guarda si està feta, no quan: el `COMPLETED` del component es
     // llegeix com un booleà.
-    const fet = filla.status === 'done' || filla.completedAt !== null ? 1 : 0;
+    const fet = dbBool(filla.status === 'done' || filla.completedAt !== null);
     const ja = existents.rows.some((existent) => existent.id === filla.uid);
     if (ja) {
       await sql`
@@ -328,7 +329,7 @@ async function writeEvent(
                           ends_at, all_day, timezone, status, rrule, sequence, etag, raw_ical,
                           created_at, updated_at)
       VALUES (${eventId}, ${collection.calendarId}, ${uid}, ${mestre.summary}, ${mestre.description},
-              ${mestre.location}, ${mestre.startsAt}, ${mestre.endsAt}, ${mestre.allDay ? 1 : 0},
+              ${mestre.location}, ${mestre.startsAt}, ${mestre.endsAt}, ${dbBool(mestre.allDay)},
               ${mestre.timezone}, ${mestre.status ?? 'CONFIRMED'}, ${mestre.rrule},
               ${mestre.sequence}, ${etag}, ${raw}, ${ctx.now}, ${ctx.now})
     `.execute(ctx.tx);
@@ -346,7 +347,7 @@ async function writeEvent(
   await sql`
     UPDATE events SET summary = ${mestre.summary}, description = ${mestre.description},
                       location = ${mestre.location}, starts_at = ${mestre.startsAt},
-                      ends_at = ${mestre.endsAt}, all_day = ${mestre.allDay ? 1 : 0},
+                      ends_at = ${mestre.endsAt}, all_day = ${dbBool(mestre.allDay)},
                       timezone = ${mestre.timezone}, status = ${mestre.status ?? 'CONFIRMED'},
                       rrule = ${mestre.rrule}, sequence = ${mestre.sequence},
                       etag = ${etag}, raw_ical = ${raw},

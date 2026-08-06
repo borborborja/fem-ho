@@ -18,6 +18,7 @@
 import { createHmac, randomBytes } from 'node:crypto';
 import { sql } from 'kysely';
 import { v7 as uuidv7 } from 'uuid';
+import { dbBool } from '../db/bool.js';
 import type { AuditContext } from '../audit/audited-transaction.js';
 import { DUMMY_HASH, hashPassword, verifyPassword } from '../auth/password.js';
 import type { MigrationDb } from '../db/migration-db.js';
@@ -184,7 +185,7 @@ export async function createShare(
     VALUES (${id}, ${input.task_id ?? null}, ${input.checklist_id ?? null}, ${principal.userId},
             ${tokenHmac(token, pepper)}, 1,
             ${hasPassword ? await hashSharePassword(input.password!) : null},
-            ${input.require_name === true ? 1 : 0}, ${permission},
+            ${dbBool(input.require_name === true)}, ${permission},
             ${input.expires_at ?? null}, ${input.max_views ?? null}, ${ctx.now})
   `.execute(ctx.tx);
 

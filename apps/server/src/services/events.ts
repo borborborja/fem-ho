@@ -11,6 +11,7 @@
 
 import { sql } from 'kysely';
 import { v7 as uuidv7 } from 'uuid';
+import { dbBool } from '../db/bool.js';
 import type { AuditContext } from '../audit/audited-transaction.js';
 import type { MigrationDb } from '../db/migration-db.js';
 import { expandOccurrences, splitSeries } from '../events/recurrence.js';
@@ -306,7 +307,7 @@ export async function createEvent(
                         sequence, created_at, updated_at, version)
     VALUES (${id}, ${input.calendar_id}, ${id}, ${input.summary}, ${input.description ?? null},
             ${input.location ?? null}, ${input.starts_at}, ${input.ends_at ?? null},
-            ${input.all_day === true ? 1 : 0}, ${input.timezone ?? null},
+            ${dbBool(input.all_day === true)}, ${input.timezone ?? null},
             ${input.status ?? 'CONFIRMED'}, ${input.transparency ?? 'OPAQUE'},
             ${input.rrule ?? null}, 0, ${ctx.now}, ${ctx.now}, 1)
   `.execute(ctx.tx);

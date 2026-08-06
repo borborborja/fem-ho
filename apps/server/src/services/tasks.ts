@@ -10,6 +10,7 @@
 import { sql } from 'kysely';
 import { v7 as uuidv7 } from 'uuid';
 import { TASK_STATUSES, generatePosition, type TaskStatus } from '@fem-ho/contracts';
+import { dbBool } from '../db/bool.js';
 import type { AuditContext } from '../audit/audited-transaction.js';
 import type { MigrationDb } from '../db/migration-db.js';
 import { PolicyError, missingCapability, notFound } from '../policy/errors.js';
@@ -467,8 +468,8 @@ export async function completeTask(
   // Les subtasques cauen amb la tasca. La cascada AMUNT —marcar l'últim ítem d'una
   // llista marca la subtasca i la tasca— arriba a M8, que és quan hi ha llistes.
   await sql`
-    UPDATE subtasks SET done = 1, updated_at = ${ctx.now}, version = version + 1
-    WHERE task_id = ${id} AND done = 0 AND deleted_at IS NULL
+    UPDATE subtasks SET done = ${dbBool(true)}, updated_at = ${ctx.now}, version = version + 1
+    WHERE task_id = ${id} AND done = ${dbBool(false)} AND deleted_at IS NULL
   `.execute(ctx.tx);
 
   ctx.record({

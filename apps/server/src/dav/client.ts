@@ -11,6 +11,7 @@
 import ICAL from 'ical.js';
 import { sql } from 'kysely';
 import { v7 as uuidv7 } from 'uuid';
+import { dbBool, isTrue } from '../db/bool.js';
 import { auditedTransaction, type AuditContext } from '../audit/audited-transaction.js';
 import { open } from '../crypto/secret-box.js';
 import type { MigrationDb } from '../db/migration-db.js';
@@ -177,7 +178,7 @@ export async function refreshSubscription(
     throw new Error(`L'origen ha respost ${String(response.status)}.`);
   }
 
-  const strip = subscription.strip_alarms === true || subscription.strip_alarms === 1;
+  const strip = isTrue(subscription.strip_alarms);
   const components = extractEvents(response.body, { stripAlarms: strip });
 
   return auditedTransaction(
@@ -219,14 +220,14 @@ async function applyFetched(
         INSERT INTO events (id, calendar_id, uid, summary, starts_at, ends_at, all_day,
                             timezone, etag, raw_ical, created_at, updated_at)
         VALUES (${uuidv7()}, ${subscription.id}, ${component.uid}, ${component.summary},
-                ${component.startsAt}, ${component.endsAt}, ${component.allDay ? 1 : 0},
+                ${component.startsAt}, ${component.endsAt}, ${dbBool(component.allDay)},
                 ${component.timezone}, ${component.etag}, ${component.raw}, ${ctx.now}, ${ctx.now})
       `.execute(ctx.tx);
       result.created += 1;
     } else {
       await sql`
         UPDATE events SET summary = ${component.summary}, starts_at = ${component.startsAt},
-                          ends_at = ${component.endsAt}, all_day = ${component.allDay ? 1 : 0},
+                          ends_at = ${component.endsAt}, all_day = ${dbBool(component.allDay)},
                           timezone = ${component.timezone}, etag = ${component.etag},
                           raw_ical = ${component.raw}, updated_at = ${ctx.now},
                           version = version + 1

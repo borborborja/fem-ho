@@ -27,6 +27,7 @@
 import { sql } from 'kysely';
 import { v7 as uuidv7 } from 'uuid';
 import { generatePosition } from '@fem-ho/contracts';
+import { dbBool, isTrue } from '../db/bool.js';
 import type { AuditContext } from '../audit/audited-transaction.js';
 import type { MigrationDb } from '../db/migration-db.js';
 import { PolicyError, missingCapability, notFound } from '../policy/errors.js';
@@ -81,15 +82,15 @@ function toView(row: ChecklistRow, items: ChecklistItemRow[], principal: Princip
     task_id: row.task_id,
     subtask_id: row.subtask_id,
     // El pinejat és PER USUARI: la llista només surt pinejada per a qui la va pinejar.
-    pinned: row.pinned === 1 && row.pinned_by === principal.userId,
+    pinned: isTrue(row.pinned) && row.pinned_by === principal.userId,
     name: row.name,
-    show_completed_inline: row.show_completed_inline === 1,
+    show_completed_inline: isTrue(row.show_completed_inline),
     position: row.position,
     items: items.map((item) => ({
       id: item.id,
       checklist_id: item.checklist_id,
       text: item.text,
-      done: item.done === 1,
+      done: isTrue(item.done),
       done_at: item.done_at,
       done_by: item.done_by,
       position: item.position,
@@ -178,7 +179,7 @@ export async function listPinnedChecklists(
     FROM checklists c
     JOIN tasks t ON t.id = c.task_id
     WHERE c.deleted_at IS NULL AND t.deleted_at IS NULL
-      AND c.pinned = 1 AND c.pinned_by = ${principal.userId}
+      AND c.pinned = ${dbBool(true)} AND c.pinned_by = ${principal.userId}
     ORDER BY c.position
   `.execute(db);
 
@@ -221,8 +222,8 @@ export async function createChecklist(
   await sql`
     INSERT INTO checklists (id, task_id, subtask_id, name, pinned, show_completed_inline,
                             position, created_at, updated_at, version)
-    VALUES (${id}, ${taskId}, ${input.subtask_id ?? null}, ${input.name.trim()}, 0,
-            ${input.show_completed_inline === false ? 0 : 1},
+    VALUES (${id}, ${taskId}, ${input.subtask_id ?? null}, ${input.name.trim()}, ${dbBool(false)},
+            ${dbBool(input.show_completed_inline !== false)},
             ${generatePosition(last.rows[0]?.position ?? null, null)}, ${ctx.now}, ${ctx.now}, 1)
   `.execute(ctx.tx);
 
@@ -242,7 +243,7 @@ export async function createChecklistItem(
   principal: Principal,
   checklistId: string,
   input: { id?: string | undefined; text?: string | undefined; position?: string | undefined },
-): Promise<ChecklistItemRow> {
+): Promise<ChecklistItemView> {
   if (!hasCapability(principal, 'checklists:write')) throw missingCapability('checklists:write');
   if (input.text === undefined || input.text.trim() === '') {
     throw new PolicyError('text-required', 'Text required', 422, "L'ítem necessita text.");
@@ -259,7 +260,7 @@ export async function createChecklistItem(
 
   await sql`
     INSERT INTO checklist_items (id, checklist_id, text, done, position, created_at, updated_at, version)
-    VALUES (${id}, ${checklistId}, ${input.text.trim()}, 0,
+    VALUES (${id}, ${checklistId}, ${input.text.trim()}, ${dbBool(false)},
             ${input.position ?? generatePosition(last.rows[0]?.position ?? null, null)},
             ${ctx.now}, ${ctx.now}, 1)
   `.execute(ctx.tx);
@@ -272,7 +273,39 @@ export async function createChecklistItem(
   `.execute(ctx.tx);
   const row = created.rows[0];
   if (row === undefined) throw notFound('ítem', id);
-  return row;
+  return toItemView(row);
+}
+
+/**
+ * L'ítem tal com surt per l'API.
+ *
+ * **`done` és un booleà de veritat.** La fila de la base porta 0/1 —a Postgres i a
+ * SQLite per igual, perquè el conversor de `connection.ts` ho normalitza en llegir— i
+ * `GET /tasks/{id}/checklists` ja el convertia, però `POST .../items` i `PATCH
+ * /checklist-items/{id}` tornaven la fila crua. El mateix camp sortia com a `0` per una
+ * banda i com a `false` per l'altra, i un client que fes `if (item.done)` es comportava
+ * diferent segons d'on hagués vingut l'ítem.
+ */
+export interface ChecklistItemView {
+  id: string;
+  checklist_id: string;
+  text: string;
+  done: boolean;
+  done_at: string | null;
+  done_by: string | null;
+  position: string;
+}
+
+function toItemView(row: ChecklistItemRow): ChecklistItemView {
+  return {
+    id: row.id,
+    checklist_id: row.checklist_id,
+    text: row.text,
+    done: isTrue(row.done),
+    done_at: row.done_at,
+    done_by: row.done_by,
+    position: row.position,
+  };
 }
 
 export interface CascadeResult {
@@ -293,7 +326,7 @@ export async function updateChecklistItem(
   principal: Principal,
   itemId: string,
   input: { text?: string | undefined; done?: boolean | undefined; position?: string | undefined },
-): Promise<{ item: ChecklistItemRow; cascade: CascadeResult }> {
+): Promise<{ item: ChecklistItemView; cascade: CascadeResult }> {
   if (!hasCapability(principal, 'checklists:write')) throw missingCapability('checklists:write');
 
   const found = await sql<ChecklistItemRow>`
@@ -306,13 +339,13 @@ export async function updateChecklistItem(
   const { checklist, taskId, scopeId } = await taskOfChecklist(ctx.tx, item.checklist_id);
   await assertScopeAccess(ctx.tx, principal, scopeId);
 
-  const done = input.done ?? item.done === 1;
+  const done = input.done ?? isTrue(item.done);
 
   await sql`
     UPDATE checklist_items SET
       text = COALESCE(${input.text ?? null}, text),
       position = COALESCE(${input.position ?? null}, position),
-      done = ${done ? 1 : 0},
+      done = ${dbBool(done)},
       done_at = ${done ? ctx.now : null},
       done_by = ${done ? principal.userId : null},
       updated_at = ${ctx.now},
@@ -325,7 +358,7 @@ export async function updateChecklistItem(
     entityId: itemId,
     scopeId,
     verb: done ? 'completed' : 'reopened',
-    changes: { done: { from: item.done === 1, to: done } },
+    changes: { done: { from: isTrue(item.done), to: done } },
   });
 
   const cascade = await applyCascade(ctx, principal, checklist, taskId, scopeId);
@@ -334,7 +367,7 @@ export async function updateChecklistItem(
     FROM checklist_items WHERE id = ${itemId}
   `.execute(ctx.tx);
 
-  return { item: updated.rows[0]!, cascade };
+  return { item: toItemView(updated.rows[0]!), cascade };
 }
 
 /**
@@ -360,7 +393,7 @@ async function applyCascade(
 
   const pending = await sql<{ n: number }>`
     SELECT COUNT(*) AS n FROM checklist_items
-    WHERE checklist_id = ${checklist.id} AND deleted_at IS NULL AND done = 0
+    WHERE checklist_id = ${checklist.id} AND deleted_at IS NULL AND done = ${dbBool(false)}
   `.execute(ctx.tx);
   const total = await sql<{ n: number }>`
     SELECT COUNT(*) AS n FROM checklist_items
@@ -375,7 +408,7 @@ async function applyCascade(
 
   // Quan una llista PINEJADA es completa del tot, es pregunta si es vol despinejar (P1).
   // Es proposa, no es fa: despinejar-la sola seria decidir per l'usuari.
-  result.suggest_unpin = checklist.pinned === 1 && checklist.pinned_by === principal.userId;
+  result.suggest_unpin = isTrue(checklist.pinned) && checklist.pinned_by === principal.userId;
 
   // Pas 1: la subtasca ancorada, si n'hi ha.
   if (checklist.subtask_id !== null) {
@@ -383,13 +416,13 @@ async function applyCascade(
       SELECT COUNT(*) AS n FROM checklists c
       WHERE c.subtask_id = ${checklist.subtask_id} AND c.deleted_at IS NULL
         AND EXISTS (SELECT 1 FROM checklist_items i
-                    WHERE i.checklist_id = c.id AND i.deleted_at IS NULL AND i.done = 0)
+                    WHERE i.checklist_id = c.id AND i.deleted_at IS NULL AND i.done = ${dbBool(false)})
     `.execute(ctx.tx);
 
     if (Number(others.rows[0]?.n ?? 0) === 0) {
       await sql`
-        UPDATE subtasks SET done = 1, updated_at = ${ctx.now}, version = version + 1
-        WHERE id = ${checklist.subtask_id} AND done = 0
+        UPDATE subtasks SET done = ${dbBool(true)}, updated_at = ${ctx.now}, version = version + 1
+        WHERE id = ${checklist.subtask_id} AND done = ${dbBool(false)}
       `.execute(ctx.tx);
 
       result.subtask_completed = true;
@@ -405,13 +438,13 @@ async function applyCascade(
   // Pas 2: la tasca, si TOTES les seves llistes i subtasques estan fetes.
   const pendingSubtasks = await sql<{ n: number }>`
     SELECT COUNT(*) AS n FROM subtasks
-    WHERE task_id = ${taskId} AND deleted_at IS NULL AND done = 0
+    WHERE task_id = ${taskId} AND deleted_at IS NULL AND done = ${dbBool(false)}
   `.execute(ctx.tx);
   const pendingLists = await sql<{ n: number }>`
     SELECT COUNT(*) AS n FROM checklists c
     WHERE c.task_id = ${taskId} AND c.deleted_at IS NULL
       AND EXISTS (SELECT 1 FROM checklist_items i
-                  WHERE i.checklist_id = c.id AND i.deleted_at IS NULL AND i.done = 0)
+                  WHERE i.checklist_id = c.id AND i.deleted_at IS NULL AND i.done = ${dbBool(false)})
   `.execute(ctx.tx);
 
   if (Number(pendingSubtasks.rows[0]?.n ?? 0) === 0 && Number(pendingLists.rows[0]?.n ?? 0) === 0) {
@@ -452,7 +485,7 @@ export async function setPinned(
   await assertScopeAccess(ctx.tx, principal, scopeId);
 
   await sql`
-    UPDATE checklists SET pinned = ${pinned ? 1 : 0},
+    UPDATE checklists SET pinned = ${dbBool(pinned)},
                           pinned_by = ${pinned ? principal.userId : null},
                           updated_at = ${ctx.now}, version = version + 1
     WHERE id = ${checklistId}
