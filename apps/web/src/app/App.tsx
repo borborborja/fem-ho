@@ -196,7 +196,22 @@ function AppShell() {
   const fullHeight = list === null && view === 'tasks' && route.path === '/';
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--page-bg)' }}>
+    <div
+      style={{
+        background: 'var(--page-bg)',
+        /**
+         * Al tauler, l'arrel és una columna d'alçada exacta i el `main` s'hi estira.
+         *
+         * El disseny validat ho escriu com `calc(100vh - 70px)`, els 70 de la seva barra.
+         * Aquí la barra no fa sempre 70: al mòbil es reorganitza en dues files i els
+         * chips poden embolicar. Amb el flex no cal saber quant fa —el que sobra és el
+         * que hi ha— i al telèfon el tauler no acaba mig pam per sota de la pantalla.
+         */
+        ...(fullHeight
+          ? { height: '100dvh', display: 'flex', flexDirection: 'column' as const }
+          : { minHeight: '100vh' }),
+      }}
+    >
       <TopBar
         view={view}
         activeScopeIds={activeScopeIds}
@@ -231,11 +246,19 @@ function AppShell() {
            */
           ...(fullHeight
             ? {
-                height: 'calc(100dvh - 70px)',
+                flex: 1,
+                minHeight: 0,
+                /**
+                 * **`minWidth: 0` no és decoració.** Un element de flex té `min-width:
+                 * auto`, que val la mida mínima del contingut; amb el tauler a dins,
+                 * aquesta mínima és l'amplada de les quatre columnes juntes, i al
+                 * telèfon el `main` es feia 673px dins d'un cos de 412 i el tauler
+                 * sortia per la dreta sense manera d'arribar-hi.
+                 */
+                minWidth: 0,
                 boxSizing: 'border-box' as const,
                 display: 'flex',
                 flexDirection: 'column' as const,
-                minHeight: 0,
               }
             : {}),
         }}

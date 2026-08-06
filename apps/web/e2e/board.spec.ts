@@ -199,3 +199,47 @@ test("l'Inbox no en té: allà s'ha de veure tot", async ({ page }) => {
 
   await expect(page.locator('[data-testid^="others-inbox:"]')).toHaveCount(0);
 });
+
+/**
+ * El tauler al mòbil. docs/02 §10.
+ *
+ * "Per sota de 860px la web ha de ser **gairebé idèntica a l'app**: el kanban passa a
+ * columnes desplaçables horitzontalment, cadascuna al 80% de l'amplada, amb
+ * desplaçament amb ajust."
+ *
+ * Sense això, la graella de dues columnes de l'escriptori hi entrava a la força: la
+ * bústia quedava d'un dit d'ample i les altres tres, fora de pantalla i sense manera
+ * d'arribar-hi. La prova mira les tres coses que ho fan navegable —la tira, l'amplada i
+ * l'ajust— i que **la pàgina no es desplaci de costat**, que és el símptoma.
+ */
+test('per sota de 860px, les columnes es desplacen amb ajust', async ({ page }) => {
+  await page.setViewportSize({ width: 412, height: 844 });
+  await page.goto('/proof/board');
+
+  const kanban = page.locator('[data-testid="board-light"] [data-testid="kanban"]');
+  await expect(kanban).toHaveAttribute('data-layout', 'scroll');
+
+  const mides = await kanban.evaluate((node) => ({
+    ample: node.getBoundingClientRect().width,
+    desplaçable: node.scrollWidth,
+    primera: node.children[0]!.getBoundingClientRect().width,
+    ajust: getComputedStyle(node).scrollSnapType,
+  }));
+
+  // Les quatre columnes no hi caben: per això es desplaça.
+  expect(mides.desplaçable).toBeGreaterThan(mides.ample);
+  // Al voltant del 78%: la següent s'endevina i convida a lliscar-hi.
+  expect(mides.primera / mides.ample).toBeGreaterThan(0.7);
+  expect(mides.primera / mides.ample).toBeLessThan(0.85);
+  expect(mides.ajust).toContain('x');
+});
+
+test("i a l'escriptori torna a ser la graella de sempre", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/proof/board');
+
+  await expect(page.locator('[data-testid="board-light"] [data-testid="kanban"]')).toHaveAttribute(
+    'data-layout',
+    'grid',
+  );
+});

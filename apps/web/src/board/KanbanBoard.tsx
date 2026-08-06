@@ -10,7 +10,13 @@
 import { useState, type ReactNode } from 'react';
 import { t } from '@fem-ho/contracts';
 import type { TaskStatus } from '@fem-ho/contracts';
-import { EmptyState, KanbanColumn, KanbanGroup, ScopeGroupHeader } from '@fem-ho/design-system/femho';
+import {
+  EmptyState,
+  KanbanColumn,
+  KanbanGroup,
+  ScopeGroupHeader,
+  useIsMobile,
+} from '@fem-ho/design-system/femho';
 import { BoardCard } from './BoardCard.js';
 import { BoardDnd, DraggableCard, DroppableColumn } from './dnd.js';
 import { InboxRail } from './InboxRail.js';
@@ -136,6 +142,13 @@ export function KanbanBoard({
   const [showOthers, setShowOthers] = useState<Record<string, boolean>>({});
   // L'agrupació per àmbit surt quan hi ha més d'un àmbit actiu (docs/02 §4).
   const grouped = scopes.length > 1;
+  /**
+   * Per sota de 860px, **la web ha de ser gairebé idèntica a l'app** (docs/02 §10): les
+   * quatre columnes es desplacen horitzontalment, cadascuna al 78% de l'amplada i amb
+   * ajust. La graella de dues columnes d'escriptori no cap en un telèfon: hi entraven
+   * les quatre a la força i tres quedaven fora de pantalla, sense manera d'arribar-hi.
+   */
+  const mobile = useIsMobile();
 
   const renderColumn = (column: (typeof COLUMNS)[number]) => {
     const ofColumn = tasks.filter((task) => task.status === column.status);
@@ -225,7 +238,10 @@ export function KanbanBoard({
             data-drop-target={over ? 'true' : 'false'}
             label={t(column.labelKey)}
             count={ofColumn.length}
-            variant="grouped"
+            // Al mòbil cada columna és una targeta pròpia: no hi ha cap contenidor que
+            // les agrupi, i sense fons no es veurien.
+            variant={mobile ? 'default' : 'grouped'}
+            style={mobile ? { background: 'var(--card-bg)' } : undefined}
             divider={column.status !== 'todo'}
             dropIndicator={over}
             headerActions={column.status === 'done' ? doneHeaderActions : undefined}
@@ -259,7 +275,21 @@ export function KanbanBoard({
     >
       <div
         data-testid="kanban"
-        style={{
+        data-layout={mobile ? 'scroll' : 'grid'}
+        style={
+          mobile
+            ? {
+                display: 'flex',
+                gap: 10,
+                overflowX: 'auto',
+                // Ajust per columna: el gest deixa una columna centrada i no a mitges.
+                scrollSnapType: 'x mandatory',
+                flex: 1,
+                minHeight: 0,
+                // La barra no es pinta, com a la resta de contenidors desplaçables.
+                scrollbarWidth: 'none',
+              }
+            : {
           display: 'grid',
           // L'Inbox se separa de les altres tres amb 24px en comptes de 16 (docs/02 §4),
           // i les tres van dins d'una sola targeta perquè "es sentin un sol element"
@@ -276,7 +306,8 @@ export function KanbanBoard({
           alignItems: 'stretch',
           flex: 1,
           minHeight: 0,
-        }}
+              }
+        }
       >
         {/*
           L'Inbox NO es pinta aquí: es delega a InboxRail, que és el MATEIX component
@@ -284,6 +315,13 @@ export function KanbanBoard({
           component". Si el kanban en tingués una versió pròpia, divergirien i es
           notaria.
         */}
+        <div
+          style={
+            mobile
+              ? { flex: '0 0 78%', display: 'flex', minWidth: 0, scrollSnapAlign: 'start' }
+              : { display: 'contents' }
+          }
+        >
         <DroppableColumn status="inbox">
           {() => (
             <InboxRail
@@ -309,6 +347,7 @@ export function KanbanBoard({
             />
           )}
         </DroppableColumn>
+        </div>
         {/*
           El gir viu aquí i no a cada columna: el que gira és la targeta sencera, i
           animar-ne tres per separat les desincronitzaria a la primera pantalla lenta.
@@ -320,6 +359,9 @@ export function KanbanBoard({
             position: 'relative',
             display: 'flex',
             flexDirection: 'column',
+            // Al mòbil no és una columna de la graella sinó tres elements més de la
+            // tira: la targeta que les agrupa no hi és i cadascuna s'ajusta sola.
+            ...(mobile ? { display: 'contents' } : {}),
           }}
         >
           {aiBoard ? (
@@ -346,6 +388,7 @@ export function KanbanBoard({
           <div
             data-ai-board={aiBoard ? 'true' : 'false'}
             style={{
+              ...(mobile ? { display: 'contents' } : {}),
               /**
                * En repòs, **cap transformada**: `rotateY(0deg)` és visualment el mateix
                * que no tenir-ne, però és una transformada 3D i promou la capa, i llavors
@@ -359,9 +402,25 @@ export function KanbanBoard({
               minHeight: 0,
             }}
           >
-            <KanbanGroup borderColor={aiBoard ? 'var(--plou-blue-ink)' : undefined}>
-              {rest.map(renderColumn)}
-            </KanbanGroup>
+            {mobile ? (
+              rest.map((column) => (
+                <div
+                  key={column.status}
+                  style={{
+                    flex: '0 0 78%',
+                    display: 'flex',
+                    minWidth: 0,
+                    scrollSnapAlign: 'start',
+                  }}
+                >
+                  {renderColumn(column)}
+                </div>
+              ))
+            ) : (
+              <KanbanGroup borderColor={aiBoard ? 'var(--plou-blue-ink)' : undefined}>
+                {rest.map(renderColumn)}
+              </KanbanGroup>
+            )}
           </div>
         </div>
       </div>

@@ -30,7 +30,7 @@ npm run test:proxy-matrix    # CalDAV i SSE darrere de nginx i Caddy
 | Proves unitàries · SQLite | 640 |
 | Proves unitàries · Postgres | 661 |
 | Comprovacions permanents | 10 de 10 |
-| Proves de navegador | 78, de les quals 32 contra el servidor real |
+| Proves de navegador | 80, de les quals 32 contra el servidor real |
 | Proves de Kotlin | 40 |
 | APK de depuració | es construeix |
 | Primer arrencament amb Compose | 13 comprovacions |
@@ -54,6 +54,7 @@ amb la versió del llenç). El que en va sortir:
 | Persones **només a la bústia d'un àmbit col·lectiu** | web |
 | Les tasques d'altres, darrere el commutador de l'epígraf i atenuades | web |
 | El tauler omple la pantalla i cada columna es desplaça per dins | web |
+| Per sota de 860px, columnes desplaçables al 78% amb ajust (`docs/02` §10) | web |
 
 **On no s'ha seguit el disseny, i per què:**
 
@@ -97,7 +98,7 @@ Les dotze seccions de `docs/02`:
 | §7 Modal d'edició completa | fet menys els adjunts |
 | §8 Tauler general | fet |
 | §9 Ajustos | fet, les vuit pestanyes |
-| §10 Responsive | fet |
+| §10 Responsive | fet; el kanban del mòbil es va **arreglar** en ajustar-se al disseny |
 | §11 Dreceres de teclat | fet, amb la paleta d'ordres |
 | §12 Estats buits, càrrega i error | fet |
 
