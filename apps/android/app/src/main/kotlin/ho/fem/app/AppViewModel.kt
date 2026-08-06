@@ -3,6 +3,8 @@ package ho.fem.app
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import ho.fem.data.Container
+import ho.fem.model.EventOccurrence
+import ho.fem.model.Inbox
 import ho.fem.model.Person
 import ho.fem.model.Project
 import ho.fem.model.Scope
@@ -59,6 +61,12 @@ class AppViewModel(private val container: Container) : ViewModel() {
 
     private val _accent = MutableStateFlow("default")
     val accent: StateFlow<String> = _accent.asStateFlow()
+
+    private val _events = MutableStateFlow<List<EventOccurrence>>(emptyList())
+    val events: StateFlow<List<EventOccurrence>> = _events.asStateFlow()
+
+    private val _inbox = MutableStateFlow<Inbox?>(null)
+    val inbox: StateFlow<Inbox?> = _inbox.asStateFlow()
 
     private var serverUrl: String? = null
 
@@ -145,6 +153,25 @@ class AppViewModel(private val container: Container) : ViewModel() {
         viewModelScope.launch {
             val active = container.settings.activeScopes.first()
             runCatching { container.repository(base).refresh(active, null) }
+        }
+    }
+
+    /**
+     * Els esdeveniments d'una finestra.
+     *
+     * **No es guarden a Room.** Un calendari és una consulta amb rang, no una llista que
+     * es replica: guardar-lo obligaria a decidir quina finestra es manté i a invalidar-la
+     * quan l'usuari en demana una altra, i el guany offline seria veure el mes que vas
+     * mirar per última vegada. El tauler sí que es replica perquè és el que es fa servir
+     * sense connexió.
+     */
+    fun loadCalendar(from: String, to: String, day: String) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            val active = container.settings.activeScopes.first()
+            val api = container.api(base)
+            runCatching { api.events(from, to, active) }.onSuccess { _events.value = it }
+            runCatching { api.inbox(day, true, active) }.onSuccess { _inbox.value = it }
         }
     }
 

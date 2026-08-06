@@ -45,6 +45,7 @@ dependencies {
     implementation(project(":core-data"))
     implementation(project(":core-designsystem"))
     implementation(project(":feature-tasks"))
+    implementation(project(":core-network"))
     implementation(project(":feature-calendar"))
     implementation(project(":feature-settings"))
 

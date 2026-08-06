@@ -40,6 +40,9 @@ import ho.fem.designsystem.FemhoTheme
 import ho.fem.designsystem.ScopeChip
 import ho.fem.model.Scope
 import ho.fem.model.TaskStatus
+import ho.fem.calendar.CalendarLabels
+import ho.fem.calendar.DayList
+import ho.fem.calendar.MonthView
 import ho.fem.settings.SettingsLabels
 import ho.fem.settings.SettingsScreen
 import ho.fem.tasks.BoardLabels
@@ -86,7 +89,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private enum class Screen { BOARD, SETTINGS }
+private enum class Screen { BOARD, CALENDAR, SETTINGS }
 
 @Composable
 private fun Root(model: AppViewModel) {
@@ -101,7 +104,16 @@ private fun Root(model: AppViewModel) {
         is AppViewModel.Session.NeedsLogin -> LoginScreen(model, state.instanceName)
 
         is AppViewModel.Session.Ready -> when (screen) {
-            Screen.BOARD -> BoardHost(model, onSettings = { screen = Screen.SETTINGS })
+            Screen.BOARD -> BoardHost(
+                model = model,
+                onSettings = { screen = Screen.SETTINGS },
+                onCalendar = { screen = Screen.CALENDAR },
+            )
+            Screen.CALENDAR -> CalendarHost(
+                model = model,
+                onSettings = { screen = Screen.SETTINGS },
+                onBoard = { screen = Screen.BOARD },
+            )
             Screen.SETTINGS -> SettingsHost(
                 model = model,
                 serverUrl = state.serverUrl,
@@ -243,11 +255,12 @@ private fun LoginScreen(model: AppViewModel, instanceName: String) {
 }
 
 @Composable
-private fun BoardHost(model: AppViewModel, onSettings: () -> Unit) {
+private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: () -> Unit) {
     val tasks by model.tasks.collectAsStateWithLifecycle()
     val scopes by model.scopes.collectAsStateWithLifecycle()
     val pending by model.pending.collectAsStateWithLifecycle()
     var active by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var draft by remember { mutableStateOf("") }
 
     val visible = if (active.isEmpty()) tasks else tasks.filter { it.scopeId in active }
 
@@ -256,12 +269,14 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit) {
             scopes = scopes,
             active = active,
             pending = pending,
+            view = Screen.BOARD,
             onToggle = { id ->
                 val next = if (id in active) active - id else active + id
                 // No es poden desactivar tots: amb cap, es tornen a veure tots.
                 active = if (next.isEmpty()) emptySet() else next
             },
             onSettings = onSettings,
+            onView = { if (it == Screen.CALENDAR) onCalendar() },
         )
 
         BoardScreen(
@@ -290,6 +305,103 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit) {
             },
             modifier = Modifier.weight(1f),
         )
+
+        /**
+         * L'afegida ràpida, al peu.
+         *
+         * Amb un sol àmbit actiu s'agafa aquell; amb més d'un, cal `#` i es demana
+         * (docs/02 §4). Aquí es resol amb el primer àmbit visible quan només n'hi ha un,
+         * que és el cas normal al mòbil.
+         */
+        val target = if (active.size == 1) active.first() else scopes.firstOrNull()?.id
+        androidx.compose.material3.OutlinedTextField(
+            value = draft,
+            onValueChange = { draft = it },
+            singleLine = true,
+            placeholder = { Text(stringResource(R.string.checklist_additem)) },
+            keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                onDone = {
+                    if (draft.isNotBlank() && target != null) {
+                        model.create(target, draft.trim())
+                        // El camp es buida i manté el focus, per poder-ne encadenar.
+                        draft = ""
+                    }
+                },
+            ),
+            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                imeAction = androidx.compose.ui.text.input.ImeAction.Done,
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp)
+                .testTag("quick-add"),
+        )
+    }
+}
+
+@Composable
+private fun CalendarHost(model: AppViewModel, onSettings: () -> Unit, onBoard: () -> Unit) {
+    val scopes by model.scopes.collectAsStateWithLifecycle()
+    val pending by model.pending.collectAsStateWithLifecycle()
+    val events by model.events.collectAsStateWithLifecycle()
+    var active by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var selected by remember { mutableStateOf(java.time.LocalDate.now()) }
+
+    androidx.compose.runtime.LaunchedEffect(selected.month, selected.year) {
+        val first = selected.withDayOfMonth(1)
+        model.loadCalendar(
+            from = first.minusDays(7).toString(),
+            to = first.plusMonths(1).plusDays(7).toString(),
+            day = selected.toString(),
+        )
+    }
+
+    val labels = CalendarLabels(
+        weekdays = stringResource(R.string.calendar_weekdays).split(","),
+        months = stringResource(R.string.calendar_months).split(","),
+        emptyDay = stringResource(R.string.calendar_empty_day),
+        emptyWeek = stringResource(R.string.calendar_empty_week),
+    )
+
+    val colors = scopes.associate { it.id to scopeColor(it.color) }
+    // Es resol FORA del `colorOf`: `scopeColor` és `@Composable` i el callback de
+    // `DayList` no ho és. Amb el mapa ja resolt, el callback és una consulta i prou.
+    val fallback = Femho.colors.inkFaint
+
+    Column(Modifier.fillMaxSize()) {
+        TopBar(
+            scopes = scopes,
+            active = active,
+            pending = pending,
+            view = Screen.CALENDAR,
+            onToggle = { id ->
+                val next = if (id in active) active - id else active + id
+                active = if (next.isEmpty()) emptySet() else next
+            },
+            onSettings = onSettings,
+            onView = { if (it == Screen.BOARD) onBoard() },
+        )
+
+        MonthView(
+            year = selected.year,
+            month = selected.monthValue,
+            selected = selected,
+            today = java.time.LocalDate.now(),
+            dots = events
+                .groupBy { java.time.LocalDate.parse(it.startsAt.substring(0, 10)) }
+                .mapValues { (_, list) ->
+                    list.mapNotNull { colors[it.scopeId] }.distinct().take(3)
+                },
+            labels = labels,
+            onSelect = { selected = it },
+        )
+
+        DayList(
+            occurrences = events.filter { it.startsAt.startsWith(selected.toString()) },
+            colorOf = { colors[it] ?: fallback },
+            labels = labels,
+            modifier = Modifier.weight(1f),
+        )
     }
 }
 
@@ -298,8 +410,10 @@ private fun TopBar(
     scopes: List<Scope>,
     active: Set<String>,
     pending: Int,
+    view: Screen,
     onToggle: (String) -> Unit,
     onSettings: () -> Unit,
+    onView: (Screen) -> Unit,
 ) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
         Row(
@@ -309,6 +423,23 @@ private fun TopBar(
         ) {
             Wordmark()
             Row(verticalAlignment = Alignment.CenterVertically) {
+                // El commutador Tasques / Calendari, igual que a la web (docs/02 §3).
+                listOf(
+                    Screen.BOARD to stringResource(R.string.nav_tasks),
+                    Screen.CALENDAR to stringResource(R.string.nav_calendar),
+                ).forEach { (target, label) ->
+                    Text(
+                        text = label,
+                        color = if (view == target) Femho.colors.ink else Femho.colors.inkFaint,
+                        fontSize = FemhoText.body,
+                        fontWeight = if (view == target) FontWeight.Bold else FontWeight.Medium,
+                        modifier = Modifier
+                            .padding(horizontal = 8.dp, vertical = 12.dp)
+                            .testTag("view-${'$'}{target.name.lowercase()}")
+                            .androidClickable { onView(target) },
+                    )
+                }
+
                 if (pending > 0) {
                     // La pastilla de canvis pendents: el que importa no és la xarxa
                     // sinó si el que has fet ja és a l'altre costat (docs/02 §12).
