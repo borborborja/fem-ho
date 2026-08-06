@@ -549,6 +549,15 @@ export interface UpdateTaskInput {
   description?: string | null | undefined;
   due_date?: string | null | undefined;
   due_time?: string | null | undefined;
+  /**
+   * La data límit, **separada del venciment** (docs/01 §4, docs/02 §7).
+   *
+   * "Fes-ho aquest dijous" i "com a molt tard el dia 30" són dues coses: amb un sol
+   * camp, qui té les dues n'ha de triar una i perd l'altra.
+   */
+  deadline?: string | null | undefined;
+  /** `null` la treu del projecte i la torna a l'espai general de l'àmbit. */
+  project_id?: string | null | undefined;
   ai_mode?: 'manual' | 'assisted' | 'delegated' | undefined;
   ai_instructions?: string | null | undefined;
 }
@@ -592,10 +601,37 @@ export async function updateTask(
     'description',
     'due_date',
     'due_time',
+    'deadline',
     'ai_mode',
     'ai_instructions',
   ] as const) {
     if (input[key] !== undefined) fields[key] = input[key];
+  }
+
+  /**
+   * Canviar de projecte sí; canviar d'àmbit, no.
+   *
+   * Un projecte és una carpeta dins del mateix àmbit i moure-hi la tasca no canvia qui
+   * la veu. Canviar d'àmbit sí: altres membres, altres etiquetes, altres calendaris, i
+   * l'assignació automàtica dels àmbits individuals. Es fa creant-la on toca.
+   */
+  if (input.project_id !== undefined) {
+    if (input.project_id !== null) {
+      const project = await sql<{ scope_id: string; name: string }>`
+        SELECT scope_id, name FROM projects WHERE id = ${input.project_id} AND deleted_at IS NULL
+      `.execute(ctx.tx);
+      const found = project.rows[0];
+      if (found === undefined) throw notFound('projecte', input.project_id);
+      if (found.scope_id !== before.scope_id) {
+        throw new PolicyError(
+          'project-other-scope',
+          'Project from another scope',
+          422,
+          `El projecte ${found.name} és d'un altre àmbit. Una tasca no canvia d'àmbit editant-la.`,
+        );
+      }
+    }
+    fields.project_id = input.project_id;
   }
 
   if (Object.keys(fields).length === 0) {

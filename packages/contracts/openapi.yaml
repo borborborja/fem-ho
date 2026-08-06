@@ -2387,6 +2387,19 @@ components:
         description: { type: [string, 'null'] }
         due_date: { type: [string, 'null'], format: date }
         due_time: { type: [string, 'null'] }
+        deadline:
+          type: [string, 'null']
+          format: date-time
+          description: |
+            Separada del venciment (docs/02 §7): "fes-ho aquest dijous" i "com a molt
+            tard el dia 30" són dues coses, i amb un sol camp qui té les dues n'ha de
+            triar una.
+        project_id:
+          type: [string, 'null']
+          description: |
+            `null` la torna a l'espai general de l'àmbit. **L'àmbit no es pot canviar
+            editant**: altres membres, altres etiquetes i l'assignació automàtica dels
+            àmbits individuals. Un projecte d'un altre àmbit es rebutja amb `422`.
         ai_mode: { type: string, enum: [manual, assisted, delegated] }
         ai_instructions: { type: [string, 'null'] }
 

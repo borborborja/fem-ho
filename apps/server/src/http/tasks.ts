@@ -129,6 +129,8 @@ export function registerTaskRoutes(app: FastifyInstance): void {
           description: nullable(input, 'description'),
           due_date: nullable(input, 'due_date'),
           due_time: nullable(input, 'due_time'),
+          deadline: nullable(input, 'deadline'),
+          project_id: nullable(input, 'project_id'),
           ai_mode:
             input.ai_mode === 'manual' || input.ai_mode === 'assisted' || input.ai_mode === 'delegated'
               ? input.ai_mode

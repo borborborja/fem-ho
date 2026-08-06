@@ -56,6 +56,7 @@ type Draft = {
   description: string;
   due_date: string;
   due_time: string;
+  deadline: string;
   ai_mode: Task['ai_mode'];
   ai_instructions: string;
 };
@@ -83,6 +84,7 @@ export function TaskModal({ taskId, onClose, onChanged, onShare, onOpenList }: T
       description: task.data.description ?? '',
       due_date: task.data.due_date ?? '',
       due_time: task.data.due_time ?? '',
+      deadline: (task.data.deadline ?? '').slice(0, 10),
       ai_mode: task.data.ai_mode,
       ai_instructions: '',
     });
@@ -95,6 +97,8 @@ export function TaskModal({ taskId, onClose, onChanged, onShare, onOpenList }: T
       description: draft.description === '' ? null : draft.description,
       due_date: draft.due_date === '' ? null : draft.due_date,
       due_time: draft.due_time === '' ? null : draft.due_time,
+      // Una data límit sense hora és tot el dia: es tanca al final, no al principi.
+      deadline: draft.deadline === '' ? null : `${draft.deadline}T23:59:59.000Z`,
       ai_mode: draft.ai_mode,
       ai_instructions: draft.ai_instructions === '' ? null : draft.ai_instructions,
     });
@@ -204,14 +208,41 @@ export function TaskModal({ taskId, onClose, onChanged, onShare, onOpenList }: T
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <label style={{ display: 'grid', gap: 5 }}>
                 {label(t('task.scope'))}
+                {/*
+                  L'àmbit no s'edita aquí: canviar-lo mou la tasca a un altre espai amb
+                  altres membres, altres etiquetes i altres calendaris, i fer-ho des d'un
+                  desplegable enmig d'un formulari és massa fàcil de fer sense voler. El
+                  servidor tampoc ho accepta a `PATCH /tasks/{id}`.
+                */}
                 <span style={{ fontSize: 13, color: 'var(--ink)' }}>{scope?.name ?? ''}</span>
               </label>
               <label style={{ display: 'grid', gap: 5 }}>
                 {label(t('task.project'))}
-                <span style={{ fontSize: 13, color: 'var(--ink)' }}>
-                  {projects.find((project) => project.id === data?.project_id)?.name ??
-                    t('task.noProject')}
-                </span>
+                <select
+                  className="femho-input"
+                  data-testid="task-project"
+                  value={data?.project_id ?? ''}
+                  onChange={(event) => {
+                    // Es desa de seguida: moure de projecte és un gest, com assignar.
+                    void api
+                      .patch(`/api/v1/tasks/${taskId}`, {
+                        project_id: event.target.value === '' ? null : event.target.value,
+                      })
+                      .then(() => {
+                        task.reload();
+                        onChanged();
+                      });
+                  }}
+                >
+                  <option value="">{t('task.noProject')}</option>
+                  {projects
+                    .filter((project) => project.scope_id === data?.scope_id)
+                    .map((project) => (
+                      <option key={project.id} value={project.id}>
+                        {project.name}
+                      </option>
+                    ))}
+                </select>
               </label>
             </div>
 
@@ -237,6 +268,22 @@ export function TaskModal({ taskId, onClose, onChanged, onShare, onOpenList }: T
                 />
               </label>
             </div>
+
+            {/*
+              El deadline és **separat** del venciment (docs/02 §7): "fes-ho aquest
+              dijous" i "com a molt tard el dia 30" són dues coses, i posar-les al mateix
+              camp obliga a triar-ne una.
+            */}
+            <label style={{ display: 'grid', gap: 5 }}>
+              {label(t('task.deadline'))}
+              <input
+                className="femho-input"
+                type="date"
+                value={draft.deadline}
+                data-testid="task-deadline"
+                onChange={(event) => patch({ deadline: event.target.value })}
+              />
+            </label>
 
             <div style={{ display: 'grid', gap: 5 }}>
               {label(t('task.aiMode'))}

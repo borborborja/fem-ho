@@ -43,6 +43,7 @@ import ho.fem.model.TaskStatus
 import ho.fem.calendar.CalendarLabels
 import ho.fem.calendar.DayList
 import ho.fem.calendar.MonthView
+import ho.fem.calendar.WeekList
 import ho.fem.settings.SettingsLabels
 import ho.fem.settings.SettingsScreen
 import ho.fem.tasks.BoardLabels
@@ -424,6 +425,7 @@ private fun CalendarHost(model: AppViewModel, onSettings: () -> Unit, onBoard: (
     // Es resol FORA del `colorOf`: `scopeColor` és `@Composable` i el callback de
     // `DayList` no ho és. Amb el mapa ja resolt, el callback és una consulta i prou.
     val fallback = Femho.colors.inkFaint
+    var mode by remember { mutableStateOf(CalendarMode.MONTH) }
 
     Column(Modifier.fillMaxSize()) {
         TopBar(
@@ -439,28 +441,81 @@ private fun CalendarHost(model: AppViewModel, onSettings: () -> Unit, onBoard: (
             onView = { if (it == Screen.BOARD) onBoard() },
         )
 
-        MonthView(
-            year = selected.year,
-            month = selected.monthValue,
-            selected = selected,
-            today = java.time.LocalDate.now(),
-            dots = events
-                .groupBy { java.time.LocalDate.parse(it.startsAt.substring(0, 10)) }
-                .mapValues { (_, list) ->
-                    list.mapNotNull { colors[it.scopeId] }.distinct().take(3)
-                },
-            labels = labels,
-            onSelect = { selected = it },
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            listOf(
+                CalendarMode.MONTH to stringResource(R.string.calendar_month),
+                CalendarMode.WEEK to stringResource(R.string.calendar_week),
+                CalendarMode.DAY to stringResource(R.string.calendar_day),
+            ).forEach { (target, label) ->
+                Text(
+                    text = label,
+                    color = if (mode == target) Femho.colors.ink else Femho.colors.inkFaint,
+                    fontSize = FemhoText.body,
+                    fontWeight = if (mode == target) FontWeight.Bold else FontWeight.Medium,
+                    modifier = Modifier
+                        .padding(vertical = 12.dp)
+                        .testTag("calendar-mode-${'$'}{target.name.lowercase()}")
+                        .androidClickable { mode = target },
+                )
+            }
+        }
 
-        DayList(
-            occurrences = events.filter { it.startsAt.startsWith(selected.toString()) },
-            colorOf = { colors[it] ?: fallback },
-            labels = labels,
-            modifier = Modifier.weight(1f),
-        )
+        when (mode) {
+            CalendarMode.MONTH -> {
+                MonthView(
+                    year = selected.year,
+                    month = selected.monthValue,
+                    selected = selected,
+                    today = java.time.LocalDate.now(),
+                    dots = events
+                        .groupBy { java.time.LocalDate.parse(it.startsAt.substring(0, 10)) }
+                        .mapValues { (_, list) ->
+                            list.mapNotNull { colors[it.scopeId] }.distinct().take(3)
+                        },
+                    labels = labels,
+                    onSelect = { selected = it },
+                )
+
+                DayList(
+                    occurrences = events.filter { it.startsAt.startsWith(selected.toString()) },
+                    colorOf = { colors[it] ?: fallback },
+                    labels = labels,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+
+            CalendarMode.WEEK -> {
+                // La setmana comença en DILLUNS (docs/00): `dayOfWeek.value` és 1 per a
+                // dilluns, o sigui que se'n resten els dies que han passat des d'ell.
+                val monday = selected.minusDays((selected.dayOfWeek.value - 1).toLong())
+                WeekList(
+                    days = (0L..6L).map { offset ->
+                        val day = monday.plusDays(offset)
+                        day to events.filter { it.startsAt.startsWith(day.toString()) }
+                    },
+                    labels = labels,
+                    onSelect = {
+                        selected = it
+                        mode = CalendarMode.DAY
+                    },
+                    modifier = Modifier.weight(1f).padding(horizontal = 12.dp),
+                )
+            }
+
+            CalendarMode.DAY -> DayList(
+                occurrences = events.filter { it.startsAt.startsWith(selected.toString()) },
+                colorOf = { colors[it] ?: fallback },
+                labels = labels,
+                modifier = Modifier.weight(1f),
+            )
+        }
     }
 }
+
+private enum class CalendarMode { MONTH, WEEK, DAY }
 
 @Composable
 private fun TopBar(

@@ -959,6 +959,59 @@ describe('administració', () => {
   });
 });
 
+/**
+ * La data límit i el projecte, al `PATCH`.
+ *
+ * Totes dues surten de docs/02 §7 i cap de les dues existia: `deadline` era una columna
+ * que ningú podia omplir, i moure una tasca de projecte no es podia fer des de l'API.
+ */
+describe('data límit i projecte', () => {
+  it("la data límit és SEPARADA del venciment", async () => {
+    const taskId = await novaTasca('Amb les dues dates');
+
+    await api('PATCH', `/api/v1/tasks/${taskId}`, {
+      due_date: '2026-09-10',
+      deadline: '2026-09-30T23:59:59.000Z',
+    });
+
+    const res = await api('GET', `/api/v1/tasks/${taskId}`);
+    const cos = res.json<{ due_date: string | null; deadline: string | null }>();
+
+    // "Fes-ho el dia 10" i "com a molt tard el 30" conviuen: amb un sol camp, qui té
+    // les dues n'hauria de triar una.
+    expect(cos.due_date).toBe('2026-09-10');
+    expect(cos.deadline).toContain('2026-09-30');
+  });
+
+  it('es pot moure de projecte i tornar a l\'espai general', async () => {
+    const projectId = (
+      await api('POST', '/api/v1/projects', { scope_id: scopeIndividual, name: 'Obres' })
+    ).json<{ id: string }>().id;
+    const taskId = await novaTasca('Per moure de carpeta');
+
+    const moguda = await api('PATCH', `/api/v1/tasks/${taskId}`, { project_id: projectId });
+    expect(moguda.statusCode, moguda.body).toBe(200);
+    expect(moguda.json<{ project_id: string | null }>().project_id).toBe(projectId);
+
+    // `null` la torna a l'espai general, que és el filtre `project_id IS NULL`.
+    const treta = await api('PATCH', `/api/v1/tasks/${taskId}`, { project_id: null });
+    expect(treta.json<{ project_id: string | null }>().project_id).toBeNull();
+  });
+
+  it("un projecte d'un altre àmbit es rebutja dient per què", async () => {
+    const altre = (
+      await api('POST', '/api/v1/projects', { scope_id: scopeCollectiu, name: 'Del col·lectiu' })
+    ).json<{ id: string }>().id;
+    const taskId = await novaTasca('Del meu àmbit');
+
+    const res = await api('PATCH', `/api/v1/tasks/${taskId}`, { project_id: altre });
+    expect(res.statusCode).toBe(422);
+    // Una tasca no canvia d'àmbit editant-la: altres membres, altres etiquetes, altra
+    // assignació automàtica.
+    expect(res.json<{ detail: string }>().detail).toContain('altre àmbit');
+  });
+});
+
 describe('netejar la instància', () => {
   it('sense el nom exacte no fa res', async () => {
     const res = await api('POST', '/api/v1/admin/wipe', { confirmation: 'casa nostra' });
@@ -991,3 +1044,4 @@ describe('netejar la instància', () => {
     expect(Number(usuaris.rows[0]?.n)).toBeGreaterThan(0);
   });
 });
+

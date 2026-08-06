@@ -272,6 +272,7 @@
   "task.assignees": "Assignat a",
   "task.checklists": "Llistes senzilles",
   "task.comments": "Comentaris",
+  "task.deadline": "Data límit",
   "task.deleteConfirm": "Segur que vols esborrar «{title}»? També se n'aniran les seves subtasques i llistes.",
   "task.description": "Descripció",
   "task.dueDate": "Data",

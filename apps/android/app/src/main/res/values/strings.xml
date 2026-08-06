@@ -265,6 +265,7 @@
     <string name="task_assignees">Assignat a</string>
     <string name="task_checklists">Llistes senzilles</string>
     <string name="task_comments">Comentaris</string>
+    <string name="task_deadline">Data límit</string>
     <string name="task_deleteconfirm">Segur que vols esborrar «{title}»? També se n\'aniran les seves subtasques i llistes.</string>
     <string name="task_description">Descripció</string>
     <string name="task_duedate">Data</string>
