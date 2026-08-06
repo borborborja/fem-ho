@@ -8,6 +8,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { buildApp } from './app.js';
+import { ensureInstanceSecret } from './config/secret.js';
 import { loadConfig } from './config.js';
 import { connect } from './db/connection.js';
 import { parseDatabaseUrl } from './db/dialect.js';
@@ -33,7 +34,19 @@ async function main(): Promise<void> {
   if (databasePath !== undefined) ensureParentDir(databasePath);
 
   const connection = connect(config.databaseUrl);
-  const app = buildApp(config, { connection });
+
+  /**
+   * **Els secrets es generen i es persisteixen a l'arrencada** (docs/12 §7), no la
+   * primera vegada que algú els fa servir.
+   *
+   * Fer-ho mandrós semblava més net —`buildApp` no toca el disc— però tenia un forat
+   * seriós: qui fes una còpia de seguretat abans de crear el primer enllaç compartit no
+   * s'enduria el `secret.key`, i el dia que restaurés, tots els enllaços creats
+   * entremig serien inservibles. `BACKUP.md` diu de copiar `/data`, i `/data` ha de
+   * tenir-ho tot des del primer segon.
+   */
+  const secret = ensureInstanceSecret(config.dataDir, config.secret);
+  const app = buildApp(config, { connection, secret });
 
   /**
    * Les migracions s'executen a l'arrencar, ABANS d'escoltar peticions, i si una falla

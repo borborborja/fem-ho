@@ -5,17 +5,23 @@
   "type": "module",
   "description": "Font de veritat de l'API i tot el que web, servidor i Android han de compartir",
   "exports": {
-    ".": "./src/index.ts",
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
     "./openapi.yaml": "./openapi.yaml",
     "./i18n/ca.json": "./i18n/ca.json"
   },
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
     "generate": "openapi-typescript openapi.yaml -o src/generated/api.ts",
-    "validate": "redocly lint openapi.yaml",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "validate": "redocly lint openapi.yaml"
   },
   "devDependencies": {
     "@redocly/cli": "2.44.2",
     "openapi-typescript": "7.13.0"
-  }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts"
 }

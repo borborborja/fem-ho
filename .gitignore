@@ -31,3 +31,4 @@ apps/web/e2e/**/*-actual.png
 apps/android/.gradle/
 apps/android/build/
 apps/android/*/build/
+packages/contracts/dist/

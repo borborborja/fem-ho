@@ -35,9 +35,11 @@ RUN npm ci
 
 COPY . .
 
-RUN npm run build --workspace @fem-ho/contracts \
-    && npm run build --workspace @fem-ho/web \
-    && npm run build --workspace @fem-ho/server
+# `--workspaces --if-present`, i no una llista de paquets escrita a mà: `contracts` i
+# `design-system` no tenen script `build` —el primer genera tipus i el segon es
+# vendoritza tal com ve— i nomenar-los aquí feia petar la construcció. Escrit així,
+# afegir un paquet nou no obliga a tocar el Dockerfile.
+RUN npm run build --workspaces --if-present
 
 # Es reinstal·len només les de producció: les de desenvolupament no han d'anar a la
 # imatge final ni per mida ni per superfície d'atac.
@@ -64,7 +66,14 @@ COPY --from=build /src/apps/server/dist ./apps/server/dist
 COPY --from=build /src/apps/server/package.json ./apps/server/package.json
 COPY --from=build /src/apps/server/node_modules ./apps/server/node_modules
 COPY --from=build /src/apps/web/dist ./apps/web/dist
-COPY --from=build /src/packages ./packages
+# Només el que el runtime necessita: el  compilat i el manifest. El  no hi
+# va — el servidor importa el JS, no el TypeScript, i portar-hi el font seria enviar
+# codi que no s'executa.
+COPY --from=build /src/packages/contracts/dist ./packages/contracts/dist
+COPY --from=build /src/packages/contracts/package.json ./packages/contracts/package.json
+COPY --from=build /src/packages/contracts/openapi.yaml ./packages/contracts/openapi.yaml
+COPY --from=build /src/packages/contracts/i18n ./packages/contracts/i18n
+COPY --from=build /src/packages/design-system ./packages/design-system
 
 # El volum el crea el runtime i l'ha de poder escriure l'usuari sense privilegis. El
 # `node` ja ve a la imatge base amb uid 1000.
