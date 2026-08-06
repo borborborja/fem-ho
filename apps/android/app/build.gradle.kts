@@ -63,6 +63,18 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.9.4")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.9.4")
     implementation("androidx.work:work-runtime-ktx:2.11.2")
+    // UnifiedPush: notificacions sense Google (docs/11 §1). Si no hi ha cap
+    // distribuïdor instal·lat, es cau a la consulta periòdica, que és el mateix
+    // WorkManager.
+    implementation("org.unifiedpush.android:connector:3.3.3") {
+        /**
+         * El connector porta Tink de JVM i `security-crypto` en porta la variant
+         * d'Android. Són **les mateixes classes** amb dos artefactes, i el dexer no ho
+         * accepta: "Duplicate class com.google.crypto.tink.Aead". Es queda la d'Android,
+         * que és la que sap parlar amb el magatzem de claus del dispositiu.
+         */
+        exclude(group = "com.google.crypto.tink", module = "tink")
+    }
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
 
     androidTestImplementation(composeBom)

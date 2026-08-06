@@ -104,8 +104,8 @@ Els vuit mòduls de `docs/03` §11 existeixen i l'APK es construeix.
 | Base local amb Room i cua de sortida | fet |
 | Detall de tasca, com a full des de baix | fet |
 | Afegida ràpida amb xips reversibles | fet, amb el parser compartit |
-| **UnifiedPush** | **no fet** |
-| **Vista setmanal a la navegació** | el component hi és, no s'hi arriba |
+| UnifiedPush, amb consulta periòdica com a alternativa | fet, **sense provar amb un distribuïdor real** |
+| Vista setmanal | fet |
 
 El detall té menys camps que el modal de la web, i és deliberat (`docs/03` §6): al mòbil
 s'edita el que es toca sovint —títol, estat, mode d'IA i les llistes— i la resta es fa
@@ -119,6 +119,10 @@ s'abandona.
 No es pot verificar en aquesta màquina i **no s'ha verificat**:
 
 - `androidTest: airplane-mode-reconciliation` — cal un emulador o un telèfon.
+- **UnifiedPush amb un distribuïdor real** (ntfy, Sunup). El codi hi és i compila, però
+  no s'ha vist arribar cap notificació: cal un telèfon amb un distribuïdor instal·lat.
+  La consulta periòdica, que és el que tindrà la majoria de gent, sí que és independent
+  del distribuïdor.
 - La comparació de captures entre la web mòbil i l'app — el mateix.
 - Les proves amb clients CalDAV reals: DAVx⁵, Apple Recordatoris, Thunderbird,
   Evolution, Nextcloud Tasks. Veure [`CALDAV-CLIENTS.md`](CALDAV-CLIENTS.md).

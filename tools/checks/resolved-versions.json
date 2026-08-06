@@ -230,7 +230,8 @@
       "androidx.work:work-runtime-ktx": "2.11.2",
       "com.squareup.okhttp3:okhttp": "5.4.0",
       "org.jetbrains.kotlinx:kotlinx-serialization-json": "1.11.0",
-      "org.jetbrains.kotlinx:kotlinx-coroutines-android": "1.11.0"
+      "org.jetbrains.kotlinx:kotlinx-coroutines-android": "1.11.0",
+      "org.unifiedpush.android:connector": "3.3.3"
     },
     "$note": [
       "Els últims de cada llibreria eren més nous (core-ktx 1.19.0, lifecycle 2.11.0,",

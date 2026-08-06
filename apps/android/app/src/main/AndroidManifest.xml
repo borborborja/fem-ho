@@ -27,5 +27,20 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <!--
+          El receptor d'UnifiedPush. Els tres primers filtres són els que la
+          especificació defineix; el quart és el que el distribuïdor fa servir per
+          descobrir les apps que en volen (docs/11 §1).
+        -->
+        <receiver
+            android:name=".PushReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="org.unifiedpush.android.connector.MESSAGE" />
+                <action android:name="org.unifiedpush.android.connector.UNREGISTERED" />
+                <action android:name="org.unifiedpush.android.connector.NEW_ENDPOINT" />
+                <action android:name="org.unifiedpush.android.connector.REGISTRATION_FAILED" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>

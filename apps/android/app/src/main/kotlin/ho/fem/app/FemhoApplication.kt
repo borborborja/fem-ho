@@ -14,5 +14,16 @@ class FemhoApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         container = Container(this)
+
+        /**
+         * La consulta periòdica es programa **sempre**.
+         *
+         * Amb distribuïdor és redundant i barata —quinze minuts, i només amb xarxa—; i
+         * sense, és l'únic camí perquè arribin els recordatoris. Programar-la només quan
+         * no hi ha distribuïdor voldria dir saber-ho en arrencar, i això no se sap fins
+         * que el registre respon.
+         */
+        Notifications.ensureChannel(this)
+        Notifications.schedulePolling(this)
     }
 }

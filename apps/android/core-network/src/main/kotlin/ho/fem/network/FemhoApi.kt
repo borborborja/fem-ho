@@ -249,6 +249,27 @@ class FemhoApi(
     suspend fun setChecklistItem(itemId: String, done: Boolean): String =
         raw("PATCH", "/api/v1/checklist-items/$itemId", """{"done":$done}""", authenticated = true)
 
+    /**
+     * Registra una subscripció de push.
+     *
+     * **Web Push i UnifiedPush comparteixen les RFC i el xifratge** (docs/11 §1): el
+     * servidor guarda `endpoint`, `p256dh` i `auth` a la mateixa taula i els fa servir
+     * amb la mateixa crida, tant si venen d'un navegador com d'un distribuïdor.
+     */
+    suspend fun subscribePush(endpoint: String, p256dh: String, auth: String): String = raw(
+        "POST",
+        "/api/v1/push/subscriptions",
+        encode(
+            mapOf(
+                "endpoint" to endpoint,
+                "p256dh" to p256dh,
+                "auth" to auth,
+                "platform" to "android",
+            ),
+        ),
+        authenticated = true,
+    )
+
     /** El buidat de la cua de sortida (docs/06 §4). El cos ja ve serialitzat. */
     suspend fun syncBatch(body: String): String =
         raw("POST", "/api/v1/sync/batch", body, authenticated = true)
