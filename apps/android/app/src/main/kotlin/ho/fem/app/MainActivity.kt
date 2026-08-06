@@ -277,6 +277,19 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: (
     // Els textos es resolen aquí i no dins dels callbacks: `stringResource` és
     // `@Composable` i no es pot cridar des d'una lambda que no ho és.
     val quickAddError = stringResource(R.string.board_quickadd_scoperequiredprefix)
+    val columnAddTemplate = stringResource(R.string.board_quickadd_placeholder)
+    // "+ Afegir a {columna}…" per a cada columna: el text porta el nom de la columna i
+    // `stringResource` no es pot cridar des del `footer`, que no és `@Composable` allà.
+    val columnAddLabels = mapOf(
+        TaskStatus.INBOX to stringResource(R.string.board_column_inbox),
+        TaskStatus.TODO to stringResource(R.string.board_column_todo),
+        TaskStatus.DOING to stringResource(R.string.board_column_doing),
+        TaskStatus.DONE to stringResource(R.string.board_column_done),
+    ).mapValues { (_, name) ->
+        // El catàleg porta `{column}` literal: la substitució és aquí, com a la web, i
+        // no amb `%1$s`, que faria divergir el text de les dues apps.
+        columnAddTemplate.replace("{column}", name)
+    }
     val manualLabel = stringResource(R.string.ai_mode_manual)
     val assistedLabel = stringResource(R.string.ai_mode_assisted)
     val delegatedLabel = stringResource(R.string.ai_mode_delegated)
@@ -323,40 +336,44 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: (
                 model.move(task, if (task.status == TaskStatus.DONE) TaskStatus.TODO else TaskStatus.DONE)
             },
             modifier = Modifier.weight(1f),
-        )
-
-        /**
-         * L'afegida ràpida, al peu, **amb el mateix parser que la web**.
-         *
-         * `parseQuickAdd` viu a `:core-model` i `parser-parity` el compara amb el de
-         * TypeScript amb els mateixos fixtures. Una versió pròpia aquí divergiria al
-         * primer cas rar.
-         */
-        QuickAddField(
-            context = QuickAddContext(
-                scopes = scopes.map { scope ->
-                    QuickAddScope(
-                        id = scope.id,
-                        name = scope.name,
-                        projects = projects
-                            .filter { it.scopeId == scope.id }
-                            .map { QuickAddProject(it.id, it.name) },
-                    )
-                },
-                people = people.map { QuickAddPerson(it.id, it.name) },
-                activeScopeIds = if (active.isEmpty()) scopes.map { it.id } else active.toList(),
-            ),
-            placeholder = stringResource(R.string.dashboard_quickadd),
-            scopeRequiredLabel = { noms -> "${'$'}{quickAddError}${'$'}noms" },
-            aiModeLabel = { mode ->
-                when (mode) {
-                    "assisted" -> assistedLabel
-                    "delegated" -> delegatedLabel
-                    else -> manualLabel
-                }
+            /**
+             * L'afegida ràpida, **al peu de cada columna i amb el mateix parser que la
+             * web**. El disseny validat la posa aquí i no sota el tauler; abans, escriure
+             * mirant "Per fer" deixava la targeta a la bústia sense dir-ho.
+             *
+             * `parseQuickAdd` viu a `:core-model` i `parser-parity` el compara amb el de
+             * TypeScript amb els mateixos fixtures. Una versió pròpia aquí divergiria al
+             * primer cas rar.
+             */
+            footer = { status ->
+                QuickAddField(
+                    context = QuickAddContext(
+                        scopes = scopes.map { scope ->
+                            QuickAddScope(
+                                id = scope.id,
+                                name = scope.name,
+                                projects = projects
+                                    .filter { it.scopeId == scope.id }
+                                    .map { QuickAddProject(it.id, it.name) },
+                            )
+                        },
+                        people = people.map { QuickAddPerson(it.id, it.name) },
+                        activeScopeIds =
+                            if (active.isEmpty()) scopes.map { it.id } else active.toList(),
+                    ),
+                    placeholder = columnAddLabels[status].orEmpty(),
+                    scopeRequiredLabel = { noms -> "${'$'}{quickAddError}${'$'}noms" },
+                    aiModeLabel = { mode ->
+                        when (mode) {
+                            "assisted" -> assistedLabel
+                            "delegated" -> delegatedLabel
+                            else -> manualLabel
+                        }
+                    },
+                    onCreate = { title, scopeId, _, _ -> model.create(scopeId, title, status) },
+                    modifier = Modifier.padding(top = 8.dp).testTag("quick-add-${'$'}{status.name.lowercase()}"),
+                )
             },
-            onCreate = { title, scopeId, _, _ -> model.create(scopeId, title) },
-            modifier = Modifier.padding(12.dp),
         )
     }
 

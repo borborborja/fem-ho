@@ -65,6 +65,11 @@ fun BoardScreen(
     onMove: (Task, TaskStatus) -> Unit,
     onToggle: (Task) -> Unit,
     modifier: Modifier = Modifier,
+    /**
+     * El peu de cada columna. El disseny validat hi posa l'afegida ràpida de la columna,
+     * i abans n'hi havia una de sola sota el tauler que ho enviava tot a la bústia.
+     */
+    footer: @Composable (TaskStatus) -> Unit = {},
 ) {
     val pager = rememberPagerState(pageCount = { ORDER.size })
 
@@ -114,6 +119,8 @@ fun BoardScreen(
                     }
                 }
             }
+
+            footer(status)
         }
     }
 }

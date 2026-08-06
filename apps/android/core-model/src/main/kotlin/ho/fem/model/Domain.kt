@@ -73,8 +73,18 @@ data class Task(
     @SerialName("ai_mode") val aiMode: AiMode = AiMode.MANUAL,
     @SerialName("delegate_agent_id") val delegateAgentId: String? = null,
     @SerialName("assignee_ids") val assigneeIds: List<String> = emptyList(),
+    /**
+     * L'agregat que la targeta plegada necessita: ítems fets, ítems totals, i quants
+     * **blocs** desplegables hi ha. Ve del tauler; no hi és a les respostes velles i per
+     * això és nul·lable.
+     */
+    val progress: TaskProgress? = null,
     val version: Int = 1,
 )
+
+/** Veure `Task.progress`. `lists` compta blocs —les subtasques en són un— i no ítems. */
+@Serializable
+data class TaskProgress(val done: Int = 0, val total: Int = 0, val lists: Int = 0)
 
 @Serializable
 data class Subtask(

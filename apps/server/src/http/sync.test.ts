@@ -497,3 +497,139 @@ describe("CAS 8 · el seq s'assigna al final de la transacció", () => {
     expect(files.rows.map((r) => r.entity_id)).toEqual(ids);
   });
 });
+
+/**
+ * **Crear des de la cua de sortida.**
+ *
+ * `docs/06` §3 llista `create` entre les operacions de l'outbox, i el client d'Android
+ * hi encua totes les tasques que es fan sense connexió. El servidor no la sabia fer: la
+ * fila no existia, `applyOne` responia `rejected` amb un 404, i el client —que només
+ * mira que la crida no peti— la treia de la cua. **La tasca desapareixia sense que ni
+ * el telèfon ni el servidor diguessin res.**
+ *
+ * Es prova amb les quatre entitats que se sincronitzen, perquè el camí és el mateix i
+ * el que falla a una fallaria a totes.
+ */
+describe('crear des del lot', () => {
+  it('una tasca creada sense connexió arriba de veritat', async () => {
+    const id = uuidv7();
+    const res = await api('POST', '/api/v1/sync/batch', {
+      operations: [
+        {
+          op_id: uuidv7(),
+          entity: 'task',
+          op: 'create',
+          id,
+          base_version: 0,
+          data: { id, scope_id: scopeId, title: 'Feta al metro', status: 'todo' },
+        },
+      ],
+    });
+
+    expect(res.statusCode, res.body).toBe(200);
+    const result = res.json<{ results: { status: string }[] }>().results[0];
+    expect(result?.status, JSON.stringify(result)).toBe('ok');
+
+    const tasca = await api('GET', `/api/v1/tasks/${id}`);
+    expect(tasca.statusCode).toBe(200);
+    expect(tasca.json<{ title: string; status: string }>().title).toBe('Feta al metro');
+    // I **a la columna on es va escriure**, no a la bústia.
+    expect(tasca.json<{ status: string }>().status).toBe('todo');
+  });
+
+  it('reenviar el mateix op_id no en crea dues', async () => {
+    const id = uuidv7();
+    const opId = uuidv7();
+    const operation = {
+      op_id: opId,
+      entity: 'task',
+      op: 'create',
+      id,
+      base_version: 0,
+      data: { id, scope_id: scopeId, title: 'Repetida' },
+    };
+
+    await api('POST', '/api/v1/sync/batch', { operations: [operation] });
+    const segona = await api('POST', '/api/v1/sync/batch', { operations: [operation] });
+    expect(segona.json<{ results: { status: string }[] }>().results[0]?.status).toBe('ok');
+
+    const totes = await api('GET', '/api/v1/tasks?limit=100');
+    const iguals = totes
+      .json<{ data: { title: string }[] }>()
+      .data.filter((task) => task.title === 'Repetida');
+    expect(iguals).toHaveLength(1);
+  });
+
+  it('subtasques, llistes i ítems també', async () => {
+    const taskId = (
+      await api('POST', '/api/v1/tasks', { scope_id: scopeId, title: 'Amb fills' })
+    ).json<{ id: string }>().id;
+
+    const subtaskId = uuidv7();
+    const checklistId = uuidv7();
+    const itemId = uuidv7();
+
+    const res = await api('POST', '/api/v1/sync/batch', {
+      operations: [
+        {
+          op_id: uuidv7(),
+          entity: 'subtask',
+          op: 'create',
+          id: subtaskId,
+          base_version: 0,
+          data: { id: subtaskId, task_id: taskId, title: 'Una subtasca' },
+        },
+        {
+          op_id: uuidv7(),
+          entity: 'checklist',
+          op: 'create',
+          id: checklistId,
+          base_version: 0,
+          data: { id: checklistId, task_id: taskId, name: 'La compra' },
+        },
+        {
+          op_id: uuidv7(),
+          entity: 'checklist_item',
+          op: 'create',
+          id: itemId,
+          base_version: 0,
+          data: { id: itemId, checklist_id: checklistId, text: 'Pa' },
+        },
+      ],
+    });
+
+    // **L'ordre topològic importa**: l'ítem va després de la llista dins del mateix lot.
+    const results = res.json<{ results: { status: string }[] }>().results;
+    expect(results.map((r) => r.status)).toEqual(['ok', 'ok', 'ok']);
+
+    const subtasques = await api('GET', `/api/v1/tasks/${taskId}/subtasks`);
+    expect(subtasques.json<{ id: string }[]>().map((s) => s.id)).toContain(subtaskId);
+
+    const llistes = await api('GET', `/api/v1/tasks/${taskId}/checklists`);
+    const llista = llistes
+      .json<{ id: string; items: { id: string }[] }[]>()
+      .find((c) => c.id === checklistId);
+    expect(llista?.items.map((i) => i.id)).toContain(itemId);
+  });
+
+  it("una creació sense àmbit es rebutja, i **es queda dient per què**", async () => {
+    const id = uuidv7();
+    const res = await api('POST', '/api/v1/sync/batch', {
+      operations: [
+        {
+          op_id: uuidv7(),
+          entity: 'task',
+          op: 'create',
+          id,
+          base_version: 0,
+          data: { id, title: 'Sense àmbit' },
+        },
+      ],
+    });
+
+    const result = res.json<{ results: { status: string; error?: { detail?: string } }[] }>()
+      .results[0];
+    expect(result?.status).toBe('rejected');
+    expect(result?.error?.detail ?? '').not.toBe('');
+  });
+});

@@ -8,10 +8,13 @@
 
 import { sql } from 'kysely';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { auditedTransaction } from '../audit/audited-transaction.js';
+import { auditedTransaction, type AuditContext } from '../audit/audited-transaction.js';
 import { PolicyError, notFound, unauthenticated } from '../policy/errors.js';
 import type { Principal } from '../policy/principal.js';
 import { assertScopeAccess } from '../services/scopes.js';
+import { createChecklist, createChecklistItem } from '../services/checklists.js';
+import { createSubtask } from '../services/subtasks.js';
+import { createTask } from '../services/tasks.js';
 import {
   decodeCursor,
   encodeCursor,
@@ -166,6 +169,71 @@ export function registerSyncRoutes(app: FastifyInstance): void {
   });
 }
 
+/**
+ * Despatxa una creació del lot al servei que li toca.
+ *
+ * L'entitat pare arriba dins de `data` —`task_id`, `checklist_id`— perquè el lot ja ve
+ * en ordre topològic (docs/06 §4): la llista abans que els seus ítems.
+ */
+async function createFromBatch(
+  ctx: AuditContext,
+  principal: Principal,
+  entity: string,
+  data: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const text = (key: string): string | undefined =>
+    typeof data[key] === 'string' ? (data[key] as string) : undefined;
+
+  switch (entity) {
+    case 'task': {
+      const { task } = await createTask(ctx, principal, data as never);
+      return task as unknown as Record<string, unknown>;
+    }
+    case 'subtask': {
+      const taskId = text('task_id');
+      if (taskId === undefined) throw missingParent('subtask', 'task_id');
+      return (await createSubtask(ctx, principal, taskId, data as never)) as unknown as Record<
+        string,
+        unknown
+      >;
+    }
+    case 'checklist': {
+      const taskId = text('task_id');
+      if (taskId === undefined) throw missingParent('checklist', 'task_id');
+      return (await createChecklist(ctx, principal, taskId, data as never)) as unknown as Record<
+        string,
+        unknown
+      >;
+    }
+    case 'checklist_item': {
+      const checklistId = text('checklist_id');
+      if (checklistId === undefined) throw missingParent('checklist_item', 'checklist_id');
+      return (await createChecklistItem(
+        ctx,
+        principal,
+        checklistId,
+        data as never,
+      )) as unknown as Record<string, unknown>;
+    }
+    default:
+      throw new PolicyError(
+        'not-creatable',
+        'Not creatable',
+        422,
+        `"${entity}" no es pot crear des d'un lot.`,
+      );
+  }
+}
+
+function missingParent(entity: string, field: string): PolicyError {
+  return new PolicyError(
+    'parent-required',
+    'Parent required',
+    422,
+    `Crear un "${entity}" necessita "${field}" a "data".`,
+  );
+}
+
 async function applyOne(
   app: FastifyInstance,
   principal: Principal,
@@ -207,8 +275,33 @@ async function applyOne(
           return { op_id: operation.op_id, status: 'ok' };
         }
 
+        /**
+         * **Crear des de la cua de sortida.**
+         *
+         * `docs/06` §3 posa `create` entre les operacions de l'outbox: una tasca escrita
+         * al metro no existeix enlloc fins que el lot arriba. Es delega als serveis de
+         * sempre i no a un `INSERT` propi, perquè són ells els que fan complir les
+         * invariants —una tasca sense àmbit es rebutja, un àmbit individual s'autoassigna—
+         * i els que deixen la fila a `activity_log` dins de la mateixa transacció.
+         *
+         * Si la fila **ja hi és**, no es torna a crear: el mateix `op_id` reenviat ja el
+         * para la memòria d'idempotència, però dos `op_id` diferents amb el mateix `id`
+         * —un reintent d'una cua que va perdre la resposta— han de convergir igual.
+         */
+        if (operation.op === 'create' && server === undefined) {
+          const data = { ...(operation.data ?? {}), id: operation.id } as Record<string, unknown>;
+          const entity = await createFromBatch(ctx, principal, operation.entity, data);
+          return { op_id: operation.op_id, status: 'ok', entity };
+        }
+
         if (server === undefined) {
           throw notFound(operation.entity, operation.id);
+        }
+
+        // Una creació d'una fila que ja hi és: ja està feta. Es respon amb la de dins,
+        // que és el que el client vol saber.
+        if (operation.op === 'create') {
+          return { op_id: operation.op_id, status: 'ok', entity: server };
         }
 
         const scopeId = server.scope_id as string | undefined;

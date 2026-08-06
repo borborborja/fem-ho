@@ -9,6 +9,7 @@ import ho.fem.model.InstanceInfo
 import ho.fem.model.Person
 import ho.fem.model.Project
 import ho.fem.model.Scope
+import ho.fem.model.Subtask
 import ho.fem.model.Task
 import ho.fem.model.UserProfile
 import kotlinx.coroutines.Dispatchers
@@ -248,6 +249,31 @@ class FemhoApi(
 
     suspend fun setChecklistItem(itemId: String, done: Boolean): String =
         raw("PATCH", "/api/v1/checklist-items/$itemId", """{"done":$done}""", authenticated = true)
+
+    suspend fun subtasks(taskId: String): List<Subtask> = get("/api/v1/tasks/$taskId/subtasks")
+
+    suspend fun setSubtask(id: String, done: Boolean): String =
+        raw("PATCH", "/api/v1/subtasks/$id", """{"done":$done}""", authenticated = true)
+
+    /**
+     * Afegir una subtasca o un ítem de llista **des de la targeta** (docs/03 §4).
+     *
+     * L'identificador el genera el client (D4), igual que a la creació de tasques: així
+     * un reintent no duplica res.
+     */
+    suspend fun createSubtask(taskId: String, id: String, title: String): Subtask =
+        post("/api/v1/tasks/$taskId/subtasks", mapOf("id" to id, "title" to title))
+
+    suspend fun createChecklist(taskId: String, id: String, name: String): Checklist =
+        post("/api/v1/tasks/$taskId/checklists", mapOf("id" to id, "name" to name))
+
+    suspend fun createChecklistItem(checklistId: String, id: String, text: String): String =
+        raw(
+            "POST",
+            "/api/v1/checklists/$checklistId/items",
+            encode(mapOf("id" to id, "text" to text)),
+            authenticated = true,
+        )
 
     /**
      * Registra una subscripció de push.

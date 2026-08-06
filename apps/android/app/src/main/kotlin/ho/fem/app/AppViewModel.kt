@@ -261,11 +261,11 @@ class AppViewModel(private val container: Container) : ViewModel() {
         }
     }
 
-    fun create(scopeId: String, title: String) {
+    fun create(scopeId: String, title: String, status: TaskStatus = TaskStatus.INBOX) {
         val base = serverUrl ?: return
         viewModelScope.launch {
             val repository = container.repository(base)
-            repository.createTask(scopeId, title, null)
+            repository.createTask(scopeId, title, null, status)
             repository.flush()
         }
     }
