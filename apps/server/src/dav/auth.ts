@@ -10,7 +10,6 @@
  * desplegament (docs/12), no aquest fitxer.
  */
 
-import { timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage } from 'node:http';
 import { sql } from 'kysely';
 import type { Connection } from '../db/connection.js';
@@ -114,12 +113,4 @@ function parseBasic(header: string | undefined): BasicCredential | undefined {
   if (separator === -1) return undefined;
 
   return { user: decoded.slice(0, separator), password: decoded.slice(separator + 1) };
-}
-
-/** Comparació en temps constant per a etags i tokens. */
-export function constantTimeEquals(a: string, b: string): boolean {
-  const left = Buffer.from(a, 'utf8');
-  const right = Buffer.from(b, 'utf8');
-  if (left.length !== right.length) return false;
-  return timingSafeEqual(left, right);
 }

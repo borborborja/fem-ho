@@ -15,7 +15,7 @@
  * triguen el mateix.
  */
 
-import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHmac, randomBytes } from 'node:crypto';
 import { sql } from 'kysely';
 import { v7 as uuidv7 } from 'uuid';
 import type { AuditContext } from '../audit/audited-transaction.js';
@@ -482,12 +482,4 @@ export function guestPrincipal(
     source: 'share',
     label: guestLabel(guestName, guestRef),
   };
-}
-
-/** Comparació en temps constant, per no filtrar res pel temps. */
-export function safeEquals(a: string, b: string): boolean {
-  const left = Buffer.from(a, 'utf8');
-  const right = Buffer.from(b, 'utf8');
-  if (left.length !== right.length) return false;
-  return timingSafeEqual(left, right);
 }

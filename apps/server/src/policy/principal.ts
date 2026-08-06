@@ -45,8 +45,3 @@ export function hasCapability(principal: Principal, capability: Capability): boo
 export function canSeeScope(principal: Principal, scopeId: string): boolean {
   return principal.scopeIds === null || principal.scopeIds.has(scopeId);
 }
-
-/** Els àmbits que pot veure, o null si són tots els seus. */
-export function visibleScopeIds(principal: Principal): ReadonlySet<string> | null {
-  return principal.scopeIds;
-}

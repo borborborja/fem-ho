@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { buildApp } from './app.js';
 import { ensureInstanceSecret } from './config/secret.js';
 import { buildDavServer } from './dav/index.js';
+import { startScheduler } from './jobs/scheduler.js';
 import { loadConfig } from './config.js';
 import { connect } from './db/connection.js';
 import { parseDatabaseUrl } from './db/dialect.js';
@@ -96,9 +97,25 @@ async function main(): Promise<void> {
     });
   });
 
+  /**
+   * El planificador (docs/11 §3). Un tic de 30 segons dins del procés, sense cua
+   * externa: una casa que s'autoallotja no ha de muntar un Redis per enviar
+   * recordatoris.
+   */
+  const scheduler = startScheduler({
+    connection,
+    secret,
+    baseUrl: config.baseUrl,
+    log: (message, error) => {
+      if (error === undefined) app.log.info(message);
+      else app.log.warn({ err: error }, message);
+    },
+  });
+
   for (const signal of ['SIGTERM', 'SIGINT'] as const) {
     process.once(signal, () => {
       app.log.info({ signal }, 'Tancant');
+      scheduler.stop();
       void new Promise<void>((resolve) => dav.close(() => resolve()))
         .then(() => app.close())
         .then(() => connection.close())

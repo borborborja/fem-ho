@@ -52,7 +52,6 @@ export interface OutboxRow {
 /** Claus de la taula `meta`. */
 export const CURSOR_KEY = 'sync_cursor';
 export const SERVER_TIME_KEY = 'server_time';
-export const CLOCK_SKEW_KEY = 'clock_skew_ms';
 
 export interface MetaRow {
   key: string;

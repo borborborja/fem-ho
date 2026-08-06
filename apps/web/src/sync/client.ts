@@ -7,7 +7,6 @@
  */
 
 import {
-  CLOCK_SKEW_KEY,
   CURSOR_KEY,
   SERVER_TIME_KEY,
   readMeta,
@@ -168,20 +167,4 @@ export async function sync(
   const pushed = await push(db, transport);
   const pulled = await pull(db, transport);
   return { sent: pushed.sent, applied: pulled.applied, resynced: pulled.resynced };
-}
-
-/**
- * Desviació entre el rellotge del client i el del servidor.
- *
- * `docs/06` §2 fa que cada resposta porti `server_time` justament per poder-la calcular.
- * Un client amb el rellotge mal posat genera `created_at` del futur i les seves
- * operacions surten sempre les últimes de la cua.
- */
-export function recordClockSkew(
-  db: FemHoDatabase,
-  serverTime: string,
-  localTime: string,
-): Promise<void> {
-  const skew = Date.parse(serverTime) - Date.parse(localTime);
-  return writeMeta(db, CLOCK_SKEW_KEY, String(skew));
 }

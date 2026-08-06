@@ -15,7 +15,6 @@ import { v7 as uuidv7 } from 'uuid';
 import webpush from 'web-push';
 import type { AuditContext } from '../audit/audited-transaction.js';
 import type { MigrationDb } from '../db/migration-db.js';
-import { PolicyError } from '../policy/errors.js';
 
 export const VAPID_PUBLIC_KEY = 'vapid_public_key';
 export const VAPID_PRIVATE_KEY = 'vapid_private_key';
@@ -358,14 +357,3 @@ export function pushAvailability(capabilities: {
 /** L'enviador real. Es passa des de fora perquè les proves no en necessitin cap. */
 export const realSender: PushSender = async (subscription, payload, options) =>
   webpush.sendNotification(subscription, payload, options) as Promise<{ statusCode: number }>;
-
-export function assertVapidConfigured(keys: VapidKeys | undefined): asserts keys is VapidKeys {
-  if (keys === undefined) {
-    throw new PolicyError(
-      'push-not-configured',
-      'Push not configured',
-      503,
-      'Aquesta instància encara no té claus VAPID.',
-    );
-  }
-}
