@@ -262,9 +262,19 @@ describe('CAS 3 · reordenació concurrent', () => {
     const clientA = generatePosition(a!.position, b!.position);
     const clientB = generatePosition(a!.position, b!.position);
 
-    // Amb jitter, les claus són diferents (D3): sense això, l'empat el resoldria cada
-    // client a la seva manera i acabarien veient ordres distints.
-    expect(clientA).not.toBe(clientB);
+    /**
+     * **El jitter fa els xocs improbables, no impossibles**, i afirmar el contrari era
+     * una prova que fallava una vegada de cada seixanta: amb 61 dígits de jitter, dos
+     * clients cauen a la mateixa clau el 1,6% de les vegades.
+     *
+     * El que sí que ha de ser cert sempre és que les dues claus **caiguin al buit**, que
+     * és el que fa que cap targeta canviï de veïns. L'empat, quan passa, el desfà el
+     * desempat per `id` de les consultes, no el jitter.
+     */
+    for (const key of [clientA, clientB]) {
+      expect(comparePositions(a!.position, key)).toBe(-1);
+      expect(comparePositions(key, b!.position)).toBe(-1);
+    }
 
     for (const [index, position] of [clientA, clientB].entries()) {
       await api('POST', '/api/v1/sync/batch', {
@@ -281,13 +291,21 @@ describe('CAS 3 · reordenació concurrent', () => {
       });
     }
 
-    // Cap targeta perduda, i l'ordre és determinista perquè és una comparació binària.
+    /**
+     * Cap targeta perduda, i l'ordre és **total**: `(position, id)` no empata mai, perquè
+     * `id` és únic. Comparar només per posició deixava l'ordre a l'atzar del motor el dia
+     * que dues claus coincidien, que és exactament el cas que aquesta prova munta.
+     */
     const final = await sql<{ id: string; position: string }>`
-      SELECT id, position FROM tasks WHERE id IN (${sql.join(ids)}) ORDER BY position
+      SELECT id, position FROM tasks WHERE id IN (${sql.join(ids)}) ORDER BY position, id
     `.execute(conn.db);
     expect(final.rows).toHaveLength(3);
     for (let i = 1; i < final.rows.length; i += 1) {
-      expect(comparePositions(final.rows[i - 1]!.position, final.rows[i]!.position)).toBe(-1);
+      const previous = final.rows[i - 1]!;
+      const current = final.rows[i]!;
+      const byPosition = comparePositions(previous.position, current.position);
+      const strictlyBefore = byPosition === -1 || (byPosition === 0 && previous.id < current.id);
+      expect(strictlyBefore, `${previous.position}/${previous.id} abans de ${current.position}/${current.id}`).toBe(true);
     }
   });
 });

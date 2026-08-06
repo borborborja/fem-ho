@@ -242,7 +242,7 @@ async function renderSubtasks(
   }>`
     SELECT id, title, done, position, created_at, updated_at
     FROM subtasks WHERE task_id = ${taskId} AND deleted_at IS NULL
-    ORDER BY position
+    ORDER BY position, id
   `.execute(db);
 
   return found.rows.map((row) => {
@@ -277,7 +277,7 @@ async function renderChecklist(db: MigrationDb, taskId: string): Promise<string 
   const lists = await sql<{ id: string; name: string }>`
     SELECT id, name FROM checklists
     WHERE task_id = ${taskId} AND deleted_at IS NULL
-    ORDER BY position
+    ORDER BY position, id
   `.execute(db);
 
   if (lists.rows.length === 0) return undefined;
@@ -286,7 +286,7 @@ async function renderChecklist(db: MigrationDb, taskId: string): Promise<string 
     SELECT checklist_id, text, done FROM checklist_items
     WHERE checklist_id IN (${sql.join(lists.rows.map((list) => sql`${list.id}`))})
       AND deleted_at IS NULL
-    ORDER BY position
+    ORDER BY position, id
   `.execute(db);
 
   /**

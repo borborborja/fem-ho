@@ -107,7 +107,7 @@ async function itemsOf(
     SELECT id, checklist_id, text, done, done_at, done_by, position
     FROM checklist_items
     WHERE deleted_at IS NULL AND checklist_id IN (${sql.join(checklistIds)})
-    ORDER BY position
+    ORDER BY position, id
   `.execute(db);
 
   const byList = new Map<string, ChecklistItemRow[]>();
@@ -154,7 +154,7 @@ export async function listChecklists(
   const rows = await sql<ChecklistRow>`
     SELECT id, task_id, subtask_id, name, pinned, pinned_by, show_completed_inline,
            position, version
-    FROM checklists WHERE task_id = ${taskId} AND deleted_at IS NULL ORDER BY position
+    FROM checklists WHERE task_id = ${taskId} AND deleted_at IS NULL ORDER BY position, id
   `.execute(db);
 
   const items = await itemsOf(
@@ -215,7 +215,7 @@ export async function createChecklist(
   const id = input.id ?? uuidv7();
   const last = await sql<{ position: string }>`
     SELECT position FROM checklists WHERE task_id = ${taskId} AND deleted_at IS NULL
-    ORDER BY position DESC LIMIT 1
+    ORDER BY position DESC, id DESC LIMIT 1
   `.execute(ctx.tx);
 
   await sql`
@@ -254,7 +254,7 @@ export async function createChecklistItem(
   const id = input.id ?? uuidv7();
   const last = await sql<{ position: string }>`
     SELECT position FROM checklist_items WHERE checklist_id = ${checklistId} AND deleted_at IS NULL
-    ORDER BY position DESC LIMIT 1
+    ORDER BY position DESC, id DESC LIMIT 1
   `.execute(ctx.tx);
 
   await sql`

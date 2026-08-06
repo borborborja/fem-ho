@@ -146,7 +146,7 @@ export async function createScope(
   const last = await sql<{ position: string }>`
     SELECT position FROM scopes
     WHERE owner_id = ${principal.userId} AND deleted_at IS NULL
-    ORDER BY position DESC LIMIT 1
+    ORDER BY position DESC, id DESC LIMIT 1
   `.execute(ctx.tx);
 
   const position = input.position ?? generatePosition(last.rows[0]?.position ?? null, null);
@@ -211,7 +211,7 @@ export async function listProjects(
            created_at, updated_at, version
     FROM projects
     WHERE deleted_at IS NULL AND scope_id IN (${sql.join(allowed)})
-    ORDER BY position
+    ORDER BY position, id
   `.execute(db);
 
   return rows.rows;
@@ -249,7 +249,7 @@ export async function createProject(
   const last = await sql<{ position: string }>`
     SELECT position FROM projects
     WHERE scope_id = ${input.scope_id} AND deleted_at IS NULL
-    ORDER BY position DESC LIMIT 1
+    ORDER BY position DESC, id DESC LIMIT 1
   `.execute(ctx.tx);
   const position = input.position ?? generatePosition(last.rows[0]?.position ?? null, null);
 

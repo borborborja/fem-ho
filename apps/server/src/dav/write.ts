@@ -196,7 +196,7 @@ async function writeTodo(
               SELECT position FROM tasks
               WHERE scope_id = ${collection.scopeId} AND status = ${mare.status}
                 AND deleted_at IS NULL
-              ORDER BY position DESC LIMIT 1
+              ORDER BY position DESC, id DESC LIMIT 1
             `.execute(ctx.tx)
           ).rows[0]?.position ?? null,
           null,

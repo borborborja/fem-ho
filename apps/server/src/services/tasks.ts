@@ -115,9 +115,9 @@ export async function listTasks(
 
   const statuses = filters.statuses ?? [...TASK_STATUSES];
   // Paginació per cursor i no per desplaçament: amb dades que canvien, el desplaçament
-  // es salta i repeteix files (docs/05 §3). El cursor és la posició de l'última fila.
+  // es salta i repeteix files (docs/05 §3).
   const limit = clampInt(filters.limit, { min: 1, max: 200, fallback: 50 });
-  const cursor = filters.cursor ?? '';
+  const cursor = decodeTaskCursor(filters.cursor);
 
   const rows = await sql<TaskRow>`
     SELECT ${TASK_COLUMNS} FROM tasks
@@ -125,20 +125,49 @@ export async function listTasks(
       AND scope_id IN (${sql.join(allowed)})
       AND status IN (${sql.join(statuses)})
       ${filters.projectId === undefined ? sql`` : sql`AND project_id = ${filters.projectId}`}
-      ${cursor === '' ? sql`` : sql`AND position > ${cursor}`}
+      ${
+        cursor === null
+          ? sql``
+          : sql`AND (position > ${cursor.position}
+                     OR (position = ${cursor.position} AND id > ${cursor.id}))`
+      }
       ${searchFilter(filters.search)}
-    ORDER BY position
+    ORDER BY position, id
     LIMIT ${limit + 1}
   `.execute(db);
 
   const hasMore = rows.rows.length > limit;
   const page = hasMore ? rows.rows.slice(0, limit) : rows.rows;
+  const last = page[page.length - 1];
 
   return {
     data: await withAssignees(db, page),
-    next_cursor: hasMore ? (page[page.length - 1]?.position ?? null) : null,
+    next_cursor: hasMore && last !== undefined ? encodeTaskCursor(last) : null,
     has_more: hasMore,
   };
+}
+
+/**
+ * El cursor porta la posició **i** l'identificador.
+ *
+ * Amb només la posició, dues files que la comparteixen —cosa que el jitter fa
+ * improbable però no impossible (D3)— es parteixen entre pàgines i la segona no
+ * apareix mai: `position > cursor` la deixa fora i `>=` repetiria la primera. La
+ * parella `(position, id)` sí que és única, perquè `id` ho és.
+ *
+ * El separador és `|`, que no és cap dígit de l'alfabet de posicions.
+ */
+function encodeTaskCursor(row: TaskRow): string {
+  return `${row.position}|${row.id}`;
+}
+
+function decodeTaskCursor(raw: string | undefined): { position: string; id: string } | null {
+  if (raw === undefined || raw === '') return null;
+  const cut = raw.indexOf('|');
+  // Un cursor antic, sense identificador, encara ha de servir: es tracta com el primer
+  // possible d'aquella posició.
+  if (cut === -1) return { position: raw, id: '' };
+  return { position: raw.slice(0, cut), id: raw.slice(cut + 1) };
 }
 
 /**
@@ -248,7 +277,7 @@ export async function createTask(
     const last = await sql<{ position: string }>`
       SELECT position FROM tasks
       WHERE scope_id = ${input.scope_id} AND status = ${status} AND deleted_at IS NULL
-      ORDER BY position DESC LIMIT 1
+      ORDER BY position DESC, id DESC LIMIT 1
     `.execute(ctx.tx);
     position = generatePosition(last.rows[0]?.position ?? null, null);
   }
@@ -378,7 +407,7 @@ export async function moveTask(
         SELECT position FROM tasks
         WHERE scope_id = ${current.scope_id} AND status = ${status}
           AND id != ${id} AND deleted_at IS NULL
-        ORDER BY position DESC LIMIT 1
+        ORDER BY position DESC, id DESC LIMIT 1
       `.execute(ctx.tx);
       position = generatePosition(last.rows[0]?.position ?? null, null);
     } else {
@@ -496,7 +525,7 @@ export async function getBoard(
     WHERE deleted_at IS NULL
       AND scope_id IN (${sql.join(allowed)})
       ${options.projectId === undefined ? sql`` : sql`AND project_id = ${options.projectId}`}
-    ORDER BY status, scope_id, position
+    ORDER BY status, scope_id, position, id
   `.execute(db);
 
   const tasks = await withAssignees(db, rows.rows);

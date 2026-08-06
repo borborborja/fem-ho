@@ -395,3 +395,77 @@ describe("l'abast del token val també per a les tasques", () => {
     expect(rebutjada.json<{ detail: string }>().detail).toContain('Personal');
   });
 });
+
+/**
+ * L'ordre és **total**, també quan dues claus empaten.
+ *
+ * El jitter (D3) fa que dos clients que insereixen al mateix buit rarament coincideixin,
+ * però "rarament" no és "mai": amb 61 dígits xoquen l'1,6% de les vegades. El dia que
+ * passa, `ORDER BY position` a seques deixa l'ordre a criteri del motor, i dos clients
+ * poden veure la columna al revés l'un de l'altre sense que res falli enlloc.
+ */
+describe('empat de posicions', () => {
+  // Es força l'empat escrivint directament: per l'API no es pot provocar a voluntat.
+  const primera = uuidv7();
+  const segona = uuidv7();
+
+  beforeAll(async () => {
+    for (const id of [primera, segona]) {
+      await sql`
+        INSERT INTO tasks (id, scope_id, title, status, position, view_mode, ai_mode, origin,
+                           created_by, created_at, updated_at, version)
+        VALUES (${id}, ${scopePersonal}, ${`Empat ${id.slice(-4)}`}, 'inbox', 'zzEMPAT',
+                'card', 'manual', 'native', ${userId}, ${NOW}, ${NOW}, 1)
+      `.execute(conn.db);
+    }
+  });
+
+  it('dues tasques amb la MATEIXA clau surten sempre en el mateix ordre', async () => {
+    // Deu lectures seguides: si l'ordre depengués del motor, no caldria que fossin deu.
+    const vistes: string[][] = [];
+    for (let i = 0; i < 10; i += 1) {
+      const res = await api('GET', '/api/v1/tasks?status=inbox&limit=200');
+      vistes.push(
+        res
+          .json<{ data: { id: string; position: string }[] }>()
+          .data.filter((t) => t.position === 'zzEMPAT')
+          .map((t) => t.id),
+      );
+    }
+
+    expect(vistes[0]).toHaveLength(2);
+    for (const vista of vistes) expect(vista).toEqual(vistes[0]);
+
+    // I el desempat és per identificador, que és el que fa que els dos clients coincideixin
+    // sense haver-se de posar d'acord.
+    expect(vistes[0]).toEqual([primera, segona].sort());
+  });
+
+  it('i la paginació no se salta la segona', async () => {
+    // Amb el cursor guardant només la posició, la pàgina que acaba a la primera de les
+    // dues empatades demanava `position > 'zzEMPAT'` i la segona no apareixia mai.
+    const vistos = new Set<string>();
+    let cursor: string | null = '';
+    for (let pagina = 0; pagina < 50 && cursor !== null; pagina += 1) {
+      const url: string =
+        cursor === ''
+          ? '/api/v1/tasks?status=inbox&limit=1'
+          : `/api/v1/tasks?status=inbox&limit=1&cursor=${encodeURIComponent(cursor)}`;
+      const res: LightMyRequestResponse = await api('GET', url);
+      const body = res.json<{ data: { id: string }[]; next_cursor: string | null }>();
+      for (const task of body.data) vistos.add(task.id);
+      cursor = body.next_cursor;
+    }
+
+    // El patró de referència és la mateixa llista demanada de cop: caminar-la d'una en
+    // una ha de donar exactament el mateix conjunt, ni una menys ni una repetida.
+    const dEnCop = await api('GET', '/api/v1/tasks?status=inbox&limit=200');
+    const esperats = dEnCop.json<{ data: { id: string }[] }>().data.map((t) => t.id);
+
+    expect([...vistos].sort()).toEqual([...esperats].sort());
+
+    // I les dues empatades hi són totes dues: aquesta és la fila que abans es perdia.
+    expect(vistos.has(primera)).toBe(true);
+    expect(vistos.has(segona)).toBe(true);
+  });
+});
