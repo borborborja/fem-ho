@@ -15,6 +15,7 @@ import { registerAuthRoutes } from './http/auth.js';
 import { registerInstanceRoutes } from './http/instance.js';
 import { registerMcpRoutes } from './http/mcp.js';
 import { registerSyncRoutes } from './http/sync.js';
+import { registerTokenRoutes } from './http/tokens.js';
 import { registerChecklistRoutes, registerEventRoutes, registerTaskRoutes } from './http/tasks.js';
 
 export interface BuildOptions {
@@ -54,6 +55,7 @@ export function buildApp(config: Config, options: BuildOptions = {}): FastifyIns
   registerChecklistRoutes(app);
   registerSyncRoutes(app);
   registerMcpRoutes(app);
+  registerTokenRoutes(app);
 
   return app;
 }

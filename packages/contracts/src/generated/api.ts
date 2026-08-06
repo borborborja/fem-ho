@@ -463,6 +463,95 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/tokens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Els tokens d'API de qui pregunta
+         * @description Es llisten amb el **prefix** i l'últim ús, mai el token sencer: només se'n guarda
+         *     el hash (docs/05 §2). Si l'usuari el perd, ha de crear-ne un de nou.
+         */
+        get: operations["listApiTokens"];
+        put?: never;
+        /**
+         * Crear un token d'API
+         * @description **El token sencer es retorna UN SOL COP.** No es pot recuperar del hash, i cal
+         *     dir-ho clarament a qui el crea.
+         *
+         *     Les capacitats i els àmbits van al registre del token, **no** a scopes d'OAuth
+         *     (regla 9).
+         */
+        post: operations["createApiToken"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tokens/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Revocar un token */
+        delete: operations["revokeApiToken"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tasks/{id}/ai-mode": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Canviar el mode d'IA d'una tasca
+         * @description Els tres modes de docs/09 §2. `manual` és el per defecte i no es pinta res a la
+         *     targeta; `assisted` pot llegir, comentar i preparar però **no completar**;
+         *     `delegated` la pot executar sencera.
+         */
+        post: operations["setAiMode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tasks/{id}/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * L'historial d'una tasca
+         * @description Els actors barrejats —humans, IA i externs— amb el valor anterior i el nou de
+         *     cada camp (docs/09 §7).
+         */
+        get: operations["listActivity"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/pinned-checklists": {
         parameters: {
             query?: never;
@@ -534,6 +623,44 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        ApiTokenSummary: {
+            id: string;
+            name: string;
+            /** @description Els primers caràcters, per poder-lo reconèixer a la llista. */
+            token_prefix: string;
+            capabilities: string[];
+            scope_ids: string[];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            expires_at?: string | null;
+            /** Format: date-time */
+            last_used_at?: string | null;
+            /** Format: date-time */
+            revoked_at?: string | null;
+        };
+        ActivityEntry: {
+            /** @description UUIDv7, que ordena per temps sense un comptador a part. */
+            id: string;
+            entity_type: string;
+            entity_id: string;
+            verb: string;
+            /** @enum {string} */
+            actor_type: "user" | "ai_agent" | "guest" | "system" | "caldav";
+            actor_user_id?: string | null;
+            actor_agent_id?: string | null;
+            /** @description "Borja", "IA · Claude", "Extern · Marta". */
+            actor_label?: string | null;
+            source: string;
+            /** @description `{camp: {from, to}}`. És el que fa possible el botó Desfés. */
+            changes?: {
+                [key: string]: unknown;
+            } | null;
+            /** Format: date-time */
+            created_at: string;
+            /** @description Un canvi autònom d'IA que encara es pot desfer. */
+            undoable?: boolean;
+        };
         SyncChange: {
             entity: string;
             id: string;
@@ -1753,6 +1880,148 @@ export interface operations {
                 content?: never;
             };
             401: components["responses"]["Unauthenticated"];
+        };
+    };
+    listApiTokens: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Els tokens. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ApiTokenSummary"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    createApiToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    name: string;
+                    capabilities: string[];
+                    /** @description Buit vol dir tots els àmbits del propietari. */
+                    scope_ids?: string[];
+                    /** Format: date-time */
+                    expires_at?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Creat. Porta el token en clar, i és l'única vegada. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description El token sencer. No es torna a poder llegir mai més. */
+                        token: string;
+                        summary: components["schemas"]["ApiTokenSummary"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    revokeApiToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Revocat. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    setAiMode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    ai_mode: "manual" | "assisted" | "delegated";
+                };
+            };
+        };
+        responses: {
+            /** @description El mode nou. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Task"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listActivity: {
+        parameters: {
+            query?: {
+                actor?: "all" | "ai" | "human";
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description L'historial. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ActivityEntry"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
         };
     };
     listPinnedChecklists: {

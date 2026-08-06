@@ -7,8 +7,7 @@
  * el seu propi `strings.xml`.
  *
  * Els que falten arriben a la seva fita: InboxRail i CalendarGrid a M7, QuickAddInput
- * i MentionPopover a M6, ChecklistRow a M8, AiModeBadge i ActivityTimeline a M11,
- * ShareDialog a M12, SyncPill a M9.
+ * i MentionPopover a M6, ChecklistRow a M8, ShareDialog a M12, SyncPill a M9.
  */
 
 export { TaskCard } from './TaskCard.jsx';
@@ -17,3 +16,5 @@ export { EmptyState } from './EmptyState.jsx';
 export { ScopeChip } from './ScopeChip.jsx';
 export { QuickAddInput } from './QuickAddInput.jsx';
 export { MonthView, WeekView, DayView, monthCells, mondayIndex } from './CalendarGrid.jsx';
+export { AiModeBadge, UnseenAiDot } from './AiModeBadge.jsx';
+export { ActivityTimeline } from './ActivityTimeline.jsx';

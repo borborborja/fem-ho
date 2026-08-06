@@ -18,3 +18,12 @@ export type {
   DayItem,
   WeekdayLabels,
 } from './CalendarGrid.js';
+export { AiModeBadge, UnseenAiDot } from './AiModeBadge.js';
+export type { AiMode, AiModeBadgeProps, UnseenAiDotProps } from './AiModeBadge.js';
+export { ActivityTimeline } from './ActivityTimeline.js';
+export type {
+  ActorFilter,
+  ActivityEntryView,
+  ActivityTimelineLabels,
+  ActivityTimelineProps,
+} from './ActivityTimeline.js';

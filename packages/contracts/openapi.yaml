@@ -791,6 +791,163 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthenticated'
 
+  /tokens:
+    get:
+      tags: [tokens]
+      operationId: listApiTokens
+      summary: Els tokens d'API de qui pregunta
+      description: |
+        Es llisten amb el **prefix** i l'últim ús, mai el token sencer: només se'n guarda
+        el hash (docs/05 §2). Si l'usuari el perd, ha de crear-ne un de nou.
+      responses:
+        '200':
+          description: Els tokens.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/ApiTokenSummary' }
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+    post:
+      tags: [tokens]
+      operationId: createApiToken
+      summary: Crear un token d'API
+      description: |
+        **El token sencer es retorna UN SOL COP.** No es pot recuperar del hash, i cal
+        dir-ho clarament a qui el crea.
+
+        Les capacitats i els àmbits van al registre del token, **no** a scopes d'OAuth
+        (regla 9).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, capabilities]
+              properties:
+                name: { type: string }
+                capabilities:
+                  type: array
+                  items: { type: string }
+                scope_ids:
+                  type: array
+                  items: { type: string }
+                  description: Buit vol dir tots els àmbits del propietari.
+                expires_at: { type: [string, 'null'], format: date-time }
+      responses:
+        '201':
+          description: Creat. Porta el token en clar, i és l'única vegada.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [token, summary]
+                properties:
+                  token:
+                    type: string
+                    description: El token sencer. No es torna a poder llegir mai més.
+                  summary: { $ref: '#/components/schemas/ApiTokenSummary' }
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /tokens/{id}:
+    delete:
+      tags: [tokens]
+      operationId: revokeApiToken
+      summary: Revocar un token
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '204':
+          description: Revocat.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /tasks/{id}/ai-mode:
+    post:
+      tags: [tasks]
+      operationId: setAiMode
+      summary: Canviar el mode d'IA d'una tasca
+      description: |
+        Els tres modes de docs/09 §2. `manual` és el per defecte i no es pinta res a la
+        targeta; `assisted` pot llegir, comentar i preparar però **no completar**;
+        `delegated` la pot executar sencera.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ai_mode]
+              properties:
+                ai_mode:
+                  type: string
+                  enum: [manual, assisted, delegated]
+      responses:
+        '200':
+          description: El mode nou.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Task' }
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /tasks/{id}/activity:
+    get:
+      tags: [tasks]
+      operationId: listActivity
+      summary: L'historial d'una tasca
+      description: |
+        Els actors barrejats —humans, IA i externs— amb el valor anterior i el nou de
+        cada camp (docs/09 §7).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: actor
+          in: query
+          required: false
+          schema: { type: string, enum: [all, ai, human] }
+      responses:
+        '200':
+          description: L'historial.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/ActivityEntry' }
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /pinned-checklists:
     get:
       tags: [checklists]
@@ -876,6 +1033,54 @@ paths:
 
 components:
   schemas:
+    ApiTokenSummary:
+      type: object
+      required: [id, name, token_prefix, capabilities, scope_ids, created_at]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        token_prefix:
+          type: string
+          description: Els primers caràcters, per poder-lo reconèixer a la llista.
+        capabilities:
+          type: array
+          items: { type: string }
+        scope_ids:
+          type: array
+          items: { type: string }
+        created_at: { type: string, format: date-time }
+        expires_at: { type: [string, 'null'], format: date-time }
+        last_used_at: { type: [string, 'null'], format: date-time }
+        revoked_at: { type: [string, 'null'], format: date-time }
+
+    ActivityEntry:
+      type: object
+      required: [id, entity_type, entity_id, verb, actor_type, source, created_at]
+      properties:
+        id:
+          type: string
+          description: UUIDv7, que ordena per temps sense un comptador a part.
+        entity_type: { type: string }
+        entity_id: { type: string }
+        verb: { type: string }
+        actor_type:
+          type: string
+          enum: [user, ai_agent, guest, system, caldav]
+        actor_user_id: { type: [string, 'null'] }
+        actor_agent_id: { type: [string, 'null'] }
+        actor_label:
+          type: [string, 'null']
+          description: '"Borja", "IA · Claude", "Extern · Marta".'
+        source: { type: string }
+        changes:
+          type: [object, 'null']
+          additionalProperties: true
+          description: '`{camp: {from, to}}`. És el que fa possible el botó Desfés.'
+        created_at: { type: string, format: date-time }
+        undoable:
+          type: boolean
+          description: Un canvi autònom d'IA que encara es pot desfer.
+
     SyncChange:
       type: object
       additionalProperties: false

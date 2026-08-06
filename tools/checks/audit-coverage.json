@@ -11,21 +11,24 @@
     "          defensar; 'no cal' no es un motiu."
   ],
   "audited": {
-    "login": "apps/server/src/http/auth.test.ts · \"el login escriu a activity_log amb l'actor i el canal correctes\"",
-    "logout": "apps/server/src/http/auth.test.ts · \"el logout també\"",
-    "createScope": "apps/server/src/http/tasks.test.ts · \"es pot crear un àmbit individual\" (i la reenviada idempotent declara noChange)",
-    "createProject": "apps/server/src/services/scopes.ts · createProject registra 'created'; cobert per la creació d'àmbits i projectes a tasks.test.ts",
-    "createTask": "apps/server/src/http/tasks.test.ts · \"a un àmbit individual s'assignen soles al propietari\"",
-    "moveTask": "apps/server/src/http/tasks.test.ts · \"moure deixa rastre amb el valor anterior i el nou\"",
     "completeTask": "apps/server/src/http/tasks.test.ts · \"marca la tasca i les seves subtasques\"",
-    "createEvent": "apps/server/src/http/events.test.ts · \"crea un esdeveniment i deixa rastre\"",
-    "updateEvent": "apps/server/src/http/events.test.ts · \"partir la sèrie deixa rastre dels dos costats\"",
+    "createApiToken": "apps/server/src/http/tokens.test.ts · \"la creació queda a activity_log sense el token a dins\"",
     "createChecklist": "apps/server/src/http/checklists.test.ts · \"es pot crear una llista dins d'una tasca\"",
     "createChecklistItem": "apps/server/src/http/checklists.test.ts · \"s'hi poden afegir ítems\"",
-    "updateChecklistItem": "apps/server/src/http/checklists.test.ts · \"la cascada queda registrada com a cascade_complete\"",
+    "createEvent": "apps/server/src/http/events.test.ts · \"crea un esdeveniment i deixa rastre\"",
+    "createProject": "apps/server/src/services/scopes.ts · createProject registra 'created'; cobert per la creació d'àmbits i projectes a tasks.test.ts",
+    "createScope": "apps/server/src/http/tasks.test.ts · \"es pot crear un àmbit individual\" (i la reenviada idempotent declara noChange)",
+    "createTask": "apps/server/src/http/tasks.test.ts · \"a un àmbit individual s'assignen soles al propietari\"",
+    "login": "apps/server/src/http/auth.test.ts · \"el login escriu a activity_log amb l'actor i el canal correctes\"",
+    "logout": "apps/server/src/http/auth.test.ts · \"el logout també\"",
+    "moveTask": "apps/server/src/http/tasks.test.ts · \"moure deixa rastre amb el valor anterior i el nou\"",
     "pinChecklist": "apps/server/src/http/checklists.test.ts · \"pinejar és PERSONAL\"",
+    "pushSync": "apps/server/src/http/sync.test.ts · \"cas 1 · mode avió\" i la resta dels vuit casos de docs/06 §10",
+    "revokeApiToken": "apps/server/src/http/tokens.test.ts · \"deixa el token inservible i queda a l'historial\"",
+    "setAiMode": "apps/server/src/http/tokens.test.ts · \"els tres modes es poden posar, i queden a l'historial\"",
     "unpinChecklist": "apps/server/src/http/checklists.test.ts · \"es pot despinejar\"",
-    "pushSync": "apps/server/src/http/sync.test.ts · \"cas 1 · mode avió\" i la resta dels vuit casos de docs/06 §10"
+    "updateChecklistItem": "apps/server/src/http/checklists.test.ts · \"la cascada queda registrada com a cascade_complete\"",
+    "updateEvent": "apps/server/src/http/events.test.ts · \"partir la sèrie deixa rastre dels dos costats\""
   },
   "exempt": {
     "refresh": "Rotar un token de refresc no és un canvi d'estat del producte: no toca cap tasca, cap àmbit ni cap dada de l'usuari. La sessió ja va quedar registrada al login, i registrar cada refresc ofegaria la taula amb una entrada cada quinze minuts per dispositiu. La reutilització d'un token gastat SÍ que es registra, però al log del servidor i com a avís, perquè és un incident de seguretat i no una acció de ningú."
