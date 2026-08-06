@@ -55,6 +55,7 @@
     <string name="board_ia_empty">La IA no té res en aquesta columna.</string>
     <string name="board_ia_newtask">Nova tasca per a la IA</string>
     <string name="board_ia_toggle">Kanban de la IA</string>
+    <string name="board_others">Veure tasques d\'altres</string>
     <string name="board_quickadd_placeholder">+ Afegir a {column}… #Àmbit @Persona</string>
     <string name="board_quickadd_revert">Tornar «{label}» a text</string>
     <string name="board_quickadd_scoperequired">Indica l\'àmbit amb #{scopes}</string>

@@ -27,6 +27,14 @@ export interface BoardTask {
   hasUnseenAiChange?: boolean | undefined;
   /** Subtasques i ítems de llista, comptats junts. Ve de `/board` com a agregat. */
   progress?: { done: number; total: number; lists: number } | undefined;
+  /**
+   * Assignada a una **altra** persona.
+   *
+   * Fora de la bústia, el tauler és el que has de fer tu: les d'algú altre queden
+   * amagades darrere del commutador de l'epígraf i, quan es veuen, atenuades. A la
+   * bústia no s'amaga res, perquè és justament on es reparteix.
+   */
+  assignedToOther?: boolean | undefined;
 }
 
 export interface BoardScope {
@@ -73,6 +81,28 @@ export interface KanbanBoardProps {
   flip?: { transform: string; transition: string } | undefined;
 }
 
+/** Les dues siluetes del commutador de "tasques d'altres", del disseny validat. */
+function PeopleIcon() {
+  return (
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2" />
+      <circle cx="10" cy="7" r="4" />
+      <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
+  );
+}
+
 /** L'ordre de les columnes és el del producte i no es reordena. */
 const COLUMNS: { status: TaskStatus; labelKey: string; emptyKey: string }[] = [
   { status: 'inbox', labelKey: 'board.column.inbox', emptyKey: 'board.empty.inbox' },
@@ -97,6 +127,13 @@ export function KanbanBoard({
   flip,
 }: KanbanBoardProps) {
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  /**
+   * Quins epígrafs ensenyen les tasques d'altres.
+   *
+   * No persisteix a les preferències, a diferència del plegat: és una mirada de moment
+   * —"a veure què fan els altres"— i no una manera de tenir el tauler.
+   */
+  const [showOthers, setShowOthers] = useState<Record<string, boolean>>({});
   // L'agrupació per àmbit surt quan hi ha més d'un àmbit actiu (docs/02 §4).
   const grouped = scopes.length > 1;
 
@@ -130,6 +167,15 @@ export function KanbanBoard({
         .map((scope) => {
           const key = `${column.status}:${scope.id}`;
           const open = collapsed[key] !== true;
+          /**
+           * **A la bústia no s'amaga res**: és on es reparteix la feina i cal veure-hi
+           * tot el que hi ha. A les altres tres, el tauler és el que has de fer tu.
+           */
+          const others = column.status === 'inbox' || showOthers[key] === true;
+          const ofGroup = ofColumn
+            .filter((task) => task.scope_id === scope.id)
+            .filter((task) => others || task.assignedToOther !== true);
+
           return (
             <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
               <ScopeGroupHeader
@@ -137,8 +183,34 @@ export function KanbanBoard({
                 color={scope.color}
                 open={open}
                 onToggle={() => onToggleGroup?.(column.status, scope.id)}
+                extra={
+                  column.status === 'inbox' ? undefined : (
+                    <button
+                      type="button"
+                      data-testid={`others-${key}`}
+                      title={t('board.others')}
+                      aria-label={t('board.others')}
+                      aria-pressed={showOthers[key] === true}
+                      onClick={() =>
+                        setShowOthers((current) => ({ ...current, [key]: current[key] !== true }))
+                      }
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        padding: 2,
+                        border: 'none',
+                        background: 'transparent',
+                        cursor: 'pointer',
+                        color:
+                          showOthers[key] === true ? 'var(--plou-blue-ink)' : 'var(--ink-faint)',
+                      }}
+                    >
+                      <PeopleIcon />
+                    </button>
+                  )
+                }
               />
-              {open ? ofColumn.filter((task) => task.scope_id === scope.id).map(cardFor) : null}
+              {open ? ofGroup.map(cardFor) : null}
             </div>
           );
         });

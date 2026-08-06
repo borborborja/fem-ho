@@ -34,14 +34,26 @@ export interface BoardScreenProps {
 }
 
 /** La targeta tal com la vol el component, des de la tasca tal com la dona l'API. */
-function toBoardTask(task: Task, projectName: string | undefined, initials: string | undefined): BoardTask {
+function toBoardTask(
+  task: Task,
+  projectName: string | undefined,
+  initials: string | undefined,
+  assignedToOther: boolean,
+): BoardTask {
   return {
     id: task.id,
     title: task.title,
     status: task.status,
     scope_id: task.scope_id,
     project: projectName,
-    assigneeInitials: initials,
+    /**
+     * A la bústia, sempre qui la té; fora, **només si és d'algú altre**.
+     *
+     * A "Per fer" gairebé totes són teves, i pintar la teva inicial a cadascuna és una
+     * columna de la mateixa lletra que no distingeix res.
+     */
+    assigneeInitials: task.status === 'inbox' || assignedToOther ? initials : undefined,
+    assignedToOther,
     time: task.due_time ?? undefined,
     aiMode: task.ai_mode,
     progress: task.progress,
@@ -56,7 +68,7 @@ export function BoardScreen({
   aiBoard = false,
   flip,
 }: BoardScreenProps) {
-  const { scopes, projects, people, settings } = useSessionData();
+  const { scopes, projects, people, settings, profile } = useSessionData();
   const { updateSettings } = useSession();
 
   const path = useMemo(() => {
@@ -109,16 +121,18 @@ export function BoardScreen({
           return aiBoard ? delegated : !delegated;
         })
         .map((task) => {
+          const assignees = task.assignee_ids ?? [];
           const card = toBoardTask(
             task,
             projectName(task.project_id ?? null),
-            initialsOf(task.assignee_ids ?? []),
+            initialsOf(assignees),
+            assignees.length > 0 && !assignees.includes(profile.id),
           );
           const moved = optimistic[task.id];
           return moved === undefined ? card : { ...card, status: moved };
         })
     );
-  }, [board.data, optimistic, projectName, initialsOf, aiBoard]);
+  }, [board.data, optimistic, projectName, initialsOf, aiBoard, profile.id]);
 
   const activeScopes = scopes.filter((scope) => activeScopeIds.includes(scope.id));
 

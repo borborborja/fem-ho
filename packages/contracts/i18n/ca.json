@@ -62,6 +62,7 @@
   "board.ia.empty": "La IA no té res en aquesta columna.",
   "board.ia.newTask": "Nova tasca per a la IA",
   "board.ia.toggle": "Kanban de la IA",
+  "board.others": "Veure tasques d'altres",
   "board.quickAdd.placeholder": "+ Afegir a {column}… #Àmbit @Persona",
   "board.quickAdd.revert": "Tornar «{label}» a text",
   "board.quickAdd.scopeRequired": "Indica l'àmbit amb #{scopes}",

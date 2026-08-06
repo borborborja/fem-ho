@@ -143,6 +143,8 @@ export function BoardCard({
   return (
     <TaskCard
       data-status={task.status}
+      // Les d'algú altre, atenuades: es veuen, però es veu que no són teves.
+      style={task.assignedToOther === true ? { opacity: 0.55 } : undefined}
       title={task.title}
       project={task.project}
       assigneeInitials={task.assigneeInitials}

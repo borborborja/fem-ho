@@ -458,7 +458,16 @@ export function TaskModal({
               </label>
             )}
 
-            <section style={{ display: 'grid', gap: 6 }}>
+            {/*
+              **Assignar només té sentit a la bústia d'un àmbit col·lectiu.**
+
+              A un àmbit individual no hi ha ningú més a qui assignar (docs/02 §4: totes
+              les tasques van soles al propietari), i un cop la tasca surt de la bústia
+              ja és de qui la fa: el disseny validat treu el camp perquè tenir-lo allà
+              convidava a repartir feina que algú ja havia agafat.
+            */}
+            {scope?.kind !== 'collective' || data?.status !== 'inbox' ? null : (
+            <section style={{ display: 'grid', gap: 6 }} data-testid="task-assignees">
               {label(t('task.assignees'))}
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 {people.map((person) => {
@@ -496,6 +505,7 @@ export function TaskModal({
                 })}
               </div>
             </section>
+            )}
 
             <section style={{ display: 'grid', gap: 6 }}>
               {label(t('task.labels'))}

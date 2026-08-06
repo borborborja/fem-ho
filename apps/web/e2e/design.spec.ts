@@ -155,3 +155,57 @@ test('desplegar ensenya els ítems, i marcar-ne un mou el recompte', async ({ pa
   await card(page, title).getByRole('checkbox', { name: /Passaport/u }).click();
   await expect(card(page, title)).toContainText('1/3', { timeout: 10_000 });
 });
+
+/**
+ * **Assignar només té sentit a la bústia d'un àmbit col·lectiu.**
+ *
+ * A un àmbit individual no hi ha ningú més; i un cop la tasca surt de la bústia, ja és
+ * de qui la fa. El disseny validat treu el camp als dos casos.
+ */
+test('el camp de persones no surt a un àmbit individual', async ({ page }) => {
+  await enter(page);
+
+  await page.locator('[data-testid="inbox-rail"]').getByText('Mirar el pressupost').first().click();
+  await expect(page.locator('[data-testid="task-modal"]')).toBeVisible();
+  await expect(page.locator('[data-testid="task-assignees"]')).toHaveCount(0);
+  await page.locator('[data-testid="task-cancel"]').click();
+  await expect(page.locator('[data-testid="task-modal"]')).toHaveCount(0);
+});
+
+test("i a un de col·lectiu, només mentre la tasca és a la bústia", async ({ page }) => {
+  await enter(page);
+
+  // Un àmbit col·lectiu nou: els tres del primer arrencament són individuals.
+  await page.goto('/settings');
+  await page.locator('[data-testid="settings-tab-scopes"]').click();
+  // Sense espais: l'afegida ràpida només parseja sigils sense espai (D12), i un àmbit
+  // que se'n digués "Pis compartit" no es podria escriure amb `#`.
+  await page.locator('[data-testid="new-scope-name"]').fill('Pis');
+  await page.locator('[data-testid="new-scope-kind-collective"]').click();
+  await page.locator('[data-testid="new-scope-create"]').click();
+
+  await page.goto('/');
+  await expect(page.locator('[data-testid="scope-chips"]')).toContainText('Pis');
+
+  const field = page.locator('[data-testid="quick-add-inbox"] input[role="combobox"]');
+  await field.fill('#Pis Buidar la nevera');
+  await field.press('Escape');
+  await field.press('Enter');
+
+  const rail = page.locator('[data-testid="inbox-rail"]');
+  await expect(rail).toContainText('Buidar la nevera', { timeout: 10_000 });
+  await rail.getByText('Buidar la nevera').first().click();
+  await expect(page.locator('[data-testid="task-assignees"]')).toBeVisible();
+  await page.locator('[data-testid="task-cancel"]').click();
+  await expect(page.locator('[data-testid="task-modal"]')).toHaveCount(0);
+
+  // I en sortir de la bústia, el camp desapareix: ja és de qui la fa.
+  await card(page, 'Buidar la nevera').getByRole('button', { name: /Per fer/u }).click();
+  await expect(page.locator('[data-column-status="todo"]')).toContainText('Buidar la nevera', {
+    timeout: 10_000,
+  });
+
+  await card(page, 'Buidar la nevera').getByText('Buidar la nevera').click();
+  await expect(page.locator('[data-testid="task-modal"]')).toBeVisible();
+  await expect(page.locator('[data-testid="task-assignees"]')).toHaveCount(0);
+});

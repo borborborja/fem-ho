@@ -171,3 +171,31 @@ test('Escape cancel·la el moviment amb teclat', async ({ page }) => {
     surface.locator('[data-column-status="inbox"] [data-testid="task-2"]'),
   ).toBeVisible();
 });
+
+/**
+ * El filtre de "tasques d'altres", del disseny validat.
+ *
+ * Fora de la bústia, el tauler és el que has de fer **tu**: les d'algú altre queden
+ * darrere del commutador de l'epígraf. La bústia no en té, perquè és on es reparteix.
+ */
+test("les tasques d'altres s'amaguen darrere el commutador de l'epígraf", async ({ page }) => {
+  await page.goto('/proof/board');
+
+  // La pàgina en pinta dos, un per tema: es mira el clar.
+  const board = page.locator('[data-testid="board-light"]');
+  const column = board.locator('[data-column-status="todo"]');
+  await expect(column).not.toContainText('Portar el cotxe al taller');
+
+  await board.locator('[data-testid="others-todo:familia"]').click();
+  await expect(column).toContainText('Portar el cotxe al taller');
+
+  // I tornant-lo a prémer, desapareix un altre cop.
+  await board.locator('[data-testid="others-todo:familia"]').click();
+  await expect(column).not.toContainText('Portar el cotxe al taller');
+});
+
+test("l'Inbox no en té: allà s'ha de veure tot", async ({ page }) => {
+  await page.goto('/proof/board');
+
+  await expect(page.locator('[data-testid^="others-inbox:"]')).toHaveCount(0);
+});

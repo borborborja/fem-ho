@@ -56,4 +56,16 @@ export const SAMPLE_TASKS: BoardTask[] = [
     aiMode: 'assisted',
   },
   { id: '8', title: 'Pagar la matrícula', status: 'done', scope_id: 'familia' },
+  /**
+   * Una que és d'algú altre: per defecte no es veu, i el commutador de l'epígraf la
+   * treu. Sense una així, el filtre no es podria captar en cap prova visual.
+   */
+  {
+    id: '9',
+    title: 'Portar el cotxe al taller',
+    status: 'todo',
+    scope_id: 'familia',
+    assigneeInitials: 'M',
+    assignedToOther: true,
+  },
 ];
