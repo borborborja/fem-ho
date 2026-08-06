@@ -17,6 +17,9 @@
 set -euo pipefail
 
 DOCKER="${DOCKER:-docker}"
+# Si l'usuari no és al grup `docker`, es prova amb sudo abans de rendir-se: fallar amb
+# "permission denied" quan `sudo docker` funciona és fer perdre el temps a qui ho corre.
+if [ "$DOCKER" = "docker" ] && ! docker info >/dev/null 2>&1; then DOCKER="sudo docker"; fi
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
 COMPOSE="$DOCKER compose -f $HERE/compose.yaml"
