@@ -499,3 +499,136 @@ export async function setPinned(
     changes: { pinned: { from: !pinned, to: pinned } },
   });
 }
+
+/**
+ * Una llista sola, amb els seus ítems.
+ *
+ * És el que necessita la vista de llista senzilla (docs/02 §6), que hi arriba des del
+ * desplegable de projectes i no des d'una tasca: demanar-la per tasca obligaria la
+ * interfície a saber de quina tasca penja abans de poder-la ensenyar.
+ */
+export async function getChecklist(
+  db: MigrationDb,
+  principal: Principal,
+  checklistId: string,
+): Promise<ChecklistView & { task_title: string }> {
+  if (!hasCapability(principal, 'checklists:read')) throw missingCapability('checklists:read');
+
+  const { checklist, taskId, scopeId } = await taskOfChecklist(db, checklistId);
+  await assertScopeAccess(db, principal, scopeId);
+
+  const items = await itemsOf(db, [checklistId]);
+  const task = await sql<{ title: string }>`SELECT title FROM tasks WHERE id = ${taskId}`.execute(
+    db,
+  );
+
+  // El títol de la tasca hi va perquè la vista de llista el pinta com a molla de pa
+  // clicable (docs/02 §6), i una segona crida per a un sol camp és una segona fallada.
+  return { ...toView(checklist, items.get(checklistId) ?? [], principal), task_title: task.rows[0]?.title ?? '' };
+}
+
+export async function updateChecklist(
+  ctx: AuditContext,
+  principal: Principal,
+  checklistId: string,
+  input: {
+    name?: string | undefined;
+    show_completed_inline?: boolean | undefined;
+    subtask_id?: string | null | undefined;
+    position?: string | undefined;
+  },
+): Promise<ChecklistView> {
+  if (!hasCapability(principal, 'checklists:write')) throw missingCapability('checklists:write');
+
+  const { checklist, scopeId } = await taskOfChecklist(ctx.tx, checklistId);
+  await assertScopeAccess(ctx.tx, principal, scopeId);
+
+  if (input.name !== undefined && input.name.trim() === '') {
+    throw new PolicyError('name-required', 'Name required', 422, 'La llista necessita un nom.');
+  }
+
+  const name = input.name?.trim() ?? checklist.name;
+  const inline = input.show_completed_inline ?? isTrue(checklist.show_completed_inline);
+  const subtaskId = input.subtask_id === undefined ? checklist.subtask_id : input.subtask_id;
+  const position = input.position ?? checklist.position;
+
+  const igual =
+    name === checklist.name &&
+    inline === isTrue(checklist.show_completed_inline) &&
+    subtaskId === checklist.subtask_id &&
+    position === checklist.position;
+  if (igual) {
+    ctx.noChange();
+    const items = await itemsOf(ctx.tx, [checklistId]);
+    return toView(checklist, items.get(checklistId) ?? [], principal);
+  }
+
+  await sql`
+    UPDATE checklists SET name = ${name}, show_completed_inline = ${dbBool(inline)},
+                          subtask_id = ${subtaskId}, position = ${position},
+                          updated_at = ${ctx.now}, version = version + 1
+    WHERE id = ${checklistId}
+  `.execute(ctx.tx);
+
+  ctx.record({
+    entityType: 'checklist',
+    entityId: checklistId,
+    scopeId,
+    verb: 'updated',
+    changes: { name: { from: checklist.name, to: name } },
+  });
+
+  const after = await taskOfChecklist(ctx.tx, checklistId);
+  const items = await itemsOf(ctx.tx, [checklistId]);
+  return toView(after.checklist, items.get(checklistId) ?? [], principal);
+}
+
+export async function deleteChecklist(
+  ctx: AuditContext,
+  principal: Principal,
+  checklistId: string,
+): Promise<void> {
+  if (!hasCapability(principal, 'checklists:write')) throw missingCapability('checklists:write');
+
+  const { scopeId } = await taskOfChecklist(ctx.tx, checklistId);
+  await assertScopeAccess(ctx.tx, principal, scopeId);
+
+  // Els ítems cauen amb la llista: no existeixen fora d'ella (P1).
+  await sql`
+    UPDATE checklist_items SET deleted_at = ${ctx.now}, updated_at = ${ctx.now},
+                               version = version + 1
+    WHERE checklist_id = ${checklistId} AND deleted_at IS NULL
+  `.execute(ctx.tx);
+  await sql`
+    UPDATE checklists SET deleted_at = ${ctx.now}, updated_at = ${ctx.now}, version = version + 1
+    WHERE id = ${checklistId}
+  `.execute(ctx.tx);
+
+  ctx.record({ entityType: 'checklist', entityId: checklistId, scopeId, verb: 'deleted' });
+}
+
+export async function deleteChecklistItem(
+  ctx: AuditContext,
+  principal: Principal,
+  itemId: string,
+): Promise<void> {
+  if (!hasCapability(principal, 'checklists:write')) throw missingCapability('checklists:write');
+
+  const found = await sql<ChecklistItemRow>`
+    SELECT id, checklist_id, text, done, done_at, done_by, position
+    FROM checklist_items WHERE id = ${itemId} AND deleted_at IS NULL
+  `.execute(ctx.tx);
+  const item = found.rows[0];
+  if (item === undefined) throw notFound('ítem', itemId);
+
+  const { scopeId } = await taskOfChecklist(ctx.tx, item.checklist_id);
+  await assertScopeAccess(ctx.tx, principal, scopeId);
+
+  await sql`
+    UPDATE checklist_items SET deleted_at = ${ctx.now}, updated_at = ${ctx.now},
+                               version = version + 1
+    WHERE id = ${itemId}
+  `.execute(ctx.tx);
+
+  ctx.record({ entityType: 'checklist_item', entityId: itemId, scopeId, verb: 'deleted' });
+}

@@ -230,6 +230,35 @@ paths:
   # `/tokens`, `/shares` i `/activity` fan servir l'envoltori sense paginar. És una
   # inconsistència coneguda i es deixa estar a posta: canviar-los ara trencaria els
   # clients per un guany estètic.
+    patch:
+      tags: [auth]
+      operationId: updateProfile
+      summary: Modificar el propi perfil
+      description: |
+        Aquí es toca NOMÉS el compte propi. El brief és explícit (línia 42): al Perfil no
+        s'editen els altres; això és a `/admin/users`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                timezone: { type: string, description: 'Nom IANA. Es valida amb `Intl`.' }
+                locale: { type: string }
+                theme: { type: string, enum: [system, light, dark] }
+                accent: { type: string, enum: [default, soft, mono-warm, mono-cool] }
+                avatar_color: { type: [string, 'null'] }
+      responses:
+        '200':
+          description: Modificat.
+          content: { application/json: { schema: { $ref: '#/components/schemas/UserProfile' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '422':
+          description: Un valor d'enum o un fus que no existeixen.
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+
   /scopes:
     get:
       tags: [scopes]
@@ -621,6 +650,37 @@ paths:
               schema:
                 $ref: '#/components/schemas/Problem'
 
+    get:
+      tags: [events]
+      operationId: getEvent
+      summary: Un esdeveniment
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '200':
+          description: L'esdeveniment.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Event' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [events]
+      operationId: deleteEvent
+      summary: Esborrar un esdeveniment o part d'una sèrie
+      description: |
+        `single` posa un EXDATE al mestre —esborrar la fila no serviria, el mestre la
+        tornaria a generar—; `future` parteix la sèrie amb `UNTIL`; `all` se l'endú
+        sencera. Mai s'emet `RANGE=THISANDFUTURE` (D8).
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: series_mode, in: query, required: false, schema: { type: string, enum: [single, future, all] } }
+        - { name: occurrence, in: query, required: false, schema: { type: string, format: date-time } }
+      responses:
+        '204': { description: Esborrat. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403':
+          description: El calendari és una subscripció.
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   /calendars:
     get:
       tags: [events]
@@ -642,6 +702,28 @@ paths:
                   $ref: '#/components/schemas/Calendar'
         '401':
           $ref: '#/components/responses/Unauthenticated'
+
+    post:
+      tags: [events]
+      operationId: createCalendar
+      summary: Crear un calendari
+      description: |
+        `origin: subscription` necessita `source_url`. Una subscripció és de només
+        lectura a la capa de repositori, no només a la interfície (docs/01 §5).
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/CalendarInput' } } }
+      responses:
+        '201':
+          description: Creat.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Calendar' } } }
+        '200':
+          description: Ja existia amb aquest `id`.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Calendar' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '422':
+          description: Falta l'àmbit, el nom o la URL d'origen.
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
 
   /tasks/{id}/checklists:
     get:
@@ -729,6 +811,78 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
 
+    get:
+      tags: [checklists]
+      operationId: listChecklistItems
+      summary: Els ítems d'una llista
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '200':
+          description: Els ítems.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/ChecklistItem' } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /checklists/{id}:
+    get:
+      tags: [checklists]
+      operationId: getChecklist
+      summary: Una llista, amb els seus ítems
+      description: |
+        Porta `task_title` perquè la vista de llista senzilla el pinta com a molla de pa
+        clicable (docs/02 §6), i una segona crida per a un sol camp és una segona fallada.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '200':
+          description: La llista.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: '#/components/schemas/Checklist' }
+                  - type: object
+                    required: [task_title]
+                    properties:
+                      task_title: { type: string }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [checklists]
+      operationId: updateChecklist
+      summary: Modificar una llista
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                show_completed_inline:
+                  type: boolean
+                  description: Completats en línia (ratllats al seu lloc) o en una secció al final.
+                subtask_id: { type: [string, 'null'] }
+                position: { type: string }
+      responses:
+        '200':
+          description: Modificada.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Checklist' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [checklists]
+      operationId: deleteChecklist
+      summary: Esborrar una llista
+      description: "Els ítems cauen amb ella: no existeixen fora d'una llista (P1)."
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '204': { description: Esborrada. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   /checklist-items/{id}:
     patch:
       tags: [checklists]
@@ -764,6 +918,16 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [checklists]
+      operationId: deleteChecklistItem
+      summary: Esborrar un ítem
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '204': { description: Esborrat. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   /checklists/{id}/pin:
     post:
@@ -969,6 +1133,52 @@ paths:
           $ref: '#/components/responses/Unauthenticated'
         '404':
           $ref: '#/components/responses/NotFound'
+
+    get:
+      tags: [scopes]
+      operationId: getShare
+      summary: Un enllaç compartit
+      description: "El token NO hi surt: no es pot recuperar del seu HMAC (docs/10 §6)."
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '200':
+          description: L'enllaç.
+          content: { application/json: { schema: { $ref: '#/components/schemas/ShareSummary' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [scopes]
+      operationId: updateShare
+      summary: Reconfigurar un enllaç
+      description: |
+        El token NO es regenera mai des d'aquí: si canviar el permís canviés l'enllaç, tot
+        el que ja s'hagi enviat deixaria de funcionar sense que ningú ho hagi demanat.
+
+        Canviar la contrasenya desbloqueja l'enllaç: els cinc intents fallits eren contra
+        l'antiga.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                permission: { type: string, enum: [view, check, comment] }
+                expires_at: { type: [string, 'null'], format: date-time }
+                max_views: { type: [integer, 'null'] }
+                require_name: { type: boolean }
+                password:
+                  type: [string, 'null']
+                  description: '`null` la treu; una cadena la canvia; absent no la toca.'
+      responses:
+        '200':
+          description: Reconfigurat.
+          content: { application/json: { schema: { $ref: '#/components/schemas/ShareSummary' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '409':
+          description: Està revocat i no es pot tornar a obrir.
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
 
   /push/subscriptions:
     post:
@@ -1186,8 +1396,1277 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthenticated'
 
+  /scopes/{id}:
+    get:
+      tags: [scopes]
+      operationId: getScope
+      summary: Un àmbit
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '200':
+          description: L'àmbit.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Scope' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [scopes]
+      operationId: updateScope
+      summary: Modificar un àmbit
+      description: |
+        `kind` NO es pot canviar. Passar d'individual a col·lectiu deixaria totes les
+        tasques assignades al propietari per la regla d'assignació automàtica (docs/01
+        §4) sense que ningú ho hagi demanat.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ScopePatch' } } }
+      responses:
+        '200':
+          description: Modificat.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Scope' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [scopes]
+      operationId: deleteScope
+      summary: Esborrar un àmbit
+      description: |
+        Es nega amb `409` si encara té tasques o projectes, i diu quants: la cascada
+        aquí seria irreversible des de la interfície.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '204': { description: Esborrat. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: Encara té coses a dins.
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+
+  /scopes/{id}/members:
+    get:
+      tags: [scopes]
+      operationId: listMembers
+      summary: Els membres d'un àmbit
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '200':
+          description: Els membres.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/Member' } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [scopes]
+      operationId: addMember
+      summary: Afegir un membre
+      description: |
+        P3: un membre és **o bé** un usuari **o bé** una subscripció de calendari de
+        només lectura. Mai totes dues coses ni cap.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/MemberInput' } } }
+      responses:
+        '201':
+          description: Afegit.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Member' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422':
+          description: Forma de membre invàlida, o l'àmbit no és col·lectiu.
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+
+  /scopes/{id}/members/{memberId}:
+    patch:
+      tags: [scopes]
+      operationId: updateMember
+      summary: Canviar el rol d'un membre
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: memberId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role]
+              properties:
+                role: { type: string, enum: [owner, admin, member, viewer] }
+      responses:
+        '200':
+          description: Canviat.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Member' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: Es quedaria sense cap propietari.
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+    delete:
+      tags: [scopes]
+      operationId: removeMember
+      summary: Treure un membre
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: memberId, in: path, required: true, schema: { type: string } }
+      responses:
+        '204': { description: Tret. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: Es quedaria sense cap propietari.
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+
+  /projects/{id}:
+    get:
+      tags: [scopes]
+      operationId: getProject
+      summary: Un projecte
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '200':
+          description: El projecte.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Project' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [scopes]
+      operationId: updateProject
+      summary: Modificar o arxivar un projecte
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ProjectPatch' } } }
+      responses:
+        '200':
+          description: Modificat.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Project' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [scopes]
+      operationId: deleteProject
+      summary: Esborrar un projecte
+      description: |
+        Les tasques NO cauen amb ell: tornen a l'espai general de l'àmbit, que és el
+        filtre `project_id IS NULL` i no una fila (docs/01 §4).
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '200':
+          description: Esborrat, amb quantes tasques han passat a l'espai general.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [moved]
+                properties:
+                  moved: { type: integer }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /labels:
+    get:
+      tags: [tasks]
+      operationId: listLabels
+      summary: Les etiquetes visibles
+      parameters:
+        - { name: scope_id, in: query, required: false, schema: { type: string } }
+      responses:
+        '200':
+          description: Les etiquetes.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/Label' } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+    post:
+      tags: [tasks]
+      operationId: createLabel
+      summary: Crear una etiqueta
+      description: |
+        Una etiqueta pertany a un àmbit: "Urgent" a Feina i "Urgent" a Casa són coses
+        diferents, i la clau única `(scope_id, name)` ho imposa.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/LabelInput' } } }
+      responses:
+        '201':
+          description: Creada.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Label' } } }
+        '200':
+          description: Ja existia amb aquest nom en aquest àmbit.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Label' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '422':
+          description: Falta l'àmbit o el nom.
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+
+  /labels/{id}:
+    delete:
+      tags: [tasks]
+      operationId: deleteLabel
+      summary: Esborrar una etiqueta
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '204': { description: Esborrada. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /tasks/{id}:
+    get:
+      tags: [tasks]
+      operationId: getTask
+      summary: Una tasca
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '200':
+          description: La tasca.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Task' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [tasks]
+      operationId: updateTask
+      summary: Modificar una tasca
+      description: |
+        Només els camps que es donin. `null` vol dir "buida'l" i absent vol dir "no el
+        toquis": sense la distinció, buidar una data seria impossible des d'un client
+        que envia només el que ha canviat.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/TaskPatch' } } }
+      responses:
+        '200':
+          description: Modificada.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Task' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [tasks]
+      operationId: deleteTask
+      summary: Esborrar una tasca
+      description: |
+        Esborrat suau. Les subtasques i les llistes cauen amb ella —no existeixen fora
+        d'una tasca—, a diferència del que passa en esborrar un projecte.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '204': { description: Esborrada. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /tasks/{id}/assignees/{userId}:
+    post:
+      tags: [tasks]
+      operationId: addAssignee
+      summary: Assignar una persona
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: userId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Assignada.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Task' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422':
+          description: No és membre de l'àmbit col·lectiu.
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+    delete:
+      tags: [tasks]
+      operationId: removeAssignee
+      summary: Desassignar una persona
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: userId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Desassignada.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Task' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /tasks/{id}/labels/{labelId}:
+    post:
+      tags: [tasks]
+      operationId: addTaskLabel
+      summary: Posar una etiqueta a una tasca
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: labelId, in: path, required: true, schema: { type: string } }
+      responses:
+        '204': { description: Posada. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '422':
+          description: L'etiqueta és d'un altre àmbit.
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+    delete:
+      tags: [tasks]
+      operationId: removeTaskLabel
+      summary: Treure una etiqueta d'una tasca
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: labelId, in: path, required: true, schema: { type: string } }
+      responses:
+        '204': { description: Treta. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+
+  /tasks/{id}/subtasks:
+    get:
+      tags: [tasks]
+      operationId: listSubtasks
+      summary: Les subtasques d'una tasca
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '200':
+          description: Les subtasques.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/Subtask' } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [tasks]
+      operationId: createSubtask
+      summary: Crear una subtasca
+      description: |
+        Una subtasca NO és una tasca: no té àmbit propi, ni estat de kanban, ni data, ni
+        assignat. Té títol i fet/no fet, i pot ancorar una llista senzilla.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/SubtaskInput' } } }
+      responses:
+        '201':
+          description: Creada.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Subtask' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '422':
+          description: Falta el títol.
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+
+  /subtasks/{id}:
+    patch:
+      tags: [tasks]
+      operationId: updateSubtask
+      summary: Modificar una subtasca
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/SubtaskPatch' } } }
+      responses:
+        '200':
+          description: Modificada.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Subtask' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [tasks]
+      operationId: deleteSubtask
+      summary: Esborrar una subtasca
+      description: |
+        Les llistes ancorades es desancoren, no cauen: una llista de la compra segueix
+        sent la llista de la compra quan la subtasca desapareix.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '204': { description: Esborrada. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /tasks/{id}/comments:
+    get:
+      tags: [tasks]
+      operationId: listComments
+      summary: Els comentaris d'una tasca
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '200':
+          description: Els comentaris.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/Comment' } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+    post:
+      tags: [tasks]
+      operationId: addComment
+      summary: Comentar una tasca
+      description: |
+        És la via principal perquè un agent reporti (docs/09 §6), i per això surt a
+        l'historial com qualsevol altre gest.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [body]
+              properties:
+                body: { type: string }
+      responses:
+        '201':
+          description: Comentat.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Comment' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+
+  /inbox:
+    get:
+      tags: [tasks]
+      operationId: getInbox
+      summary: L'Inbox d'un dia
+      description: |
+        La MATEIXA font de dades per a la columna del kanban i per al rail del calendari
+        (P4). Sense `date`, el dia és avui al fus de qui pregunta, no al del servidor.
+      parameters:
+        - { name: date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: include_overdue, in: query, required: false, schema: { type: boolean } }
+        - { name: scope_ids, in: query, required: false, schema: { type: string } }
+      responses:
+        '200':
+          description: L'Inbox.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Inbox' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+
+  /dashboard:
+    get:
+      tags: [tasks]
+      operationId: getDashboard
+      summary: El dashboard global
+      description: |
+        Ignora la selecció d'àmbits i de projecte: ho ensenya tot (docs/02 §8). Per això
+        no accepta cap filtre d'àmbit.
+      parameters:
+        - { name: date, in: query, required: false, schema: { type: string, format: date } }
+      responses:
+        '200':
+          description: El dashboard.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Dashboard' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+
+  /search:
+    get:
+      tags: [tasks]
+      operationId: search
+      summary: Cercar tasques
+      description: |
+        La consulta es normalitza amb la MATEIXA funció que va generar `search_text`
+        (docs/01 §11). Dues implementacions divergirien justament en les paraules per a
+        les quals la normalització existeix: "col·legi", "Barça", "l'aigua".
+      parameters:
+        - { name: q, in: query, required: true, schema: { type: string } }
+        - { name: scope_id, in: query, required: false, schema: { type: string } }
+        - { name: status, in: query, required: false, schema: { type: string } }
+        - { name: limit, in: query, required: false, schema: { type: integer } }
+        - { name: cursor, in: query, required: false, schema: { type: string } }
+      responses:
+        '200':
+          description: Els resultats.
+          content: { application/json: { schema: { $ref: '#/components/schemas/TaskPage' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+
+  /parse:
+    post:
+      tags: [tasks]
+      operationId: parseQuickAdd
+      summary: Analitzar una cadena d'afegida ràpida
+      description: |
+        Per a clients que no poden portar el parser. Els que sí, el porten: el camp
+        d'afegida ha de pintar els xips mentre s'escriu i una petició per tecla no és
+        una opció (D12).
+
+        A la v1, només sigils. El parseig de dates en català arriba a la v1.1 sense
+        canviar la forma d'aquest endpoint.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text]
+              properties:
+                text: { type: string }
+                active_scope_ids: { type: string }
+      responses:
+        '200':
+          description: El resultat del parseig.
+          content: { application/json: { schema: { $ref: '#/components/schemas/QuickAddResult' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+
+  /calendars/{id}:
+    patch:
+      tags: [events]
+      operationId: updateCalendar
+      summary: Modificar un calendari
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/CalendarPatch' } } }
+      responses:
+        '200':
+          description: Modificat.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Calendar' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [events]
+      operationId: deleteCalendar
+      summary: Esborrar un calendari
+      description: |
+        Es nega amb `409` si és local i encara té esdeveniments. Una subscripció sí que
+        se'n va amb el que hagi portat: el que hi ha a dins no l'ha escrit ningú d'aquí.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '204': { description: Esborrat. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '409':
+          description: Encara té esdeveniments.
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+
+  /auth/password:
+    post:
+      tags: [auth]
+      operationId: changePassword
+      summary: Canviar la contrasenya
+      description: |
+        Demana l'actual encara que hi hagi sessió: una sessió oberta en un ordinador
+        compartit no és prova d'identitat per canviar la credencial que obre totes les
+        altres. I revoca la resta de sessions.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [current_password, new_password]
+              properties:
+                current_password: { type: string }
+                new_password: { type: string, minLength: 10 }
+      responses:
+        '200':
+          description: Canviada, amb quantes sessions s'han revocat.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [revoked_sessions]
+                properties:
+                  revoked_sessions: { type: integer }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403':
+          description: La contrasenya actual no és correcta.
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+
+  /auth/settings:
+    get:
+      tags: [auth]
+      operationId: getSettings
+      summary: Perfil i preferències
+      responses:
+        '200':
+          description: El perfil i les preferències.
+          content: { application/json: { schema: { $ref: '#/components/schemas/SettingsBundle' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+    patch:
+      tags: [auth]
+      operationId: updateSettings
+      summary: Canviar les preferències
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/UserSettings' } } }
+      responses:
+        '200':
+          description: Canviades.
+          content: { application/json: { schema: { $ref: '#/components/schemas/UserSettings' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+
+  /ai/agents:
+    get:
+      tags: [tasks]
+      operationId: listAgents
+      summary: Els agents que actuen en nom de qui pregunta
+      responses:
+        '200':
+          description: Els agents.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/Agent' } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+    post:
+      tags: [tasks]
+      operationId: createAgent
+      summary: Crear un agent
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AgentInput' } } }
+      responses:
+        '201':
+          description: Creat.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Agent' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+
+  /ai/agents/{id}:
+    get:
+      tags: [tasks]
+      operationId: getAgent
+      summary: Un agent
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '200':
+          description: L'agent.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Agent' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [tasks]
+      operationId: updateAgent
+      summary: Modificar un agent
+      description: Desactivar-lo allibera les seves reserves.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AgentPatch' } } }
+      responses:
+        '200':
+          description: Modificat.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Agent' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [tasks]
+      operationId: deleteAgent
+      summary: Esborrar un agent
+      description: |
+        Les tasques que hi tenien delegació es queden, amb `delegate_agent_id` a null i
+        el mode d'IA a `manual`: la feina és de la persona, no de l'agent (D5).
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '200':
+          description: Esborrat, amb quantes tasques s'han desdelegat.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [released]
+                properties:
+                  released: { type: integer }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /ai/next-task:
+    get:
+      tags: [tasks]
+      operationId: nextTask
+      summary: La següent tasca disponible, ja reservada
+      description: |
+        `task` a null vol dir "ara no hi ha res a fer", que és una resposta correcta: un
+        404 faria que un agent que consulta cada minut ho llegís com un error de
+        configuració.
+      parameters:
+        - { name: scope_id, in: query, required: false, schema: { type: string } }
+      responses:
+        '200':
+          description: La tasca reservada, o null.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [task]
+                properties:
+                  task:
+                    oneOf:
+                      - { $ref: '#/components/schemas/ClaimedTask' }
+                      - { type: 'null' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+
+  /ai/tasks/{id}/claim:
+    post:
+      tags: [tasks]
+      operationId: claimTask
+      summary: Reservar una tasca
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '200':
+          description: Reservada.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Lease' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '409':
+          description: Ja la té algú altre.
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+
+  /ai/tasks/{id}/release:
+    post:
+      tags: [tasks]
+      operationId: releaseTask
+      summary: Alliberar una reserva
+      description: |
+        El motiu és obligatori: una reserva alliberada sense dir per què deixa
+        l'historial amb un forat que ningú sabrà interpretar (docs/09 §5).
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string }
+      responses:
+        '204': { description: Alliberada. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '422':
+          description: Falta el motiu.
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+
+  /ai/tasks/{id}/lease:
+    get:
+      tags: [tasks]
+      operationId: getLease
+      summary: La reserva d'una tasca, si en té
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '200':
+          description: La reserva, o null.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [lease]
+                properties:
+                  lease:
+                    oneOf:
+                      - { $ref: '#/components/schemas/Lease' }
+                      - { type: 'null' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+
+  /shares/{id}/accesses:
+    get:
+      tags: [scopes]
+      operationId: listShareAccesses
+      summary: Qui ha entrat per un enllaç
+      description: |
+        L'etiqueta és pseudònima: "Extern · Marta" o "Extern · a4f2". No hi ha cap
+        columna d'IP enlloc, i és una decisió de privadesa explícita (D10).
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '200':
+          description: Els accessos.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/ShareAccess' } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /admin/users:
+    get:
+      tags: [instance]
+      operationId: listUsers
+      summary: Els membres de la llar
+      responses:
+        '200':
+          description: Els usuaris.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/AdminUser' } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /admin/users/invite:
+    post:
+      tags: [instance]
+      operationId: inviteUser
+      summary: Convidar un membre
+      description: |
+        Crea l'usuari SENSE contrasenya i genera un enllaç d'un sol ús perquè la posi
+        ell. L'administrador no arriba a saber-la mai.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, name]
+              properties:
+                email: { type: string, format: email }
+                name: { type: string }
+                role: { type: string, enum: [admin, member] }
+      responses:
+        '201':
+          description: Convidat. `invite_url` es mostra un sol cop.
+          content: { application/json: { schema: { $ref: '#/components/schemas/InviteResult' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: Ja hi ha un compte amb aquest correu.
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+
+  /admin/users/{id}:
+    patch:
+      tags: [instance]
+      operationId: updateUser
+      summary: Modificar un usuari
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                role: { type: string, enum: [admin, member] }
+      responses:
+        '200':
+          description: Modificat.
+          content: { application/json: { schema: { $ref: '#/components/schemas/AdminUser' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    delete:
+      tags: [instance]
+      operationId: deleteUser
+      summary: Esborrar un usuari
+      description: |
+        Un administrador NO es pot esborrar a si mateix, ni es pot esborrar l'últim: la
+        instància es quedaria sense ningú que la pogués administrar.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '204': { description: Esborrat. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: És l'últim administrador, o ets tu mateix.
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+
+  /admin/wipe:
+    post:
+      tags: [instance]
+      operationId: wipeInstance
+      summary: Netejar la instància
+      description: |
+        La confirmació escrivint el nom exacte de la instància es comprova TAMBÉ aquí:
+        una crida directa a l'API no ha de poder-ho fer sense el mateix gest deliberat
+        que la interfície demana.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [confirmation]
+              properties:
+                confirmation: { type: string }
+      responses:
+        '200':
+          description: Netejada, amb el recompte per taula.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [deleted]
+                properties:
+                  deleted: { type: object, additionalProperties: { type: integer } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422':
+          description: La confirmació no coincideix.
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+
+  /admin/diagnostics:
+    get:
+      tags: [instance]
+      operationId: getDiagnostics
+      summary: Paquet de diagnòstic
+      description: |
+        Amb tots els secrets ocultats (docs/12 §8). El punt és poder-lo enganxar a un
+        informe d'error: no hi surt cap valor de variable d'entorn, cap cadena de
+        connexió i cap clau, només si hi són.
+      responses:
+        '200':
+          description: El diagnòstic.
+          content: { application/json: { schema: { type: object, additionalProperties: true } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /export:
+    get:
+      tags: [instance]
+      operationId: exportAll
+      summary: Exportar les dades pròpies
+      description: |
+        No demana permís a ningú: són les seves dades (docs/10 §9). El que surt és el
+        que qui pregunta pot veure, i les entitats esborrades no hi són.
+      responses:
+        '200':
+          description: L'exportació.
+          content: { application/json: { schema: { type: object, additionalProperties: true } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+
 components:
   schemas:
+
+    ScopePatch:
+      type: object
+      description: |
+        Només els camps donats. `kind` no hi és a posta: no es pot canviar.
+      properties:
+        name: { type: string }
+        color: { type: string }
+        icon: { type: [string, 'null'] }
+        ai_instructions: { type: [string, 'null'] }
+        ai_description: { type: [string, 'null'] }
+        position: { type: string }
+
+    Member:
+      type: object
+      required: [id, scope_id, user_id, external_calendar_id, role, created_at]
+      properties:
+        id: { type: string }
+        scope_id: { type: string }
+        user_id:
+          type: [string, 'null']
+          description: P3 · o això o `external_calendar_id`, mai totes dues coses.
+        external_calendar_id: { type: [string, 'null'] }
+        role: { type: string, enum: [owner, admin, member, viewer] }
+        created_at: { type: string, format: date-time }
+        name: { type: [string, 'null'] }
+        email: { type: [string, 'null'] }
+
+    MemberInput:
+      type: object
+      description: Exactament un de `user_id` o `external_calendar_id`.
+      properties:
+        user_id: { type: string }
+        external_calendar_id: { type: string }
+        role: { type: string, enum: [owner, admin, member, viewer] }
+
+    ProjectPatch:
+      type: object
+      properties:
+        name: { type: string }
+        ai_instructions: { type: [string, 'null'] }
+        ai_description: { type: [string, 'null'] }
+        position: { type: string }
+        archived:
+          type: boolean
+          description: Arxivar és posar-hi data; desarxivar és treure-la. No és un esborrat.
+
+    Label:
+      type: object
+      required: [id, scope_id, name, color, created_at]
+      properties:
+        id: { type: string }
+        scope_id: { type: string }
+        name: { type: string }
+        color: { type: string, description: 'Nom de token, mai un literal de color.' }
+        created_at: { type: string, format: date-time }
+
+    LabelInput:
+      type: object
+      required: [scope_id, name]
+      properties:
+        id: { type: string }
+        scope_id: { type: string }
+        name: { type: string }
+        color: { type: string }
+
+    TaskPatch:
+      type: object
+      description: |
+        `null` vol dir "buida'l" i absent vol dir "no el toquis". Per moure-la, `/move`.
+      properties:
+        title: { type: string }
+        description: { type: [string, 'null'] }
+        due_date: { type: [string, 'null'], format: date }
+        due_time: { type: [string, 'null'] }
+        ai_mode: { type: string, enum: [manual, assisted, delegated] }
+        ai_instructions: { type: [string, 'null'] }
+
+    Subtask:
+      type: object
+      required: [id, task_id, title, done, position, version]
+      properties:
+        id: { type: string }
+        task_id: { type: string }
+        title: { type: string }
+        done: { type: boolean }
+        position: { type: string }
+        version: { type: integer }
+
+    SubtaskInput:
+      type: object
+      required: [title]
+      properties:
+        id: { type: string }
+        title: { type: string }
+        position: { type: string }
+
+    SubtaskPatch:
+      type: object
+      properties:
+        title: { type: string }
+        done: { type: boolean }
+        position: { type: string }
+
+    Comment:
+      type: object
+      required: [id, task_id, body, created_at]
+      properties:
+        id: { type: string }
+        task_id: { type: string }
+        author_id: { type: [string, 'null'] }
+        author_name: { type: [string, 'null'] }
+        guest_name:
+          type: [string, 'null']
+          description: Present quan el comentari ve d'un enllaç compartit.
+        body: { type: string }
+        created_at: { type: string, format: date-time }
+
+    Inbox:
+      type: object
+      required: [date, dated, overdue, undated]
+      properties:
+        date: { type: string, format: date }
+        dated:
+          type: array
+          items: { $ref: '#/components/schemas/Task' }
+        overdue:
+          type: array
+          description: Buit si no s'han demanat.
+          items: { $ref: '#/components/schemas/Task' }
+        undated:
+          type: array
+          description: La secció "SENSE DIA" del rail (docs/02 §5).
+          items: { $ref: '#/components/schemas/Task' }
+
+    DashboardScope:
+      type: object
+      required: [scope_id, name, color, pending, overdue]
+      properties:
+        scope_id: { type: string }
+        name: { type: string }
+        color: { type: string }
+        pending: { type: integer }
+        overdue: { type: integer }
+
+    Dashboard:
+      type: object
+      required: [date, scopes, today, overdue, doing]
+      properties:
+        date: { type: string, format: date }
+        scopes:
+          type: array
+          items: { $ref: '#/components/schemas/DashboardScope' }
+        today:
+          type: array
+          items: { $ref: '#/components/schemas/Task' }
+        overdue:
+          type: array
+          items: { $ref: '#/components/schemas/Task' }
+        doing:
+          type: array
+          items: { $ref: '#/components/schemas/Task' }
+
+    QuickAddToken:
+      type: object
+      required: [kind, raw, start, end, id, label]
+      properties:
+        kind: { type: string, enum: [scope, project, person, aiMode] }
+        raw:
+          type: string
+          description: El text literal que ocupava, sigil inclòs. Tornar-lo a posar desfà el xip.
+        start: { type: integer }
+        end: { type: integer }
+        id: { type: string }
+        label: { type: string }
+
+    QuickAddResult:
+      type: object
+      required: [title, scopeId, projectId, assigneeIds, aiMode, tokens, error]
+      properties:
+        title: { type: string }
+        scopeId: { type: [string, 'null'] }
+        projectId: { type: [string, 'null'] }
+        assigneeIds:
+          type: array
+          items: { type: string }
+        aiMode: { type: string, enum: [manual, assisted, delegated] }
+        tokens:
+          type: array
+          items: { $ref: '#/components/schemas/QuickAddToken' }
+        error:
+          type: ['null', string]
+          enum: [scope-required, empty-title, null]
+          description: |
+            `scope-required` quan hi ha més d'un àmbit actiu i no s'ha escrit `#`: llavors
+            no es crea res i es demana l'àmbit (docs/02 §4). El nom del camp és el que ja
+            fan servir els fixtures compartits amb Kotlin, i no se'n pot inventar un altre
+            aquí sense trencar `parser-parity`.
+
+    CalendarInput:
+      type: object
+      required: [scope_id, name]
+      properties:
+        id: { type: string }
+        scope_id: { type: string }
+        project_id: { type: [string, 'null'] }
+        name: { type: string }
+        color: { type: [string, 'null'] }
+        kind:
+          type: string
+          enum: [events, todos]
+          description: |
+            D9 · dues col·leccions per contenidor, sempre. RFC 4791 §5.2 prohibeix
+            recursos de components mixtos.
+        origin: { type: string, enum: [local, subscription] }
+        source_url:
+          type: string
+          description: Obligatòria si `origin` és `subscription`.
+        refresh_interval: { type: integer }
+        strip_alarms: { type: boolean }
+
+    CalendarPatch:
+      type: object
+      properties:
+        name: { type: string }
+        color: { type: [string, 'null'] }
+        refresh_interval: { type: [integer, 'null'] }
+        strip_alarms: { type: boolean }
+
+    UserSettings:
+      type: object
+      properties:
+        done_cleared_at:
+          type: [string, 'null']
+          format: date-time
+          description: El botó de netejar la columna Fet. No esborra res (P2).
+        inbox_position: { type: string, enum: [left, right, below] }
+        inbox_show_overdue: { type: boolean }
+        collapsed_groups:
+          type: array
+          items: { type: string }
+        show_calendar_widget: { type: boolean }
+        show_overdue_section: { type: boolean }
+        quiet_hours_start: { type: [string, 'null'] }
+        quiet_hours_end: { type: [string, 'null'] }
+        daily_digest_at: { type: [string, 'null'] }
+
+    UserProfile:
+      type: object
+      required: [id, name, role, kind, timezone, locale, theme, accent]
+      properties:
+        id: { type: string }
+        email: { type: [string, 'null'] }
+        name: { type: string }
+        role: { type: string, enum: [admin, member] }
+        kind: { type: string, enum: [human, ai, caldav_only] }
+        timezone: { type: string }
+        locale: { type: string }
+        theme: { type: string, enum: [system, light, dark] }
+        accent: { type: string, enum: [default, soft, mono-warm, mono-cool] }
+        avatar_color: { type: [string, 'null'] }
+
+    SettingsBundle:
+      type: object
+      required: [profile, settings]
+      properties:
+        profile: { $ref: '#/components/schemas/UserProfile' }
+        settings: { $ref: '#/components/schemas/UserSettings' }
+
+    Agent:
+      type: object
+      required: [id, name, on_behalf_of_user_id, actor_user_id, can_create_tasks, enabled, created_at, version]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        on_behalf_of_user_id:
+          type: string
+          description: D5 · la responsabilitat es queda sempre amb una persona.
+        actor_user_id:
+          type: string
+          description: La fila d'usuari `kind='ai'`, que és qui signa l'historial i els comentaris.
+        can_create_tasks: { type: boolean }
+        enabled: { type: boolean }
+        created_at: { type: string, format: date-time }
+        version: { type: integer }
+
+    AgentInput:
+      type: object
+      required: [name]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        can_create_tasks: { type: boolean }
+
+    AgentPatch:
+      type: object
+      properties:
+        name: { type: string }
+        can_create_tasks: { type: boolean }
+        enabled: { type: boolean }
+
+    Lease:
+      type: object
+      required: [task_id, user_id, acquired_at, expires_at]
+      properties:
+        task_id: { type: string }
+        user_id: { type: string }
+        agent_id: { type: [string, 'null'] }
+        acquired_at: { type: string, format: date-time }
+        expires_at:
+          type: string
+          format: date-time
+          description: Trenta minuts (docs/09 §5). Caducada, la tasca torna a estar disponible.
+
+    ClaimedTask:
+      type: object
+      required: [taskId, lease]
+      properties:
+        taskId: { type: string }
+        lease: { $ref: '#/components/schemas/Lease' }
+
+    ShareAccess:
+      type: object
+      required: [id, label, first_seen, last_seen]
+      properties:
+        id: { type: string }
+        label:
+          type: string
+          description: '"Extern · Marta" o "Extern · a4f2". Mai una IP: no n''hi ha cap columna (D10).'
+        first_seen: { type: string, format: date-time }
+        last_seen: { type: string, format: date-time }
+
+    AdminUser:
+      type: object
+      required: [id, name, role, kind, created_at, pending_invite]
+      properties:
+        id: { type: string }
+        email: { type: [string, 'null'] }
+        name: { type: string }
+        role: { type: string, enum: [admin, member] }
+        kind: { type: string, enum: [human, ai, caldav_only] }
+        created_at: { type: string, format: date-time }
+        pending_invite:
+          type: boolean
+          description: Encara no ha fet servir la invitació; el compte no s'ha estrenat.
+
+    InviteResult:
+      type: object
+      required: [user, invite_url, expires_at]
+      properties:
+        user: { $ref: '#/components/schemas/AdminUser' }
+        invite_url:
+          type: string
+          description: Es mostra UN SOL COP. Després només en queda l'HMAC.
+        expires_at: { type: string, format: date-time }
     ShareSummary:
       type: object
       required: [id, permission, require_name, has_password, view_count, created_at]

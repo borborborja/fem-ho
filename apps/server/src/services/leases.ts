@@ -118,7 +118,7 @@ export async function claim(
 export async function nextTask(
   ctx: AuditContext,
   principal: Principal,
-  { scopeId }: { scopeId?: string } = {},
+  { scopeId }: { scopeId?: string | undefined } = {},
 ): Promise<{ taskId: string; lease: Lease } | undefined> {
   const scopeFilter =
     principal.scopeIds === null

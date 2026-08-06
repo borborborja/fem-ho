@@ -497,3 +497,272 @@ async function reload(tx: MigrationDb, id: string): Promise<EventRow> {
   if (row === undefined) throw notFound('esdeveniment', id);
   return row;
 }
+
+export async function getEvent(
+  db: MigrationDb,
+  principal: Principal,
+  id: string,
+): Promise<EventRow> {
+  if (!hasCapability(principal, 'events:read')) throw missingCapability('events:read');
+
+  const found = await sql<EventRow>`
+    SELECT * FROM events WHERE id = ${id} AND deleted_at IS NULL
+  `.execute(db);
+  const row = found.rows[0];
+  if (row === undefined) throw notFound('esdeveniment', id);
+
+  const calendar = await loadCalendar(db, row.calendar_id);
+  await assertScopeAccess(db, principal, calendar.scope_id, { type: "L'esdeveniment", id });
+  return row;
+}
+
+/**
+ * Esborra un esdeveniment, amb el mateix `series_mode` que l'edició.
+ *
+ *   - `single`  — només aquesta ocurrència: s'hi afegeix un EXDATE al mestre, o s'esborra
+ *                 la germana si l'ocurrència ja estava modificada.
+ *   - `future`  — parteix la sèrie posant `UNTIL` al mestre. **Mai `RANGE=THISANDFUTURE`**,
+ *                 que s'analitza però no s'emet (D8).
+ *   - `all`     — el mestre i totes les germanes.
+ */
+export async function deleteEvent(
+  ctx: AuditContext,
+  principal: Principal,
+  id: string,
+  mode: SeriesMode = 'single',
+  occurrence?: string | undefined,
+): Promise<void> {
+  if (!hasCapability(principal, 'events:delete')) throw missingCapability('events:delete');
+
+  const found = await sql<EventRow>`
+    SELECT * FROM events WHERE id = ${id} AND deleted_at IS NULL
+  `.execute(ctx.tx);
+  const event = found.rows[0];
+  if (event === undefined) throw notFound('esdeveniment', id);
+
+  const calendar = await loadCalendar(ctx.tx, event.calendar_id);
+  await assertScopeAccess(ctx.tx, principal, calendar.scope_id, { type: "L'esdeveniment", id });
+
+  if (calendar.origin === 'subscription') {
+    throw new PolicyError(
+      'calendar-read-only',
+      'Calendar is read-only',
+      403,
+      `El calendari "${calendar.name}" és una subscripció i no s'hi pot escriure.`,
+    );
+  }
+
+  const esBorrarTot = mode === 'all' || event.rrule === null;
+
+  if (esBorrarTot) {
+    await sql`
+      UPDATE events SET deleted_at = ${ctx.now}, updated_at = ${ctx.now}, version = version + 1
+      WHERE (id = ${id} OR (uid = ${event.uid} AND calendar_id = ${event.calendar_id}))
+        AND deleted_at IS NULL
+    `.execute(ctx.tx);
+  } else if (mode === 'future' && occurrence !== undefined) {
+    // Esborrar "aquesta i les següents" és tallar la sèrie, no crear-ne cap de nova: el
+    // mestre es queda amb un `UNTIL` just abans del tall i prou.
+    const { masterRrule } = splitSeries(event.rrule!, occurrence, event.starts_at);
+    await sql`
+      UPDATE events SET rrule = ${masterRrule}, updated_at = ${ctx.now}, version = version + 1
+      WHERE id = ${id}
+    `.execute(ctx.tx);
+    // Les germanes que caiguin dins del tros esborrat se'n van amb ell.
+    await sql`
+      UPDATE events SET deleted_at = ${ctx.now}, updated_at = ${ctx.now}, version = version + 1
+      WHERE uid = ${event.uid} AND calendar_id = ${event.calendar_id}
+        AND recurrence_id IS NOT NULL AND recurrence_id >= ${occurrence}
+        AND deleted_at IS NULL
+    `.execute(ctx.tx);
+  } else {
+    // `single` sobre una sèrie: un EXDATE, que és la manera d'iCalendar de dir "aquest dia
+    // no". Esborrar la fila no serviria: el mestre la tornaria a generar.
+    const dia = occurrence ?? event.starts_at;
+    const exdate = event.exdate === null || event.exdate === '' ? dia : `${event.exdate},${dia}`;
+    await sql`
+      UPDATE events SET exdate = ${exdate}, updated_at = ${ctx.now}, version = version + 1
+      WHERE id = ${id}
+    `.execute(ctx.tx);
+    await sql`
+      UPDATE events SET deleted_at = ${ctx.now}, updated_at = ${ctx.now}, version = version + 1
+      WHERE uid = ${event.uid} AND calendar_id = ${event.calendar_id}
+        AND recurrence_id = ${dia} AND deleted_at IS NULL
+    `.execute(ctx.tx);
+  }
+
+  await sql`
+    UPDATE calendars SET sync_seq = sync_seq + 1, updated_at = ${ctx.now}
+    WHERE id = ${event.calendar_id}
+  `.execute(ctx.tx);
+
+  ctx.record({
+    entityType: 'event',
+    entityId: id,
+    scopeId: calendar.scope_id,
+    verb: 'deleted',
+  });
+}
+
+// ------------------------------------------------------------------ calendaris
+
+export interface CreateCalendarInput {
+  id?: string | undefined;
+  scope_id?: string | undefined;
+  project_id?: string | null | undefined;
+  name?: string | undefined;
+  color?: string | undefined;
+  kind?: 'events' | 'todos' | undefined;
+  origin?: 'local' | 'subscription' | undefined;
+  source_url?: string | undefined;
+  refresh_interval?: number | undefined;
+  strip_alarms?: boolean | undefined;
+}
+
+export async function createCalendar(
+  ctx: AuditContext,
+  principal: Principal,
+  input: CreateCalendarInput,
+): Promise<{ calendar: CalendarRow; created: boolean }> {
+  if (!hasCapability(principal, 'events:write')) throw missingCapability('events:write');
+
+  if (input.scope_id === undefined || input.scope_id === '') {
+    throw new PolicyError(
+      'scope-required',
+      'Scope required',
+      422,
+      'Un calendari sempre pertany a un àmbit.',
+    );
+  }
+  if (input.name === undefined || input.name.trim() === '') {
+    throw new PolicyError('name-required', 'Name required', 422, 'El calendari necessita un nom.');
+  }
+  await assertScopeAccess(ctx.tx, principal, input.scope_id);
+
+  const origin = input.origin ?? 'local';
+  if (origin === 'subscription' && (input.source_url === undefined || input.source_url === '')) {
+    throw new PolicyError(
+      'source-url-required',
+      'Source URL required',
+      422,
+      "Una subscripció necessita la URL de l'origen.",
+    );
+  }
+
+  const id = input.id ?? uuidv7();
+  const existing = await sql<CalendarRow>`
+    SELECT id, scope_id, project_id, name, color, kind, origin FROM calendars WHERE id = ${id}
+  `.execute(ctx.tx);
+  if (existing.rows[0] !== undefined) {
+    ctx.noChange();
+    return { calendar: existing.rows[0], created: false };
+  }
+
+  await sql`
+    INSERT INTO calendars (id, scope_id, project_id, name, color, kind, origin, source_url,
+                           refresh_interval, strip_alarms, sync_seq, created_at, updated_at)
+    VALUES (${id}, ${input.scope_id}, ${input.project_id ?? null}, ${input.name.trim()},
+            ${input.color ?? null}, ${input.kind ?? 'events'}, ${origin},
+            ${input.source_url ?? null}, ${input.refresh_interval ?? null},
+            ${dbBool(input.strip_alarms !== false)}, 0, ${ctx.now}, ${ctx.now})
+  `.execute(ctx.tx);
+
+  ctx.record({
+    entityType: 'calendar',
+    entityId: id,
+    scopeId: input.scope_id,
+    verb: 'created',
+  });
+
+  const created = await sql<CalendarRow>`
+    SELECT id, scope_id, project_id, name, color, kind, origin FROM calendars WHERE id = ${id}
+  `.execute(ctx.tx);
+  return { calendar: created.rows[0]!, created: true };
+}
+
+export async function updateCalendar(
+  ctx: AuditContext,
+  principal: Principal,
+  id: string,
+  input: { name?: string | undefined; color?: string | null | undefined; refresh_interval?: number | null | undefined; strip_alarms?: boolean | undefined },
+): Promise<CalendarRow> {
+  if (!hasCapability(principal, 'events:write')) throw missingCapability('events:write');
+
+  const calendar = await loadCalendar(ctx.tx, id);
+  await assertScopeAccess(ctx.tx, principal, calendar.scope_id);
+
+  if (input.name !== undefined && input.name.trim() === '') {
+    throw new PolicyError('name-required', 'Name required', 422, 'El calendari necessita un nom.');
+  }
+
+  const name = input.name?.trim() ?? calendar.name;
+  const color = input.color === undefined ? calendar.color : input.color;
+
+  await sql`
+    UPDATE calendars SET name = ${name}, color = ${color},
+      ${input.refresh_interval === undefined ? sql`refresh_interval = refresh_interval` : sql`refresh_interval = ${input.refresh_interval}`},
+      ${input.strip_alarms === undefined ? sql`strip_alarms = strip_alarms` : sql`strip_alarms = ${dbBool(input.strip_alarms)}`},
+      updated_at = ${ctx.now}
+    WHERE id = ${id}
+  `.execute(ctx.tx);
+
+  ctx.record({
+    entityType: 'calendar',
+    entityId: id,
+    scopeId: calendar.scope_id,
+    verb: 'updated',
+    changes: { name: { from: calendar.name, to: name } },
+  });
+
+  return loadCalendar(ctx.tx, id);
+}
+
+/**
+ * Esborrat suau d'un calendari.
+ *
+ * **Es nega si encara té esdeveniments**, per la mateixa raó que un àmbit amb tasques:
+ * la cascada aquí seria irreversible des de la interfície. Una subscripció sí que se'n
+ * va amb el que hagi portat, perquè el que hi ha a dins no l'ha escrit ningú d'aquí i es
+ * pot tornar a baixar.
+ */
+export async function deleteCalendar(
+  ctx: AuditContext,
+  principal: Principal,
+  id: string,
+): Promise<void> {
+  if (!hasCapability(principal, 'events:delete')) throw missingCapability('events:delete');
+
+  const calendar = await loadCalendar(ctx.tx, id);
+  await assertScopeAccess(ctx.tx, principal, calendar.scope_id);
+
+  if (calendar.origin === 'subscription') {
+    await sql`
+      UPDATE events SET deleted_at = ${ctx.now}, updated_at = ${ctx.now}, version = version + 1
+      WHERE calendar_id = ${id} AND deleted_at IS NULL
+    `.execute(ctx.tx);
+  } else {
+    const pendents = await sql<{ n: number }>`
+      SELECT COUNT(*) AS n FROM events WHERE calendar_id = ${id} AND deleted_at IS NULL
+    `.execute(ctx.tx);
+    const n = Number(pendents.rows[0]?.n ?? 0);
+    if (n > 0) {
+      throw new PolicyError(
+        'calendar-not-empty',
+        'Calendar not empty',
+        409,
+        `El calendari "${calendar.name}" encara té ${String(n)} ${n === 1 ? 'esdeveniment' : 'esdeveniments'}. Mou-los o esborra'ls abans.`,
+      );
+    }
+  }
+
+  await sql`
+    UPDATE calendars SET deleted_at = ${ctx.now}, updated_at = ${ctx.now} WHERE id = ${id}
+  `.execute(ctx.tx);
+
+  ctx.record({
+    entityType: 'calendar',
+    entityId: id,
+    scopeId: calendar.scope_id,
+    verb: 'deleted',
+  });
+}

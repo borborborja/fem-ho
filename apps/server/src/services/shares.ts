@@ -484,3 +484,143 @@ export function guestPrincipal(
     label: guestLabel(guestName, guestRef),
   };
 }
+
+export async function getShare(
+  db: MigrationDb,
+  principal: Principal,
+  id: string,
+): Promise<Share> {
+  if (!hasCapability(principal, 'shares:read')) throw missingCapability('shares:read');
+
+  const found = await sql<ShareRow>`
+    SELECT id, created_by, task_id, checklist_id, permission, require_name, password_hash,
+           expires_at, max_views, view_count, failed_attempts, locked_until, created_at,
+           revoked_at, secret_version
+    FROM shares WHERE id = ${id} AND created_by = ${principal.userId}
+  `.execute(db);
+  const row = found.rows[0];
+  if (row === undefined) throw notFound('share', id);
+  return toShare(row);
+}
+
+export interface UpdateShareInput {
+  permission?: SharePermission | undefined;
+  expires_at?: string | null | undefined;
+  max_views?: number | null | undefined;
+  require_name?: boolean | undefined;
+  /** `null` treu la contrasenya; una cadena la canvia; `undefined` no la toca. */
+  password?: string | null | undefined;
+}
+
+/**
+ * Canvia la configuració d'un enllaç sense canviar-ne el token.
+ *
+ * **El token no es regenera mai des d'aquí.** Si canviar el permís canviés l'enllaç, tot
+ * el que ja s'hagi enviat deixaria de funcionar sense que ningú ho hagi demanat; qui
+ * vulgui un enllaç nou el crea, i revoca el vell.
+ *
+ * Canviar la contrasenya **desbloqueja** l'enllaç: els cinc intents fallits eren contra
+ * la contrasenya antiga, i mantenir el bloqueig castigaria qui l'acaba de canviar
+ * justament perquè algú l'estava provant.
+ */
+export async function updateShare(
+  ctx: AuditContext,
+  principal: Principal,
+  id: string,
+  input: UpdateShareInput,
+): Promise<Share> {
+  if (!hasCapability(principal, 'shares:write')) throw missingCapability('shares:write');
+
+  const before = await getShare(ctx.tx, principal, id);
+  if (before.revoked_at !== null) {
+    throw new PolicyError(
+      'share-revoked',
+      'Share revoked',
+      409,
+      "Aquest enllaç està revocat: no es pot tornar a obrir. Crea'n un de nou.",
+    );
+  }
+
+  const permission = input.permission ?? before.permission;
+  const expiresAt = input.expires_at === undefined ? before.expires_at : input.expires_at;
+  const maxViews = input.max_views === undefined ? before.max_views : input.max_views;
+  const requireName = input.require_name ?? before.require_name;
+
+  let passwordHash: string | null | undefined;
+  if (input.password === null) {
+    passwordHash = null;
+  } else if (typeof input.password === 'string') {
+    if (input.password.length < MIN_SHARE_PASSWORD_LENGTH) {
+      throw new PolicyError(
+        'password-too-short',
+        'Password too short',
+        422,
+        `La contrasenya de l'enllaç ha de tenir com a mínim ${String(MIN_SHARE_PASSWORD_LENGTH)} caràcters.`,
+      );
+    }
+    passwordHash = await hashPassword(input.password);
+  }
+
+  const igual =
+    permission === before.permission &&
+    expiresAt === before.expires_at &&
+    maxViews === before.max_views &&
+    requireName === before.require_name &&
+    passwordHash === undefined;
+  if (igual) {
+    ctx.noChange();
+    return before;
+  }
+
+  await sql`
+    UPDATE shares SET permission = ${permission}, expires_at = ${expiresAt},
+                      max_views = ${maxViews}, require_name = ${dbBool(requireName)}
+      ${passwordHash === undefined ? sql`` : sql`, password_hash = ${passwordHash}, failed_attempts = 0, locked_until = NULL`}
+    WHERE id = ${id}
+  `.execute(ctx.tx);
+
+  ctx.record({
+    entityType: 'share',
+    entityId: id,
+    verb: 'updated',
+    changes: { permission: { from: before.permission, to: permission } },
+  });
+
+  return getShare(ctx.tx, principal, id);
+}
+
+export interface ShareAccess {
+  id: string;
+  /** "Extern · Marta" o "Extern · a4f2". Mai una IP: no n'hi ha cap columna (D10). */
+  label: string;
+  first_seen: string;
+  last_seen: string;
+}
+
+export async function listAccesses(
+  db: MigrationDb,
+  principal: Principal,
+  shareId: string,
+): Promise<ShareAccess[]> {
+  // Passa per `getShare`, que ja comprova que l'enllaç sigui de qui pregunta.
+  await getShare(db, principal, shareId);
+
+  const rows = await sql<{
+    id: string;
+    guest_name: string | null;
+    guest_ref: string;
+    first_seen: string;
+    last_seen: string;
+  }>`
+    SELECT id, guest_name, guest_ref, first_seen, last_seen
+    FROM share_accesses WHERE share_id = ${shareId}
+    ORDER BY last_seen DESC, id
+  `.execute(db);
+
+  return rows.rows.map((row) => ({
+    id: row.id,
+    label: guestLabel(row.guest_name, row.guest_ref),
+    first_seen: row.first_seen,
+    last_seen: row.last_seen,
+  }));
+}

@@ -18,10 +18,13 @@ import { listComments } from '../services/comments.js';
 import { listChecklists, updateChecklistItem } from '../services/checklists.js';
 import {
   createShare,
+  getShare,
   guestPrincipal,
+  listAccesses,
   listShares,
   openShare,
   revokeShare,
+  updateShare,
   type SharePermission,
 } from '../services/shares.js';
 import { getTask } from '../services/tasks.js';
@@ -83,6 +86,36 @@ export function registerShareRoutes(app: FastifyInstance, secret: SecretProvider
   app.get('/api/v1/shares', async (request, reply) =>
     handle(app, request, reply, async (principal) => ({
       data: await listShares(app.connection!.db, principal),
+    })),
+  );
+
+  app.get<{ Params: { id: string } }>('/api/v1/shares/:id', async (request, reply) =>
+    handle(app, request, reply, async (principal) =>
+      getShare(app.connection!.db, principal, request.params.id),
+    ),
+  );
+
+  app.patch<{ Params: { id: string } }>('/api/v1/shares/:id', async (request, reply) =>
+    handle(app, request, reply, async (principal) => {
+      const input = (request.body ?? {}) as Record<string, unknown>;
+      return auditedTransaction(app.connection!.db, principal, (ctx) =>
+        updateShare(ctx, principal, request.params.id, {
+          permission:
+            input.permission === 'view' || input.permission === 'check' || input.permission === 'comment'
+              ? input.permission
+              : undefined,
+          expires_at: 'expires_at' in input ? ((input.expires_at as string | null) ?? null) : undefined,
+          max_views: 'max_views' in input ? ((input.max_views as number | null) ?? null) : undefined,
+          require_name: typeof input.require_name === 'boolean' ? input.require_name : undefined,
+          password: 'password' in input ? ((input.password as string | null) ?? null) : undefined,
+        }),
+      );
+    }),
+  );
+
+  app.get<{ Params: { id: string } }>('/api/v1/shares/:id/accesses', async (request, reply) =>
+    handle(app, request, reply, async (principal) => ({
+      data: await listAccesses(app.connection!.db, principal, request.params.id),
     })),
   );
 

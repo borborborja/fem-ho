@@ -156,7 +156,12 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Modificar el propi perfil
+         * @description Aquí es toca NOMÉS el compte propi. El brief és explícit (línia 42): al Perfil no
+         *     s'editen els altres; això és a `/admin/users`.
+         */
+        patch: operations["updateProfile"];
         trace?: never;
     };
     "/scopes": {
@@ -329,10 +334,17 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** Un esdeveniment */
+        get: operations["getEvent"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Esborrar un esdeveniment o part d'una sèrie
+         * @description `single` posa un EXDATE al mestre —esborrar la fila no serviria, el mestre la
+         *     tornaria a generar—; `future` parteix la sèrie amb `UNTIL`; `all` se l'endú
+         *     sencera. Mai s'emet `RANGE=THISANDFUTURE` (D8).
+         */
+        delete: operations["deleteEvent"];
         options?: never;
         head?: never;
         /**
@@ -365,7 +377,12 @@ export interface paths {
          */
         get: operations["listCalendars"];
         put?: never;
-        post?: never;
+        /**
+         * Crear un calendari
+         * @description `origin: subscription` necessita `source_url`. Una subscripció és de només
+         *     lectura a la capa de repositori, no només a la interfície (docs/01 §5).
+         */
+        post: operations["createCalendar"];
         delete?: never;
         options?: never;
         head?: never;
@@ -402,7 +419,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** Els ítems d'una llista */
+        get: operations["listChecklistItems"];
         put?: never;
         /**
          * Afegir un ítem
@@ -417,6 +435,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/checklists/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Una llista, amb els seus ítems
+         * @description Porta `task_title` perquè la vista de llista senzilla el pinta com a molla de pa
+         *     clicable (docs/02 §6), i una segona crida per a un sol camp és una segona fallada.
+         */
+        get: operations["getChecklist"];
+        put?: never;
+        post?: never;
+        /**
+         * Esborrar una llista
+         * @description Els ítems cauen amb ella: no existeixen fora d'una llista (P1).
+         */
+        delete: operations["deleteChecklist"];
+        options?: never;
+        head?: never;
+        /** Modificar una llista */
+        patch: operations["updateChecklist"];
+        trace?: never;
+    };
     "/checklist-items/{id}": {
         parameters: {
             query?: never;
@@ -427,7 +471,8 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        delete?: never;
+        /** Esborrar un ítem */
+        delete: operations["deleteChecklistItem"];
         options?: never;
         head?: never;
         /**
@@ -546,14 +591,26 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * Un enllaç compartit
+         * @description El token NO hi surt: no es pot recuperar del seu HMAC (docs/10 §6).
+         */
+        get: operations["getShare"];
         put?: never;
         post?: never;
         /** Revocar un enllaç */
         delete: operations["revokeShare"];
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Reconfigurar un enllaç
+         * @description El token NO es regenera mai des d'aquí: si canviar el permís canviés l'enllaç, tot
+         *     el que ja s'hagi enviat deixaria de funcionar sense que ningú ho hagi demanat.
+         *
+         *     Canviar la contrasenya desbloqueja l'enllaç: els cinc intents fallits eren contra
+         *     l'antiga.
+         */
+        patch: operations["updateShare"];
         trace?: never;
     };
     "/push/subscriptions": {
@@ -709,10 +766,960 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/scopes/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Un àmbit */
+        get: operations["getScope"];
+        put?: never;
+        post?: never;
+        /**
+         * Esborrar un àmbit
+         * @description Es nega amb `409` si encara té tasques o projectes, i diu quants: la cascada
+         *     aquí seria irreversible des de la interfície.
+         */
+        delete: operations["deleteScope"];
+        options?: never;
+        head?: never;
+        /**
+         * Modificar un àmbit
+         * @description `kind` NO es pot canviar. Passar d'individual a col·lectiu deixaria totes les
+         *     tasques assignades al propietari per la regla d'assignació automàtica (docs/01
+         *     §4) sense que ningú ho hagi demanat.
+         */
+        patch: operations["updateScope"];
+        trace?: never;
+    };
+    "/scopes/{id}/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Els membres d'un àmbit */
+        get: operations["listMembers"];
+        put?: never;
+        /**
+         * Afegir un membre
+         * @description P3: un membre és **o bé** un usuari **o bé** una subscripció de calendari de
+         *     només lectura. Mai totes dues coses ni cap.
+         */
+        post: operations["addMember"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/scopes/{id}/members/{memberId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Treure un membre */
+        delete: operations["removeMember"];
+        options?: never;
+        head?: never;
+        /** Canviar el rol d'un membre */
+        patch: operations["updateMember"];
+        trace?: never;
+    };
+    "/projects/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Un projecte */
+        get: operations["getProject"];
+        put?: never;
+        post?: never;
+        /**
+         * Esborrar un projecte
+         * @description Les tasques NO cauen amb ell: tornen a l'espai general de l'àmbit, que és el
+         *     filtre `project_id IS NULL` i no una fila (docs/01 §4).
+         */
+        delete: operations["deleteProject"];
+        options?: never;
+        head?: never;
+        /** Modificar o arxivar un projecte */
+        patch: operations["updateProject"];
+        trace?: never;
+    };
+    "/labels": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Les etiquetes visibles */
+        get: operations["listLabels"];
+        put?: never;
+        /**
+         * Crear una etiqueta
+         * @description Una etiqueta pertany a un àmbit: "Urgent" a Feina i "Urgent" a Casa són coses
+         *     diferents, i la clau única `(scope_id, name)` ho imposa.
+         */
+        post: operations["createLabel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/labels/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Esborrar una etiqueta */
+        delete: operations["deleteLabel"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tasks/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Una tasca */
+        get: operations["getTask"];
+        put?: never;
+        post?: never;
+        /**
+         * Esborrar una tasca
+         * @description Esborrat suau. Les subtasques i les llistes cauen amb ella —no existeixen fora
+         *     d'una tasca—, a diferència del que passa en esborrar un projecte.
+         */
+        delete: operations["deleteTask"];
+        options?: never;
+        head?: never;
+        /**
+         * Modificar una tasca
+         * @description Només els camps que es donin. `null` vol dir "buida'l" i absent vol dir "no el
+         *     toquis": sense la distinció, buidar una data seria impossible des d'un client
+         *     que envia només el que ha canviat.
+         */
+        patch: operations["updateTask"];
+        trace?: never;
+    };
+    "/tasks/{id}/assignees/{userId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Assignar una persona */
+        post: operations["addAssignee"];
+        /** Desassignar una persona */
+        delete: operations["removeAssignee"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tasks/{id}/labels/{labelId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Posar una etiqueta a una tasca */
+        post: operations["addTaskLabel"];
+        /** Treure una etiqueta d'una tasca */
+        delete: operations["removeTaskLabel"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tasks/{id}/subtasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Les subtasques d'una tasca */
+        get: operations["listSubtasks"];
+        put?: never;
+        /**
+         * Crear una subtasca
+         * @description Una subtasca NO és una tasca: no té àmbit propi, ni estat de kanban, ni data, ni
+         *     assignat. Té títol i fet/no fet, i pot ancorar una llista senzilla.
+         */
+        post: operations["createSubtask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/subtasks/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Esborrar una subtasca
+         * @description Les llistes ancorades es desancoren, no cauen: una llista de la compra segueix
+         *     sent la llista de la compra quan la subtasca desapareix.
+         */
+        delete: operations["deleteSubtask"];
+        options?: never;
+        head?: never;
+        /** Modificar una subtasca */
+        patch: operations["updateSubtask"];
+        trace?: never;
+    };
+    "/tasks/{id}/comments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Els comentaris d'una tasca */
+        get: operations["listComments"];
+        put?: never;
+        /**
+         * Comentar una tasca
+         * @description És la via principal perquè un agent reporti (docs/09 §6), i per això surt a
+         *     l'historial com qualsevol altre gest.
+         */
+        post: operations["addComment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/inbox": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * L'Inbox d'un dia
+         * @description La MATEIXA font de dades per a la columna del kanban i per al rail del calendari
+         *     (P4). Sense `date`, el dia és avui al fus de qui pregunta, no al del servidor.
+         */
+        get: operations["getInbox"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dashboard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * El dashboard global
+         * @description Ignora la selecció d'àmbits i de projecte: ho ensenya tot (docs/02 §8). Per això
+         *     no accepta cap filtre d'àmbit.
+         */
+        get: operations["getDashboard"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Cercar tasques
+         * @description La consulta es normalitza amb la MATEIXA funció que va generar `search_text`
+         *     (docs/01 §11). Dues implementacions divergirien justament en les paraules per a
+         *     les quals la normalització existeix: "col·legi", "Barça", "l'aigua".
+         */
+        get: operations["search"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/parse": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Analitzar una cadena d'afegida ràpida
+         * @description Per a clients que no poden portar el parser. Els que sí, el porten: el camp
+         *     d'afegida ha de pintar els xips mentre s'escriu i una petició per tecla no és
+         *     una opció (D12).
+         *
+         *     A la v1, només sigils. El parseig de dates en català arriba a la v1.1 sense
+         *     canviar la forma d'aquest endpoint.
+         */
+        post: operations["parseQuickAdd"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/calendars/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Esborrar un calendari
+         * @description Es nega amb `409` si és local i encara té esdeveniments. Una subscripció sí que
+         *     se'n va amb el que hagi portat: el que hi ha a dins no l'ha escrit ningú d'aquí.
+         */
+        delete: operations["deleteCalendar"];
+        options?: never;
+        head?: never;
+        /** Modificar un calendari */
+        patch: operations["updateCalendar"];
+        trace?: never;
+    };
+    "/auth/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Canviar la contrasenya
+         * @description Demana l'actual encara que hi hagi sessió: una sessió oberta en un ordinador
+         *     compartit no és prova d'identitat per canviar la credencial que obre totes les
+         *     altres. I revoca la resta de sessions.
+         */
+        post: operations["changePassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Perfil i preferències */
+        get: operations["getSettings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Canviar les preferències */
+        patch: operations["updateSettings"];
+        trace?: never;
+    };
+    "/ai/agents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Els agents que actuen en nom de qui pregunta */
+        get: operations["listAgents"];
+        put?: never;
+        /** Crear un agent */
+        post: operations["createAgent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ai/agents/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Un agent */
+        get: operations["getAgent"];
+        put?: never;
+        post?: never;
+        /**
+         * Esborrar un agent
+         * @description Les tasques que hi tenien delegació es queden, amb `delegate_agent_id` a null i
+         *     el mode d'IA a `manual`: la feina és de la persona, no de l'agent (D5).
+         */
+        delete: operations["deleteAgent"];
+        options?: never;
+        head?: never;
+        /**
+         * Modificar un agent
+         * @description Desactivar-lo allibera les seves reserves.
+         */
+        patch: operations["updateAgent"];
+        trace?: never;
+    };
+    "/ai/next-task": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * La següent tasca disponible, ja reservada
+         * @description `task` a null vol dir "ara no hi ha res a fer", que és una resposta correcta: un
+         *     404 faria que un agent que consulta cada minut ho llegís com un error de
+         *     configuració.
+         */
+        get: operations["nextTask"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ai/tasks/{id}/claim": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reservar una tasca */
+        post: operations["claimTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ai/tasks/{id}/release": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Alliberar una reserva
+         * @description El motiu és obligatori: una reserva alliberada sense dir per què deixa
+         *     l'historial amb un forat que ningú sabrà interpretar (docs/09 §5).
+         */
+        post: operations["releaseTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ai/tasks/{id}/lease": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** La reserva d'una tasca, si en té */
+        get: operations["getLease"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/shares/{id}/accesses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Qui ha entrat per un enllaç
+         * @description L'etiqueta és pseudònima: "Extern · Marta" o "Extern · a4f2". No hi ha cap
+         *     columna d'IP enlloc, i és una decisió de privadesa explícita (D10).
+         */
+        get: operations["listShareAccesses"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Els membres de la llar */
+        get: operations["listUsers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/users/invite": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Convidar un membre
+         * @description Crea l'usuari SENSE contrasenya i genera un enllaç d'un sol ús perquè la posi
+         *     ell. L'administrador no arriba a saber-la mai.
+         */
+        post: operations["inviteUser"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/users/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Esborrar un usuari
+         * @description Un administrador NO es pot esborrar a si mateix, ni es pot esborrar l'últim: la
+         *     instància es quedaria sense ningú que la pogués administrar.
+         */
+        delete: operations["deleteUser"];
+        options?: never;
+        head?: never;
+        /** Modificar un usuari */
+        patch: operations["updateUser"];
+        trace?: never;
+    };
+    "/admin/wipe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Netejar la instància
+         * @description La confirmació escrivint el nom exacte de la instància es comprova TAMBÉ aquí:
+         *     una crida directa a l'API no ha de poder-ho fer sense el mateix gest deliberat
+         *     que la interfície demana.
+         */
+        post: operations["wipeInstance"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/diagnostics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Paquet de diagnòstic
+         * @description Amb tots els secrets ocultats (docs/12 §8). El punt és poder-lo enganxar a un
+         *     informe d'error: no hi surt cap valor de variable d'entorn, cap cadena de
+         *     connexió i cap clau, només si hi són.
+         */
+        get: operations["getDiagnostics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Exportar les dades pròpies
+         * @description No demana permís a ningú: són les seves dades (docs/10 §9). El que surt és el
+         *     que qui pregunta pot veure, i les entitats esborrades no hi són.
+         */
+        get: operations["exportAll"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @description Només els camps donats. `kind` no hi és a posta: no es pot canviar. */
+        ScopePatch: {
+            name?: string;
+            color?: string;
+            icon?: string | null;
+            ai_instructions?: string | null;
+            ai_description?: string | null;
+            position?: string;
+        };
+        Member: {
+            id: string;
+            scope_id: string;
+            /** @description P3 · o això o `external_calendar_id`, mai totes dues coses. */
+            user_id: string | null;
+            external_calendar_id: string | null;
+            /** @enum {string} */
+            role: "owner" | "admin" | "member" | "viewer";
+            /** Format: date-time */
+            created_at: string;
+            name?: string | null;
+            email?: string | null;
+        };
+        /** @description Exactament un de `user_id` o `external_calendar_id`. */
+        MemberInput: {
+            user_id?: string;
+            external_calendar_id?: string;
+            /** @enum {string} */
+            role?: "owner" | "admin" | "member" | "viewer";
+        };
+        ProjectPatch: {
+            name?: string;
+            ai_instructions?: string | null;
+            ai_description?: string | null;
+            position?: string;
+            /** @description Arxivar és posar-hi data; desarxivar és treure-la. No és un esborrat. */
+            archived?: boolean;
+        };
+        Label: {
+            id: string;
+            scope_id: string;
+            name: string;
+            /** @description Nom de token, mai un literal de color. */
+            color: string;
+            /** Format: date-time */
+            created_at: string;
+        };
+        LabelInput: {
+            id?: string;
+            scope_id: string;
+            name: string;
+            color?: string;
+        };
+        /** @description `null` vol dir "buida'l" i absent vol dir "no el toquis". Per moure-la, `/move`. */
+        TaskPatch: {
+            title?: string;
+            description?: string | null;
+            /** Format: date */
+            due_date?: string | null;
+            due_time?: string | null;
+            /** @enum {string} */
+            ai_mode?: "manual" | "assisted" | "delegated";
+            ai_instructions?: string | null;
+        };
+        Subtask: {
+            id: string;
+            task_id: string;
+            title: string;
+            done: boolean;
+            position: string;
+            version: number;
+        };
+        SubtaskInput: {
+            id?: string;
+            title: string;
+            position?: string;
+        };
+        SubtaskPatch: {
+            title?: string;
+            done?: boolean;
+            position?: string;
+        };
+        Comment: {
+            id: string;
+            task_id: string;
+            author_id?: string | null;
+            author_name?: string | null;
+            /** @description Present quan el comentari ve d'un enllaç compartit. */
+            guest_name?: string | null;
+            body: string;
+            /** Format: date-time */
+            created_at: string;
+        };
+        Inbox: {
+            /** Format: date */
+            date: string;
+            dated: components["schemas"]["Task"][];
+            /** @description Buit si no s'han demanat. */
+            overdue: components["schemas"]["Task"][];
+            /** @description La secció "SENSE DIA" del rail (docs/02 §5). */
+            undated: components["schemas"]["Task"][];
+        };
+        DashboardScope: {
+            scope_id: string;
+            name: string;
+            color: string;
+            pending: number;
+            overdue: number;
+        };
+        Dashboard: {
+            /** Format: date */
+            date: string;
+            scopes: components["schemas"]["DashboardScope"][];
+            today: components["schemas"]["Task"][];
+            overdue: components["schemas"]["Task"][];
+            doing: components["schemas"]["Task"][];
+        };
+        QuickAddToken: {
+            /** @enum {string} */
+            kind: "scope" | "project" | "person" | "aiMode";
+            /** @description El text literal que ocupava, sigil inclòs. Tornar-lo a posar desfà el xip. */
+            raw: string;
+            start: number;
+            end: number;
+            id: string;
+            label: string;
+        };
+        QuickAddResult: {
+            title: string;
+            scopeId: string | null;
+            projectId: string | null;
+            assigneeIds: string[];
+            /** @enum {string} */
+            aiMode: "manual" | "assisted" | "delegated";
+            tokens: components["schemas"]["QuickAddToken"][];
+            /**
+             * @description `scope-required` quan hi ha més d'un àmbit actiu i no s'ha escrit `#`: llavors
+             *     no es crea res i es demana l'àmbit (docs/02 §4). El nom del camp és el que ja
+             *     fan servir els fixtures compartits amb Kotlin, i no se'n pot inventar un altre
+             *     aquí sense trencar `parser-parity`.
+             * @enum {null|string}
+             */
+            error: "scope-required" | "empty-title" | null;
+        };
+        CalendarInput: {
+            id?: string;
+            scope_id: string;
+            project_id?: string | null;
+            name: string;
+            color?: string | null;
+            /**
+             * @description D9 · dues col·leccions per contenidor, sempre. RFC 4791 §5.2 prohibeix
+             *     recursos de components mixtos.
+             * @enum {string}
+             */
+            kind?: "events" | "todos";
+            /** @enum {string} */
+            origin?: "local" | "subscription";
+            /** @description Obligatòria si `origin` és `subscription`. */
+            source_url?: string;
+            refresh_interval?: number;
+            strip_alarms?: boolean;
+        };
+        CalendarPatch: {
+            name?: string;
+            color?: string | null;
+            refresh_interval?: number | null;
+            strip_alarms?: boolean;
+        };
+        UserSettings: {
+            /**
+             * Format: date-time
+             * @description El botó de netejar la columna Fet. No esborra res (P2).
+             */
+            done_cleared_at?: string | null;
+            /** @enum {string} */
+            inbox_position?: "left" | "right" | "below";
+            inbox_show_overdue?: boolean;
+            collapsed_groups?: string[];
+            show_calendar_widget?: boolean;
+            show_overdue_section?: boolean;
+            quiet_hours_start?: string | null;
+            quiet_hours_end?: string | null;
+            daily_digest_at?: string | null;
+        };
+        UserProfile: {
+            id: string;
+            email?: string | null;
+            name: string;
+            /** @enum {string} */
+            role: "admin" | "member";
+            /** @enum {string} */
+            kind: "human" | "ai" | "caldav_only";
+            timezone: string;
+            locale: string;
+            /** @enum {string} */
+            theme: "system" | "light" | "dark";
+            /** @enum {string} */
+            accent: "default" | "soft" | "mono-warm" | "mono-cool";
+            avatar_color?: string | null;
+        };
+        SettingsBundle: {
+            profile: components["schemas"]["UserProfile"];
+            settings: components["schemas"]["UserSettings"];
+        };
+        Agent: {
+            id: string;
+            name: string;
+            /** @description D5 · la responsabilitat es queda sempre amb una persona. */
+            on_behalf_of_user_id: string;
+            /** @description La fila d'usuari `kind='ai'`, que és qui signa l'historial i els comentaris. */
+            actor_user_id: string;
+            can_create_tasks: boolean;
+            enabled: boolean;
+            /** Format: date-time */
+            created_at: string;
+            version: number;
+        };
+        AgentInput: {
+            id?: string;
+            name: string;
+            can_create_tasks?: boolean;
+        };
+        AgentPatch: {
+            name?: string;
+            can_create_tasks?: boolean;
+            enabled?: boolean;
+        };
+        Lease: {
+            task_id: string;
+            user_id: string;
+            agent_id?: string | null;
+            /** Format: date-time */
+            acquired_at: string;
+            /**
+             * Format: date-time
+             * @description Trenta minuts (docs/09 §5). Caducada, la tasca torna a estar disponible.
+             */
+            expires_at: string;
+        };
+        ClaimedTask: {
+            taskId: string;
+            lease: components["schemas"]["Lease"];
+        };
+        ShareAccess: {
+            id: string;
+            /** @description "Extern · Marta" o "Extern · a4f2". Mai una IP: no n'hi ha cap columna (D10). */
+            label: string;
+            /** Format: date-time */
+            first_seen: string;
+            /** Format: date-time */
+            last_seen: string;
+        };
+        AdminUser: {
+            id: string;
+            email?: string | null;
+            name: string;
+            /** @enum {string} */
+            role: "admin" | "member";
+            /** @enum {string} */
+            kind: "human" | "ai" | "caldav_only";
+            /** Format: date-time */
+            created_at: string;
+            /** @description Encara no ha fet servir la invitació; el compte no s'ha estrenat. */
+            pending_invite: boolean;
+        };
+        InviteResult: {
+            user: components["schemas"]["AdminUser"];
+            /** @description Es mostra UN SOL COP. Després només en queda l'HMAC. */
+            invite_url: string;
+            /** Format: date-time */
+            expires_at: string;
+        };
         ShareSummary: {
             id: string;
             task_id?: string | null;
@@ -1448,6 +2455,50 @@ export interface operations {
             };
         };
     };
+    updateProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    name?: string;
+                    /** @description Nom IANA. Es valida amb `Intl`. */
+                    timezone?: string;
+                    locale?: string;
+                    /** @enum {string} */
+                    theme?: "system" | "light" | "dark";
+                    /** @enum {string} */
+                    accent?: "default" | "soft" | "mono-warm" | "mono-cool";
+                    avatar_color?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Modificat. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserProfile"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            /** @description Un valor d'enum o un fus que no existeixen. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     listScopes: {
         parameters: {
             query?: never;
@@ -1775,6 +2826,64 @@ export interface operations {
             403: components["responses"]["Forbidden"];
         };
     };
+    getEvent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description L'esdeveniment. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Event"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteEvent: {
+        parameters: {
+            query?: {
+                series_mode?: "single" | "future" | "all";
+                occurrence?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Esborrat. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            /** @description El calendari és una subscripció. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
     updateEvent: {
         parameters: {
             query?: {
@@ -1838,6 +2947,49 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
         };
     };
+    createCalendar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CalendarInput"];
+            };
+        };
+        responses: {
+            /** @description Ja existia amb aquest `id`. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Calendar"];
+                };
+            };
+            /** @description Creat. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Calendar"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            /** @description Falta l'àmbit, el nom o la URL d'origen. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     listChecklists: {
         parameters: {
             query?: never;
@@ -1890,6 +3042,30 @@ export interface operations {
             403: components["responses"]["Forbidden"];
         };
     };
+    listChecklistItems: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Els ítems. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChecklistItem"][];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+        };
+    };
     createChecklistItem: {
         parameters: {
             query?: never;
@@ -1916,6 +3092,110 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
+        };
+    };
+    getChecklist: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description La llista. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Checklist"] & {
+                        task_title: string;
+                    };
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteChecklist: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Esborrada. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateChecklist: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    name?: string;
+                    /** @description Completats en línia (ratllats al seu lloc) o en una secció al final. */
+                    show_completed_inline?: boolean;
+                    subtask_id?: string | null;
+                    position?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Modificada. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Checklist"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteChecklistItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Esborrat. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
         };
     };
     updateChecklistItem: {
@@ -2139,6 +3419,30 @@ export interface operations {
             403: components["responses"]["Forbidden"];
         };
     };
+    getShare: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description L'enllaç. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShareSummary"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+        };
+    };
     revokeShare: {
         parameters: {
             query?: never;
@@ -2159,6 +3463,51 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    updateShare: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    permission?: "view" | "check" | "comment";
+                    /** Format: date-time */
+                    expires_at?: string | null;
+                    max_views?: number | null;
+                    require_name?: boolean;
+                    /** @description `null` la treu; una cadena la canvia; absent no la toca. */
+                    password?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Reconfigurat. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShareSummary"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            /** @description Està revocat i no es pot tornar a obrir. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     subscribePush: {
@@ -2372,6 +3721,1470 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SyncBatchResults"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    getScope: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description L'àmbit. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Scope"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteScope: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Esborrat. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            /** @description Encara té coses a dins. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    updateScope: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScopePatch"];
+            };
+        };
+        responses: {
+            /** @description Modificat. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Scope"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listMembers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Els membres. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Member"][];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    addMember: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MemberInput"];
+            };
+        };
+        responses: {
+            /** @description Afegit. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Member"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            /** @description Forma de membre invàlida, o l'àmbit no és col·lectiu. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    removeMember: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                memberId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Tret. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            /** @description Es quedaria sense cap propietari. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    updateMember: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                memberId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    role: "owner" | "admin" | "member" | "viewer";
+                };
+            };
+        };
+        responses: {
+            /** @description Canviat. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Member"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            /** @description Es quedaria sense cap propietari. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getProject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description El projecte. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Project"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteProject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Esborrat, amb quantes tasques han passat a l'espai general. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        moved: number;
+                    };
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateProject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectPatch"];
+            };
+        };
+        responses: {
+            /** @description Modificat. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Project"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listLabels: {
+        parameters: {
+            query?: {
+                scope_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Les etiquetes. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Label"][];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    createLabel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LabelInput"];
+            };
+        };
+        responses: {
+            /** @description Ja existia amb aquest nom en aquest àmbit. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Label"];
+                };
+            };
+            /** @description Creada. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Label"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            /** @description Falta l'àmbit o el nom. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    deleteLabel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Esborrada. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description La tasca. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Task"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Esborrada. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskPatch"];
+            };
+        };
+        responses: {
+            /** @description Modificada. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Task"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    addAssignee: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Assignada. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Task"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            /** @description No és membre de l'àmbit col·lectiu. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    removeAssignee: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Desassignada. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Task"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    addTaskLabel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                labelId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Posada. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            /** @description L'etiqueta és d'un altre àmbit. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    removeTaskLabel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                labelId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Treta. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    listSubtasks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Les subtasques. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Subtask"][];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    createSubtask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubtaskInput"];
+            };
+        };
+        responses: {
+            /** @description Creada. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Subtask"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            /** @description Falta el títol. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    deleteSubtask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Esborrada. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateSubtask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubtaskPatch"];
+            };
+        };
+        responses: {
+            /** @description Modificada. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Subtask"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listComments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Els comentaris. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Comment"][];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    addComment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    body: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Comentat. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Comment"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    getInbox: {
+        parameters: {
+            query?: {
+                date?: string;
+                include_overdue?: boolean;
+                scope_ids?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description L'Inbox. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Inbox"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    getDashboard: {
+        parameters: {
+            query?: {
+                date?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description El dashboard. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Dashboard"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    search: {
+        parameters: {
+            query: {
+                q: string;
+                scope_id?: string;
+                status?: string;
+                limit?: number;
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Els resultats. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskPage"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    parseQuickAdd: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    text: string;
+                    active_scope_ids?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description El resultat del parseig. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuickAddResult"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    deleteCalendar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Esborrat. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            /** @description Encara té esdeveniments. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    updateCalendar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CalendarPatch"];
+            };
+        };
+        responses: {
+            /** @description Modificat. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Calendar"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    changePassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    current_password: string;
+                    new_password: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Canviada, amb quantes sessions s'han revocat. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        revoked_sessions: number;
+                    };
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            /** @description La contrasenya actual no és correcta. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description El perfil i les preferències. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingsBundle"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    updateSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UserSettings"];
+            };
+        };
+        responses: {
+            /** @description Canviades. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserSettings"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    listAgents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Els agents. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Agent"][];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    createAgent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentInput"];
+            };
+        };
+        responses: {
+            /** @description Creat. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Agent"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    getAgent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description L'agent. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Agent"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteAgent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Esborrat, amb quantes tasques s'han desdelegat. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        released: number;
+                    };
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateAgent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentPatch"];
+            };
+        };
+        responses: {
+            /** @description Modificat. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Agent"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    nextTask: {
+        parameters: {
+            query?: {
+                scope_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description La tasca reservada, o null. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        task: components["schemas"]["ClaimedTask"] | null;
+                    };
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    claimTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Reservada. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Lease"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            /** @description Ja la té algú altre. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    releaseTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    reason: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Alliberada. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            /** @description Falta el motiu. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getLease: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description La reserva, o null. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        lease: components["schemas"]["Lease"] | null;
+                    };
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    listShareAccesses: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Els accessos. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ShareAccess"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listUsers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Els usuaris. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminUser"][];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    inviteUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: email */
+                    email: string;
+                    name: string;
+                    /** @enum {string} */
+                    role?: "admin" | "member";
+                };
+            };
+        };
+        responses: {
+            /** @description Convidat. `invite_url` es mostra un sol cop. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InviteResult"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            /** @description Ja hi ha un compte amb aquest correu. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    deleteUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Esborrat. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            /** @description És l'últim administrador, o ets tu mateix. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    updateUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    name?: string;
+                    /** @enum {string} */
+                    role?: "admin" | "member";
+                };
+            };
+        };
+        responses: {
+            /** @description Modificat. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminUser"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    wipeInstance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    confirmation: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Netejada, amb el recompte per taula. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        deleted: {
+                            [key: string]: number;
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            /** @description La confirmació no coincideix. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getDiagnostics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description El diagnòstic. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    exportAll: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description L'exportació. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             401: components["responses"]["Unauthenticated"];

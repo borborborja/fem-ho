@@ -641,3 +641,265 @@ export async function updateTask(
   const [task] = await withAssignees(ctx.tx, after.rows);
   return task!;
 }
+
+/**
+ * Esborrat suau d'una tasca.
+ *
+ * **Les subtasques i les llistes cauen amb ella**, a diferència del que passa quan
+ * s'esborra un projecte. La diferència no és capritxosa: una subtasca no existeix fora
+ * de la seva tasca —no té àmbit propi ni identitat pròpia—, mentre que una tasca dins
+ * d'un projecte sí que en té i pot viure a l'espai general.
+ *
+ * Cap DELETE de veritat: `deleted_at` és el que fa que el canvi arribi als altres
+ * clients pel sync (docs/06 §7). Una fila esborrada de debò no es pot sincronitzar.
+ */
+export async function deleteTask(
+  ctx: AuditContext,
+  principal: Principal,
+  id: string,
+): Promise<void> {
+  if (!hasCapability(principal, 'tasks:delete')) throw missingCapability('tasks:delete');
+
+  const found = await sql<TaskRow>`
+    SELECT ${TASK_COLUMNS} FROM tasks WHERE id = ${id} AND deleted_at IS NULL
+  `.execute(ctx.tx);
+  const task = found.rows[0];
+  if (task === undefined) throw notFound('tasca', id);
+  await assertScopeAccess(ctx.tx, principal, task.scope_id, { type: 'La tasca', id });
+
+  await sql`
+    UPDATE checklist_items SET deleted_at = ${ctx.now}, updated_at = ${ctx.now},
+                               version = version + 1
+    WHERE deleted_at IS NULL
+      AND checklist_id IN (SELECT id FROM checklists WHERE task_id = ${id})
+  `.execute(ctx.tx);
+  await sql`
+    UPDATE checklists SET deleted_at = ${ctx.now}, updated_at = ${ctx.now}, version = version + 1
+    WHERE task_id = ${id} AND deleted_at IS NULL
+  `.execute(ctx.tx);
+  await sql`
+    UPDATE subtasks SET deleted_at = ${ctx.now}, updated_at = ${ctx.now}, version = version + 1
+    WHERE task_id = ${id} AND deleted_at IS NULL
+  `.execute(ctx.tx);
+  await sql`
+    UPDATE tasks SET deleted_at = ${ctx.now}, updated_at = ${ctx.now}, version = version + 1
+    WHERE id = ${id}
+  `.execute(ctx.tx);
+
+  ctx.record({ entityType: 'task', entityId: id, scopeId: task.scope_id, verb: 'deleted' });
+}
+
+/**
+ * Assigna o desassigna una persona.
+ *
+ * És una taula i no una columna perquè el brief demana "persona o persones". Posar dues
+ * vegades la mateixa persona no és un error: és una reenviada, i es diu.
+ */
+export async function setAssignee(
+  ctx: AuditContext,
+  principal: Principal,
+  taskId: string,
+  userId: string,
+  assigned: boolean,
+): Promise<Task> {
+  if (!hasCapability(principal, 'tasks:write')) throw missingCapability('tasks:write');
+
+  const found = await sql<TaskRow>`
+    SELECT ${TASK_COLUMNS} FROM tasks WHERE id = ${taskId} AND deleted_at IS NULL
+  `.execute(ctx.tx);
+  const task = found.rows[0];
+  if (task === undefined) throw notFound('tasca', taskId);
+  const scope = await assertScopeAccess(ctx.tx, principal, task.scope_id, {
+    type: 'La tasca',
+    id: taskId,
+  });
+
+  const user = await sql<{ id: string; name: string }>`
+    SELECT id, name FROM users WHERE id = ${userId} AND deleted_at IS NULL
+  `.execute(ctx.tx);
+  if (user.rows[0] === undefined) throw notFound('usuari', userId);
+
+  if (assigned) {
+    // A un àmbit col·lectiu, qui s'assigna ha de ser-ne membre: si no, la persona veuria
+    // una tasca seva que no pot obrir.
+    if (scope.kind === 'collective') {
+      const member = await sql<{ n: number }>`
+        SELECT COUNT(*) AS n FROM scopes s
+        WHERE s.id = ${task.scope_id}
+          AND (s.owner_id = ${userId}
+               OR EXISTS (SELECT 1 FROM scope_members m
+                          WHERE m.scope_id = s.id AND m.user_id = ${userId}))
+      `.execute(ctx.tx);
+      if (Number(member.rows[0]?.n ?? 0) === 0) {
+        throw new PolicyError(
+          'not-a-member',
+          'Not a member',
+          422,
+          `${user.rows[0].name} no és membre de ${scope.name}: no podria obrir la tasca.`,
+        );
+      }
+    }
+
+    const already = await sql<{ n: number }>`
+      SELECT COUNT(*) AS n FROM task_assignees WHERE task_id = ${taskId} AND user_id = ${userId}
+    `.execute(ctx.tx);
+    if (Number(already.rows[0]?.n ?? 0) > 0) {
+      ctx.noChange();
+      const [task2] = await withAssignees(ctx.tx, [task]);
+      return task2!;
+    }
+
+    await sql`
+      INSERT INTO task_assignees (task_id, user_id, assigned_at)
+      VALUES (${taskId}, ${userId}, ${ctx.now})
+    `.execute(ctx.tx);
+  } else {
+    const removed = await sql`
+      DELETE FROM task_assignees WHERE task_id = ${taskId} AND user_id = ${userId}
+    `.execute(ctx.tx);
+    if (Number(removed.numAffectedRows ?? 0n) === 0) {
+      ctx.noChange();
+      const [task2] = await withAssignees(ctx.tx, [task]);
+      return task2!;
+    }
+  }
+
+  ctx.record({
+    entityType: 'task',
+    entityId: taskId,
+    scopeId: task.scope_id,
+    verb: 'updated',
+    changes: { assignee: { from: assigned ? null : userId, to: assigned ? userId : null } },
+  });
+
+  const after = await sql<TaskRow>`
+    SELECT ${TASK_COLUMNS} FROM tasks WHERE id = ${taskId}
+  `.execute(ctx.tx);
+  const [updated] = await withAssignees(ctx.tx, after.rows);
+  return updated!;
+}
+
+export interface InboxView {
+  date: string;
+  /** Amb venciment el dia demanat. */
+  dated: Task[];
+  /** Vençudes i no fetes. Buit si no s'han demanat. */
+  overdue: Task[];
+  /** Sense data. És la secció "SENSE DIA" del rail (docs/02 §5). */
+  undated: Task[];
+}
+
+/**
+ * L'Inbox d'un dia.
+ *
+ * **És la mateixa font de dades per a la columna del kanban i per al rail del
+ * calendari** (P4). Si fossin dues consultes, un dia divergirien i es notaria: el
+ * document ho diu amb aquestes paraules i per això aquí n'hi ha una de sola.
+ */
+export async function getInbox(
+  db: MigrationDb,
+  principal: Principal,
+  options: {
+    date: string;
+    includeOverdue?: boolean | undefined;
+    scopeIds?: string[] | undefined;
+  },
+): Promise<InboxView> {
+  if (!hasCapability(principal, 'tasks:read')) throw missingCapability('tasks:read');
+
+  const scopes = await listScopes(db, principal);
+  const requested = options.scopeIds;
+  const allowed = scopes
+    .map((s) => s.id)
+    .filter((id) => requested === undefined || requested.includes(id));
+
+  const empty: InboxView = { date: options.date, dated: [], overdue: [], undated: [] };
+  if (allowed.length === 0) return empty;
+
+  const rows = await sql<TaskRow>`
+    SELECT ${TASK_COLUMNS} FROM tasks
+    WHERE deleted_at IS NULL AND status = 'inbox' AND scope_id IN (${sql.join(allowed)})
+    ORDER BY position, id
+  `.execute(db);
+  const tasks = await withAssignees(db, rows.rows);
+
+  return {
+    date: options.date,
+    dated: tasks.filter((t) => t.due_date === options.date),
+    overdue:
+      options.includeOverdue === true
+        ? tasks.filter((t) => t.due_date !== null && t.due_date < options.date)
+        : [],
+    undated: tasks.filter((t) => t.due_date === null),
+  };
+}
+
+export interface DashboardScope {
+  scope_id: string;
+  name: string;
+  color: string;
+  pending: number;
+  overdue: number;
+}
+
+export interface DashboardView {
+  date: string;
+  scopes: DashboardScope[];
+  today: Task[];
+  overdue: Task[];
+  doing: Task[];
+}
+
+/**
+ * El dashboard global. docs/02 §8.
+ *
+ * **Ignora la selecció d'àmbits i de projecte: ho ensenya tot.** És el que el distingeix
+ * del tauler, i per això no accepta cap filtre d'àmbit — acceptar-lo convidaria a
+ * reutilitzar-lo com un tauler amb una altra cara.
+ *
+ * Va en una sola crida per la mateixa raó que `/board`: sis peticions paral·leles per a
+ * una pantalla són sis estats de càrrega i sis punts de fallada.
+ */
+export async function getDashboard(
+  db: MigrationDb,
+  principal: Principal,
+  options: { date: string },
+): Promise<DashboardView> {
+  if (!hasCapability(principal, 'tasks:read')) throw missingCapability('tasks:read');
+
+  const scopes = await listScopes(db, principal);
+  const empty: DashboardView = {
+    date: options.date,
+    scopes: [],
+    today: [],
+    overdue: [],
+    doing: [],
+  };
+  if (scopes.length === 0) return empty;
+
+  const ids = scopes.map((s) => s.id);
+  const rows = await sql<TaskRow>`
+    SELECT ${TASK_COLUMNS} FROM tasks
+    WHERE deleted_at IS NULL AND scope_id IN (${sql.join(ids)})
+    ORDER BY due_date, position, id
+  `.execute(db);
+  const tasks = await withAssignees(db, rows.rows);
+
+  const pendents = tasks.filter((t) => t.status !== 'done');
+
+  return {
+    date: options.date,
+    scopes: scopes.map((scope) => ({
+      scope_id: scope.id,
+      name: scope.name,
+      color: scope.color,
+      pending: pendents.filter((t) => t.scope_id === scope.id).length,
+      overdue: pendents.filter(
+        (t) => t.scope_id === scope.id && t.due_date !== null && t.due_date < options.date,
+      ).length,
+    })),
+    today: pendents.filter((t) => t.due_date === options.date),
+    overdue: pendents.filter((t) => t.due_date !== null && t.due_date < options.date),
+    doing: pendents.filter((t) => t.status === 'doing'),
+  };
+}

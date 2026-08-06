@@ -21,6 +21,8 @@ import type { MigrationDb } from './migration-db.js';
 import * as initialSchema from './migrations/001-initial-schema.js';
 import * as taskLeases from './migrations/002-task-leases.js';
 import * as instanceSettings from './migrations/003-instance-settings.js';
+import * as aiUser from './migrations/004-ai-user.js';
+import * as userInvites from './migrations/005-user-invites.js';
 
 export interface Migration {
   name: string;
@@ -36,6 +38,8 @@ export const MIGRATIONS: Migration[] = [
   { name: '001-initial-schema', up: initialSchema.up, down: initialSchema.down },
   { name: '002-task-leases', up: taskLeases.up, down: taskLeases.down },
   { name: '003-instance-settings', up: instanceSettings.up, down: instanceSettings.down },
+  { name: '004-ai-user', up: aiUser.up, down: aiUser.down },
+  { name: '005-user-invites', up: userInvites.up, down: userInvites.down },
 ];
 
 const MIGRATIONS_TABLE = 'schema_migrations';

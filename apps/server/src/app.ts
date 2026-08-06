@@ -17,6 +17,10 @@ import { registerInstanceRoutes } from './http/instance.js';
 import { registerMcpRoutes } from './http/mcp.js';
 import { registerSyncRoutes } from './http/sync.js';
 import { registerPushRoutes } from './http/push.js';
+import { registerAdminRoutes } from './http/admin.js';
+import { registerAgentRoutes } from './http/agents.js';
+import { registerMeRoutes } from './http/me.js';
+import { registerScopeRoutes } from './http/scopes.js';
 import { registerSetupRoutes } from './http/setup.js';
 import { registerShareRoutes } from './http/shares.js';
 import { registerTokenRoutes } from './http/tokens.js';
@@ -69,6 +73,9 @@ export function buildApp(config: Config, options: BuildOptions = {}): FastifyIns
 
   registerInstanceRoutes(app);
   registerAuthRoutes(app);
+  registerMeRoutes(app);
+  registerScopeRoutes(app);
+  registerAgentRoutes(app);
   registerTaskRoutes(app);
   registerEventRoutes(app);
   registerChecklistRoutes(app);
@@ -83,10 +90,12 @@ export function buildApp(config: Config, options: BuildOptions = {}): FastifyIns
    * i les proves de contracte no n'han de muntar cap volum.
    */
   let secret: string | undefined = options.secret;
-  registerShareRoutes(app, () => {
+  const instanceSecret = (): string => {
     secret ??= ensureInstanceSecret(config.dataDir, config.secret);
     return secret;
-  });
+  };
+  registerShareRoutes(app, instanceSecret);
+  registerAdminRoutes(app, instanceSecret);
 
   return app;
 }
