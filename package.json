@@ -44,7 +44,9 @@
     "test:fresh-install": "./tools/fresh-install/run.sh",
     "test:postgres": "FEMHO_TEST_POSTGRES_URL=\"${FEMHO_TEST_POSTGRES_URL:-postgres://postgres:femho@localhost:55432/femho_test}\" vitest run",
     "test:proxy-matrix": "./tools/proxy-matrix/run.sh",
-    "typecheck": "npm run typecheck --workspaces --if-present"
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "check:i18n-parity": "node tools/checks/i18n-parity.mjs",
+    "check:i18n-keys-exist": "node tools/checks/i18n-keys-exist.mjs"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

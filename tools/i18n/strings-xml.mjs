@@ -17,12 +17,36 @@
  * l'app.
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { ROOT } from '../checks/lib/scan.mjs';
 
-const CATALOG = join(ROOT, 'packages', 'contracts', 'i18n', 'ca.json');
-const OUTPUT = join(ROOT, 'apps', 'android', 'app', 'src', 'main', 'res', 'values', 'strings.xml');
+const I18N = join(ROOT, 'packages', 'contracts', 'i18n');
+const RES = join(ROOT, 'apps', 'android', 'app', 'src', 'main', 'res');
+
+/**
+ * L'idioma de reserva va a `values/`, i la resta a `values-xx/`.
+ *
+ * Android serveix `values/` quan la configuració del dispositiu no encaixa amb cap
+ * altra carpeta. Hi va el **català** i no l'anglès perquè és el que fa `t()` a la web:
+ * un sol lloc de reserva a les dues apps, i el que és font de veritat de les claus també
+ * ho és del text quan no n'hi ha cap altre.
+ */
+const FALLBACK = 'ca';
+
+/** Els idiomes són els fitxers que hi ha, no una llista escrita a part. */
+export function locales() {
+  return readdirSync(I18N)
+    .filter((name) => name.endsWith('.json'))
+    .map((name) => name.replace(/\.json$/u, ''))
+    .sort();
+}
+
+/** On va cada idioma dins de `res/`. */
+export function outputFor(locale) {
+  const dir = locale === FALLBACK ? 'values' : `values-${locale}`;
+  return join(RES, dir, 'strings.xml');
+}
 
 /**
  * Una clau del catàleg a un nom de recurs d'Android.
@@ -56,7 +80,7 @@ export function escapeAndroid(value) {
     .replaceAll('\n', '\\n');
 }
 
-export function buildStringsXml(catalog) {
+export function buildStringsXml(catalog, locale = FALLBACK) {
   const entries = Object.entries(catalog)
     .filter(([key]) => !key.startsWith('$'))
     .sort(([a], [b]) => a.localeCompare(b));
@@ -77,10 +101,10 @@ export function buildStringsXml(catalog) {
   const lines = [
     '<?xml version="1.0" encoding="utf-8"?>',
     '<!--',
-    "  GENERAT des de packages/contracts/i18n/ca.json. NO s'edita a mà.",
+    `  GENERAT des de packages/contracts/i18n/${locale}.json. NO s'edita a mà.`,
     '',
-    '  docs/03 §1: les cadenes catalanes surten del mateix catàleg que la web, i cap',
-    '  literal viu al codi. Per canviar un text, es canvia el catàleg i es regenera amb',
+    '  docs/03 §1: les cadenes surten del mateix catàleg que la web, i cap literal viu al',
+    '  codi. Per canviar un text, es canvia el catàleg i es regenera amb',
     '  `node tools/i18n/strings-xml.mjs`.',
     '-->',
     '<resources>',
@@ -96,31 +120,43 @@ export function buildStringsXml(catalog) {
 }
 
 function main() {
-  const catalog = JSON.parse(readFileSync(CATALOG, 'utf8'));
-  const xml = buildStringsXml(catalog);
   const check = process.argv.includes('--check');
+  let count = 0;
 
-  if (check) {
-    if (!existsSync(OUTPUT)) {
-      console.error(`strings-xml · falta ${OUTPUT}. Executa \`node tools/i18n/strings-xml.mjs\`.`);
-      process.exit(1);
+  for (const locale of locales()) {
+    const catalog = JSON.parse(readFileSync(join(I18N, `${locale}.json`), 'utf8'));
+    const xml = buildStringsXml(catalog, locale);
+    const output = outputFor(locale);
+
+    if (check) {
+      if (!existsSync(output)) {
+        console.error(
+          `strings-xml · falta ${output}. Executa \`node tools/i18n/strings-xml.mjs\`.`,
+        );
+        process.exit(1);
+      }
+      if (readFileSync(output, 'utf8') !== xml) {
+        console.error(
+          `strings-xml · ${output} no coincideix amb el catàleg. Algú ha canviat les ` +
+            'cadenes i no ha regenerat: Android es quedaria amb el text vell.\n' +
+            'Executa `node tools/i18n/strings-xml.mjs` i compromet el resultat.',
+        );
+        process.exit(1);
+      }
+      count = Object.keys(catalog).filter((k) => !k.startsWith('$')).length;
+      continue;
     }
-    if (readFileSync(OUTPUT, 'utf8') !== xml) {
-      console.error(
-        'strings-xml · el strings.xml no coincideix amb el catàleg. Algú ha canviat les ' +
-          'cadenes i no ha regenerat: Android es quedaria amb el text vell.\n' +
-          'Executa `node tools/i18n/strings-xml.mjs` i compromet el resultat.',
-      );
-      process.exit(1);
-    }
-    const count = Object.keys(catalog).filter((k) => !k.startsWith('$')).length;
-    console.log(`strings-xml · ${count} cadenes, al dia amb el catàleg.`);
-    return;
+
+    mkdirSync(dirname(output), { recursive: true });
+    writeFileSync(output, xml, 'utf8');
+    console.log(`strings-xml · escrit ${output}`);
   }
 
-  mkdirSync(dirname(OUTPUT), { recursive: true });
-  writeFileSync(OUTPUT, xml, 'utf8');
-  console.log(`strings-xml · escrit ${OUTPUT}`);
+  if (check) {
+    console.log(
+      `strings-xml · ${count} cadenes × ${locales().length} idiomes, al dia amb el catàleg.`,
+    );
+  }
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) main();

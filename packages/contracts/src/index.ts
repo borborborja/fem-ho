@@ -23,7 +23,18 @@ export {
 } from './position.js';
 export type { RandomSource } from './position.js';
 
-export { MESSAGES, messageKeys, t } from './i18n.js';
+export {
+  FALLBACK,
+  LOCALES,
+  MESSAGES,
+  catalogOf,
+  getLocale,
+  isLocale,
+  messageKeys,
+  negotiate,
+  setLocale,
+  t,
+} from './i18n.js';
 export { parseQuickAdd, revertToken } from './quickadd.js';
 export type {
   QuickAddContext,
@@ -33,7 +44,7 @@ export type {
   QuickAddScope,
   QuickAddToken,
 } from './quickadd.js';
-export type { MessageKey, TranslateOptions } from './i18n.js';
+export type { Locale, MessageKey, TranslateOptions } from './i18n.js';
 
 /** Els valors canònics de `status`. `column` no existeix (D2). */
 export const TASK_STATUSES = ['inbox', 'todo', 'doing', 'done'] as const;

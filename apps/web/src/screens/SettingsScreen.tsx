@@ -234,6 +234,33 @@ function GeneralTab() {
 
   return (
     <>
+      {/*
+        L'idioma va el primer de tot.
+        És l'única preferència que canvia la pantalla on l'estàs triant: si algú hi ha
+        arribat perquè l'app li surt en un idioma que no és el seu, ha de ser la primera
+        cosa que trobi i no la sisena.
+      */}
+      <Group title={t('settings.language')}>
+        <Chips
+          testId="language-chips"
+          value={profile.locale}
+          options={[
+            /**
+             * check-ignore · cada idioma es diu **en el seu**.
+             *
+             * Qui busca el castellà busca "Español", no "Castellà", i qui busca el
+             * català el busca escrit "Català" encara que tingui l'app en anglès. Passar
+             * aquests tres noms pel catàleg voldria dir que la llista es tradueix
+             * sencera i que ningú hi troba el seu.
+             */
+            { key: 'ca' as const, label: 'Català' },
+            { key: 'en' as const, label: 'English' },
+            { key: 'es' as const, label: 'Español' }, // check-ignore · veure a dalt
+          ]}
+          onChange={(locale) => void updateProfile({ locale })}
+        />
+      </Group>
+
       <Group title={t('settings.theme')}>
         <Chips
           testId="theme-chips"

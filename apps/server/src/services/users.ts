@@ -10,6 +10,7 @@ import { sql } from 'kysely';
 import type { AuditContext } from '../audit/audited-transaction.js';
 import { hashPassword, verifyPassword } from '../auth/password.js';
 import { dbBool, isTrue } from '../db/bool.js';
+import { LOCALES } from '@fem-ho/contracts';
 import type { MigrationDb } from '../db/migration-db.js';
 import { PolicyError, notFound } from '../policy/errors.js';
 import type { Principal } from '../policy/principal.js';
@@ -93,7 +94,14 @@ export async function updateProfile(
   const theme = pickEnum('theme', input.theme, THEMES, before.theme);
   const accent = pickEnum('accent', input.accent, ACCENTS, before.accent);
   const timezone = input.timezone ?? before.timezone;
-  const locale = input.locale ?? before.locale;
+  /**
+   * L'idioma es valida com el tema i l'accent, i no s'acceptava res.
+   *
+   * Era l'únic camp d'enum del perfil que passava sense mirar: un `PATCH` amb
+   * `locale: 'klingon'` es desava, i el client hi cauria a la reserva sense saber mai
+   * per què. Ara el rebuig diu quins hi ha.
+   */
+  const locale = pickEnum('locale', input.locale, LOCALES, before.locale);
   const avatarColor = input.avatar_color === undefined ? before.avatar_color : input.avatar_color;
 
   // Un fus que no existeix deixaria totes les vistes de calendari en un estat

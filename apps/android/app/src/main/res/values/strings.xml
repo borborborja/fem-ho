@@ -2,8 +2,8 @@
 <!--
   GENERAT des de packages/contracts/i18n/ca.json. NO s'edita a mà.
 
-  docs/03 §1: les cadenes catalanes surten del mateix catàleg que la web, i cap
-  literal viu al codi. Per canviar un text, es canvia el catàleg i es regenera amb
+  docs/03 §1: les cadenes surten del mateix catàleg que la web, i cap literal viu al
+  codi. Per canviar un text, es canvia el catàleg i es regenera amb
   `node tools/i18n/strings-xml.mjs`.
 -->
 <resources>
@@ -181,6 +181,7 @@
     <string name="settings_invitename">Nom</string>
     <string name="settings_invitepending">Convidat, encara no ha entrat</string>
     <string name="settings_inviterole">Rol</string>
+    <string name="settings_language">Idioma</string>
     <string name="settings_mcpenable">Activar MCP</string>
     <string name="settings_mcpinstructions">Per connectar-hi un client, fes servir aquesta adreça i un token amb les capacitats que li vulguis donar.</string>
     <string name="settings_members">Membres</string>

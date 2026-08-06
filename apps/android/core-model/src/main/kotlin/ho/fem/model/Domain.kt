@@ -157,6 +157,8 @@ data class UserProfile(
     val name: String,
     val role: String = "member",
     val timezone: String = "Europe/Madrid",
+    /** L'idioma triat. Mana per damunt del que digui el dispositiu. */
+    val locale: String = "ca",
     val theme: String = "system",
     val accent: String = "default",
 )

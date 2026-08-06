@@ -17,6 +17,7 @@ import { generatePosition } from '@fem-ho/contracts';
 import type { AuditContext } from '../audit/audited-transaction.js';
 import { hashPassword } from '../auth/password.js';
 import type { MigrationDb } from '../db/migration-db.js';
+import { FALLBACK, isLocale } from '@fem-ho/contracts';
 import { PolicyError } from '../policy/errors.js';
 import type { Principal } from '../policy/principal.js';
 
@@ -55,6 +56,14 @@ export interface SetupInput {
   email: string;
   name: string;
   password: string;
+  /**
+   * L'idioma de qui crea el compte.
+   *
+   * El navegador el sap i la persona encara no ha pogut triar res: és **l'únic moment
+   * en què "automàtic" és inequívoc**. Un cop hi ha perfil, `users.locale` ja porta una
+   * tria deliberada i endevinar-la seria sobreescriure-la.
+   */
+  locale?: string | undefined;
 }
 
 export interface SetupResult {
@@ -93,9 +102,10 @@ export async function createFirstAdmin(ctx: AuditContext, input: SetupInput): Pr
 
   const userId = uuidv7();
   await sql`
-    INSERT INTO users (id, email, name, password_hash, kind, role, created_at, updated_at)
+    INSERT INTO users (id, email, name, password_hash, kind, role, locale,
+                       created_at, updated_at)
     VALUES (${userId}, ${email}, ${input.name.trim()}, ${passwordHash}, 'human', 'admin',
-            ${ctx.now}, ${ctx.now})
+            ${isLocale(input.locale) ? input.locale : FALLBACK}, ${ctx.now}, ${ctx.now})
   `.execute(ctx.tx);
 
   ctx.record({

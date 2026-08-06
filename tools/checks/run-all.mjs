@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Executa les vuit comprovacions permanents de docs/13.
+ * Executa les comprovacions permanents de docs/13.
  *
  * Les executa TOTES abans de decidir el resultat: aturar-se a la primera obliga a fer
  * vuit rondes per veure vuit problemes.
@@ -18,6 +18,8 @@ const CHECKS = [
   { name: 'vocab-lint', script: 'vocab-lint.mjs', selfTest: true },
   { name: 'no-hardcoded-colors', script: 'no-hardcoded-colors.mjs', selfTest: true },
   { name: 'i18n-lint', script: 'i18n-lint.mjs', selfTest: true },
+  { name: 'i18n-parity', script: 'i18n-parity.mjs', selfTest: true },
+  { name: 'i18n-keys-exist', script: 'i18n-keys-exist.mjs', selfTest: true },
   { name: 'no-pinned-from-research', script: 'no-pinned-from-research.mjs' },
   { name: 'contrast-check', script: 'contrast-check.mjs' },
   { name: 'audit-coverage', script: 'audit-coverage.mjs' },

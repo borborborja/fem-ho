@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Els idiomes que l'app parla.
+
+  Amb això, Android 13+ ensenya Fem-ho al selector d'idioma per app dels Ajustos del
+  sistema. Sense, l'app segueix l'idioma del dispositiu i prou, i qui té el telèfon en
+  castellà però vol Fem-ho en català no ho pot demanar enlloc.
+
+  L'ordre és el de `LOCALES` a packages/contracts/src/i18n.ts. El català va primer
+  perquè és la reserva: `values/` és el seu.
+-->
+<locale-config xmlns:android="http://schemas.android.com/apk/res/android">
+    <locale android:name="ca" />
+    <locale android:name="en" />
+    <locale android:name="es" />
+</locale-config>

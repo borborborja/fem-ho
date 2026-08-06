@@ -15,7 +15,7 @@ npm run typecheck        # 0 errors
 npm run lint             # 0 errors
 npm test                 # unitàries, SQLite
 npm run test:postgres    # unitàries, Postgres (cal FEMHO_TEST_POSTGRES_URL)
-npm run check            # les 10 comprovacions permanents
+npm run check            # les 12 comprovacions permanents
 npm run e2e              # navegador, contra un servidor real
 npm run test:android     # Kotlin pur, sense emulador
 npm run android:build    # APK de depuració
@@ -29,8 +29,8 @@ npm run test:proxy-matrix    # CalDAV i SSE darrere de nginx i Caddy
 | Tipus · estil | 0 · 0 |
 | Proves unitàries · SQLite | 649 |
 | Proves unitàries · Postgres | 670 |
-| Comprovacions permanents | 10 de 10 |
-| Proves de navegador | 88, de les quals 39 contra el servidor real |
+| Comprovacions permanents | 12 de 12 |
+| Proves de navegador | 94, de les quals 42 contra el servidor real |
 | Proves de Kotlin | 40 |
 | APK de depuració | es construeix |
 | Primer arrencament amb Compose | 13 comprovacions |
@@ -219,6 +219,53 @@ planificador i no una crida de xarxa dins d'una transacció.
 Per això **el commutador no surt a la interfície**. Oferir-lo ara voldria dir deixar
 editar una cosa que no arribaria mai a l'altre costat, i una edició que es perd en
 silenci és pitjor que una que no es deixa fer.
+
+---
+
+## Idiomes
+
+Català, anglès i castellà. **Automàtic amb opció de canviar**: el navegador o el
+dispositiu decideixen la primera vegada, i a partir d'aquí mana `users.locale` del
+perfil, que es canvia a Ajustos ▸ General ▸ Idioma i val per a tots els dispositius.
+
+Els tres catàlegs són a `packages/contracts/i18n/{ca,en,es}.json`. **`ca.json` és la font
+de veritat de les claus**: cap altre fitxer en pot tenir de noves, i `i18n-parity` ho fa
+complir. Una traducció que falti cau al català —que es llegeix—; una clau que falti a tot
+arreu s'ensenya crua, que és un error de programa i s'ha de veure.
+
+Afegir un quart idioma és: un fitxer a `i18n/`, una entrada a `LOCALES`
+(`packages/contracts/src/i18n.ts`), una a `locales_config.xml` i una al selector
+d'Ajustos. Res més: el `strings.xml` d'Android i les comprovacions surten dels fitxers
+que hi ha.
+
+**Tres comprovacions noves** en fan de xarxa:
+
+| Comprovació | Què impedeix |
+| --- | --- |
+| `i18n-parity` | Una clau o un marcador `{x}` que falti en un idioma. Cap de les dues falla avui: la primera fa sortir una frase en un altre idioma, la segona fa desaparèixer un número |
+| `i18n-keys-exist` | Una errata a `t('...')`, que compila i passa tots els altres linters |
+| `i18n-lint` | Ampliada amb `ñ`, `¿` i `¡`: sense, el castellà escrit a mà tornaria a colar-se fora del catàleg |
+
+### El que encara és en català
+
+Per fases, i cada una es pot desplegar sola:
+
+- **Els errors del servidor** (~225 punts, ~100 cadenes). Passaran a `type` + `params`, i
+  cada app els pintarà en el seu idioma; el `detail` es queda en anglès per a màquines.
+- **Dates i hores segons l'idioma**: `Intl` per als mesos i els dies, i el primer dia de
+  la setmana per idioma. Avui és dilluns per constant a tot arreu.
+- **Notificacions** en l'idioma de qui les rep, llegint `users.locale`.
+- **MCP i CalDAV** a l'anglès: els llegeixen agents, DAVx⁵ i Thunderbird.
+
+### Els límits coneguts
+
+- **Android per sota de 13** segueix l'idioma del dispositiu i ignora el del perfil:
+  l'API d'idioma per app no existeix abans, i un embolcall de context per a un cas de
+  vuit anys enrere seria molt codi per molt poca gent.
+- **Els comptes que ja existeixen** es queden en català fins que algú els canviï a
+  Ajustos. L'idioma del navegador només s'escriu **en crear el compte**, que és l'únic
+  moment en què "automàtic" és inequívoc: després, `users.locale` ja porta una tria i
+  endevinar-la seria sobreescriure-la.
 
 ---
 

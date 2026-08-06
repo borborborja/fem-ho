@@ -1,0 +1,129 @@
+/**
+ * El multiidioma, contra el servidor real.
+ *
+ * La resta de la suite corre amb `locale: 'ca-ES'` fixat a `playwright.config.ts`, que
+ * és el que fa que les seves assercions de text català segueixin valent. **Aquí és
+ * l'única que el mou**, perquè és l'única que el comprova.
+ *
+ * Tres coses decideixen si "automàtic amb opció de canviar" és cert:
+ * que el navegador mani abans d'entrar, que el perfil mani després, i que la tria
+ * sobrevisqui a una recàrrega. Si qualsevol de les tres falla, l'idioma és decoració.
+ */
+
+import { expect, test, type Page } from '@playwright/test';
+
+test.describe.configure({ mode: 'serial' });
+
+const ADMIN = {
+  name: 'Borja',
+  email: 'borja@example.com',
+  password: 'la-contrasenya-de-prova',
+};
+
+async function enter(page: Page): Promise<void> {
+  const gate = await page.request.get('/api/v1/setup');
+  const open = ((await gate.json()) as { open: boolean }).open;
+
+  await page.goto('/');
+  if ((await page.locator('[data-testid="topbar"]').count()) > 0) return;
+
+  if (open) {
+    await page.goto('/setup');
+    await page.locator('[data-testid="setup-name"]').fill(ADMIN.name);
+    await page.locator('[data-testid="setup-email"]').fill(ADMIN.email);
+    await page.locator('[data-testid="setup-password"]').fill(ADMIN.password);
+    await page.locator('[data-testid="setup-submit"]').click();
+    await expect(page.locator('[data-testid="login"]')).toBeVisible({ timeout: 15_000 });
+  }
+
+  await page.locator('[data-testid="login-email"]').fill(ADMIN.email);
+  await page.locator('[data-testid="login-password"]').fill(ADMIN.password);
+  await page.locator('[data-testid="login-submit"]').click();
+  await expect(page.locator('[data-testid="topbar"]')).toBeVisible();
+}
+
+/**
+ * **Abans d'entrar, mana el navegador.**
+ *
+ * La pantalla d'entrada la veu gent que encara no té perfil: si sortís sempre en català,
+ * "automàtic" no voldria dir res per a la primera impressió del producte, que és
+ * justament on importa.
+ */
+test.describe("abans d'entrar, mana el navegador", () => {
+  test.use({ locale: 'en-GB' });
+
+  test('amb el navegador en anglès, la pantalla surt en anglès', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('[data-testid="login-submit"]')).toHaveText('Sign in');
+    // L'`lang` de l'`<html>` no és decoració: és el que fa que un lector de pantalla
+    // llegeixi amb la pronúncia bona.
+    await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+  });
+});
+
+test.describe('i en castellà, en castellà', () => {
+  test.use({ locale: 'es-ES' });
+
+  test("l'etiqueta d'entrar surt en castellà", async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('[data-testid="login-submit"]')).toHaveText('Entrar');
+    await expect(page.locator('html')).toHaveAttribute('lang', 'es');
+  });
+});
+
+/**
+ * **Un cop hi ha sessió, mana el perfil.**
+ *
+ * És el que fa que canviar l'idioma al portàtil també el canviï al telèfon, i el que
+ * permet que el servidor sàpiga en quin idioma enviar una notificació.
+ */
+test('canviar-lo a Ajustos ho canvia a l\'acte i sobreviu a una recàrrega', async ({ page }) => {
+  await enter(page);
+
+  await page.goto('/settings');
+  await expect(page.locator('[data-testid="settings-tab-general"]')).toBeVisible();
+
+  await page.locator('[data-testid="language-chips-en"]').click();
+  // A l'acte, sense recarregar: és la pantalla on l'estàs triant.
+  await expect(page.locator('[data-testid="settings-tab-general"]')).toHaveText('General');
+  await expect(page.locator('[data-testid="settings-tab-scopes"]')).toHaveText('Scopes');
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+
+  await page.reload();
+  await expect(page.locator('[data-testid="settings-tab-scopes"]')).toHaveText('Scopes');
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+});
+
+test('i el perfil mana per damunt del navegador', async ({ page }) => {
+  // El navegador d'aquesta prova és català —el de la resta de la suite— i el perfil ha
+  // quedat en anglès de la prova anterior. Ha de guanyar el perfil.
+  await enter(page);
+  await expect(page.locator('[data-testid="view-tasks"]')).toHaveText('Tasks');
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+});
+
+test('i es pot tornar al català', async ({ page }) => {
+  await enter(page);
+  await page.goto('/settings');
+  await page.locator('[data-testid="language-chips-ca"]').click();
+  await expect(page.locator('[data-testid="settings-tab-scopes"]')).toHaveText('Àmbits');
+  await expect(page.locator('html')).toHaveAttribute('lang', 'ca');
+});
+
+/**
+ * Un idioma que no tenim no ha de deixar l'app a mitges.
+ *
+ * `negotiate` cau al català: val més una llengua que la persona potser no té que una
+ * pantalla amb les claus escrites a la cara.
+ */
+test.describe('un idioma que no tenim', () => {
+  test.use({ locale: 'de-DE' });
+
+  test('cau al català i no deixa cap clau crua', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('[data-testid="login-submit"]')).toHaveText('Entrar');
+    await expect(page.locator('html')).toHaveAttribute('lang', 'ca');
+    // Cap clau del catàleg escrita a la pantalla: seria el símptoma d'una reserva trencada.
+    await expect(page.locator('body')).not.toContainText('login.submit');
+  });
+});

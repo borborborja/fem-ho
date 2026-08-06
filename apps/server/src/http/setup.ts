@@ -50,6 +50,7 @@ export function registerSetupRoutes(app: FastifyInstance): void {
             email: String(body.email ?? ''),
             name: String(body.name ?? ''),
             password: String(body.password ?? ''),
+            locale: typeof body.locale === 'string' ? body.locale : undefined,
           }),
         { engine: app.connection.engine },
       );

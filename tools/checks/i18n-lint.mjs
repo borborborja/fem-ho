@@ -14,28 +14,39 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { buildStringsXml } from '../i18n/strings-xml.mjs';
+import { relative } from 'node:path';
+import { buildStringsXml, locales, outputFor } from '../i18n/strings-xml.mjs';
 import { ROOT, applyRules, report, walk } from './lib/scan.mjs';
 
-// Caràcters que només apareixen en català (i altres llengües romàniques), mai en
-// identificadors ni en anglès.
-const CATALAN = 'àèéíòóúïüçÀÈÉÍÒÓÚÏÜÇ·';
+/**
+ * Caràcters que delaten text escrit a mà en una de les llengües del producte.
+ *
+ * Eren només els catalans. Amb el castellà a dins calen la `ñ` i els signes d'obertura
+ * `¿` i `¡`: sense, `placeholder="¿Cómo te llamas?"` escrit al codi passaria de llarg i
+ * el castellà tornaria a tenir literals fora del catàleg, que és exactament el que
+ * aquesta comprovació existeix per impedir.
+ *
+ * L'anglès no té cap caràcter propi i no es pot detectar així. És el forat conegut
+ * d'aquesta regla, i el tapa `i18n-keys-exist`: un text anglès escrit a mà no passa per
+ * `t()`, i el que sí que hi passa ha d'existir al catàleg.
+ */
+const TRANSLATABLE = 'àèéíòóúïüçñÀÈÉÍÒÓÚÏÜÇÑ·¿¡';
 
 const RULES = [
   {
-    name: 'literal-catala-a-jsx',
+    name: 'literal-traduible-a-jsx',
     // Text català directament entre etiquetes JSX.
-    re: new RegExp(`>[^<>{}]*[${CATALAN}][^<>{}]*<`),
-    message: 'Text català dins de JSX. Ha de sortir del catàleg (packages/contracts/i18n).',
+    re: new RegExp(`>[^<>{}]*[${TRANSLATABLE}][^<>{}]*<`),
+    message: 'Text traduïble dins de JSX. Ha de sortir del catàleg (packages/contracts/i18n).',
     allow: (line) => /^\s*\*|\/\/|<!--/.test(line),
   },
   {
-    name: 'literal-catala-a-prop',
+    name: 'literal-traduible-a-prop',
     // Cadenes catalanes assignades a props de text visible.
     re: new RegExp(
-      `\\b(label|title|placeholder|aria-label|ariaLabel|alt|children|text|message)\\s*[=:]\\s*['"\`][^'"\`]*[${CATALAN}]`,
+      `\\b(label|title|placeholder|aria-label|ariaLabel|alt|children|text|message)\\s*[=:]\\s*['"\`][^'"\`]*[${TRANSLATABLE}]`,
     ),
-    message: 'Cadena catalana en una prop visible. Ha de sortir del catàleg.',
+    message: 'Cadena traduïble en una prop visible. Ha de sortir del catàleg.',
     allow: (line) => /^\s*\*|\/\//.test(line),
   },
 ];
@@ -73,41 +84,41 @@ for (const file of walk(undefined, ['.tsx', '.jsx', '.kt'])) {
  * catàleg, no regenera, i Android segueix ensenyant el text vell. Cap literal, però
  * tampoc cap desincronització.
  */
-const androidStrings = join(
-  ROOT,
-  'apps',
-  'android',
-  'app',
-  'src',
-  'main',
-  'res',
-  'values',
-  'strings.xml',
-);
+/**
+ * El `strings.xml` de **cada** idioma ha d'estar al dia.
+ *
+ * Amb un sol idioma n'hi havia prou de mirar-ne un. Ara n'hi ha tres, i el que es queda
+ * enrere és sempre el que ningú mira: canviar un text català i regenerar només `values/`
+ * deixaria l'anglès i el castellà dient una altra cosa, sense que res fallés.
+ */
 if (existsSync(join(ROOT, 'apps', 'android'))) {
-  const catalog = JSON.parse(
-    readFileSync(join(ROOT, 'packages', 'contracts', 'i18n', 'ca.json'), 'utf8'),
-  );
-  const expected = buildStringsXml(catalog);
+  for (const locale of locales()) {
+    const catalog = JSON.parse(
+      readFileSync(join(ROOT, 'packages', 'contracts', 'i18n', `${locale}.json`), 'utf8'),
+    );
+    const output = outputFor(locale);
+    const rel = relative(ROOT, output);
+    const expected = buildStringsXml(catalog, locale);
 
-  if (!existsSync(androidStrings)) {
-    violations.push({
-      rel: 'apps/android/app/src/main/res/values/strings.xml',
-      line: 0,
-      rule: 'strings-xml-absent',
-      message: 'Hi ha Android però cap strings.xml. Executa `node tools/i18n/strings-xml.mjs`.',
-      excerpt: 'El catàleg és la font de veritat i el XML en surt.',
-    });
-  } else if (readFileSync(androidStrings, 'utf8') !== expected) {
-    violations.push({
-      rel: 'apps/android/app/src/main/res/values/strings.xml',
-      line: 0,
-      rule: 'strings-xml-desactualitzat',
-      message:
-        'El strings.xml no coincideix amb el catàleg: Android ensenyaria el text vell. ' +
-        'Executa `node tools/i18n/strings-xml.mjs` i compromet el resultat.',
-      excerpt: 'docs/03 §1: les cadenes surten del MATEIX catàleg que la web.',
-    });
+    if (!existsSync(output)) {
+      violations.push({
+        rel,
+        line: 0,
+        rule: 'strings-xml-absent',
+        message: `Falta el strings.xml de "${locale}". Executa \`node tools/i18n/strings-xml.mjs\`.`,
+        excerpt: 'El catàleg és la font de veritat i el XML en surt.',
+      });
+    } else if (readFileSync(output, 'utf8') !== expected) {
+      violations.push({
+        rel,
+        line: 0,
+        rule: 'strings-xml-desactualitzat',
+        message:
+          `El strings.xml de "${locale}" no coincideix amb el catàleg: Android ensenyaria ` +
+          'el text vell. Executa `node tools/i18n/strings-xml.mjs` i compromet el resultat.',
+        excerpt: 'docs/03 §1: les cadenes surten del MATEIX catàleg que la web.',
+      });
+    }
   }
 }
 

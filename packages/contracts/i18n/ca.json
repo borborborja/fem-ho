@@ -188,6 +188,7 @@
   "settings.inviteName": "Nom",
   "settings.invitePending": "Convidat, encara no ha entrat",
   "settings.inviteRole": "Rol",
+  "settings.language": "Idioma",
   "settings.mcpEnable": "Activar MCP",
   "settings.mcpInstructions": "Per connectar-hi un client, fes servir aquesta adreça i un token amb les capacitats que li vulguis donar.",
   "settings.members": "Membres",

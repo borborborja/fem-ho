@@ -24,6 +24,18 @@ export default defineConfig({
   use: {
     baseURL: 'http://localhost:4173',
     trace: 'on-first-retry',
+    /**
+     * **L'idioma de la suite és explícit.**
+     *
+     * Per defecte Playwright obre el navegador en `en-US`, i des que l'app és
+     * multiidioma això vol dir que totes les pantalles surten en anglès i que les
+     * proves que esperen text català fallen. Abans no es notava perquè no hi havia res
+     * a triar; ara l'idioma és una entrada més de la prova i s'escriu.
+     *
+     * Les proves que comproven **el multiidioma** el sobreescriuen per test amb
+     * `test.use({ locale: ... })`; veure `i18n.spec.ts`.
+     */
+    locale: 'ca-ES',
   },
 
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],

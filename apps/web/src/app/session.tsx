@@ -19,7 +19,21 @@ import {
   type ReactNode,
 } from 'react';
 import { ApiError, api, currentTokens, onSessionExpired, setTokens, type Tokens } from './api.js';
+import { isLocale, negotiate, setLocale, type Locale } from '@fem-ho/contracts';
 import { applyAccent, applyDefaults, applyTheme } from './theme.js';
+
+/**
+ * Posa l'idioma actiu i l'anuncia a la pàgina.
+ *
+ * L'`lang` de l'`<html>` no és decoració: és el que fa que el lector de pantalla llegeixi
+ * amb la pronúncia bona i que el navegador ofereixi de traduir —o no— la pàgina. Amb un
+ * `lang="ca"` fix, una pantalla en castellà es llegiria amb accent català.
+ */
+function applyLocale(value: unknown): void {
+  const locale: Locale = isLocale(value) ? value : negotiate(navigator.languages);
+  setLocale(locale);
+  document.documentElement.lang = locale;
+}
 import type { Project, Scope, UserProfile, UserSettings } from './types.js';
 
 export interface SessionData {
@@ -95,6 +109,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       const data = await fetchSession();
       applyTheme(data.profile.theme);
       applyAccent(data.profile.accent);
+      applyLocale(data.profile.locale);
       setState({ status: 'ready', data });
     } catch (error) {
       // Un 401 vol dir sessió morta; qualsevol altra cosa és una fallada temporal i no
@@ -142,6 +157,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         const profile = await api.patch<UserProfile>('/api/v1/auth/me', patch);
         applyTheme(profile.theme);
         applyAccent(profile.accent);
+        applyLocale(profile.locale);
         setState((prev) =>
           prev.status === 'ready' ? { status: 'ready', data: { ...prev.data, profile } } : prev,
         );

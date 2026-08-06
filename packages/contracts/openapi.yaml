@@ -246,7 +246,9 @@ paths:
               properties:
                 name: { type: string }
                 timezone: { type: string, description: 'Nom IANA. Es valida amb `Intl`.' }
-                locale: { type: string }
+                locale:
+                  type: string
+                  enum: [ca, en, es]
                 theme: { type: string, enum: [system, light, dark] }
                 accent: { type: string, enum: [default, soft, mono-warm, mono-cool] }
                 avatar_color: { type: [string, 'null'] }
@@ -2629,7 +2631,17 @@ components:
         role: { type: string, enum: [admin, member] }
         kind: { type: string, enum: [human, ai, caldav_only] }
         timezone: { type: string }
-        locale: { type: string }
+        locale:
+          type: string
+          enum: [ca, en, es]
+          description: |
+            L'idioma d'aquesta persona. La primera vegada el client el negocia del
+            navegador o del dispositiu i l'escriu aquí; a partir d'aquí el perfil mana
+            sobre el dispositiu, que és el que fa que canviar-lo al portàtil també el
+            canviï al telèfon.
+
+            **El servidor el fa servir per a les notificacions**, que les pinta el
+            sistema operatiu i el client no pot traduir després.
         theme: { type: string, enum: [system, light, dark] }
         accent: { type: string, enum: [default, soft, mono-warm, mono-cool] }
         avatar_color: { type: [string, 'null'] }

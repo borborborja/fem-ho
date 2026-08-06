@@ -1697,7 +1697,17 @@ export interface components {
             /** @enum {string} */
             kind: "human" | "ai" | "caldav_only";
             timezone: string;
-            locale: string;
+            /**
+             * @description L'idioma d'aquesta persona. La primera vegada el client el negocia del
+             *     navegador o del dispositiu i l'escriu aquí; a partir d'aquí el perfil mana
+             *     sobre el dispositiu, que és el que fa que canviar-lo al portàtil també el
+             *     canviï al telèfon.
+             *
+             *     **El servidor el fa servir per a les notificacions**, que les pinta el
+             *     sistema operatiu i el client no pot traduir després.
+             * @enum {string}
+             */
+            locale: "ca" | "en" | "es";
             /** @enum {string} */
             theme: "system" | "light" | "dark";
             /** @enum {string} */
@@ -2589,7 +2599,8 @@ export interface operations {
                     name?: string;
                     /** @description Nom IANA. Es valida amb `Intl`. */
                     timezone?: string;
-                    locale?: string;
+                    /** @enum {string} */
+                    locale?: "ca" | "en" | "es";
                     /** @enum {string} */
                     theme?: "system" | "light" | "dark";
                     /** @enum {string} */

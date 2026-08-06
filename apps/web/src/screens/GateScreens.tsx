@@ -7,7 +7,7 @@
  */
 
 import { useState, type FormEvent, type ReactNode } from 'react';
-import { t } from '@fem-ho/contracts';
+import { negotiate, t } from '@fem-ho/contracts';
 import { request } from '../app/api.js';
 
 function Card({ title, subtitle, children }: { title: string; subtitle: string; children: ReactNode }) {
@@ -143,7 +143,12 @@ export function SetupScreen({ onDone }: { onDone: () => void }) {
       return;
     }
 
-    void request('/setup', { method: 'POST', body: { name, email, password } })
+    // L'idioma del navegador viatja amb la creació del compte: és l'únic moment en què
+    // "automàtic" és inequívoc, perquè encara no hi ha perfil on hagi triat ningú.
+    void request('/setup', {
+      method: 'POST',
+      body: { name, email, password, locale: negotiate(navigator.languages) },
+    })
       .then(onDone)
       .catch(() => setError(t('error.generic')));
   };

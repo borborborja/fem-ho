@@ -162,6 +162,12 @@ class AppViewModel(private val container: Container) : ViewModel() {
     fun refresh() {
         val base = serverUrl ?: return
         loadAgents()
+        // L'idioma del perfil, cada cop que es refresca: si algú l'ha canviat des de la
+        // web, el telèfon se n'assabenta al primer refresc i no al proper reinstal·lat.
+        viewModelScope.launch {
+            runCatching { container.api(base).profile() }
+                .onSuccess { applyProfileLocale(it.locale) }
+        }
         viewModelScope.launch {
             val active = container.settings.activeScopes.first()
             runCatching { container.repository(base).refresh(active, null) }
@@ -240,6 +246,26 @@ class AppViewModel(private val container: Container) : ViewModel() {
                 .onSuccess { _openTask.value = it }
             refresh()
         }
+    }
+
+    /**
+     * L'idioma del perfil mana per damunt del dispositiu.
+     *
+     * Android ja tria `values-en` o `values-es` sol segons la configuració del telèfon, i
+     * això és el "automàtic" que es vol. Però si algú ha triat l'idioma a la web, ha de
+     * valer també aquí: és el que fa que canviar-lo al portàtil el canviï al telèfon.
+     *
+     * **Només a partir d'Android 13.** L'API per idioma d'app no existeix abans, i
+     * inventar-se un embolcall de context per a un cas de vuit anys enrere seria molt
+     * codi per molt poca gent. Per sota, mana el dispositiu i prou.
+     */
+    fun applyProfileLocale(locale: String) {
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.TIRAMISU) return
+        val manager = container.appContext.getSystemService(android.app.LocaleManager::class.java)
+            ?: return
+        val current = manager.applicationLocales
+        if (!current.isEmpty && current[0]?.language == locale) return
+        manager.applicationLocales = android.os.LocaleList.forLanguageTags(locale)
     }
 
     fun setTheme(value: String) {
