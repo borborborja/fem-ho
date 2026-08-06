@@ -221,6 +221,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/Problem'
 
+  # CONVENCIÓ DE LLISTES
+  #
+  # Les llistes **paginades** tornen `{ data, next_cursor, has_more }` (docs/05 §3). Les
+  # que no es paginen —àmbits, projectes, calendaris— tornen l'array pelat: un envoltori
+  # amb un sol camp que no porta cap cursor només afegeix una indirecció a cada client.
+  #
+  # `/tokens`, `/shares` i `/activity` fan servir l'envoltori sense paginar. És una
+  # inconsistència coneguda i es deixa estar a posta: canviar-los ara trencaria els
+  # clients per un guany estètic.
   /scopes:
     get:
       tags: [scopes]
