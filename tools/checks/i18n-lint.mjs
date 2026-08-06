@@ -12,7 +12,10 @@
  * del servidor, que no els llegeix cap usuari final.
  */
 
-import { applyRules, report, walk } from './lib/scan.mjs';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { buildStringsXml } from '../i18n/strings-xml.mjs';
+import { ROOT, applyRules, report, walk } from './lib/scan.mjs';
 
 // Caràcters que només apareixen en català (i altres llengües romàniques), mai en
 // identificadors ni en anglès.
@@ -57,11 +60,55 @@ if (process.argv.includes('--self-test')) {
   process.exit(0);
 }
 
-// A M1 encara no hi ha catàleg ni pantalles de producte: l'única UI és la pàgina de
-// prova de tokens, que no és interfície d'usuari. La comprovació ja hi és perquè
-// entri en vigor sola quan arribi M5.
 const violations = [];
 for (const file of walk(undefined, ['.tsx', '.jsx', '.kt'])) {
   violations.push(...applyRules(file.text, RULES, file.rel));
 }
+
+/**
+ * I la segona meitat de la regla: **el `strings.xml` d'Android ha d'estar al dia**.
+ *
+ * `docs/03` §1 diu que les cadenes catalanes surten del *mateix* catàleg. Comprovar
+ * només que no n'hi hagi cap escrita al codi deixa passar el cas invers: algú canvia el
+ * catàleg, no regenera, i Android segueix ensenyant el text vell. Cap literal, però
+ * tampoc cap desincronització.
+ */
+const androidStrings = join(
+  ROOT,
+  'apps',
+  'android',
+  'app',
+  'src',
+  'main',
+  'res',
+  'values',
+  'strings.xml',
+);
+if (existsSync(join(ROOT, 'apps', 'android'))) {
+  const catalog = JSON.parse(
+    readFileSync(join(ROOT, 'packages', 'contracts', 'i18n', 'ca.json'), 'utf8'),
+  );
+  const expected = buildStringsXml(catalog);
+
+  if (!existsSync(androidStrings)) {
+    violations.push({
+      rel: 'apps/android/app/src/main/res/values/strings.xml',
+      line: 0,
+      rule: 'strings-xml-absent',
+      message: 'Hi ha Android però cap strings.xml. Executa `node tools/i18n/strings-xml.mjs`.',
+      excerpt: 'El catàleg és la font de veritat i el XML en surt.',
+    });
+  } else if (readFileSync(androidStrings, 'utf8') !== expected) {
+    violations.push({
+      rel: 'apps/android/app/src/main/res/values/strings.xml',
+      line: 0,
+      rule: 'strings-xml-desactualitzat',
+      message:
+        'El strings.xml no coincideix amb el catàleg: Android ensenyaria el text vell. ' +
+        'Executa `node tools/i18n/strings-xml.mjs` i compromet el resultat.',
+      excerpt: 'docs/03 §1: les cadenes surten del MATEIX catàleg que la web.',
+    });
+  }
+}
+
 process.exit(report('i18n-lint', violations));

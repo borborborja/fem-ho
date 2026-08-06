@@ -33,6 +33,7 @@
     "e2e:update": "playwright test --update-snapshots",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "i18n:android": "node tools/i18n/strings-xml.mjs",
     "lint": "eslint .",
     "test": "vitest run",
     "test:android": "cd apps/android && gradle :core:test --console=plain",
