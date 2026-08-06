@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@fastify/static": "10.1.2",
     "@fem-ho/contracts": "*",
     "@modelcontextprotocol/sdk": "1.30.0",
     "@node-rs/argon2": "2.0.2",

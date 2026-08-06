@@ -24,7 +24,7 @@ const THEMES = ['light', 'dark'] as const;
 const cell = (theme: string, accent: string) => `[data-testid="cell-${theme}-${accent}"]`;
 
 test('el gradient de marca és diferent a cada accent', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/proof/tokens');
 
   const gradients = new Set<string>();
   for (const accent of ACCENTS) {
@@ -43,7 +43,7 @@ test('el gradient de marca és diferent a cada accent', async ({ page }) => {
 });
 
 test("--on-brand passa a fosc a l'accent soft", async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/proof/tokens');
 
   const colorOf = async (accent: string) =>
     page
@@ -57,7 +57,7 @@ test("--on-brand passa a fosc a l'accent soft", async ({ page }) => {
 });
 
 test('el fons de columna es veu als dos temes', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/proof/tokens');
 
   for (const theme of THEMES) {
     const columna = page.locator(`${cell(theme, 'default')} [data-testid="column-bg"]`);
@@ -75,7 +75,7 @@ test('el fons de columna es veu als dos temes', async ({ page }) => {
 });
 
 test('captura dels 8 temes', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/proof/tokens');
   await page.waitForLoadState('networkidle');
   await expect(page).toHaveScreenshot('token-proof.png', { fullPage: true });
 });

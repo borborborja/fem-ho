@@ -9,7 +9,7 @@
 import { expect, test } from '@playwright/test';
 
 test('el tauler pinta les quatre columnes als dos temes', async ({ page }) => {
-  await page.goto('/board');
+  await page.goto('/proof/board');
 
   for (const theme of ['light', 'dark'] as const) {
     const surface = page.locator(`[data-testid="board-${theme}"]`);
@@ -20,7 +20,7 @@ test('el tauler pinta les quatre columnes als dos temes', async ({ page }) => {
 });
 
 test("l'Inbox es distingeix de les altres tres", async ({ page }) => {
-  await page.goto('/board');
+  await page.goto('/proof/board');
   const surface = page.locator('[data-testid="board-light"]');
 
   const inbox = surface.locator('[data-column-status="inbox"]');
@@ -37,7 +37,7 @@ test("l'Inbox es distingeix de les altres tres", async ({ page }) => {
 });
 
 test("les tres columnes van dins d'una sola targeta", async ({ page }) => {
-  await page.goto('/board');
+  await page.goto('/proof/board');
   const surface = page.locator('[data-testid="board-light"]');
 
   // La segona meitat del que demana el brief: que les tres "es sentin un sol element".
@@ -69,7 +69,7 @@ test("les tres columnes van dins d'una sola targeta", async ({ page }) => {
 });
 
 test("les accions ràpides són només a l'Inbox", async ({ page }) => {
-  await page.goto('/board');
+  await page.goto('/proof/board');
   const surface = page.locator('[data-testid="board-light"]');
 
   // docs/02 §4: "Accions ràpides: només a les targetes de l'Inbox".
@@ -86,13 +86,13 @@ test("les accions ràpides són només a l'Inbox", async ({ page }) => {
 });
 
 test('captura del tauler als dos temes', async ({ page }) => {
-  await page.goto('/board');
+  await page.goto('/proof/board');
   await page.waitForLoadState('networkidle');
   await expect(page).toHaveScreenshot('board.png', { fullPage: true });
 });
 
 test('arrossegar entre columnes persisteix', async ({ page }) => {
-  await page.goto('/board');
+  await page.goto('/proof/board');
   const surface = page.locator('[data-testid="board-light"]');
 
   const card = surface.locator('[data-testid="task-1"]');
@@ -124,7 +124,7 @@ test('arrossegar entre columnes persisteix', async ({ page }) => {
 
 test('AQUESTA és la de docs/13: moure amb teclat també', async ({ page }) => {
   // "Un tauler que només funciona amb ratolí no és accessible" (docs/02 §4).
-  await page.goto('/board');
+  await page.goto('/proof/board');
   const surface = page.locator('[data-testid="board-light"]');
 
   // El focus va a l'element ARROSSEGABLE, que és el que porta els listeners i el
@@ -154,7 +154,7 @@ test('AQUESTA és la de docs/13: moure amb teclat també', async ({ page }) => {
 });
 
 test('Escape cancel·la el moviment amb teclat', async ({ page }) => {
-  await page.goto('/board');
+  await page.goto('/proof/board');
   const surface = page.locator('[data-testid="board-light"]');
 
   await surface.locator('[data-testid="task-2"]').focus();

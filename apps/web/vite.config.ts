@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { defineConfig } from 'vite';
+import { defineConfig, type ProxyOptions } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 
@@ -24,6 +24,34 @@ function tokenColor(tokenName: string): string {
 }
 
 const APP_BG = tokenColor('app-bg');
+
+/**
+ * En desenvolupament la web i el servidor són processos diferents; en producció el
+ * mateix procés serveix les dues coses i aquest proxy no existeix.
+ */
+const API = process.env.FEMHO_API_ORIGIN ?? 'http://localhost:8080';
+/**
+ * `/setup` i `/invite/{token}` són **una pàgina i un endpoint alhora**.
+ *
+ * `GET` ha de donar el formulari (docs/12 §3: "`/setup` mostra un formulari"), i `POST`
+ * ha d'arribar al servidor. En producció això surt sol —el mateix procés serveix les
+ * dues coses i la ruta declarada guanya el gestor de "no trobat"—, però amb el proxy de
+ * desenvolupament cal dir-ho: sense això, obrir `/setup` al navegador descarregava un
+ * JSON en comptes de pintar el formulari.
+ */
+const pageOrApi: ProxyOptions = {
+  target: API,
+  bypass: (req) => (req.method === 'GET' || req.method === 'HEAD' ? '/index.html' : undefined),
+};
+
+const PROXY = {
+  '/api': API,
+  '/info': API,
+  '/healthz': API,
+  '/s/': API,
+  '/setup': pageOrApi,
+  '/invite': pageOrApi,
+};
 
 export default defineConfig({
   plugins: [
@@ -58,13 +86,19 @@ export default defineConfig({
   ],
   server: {
     port: 5173,
-    proxy: {
-      // En desenvolupament la web i el servidor són processos diferents; en producció
-      // el mateix procés serveix les dues coses i aquest proxy no existeix.
-      '/api': 'http://localhost:8080',
-      '/info': 'http://localhost:8080',
-      '/healthz': 'http://localhost:8080',
-    },
+    proxy: PROXY,
+  },
+  /**
+   * `preview` porta el MATEIX proxy que `server`.
+   *
+   * Les proves de navegador corren contra la construcció de producció (playwright.config)
+   * i allà l'API segueix sent un altre procés. Sense aquest bloc, cada crida acabava en
+   * el `index.html` de la SPA i el client rebia HTML on esperava JSON —un error que no
+   * diu res del que passa de veritat.
+   */
+  preview: {
+    port: 4173,
+    proxy: PROXY,
   },
   build: {
     outDir: 'dist',

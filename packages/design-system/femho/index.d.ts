@@ -27,3 +27,11 @@ export type {
   ActivityTimelineLabels,
   ActivityTimelineProps,
 } from './ActivityTimeline.js';
+export { ChecklistRow } from './ChecklistRow.js';
+export type { ChecklistRowProps } from './ChecklistRow.js';
+export { SyncPill } from './SyncPill.js';
+export type { SyncPillProps, SyncState } from './SyncPill.js';
+export { MentionPopover, useIsMobile } from './MentionPopover.js';
+export type { MentionPopoverProps } from './MentionPopover.js';
+export { ShareDialog } from './ShareDialog.js';
+export type { ShareDialogProps, ShareDialogLabels, SharePermission } from './ShareDialog.js';

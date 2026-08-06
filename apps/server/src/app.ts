@@ -21,6 +21,7 @@ import { registerAdminRoutes } from './http/admin.js';
 import { registerAgentRoutes } from './http/agents.js';
 import { registerMeRoutes } from './http/me.js';
 import { registerScopeRoutes } from './http/scopes.js';
+import { registerSpaRoutes } from './http/spa.js';
 import { registerSetupRoutes } from './http/setup.js';
 import { registerShareRoutes } from './http/shares.js';
 import { registerTokenRoutes } from './http/tokens.js';
@@ -96,6 +97,14 @@ export function buildApp(config: Config, options: BuildOptions = {}): FastifyIns
   };
   registerShareRoutes(app, instanceSecret);
   registerAdminRoutes(app, instanceSecret);
+
+  /**
+   * L'app web va **l'última**.
+   *
+   * Registra un gestor de "no trobat" que porta a `index.html`, i si anés abans es
+   * menjaria les rutes de l'API que encara no s'han declarat.
+   */
+  registerSpaRoutes(app);
 
   return app;
 }

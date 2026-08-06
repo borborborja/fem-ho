@@ -1,6 +1,11 @@
 /**
  * docs/13 M14 · el primer arrencament.
  *
+ * `GET /setup` **és una pàgina** (docs/12 §3: "mostra un formulari per crear el primer
+ * administrador"): la serveix l'app web. L'estat de la porta, en JSON, és
+ * `GET /api/v1/setup`. Amb les dues coses al mateix camí, obrir-lo al navegador donava
+ * el JSON i no el formulari.
+ *
  * El que decideix aquesta peça: que `/setup` **es tanqui per sempre**. Una ruta que crea
  * administradors i es pot reobrir des d'internet no és una porta.
  */
@@ -58,7 +63,7 @@ afterEach(async () => {
 describe('amb la base buida', () => {
   it('diu que està obert, i sense demanar credencials', async () => {
     // La interfície l'ha de poder consultar abans que existeixi cap usuari.
-    const res = await app.inject({ method: 'GET', url: '/setup' });
+    const res = await app.inject({ method: 'GET', url: '/api/v1/setup' });
     expect(res.statusCode).toBe(200);
     expect(res.json<{ open: boolean }>().open).toBe(true);
   });
@@ -131,7 +136,7 @@ describe('AQUESTA és la que compta: la porta es tanca', () => {
 
   it('i el GET ja diu que està tancat', async () => {
     await setup();
-    const res = await app.inject({ method: 'GET', url: '/setup' });
+    const res = await app.inject({ method: 'GET', url: '/api/v1/setup' });
     expect(res.json<{ open: boolean }>().open).toBe(false);
   });
 
@@ -141,7 +146,7 @@ describe('AQUESTA és la que compta: la porta es tanca', () => {
 
     // Si es reobrís, qualsevol que arribés abans que l'administrador tornés a entrar es
     // faria administrador ell.
-    const res = await app.inject({ method: 'GET', url: '/setup' });
+    const res = await app.inject({ method: 'GET', url: '/api/v1/setup' });
     expect(res.json<{ open: boolean }>().open).toBe(false);
     expect((await setup({ ...ADMIN, email: 'oportunista@example.com' })).statusCode).toBe(403);
   });
@@ -158,7 +163,7 @@ describe('AQUESTA és la que compta: la porta es tanca', () => {
     expect(Number(usuaris.rows[0]?.n)).toBe(0);
 
     // I tot i així: el rastre queda a `activity_log` encara que la fila desaparegui.
-    const res = await app.inject({ method: 'GET', url: '/setup' });
+    const res = await app.inject({ method: 'GET', url: '/api/v1/setup' });
     expect(res.json<{ open: boolean }>().open).toBe(false);
   });
 
@@ -188,7 +193,7 @@ describe('validació', () => {
     expect((await setup({ ...ADMIN, password: 'curta' })).statusCode).toBe(422);
 
     // Un intent fallit no ha de tancar la porta: seria deixar la instància inservible.
-    const res = await app.inject({ method: 'GET', url: '/setup' });
+    const res = await app.inject({ method: 'GET', url: '/api/v1/setup' });
     expect(res.json<{ open: boolean }>().open).toBe(true);
   });
 });

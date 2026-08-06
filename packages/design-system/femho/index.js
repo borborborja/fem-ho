@@ -6,8 +6,9 @@
  * catàleg (regla 3), perquè el mateix component l'ha de poder fer servir Android amb
  * el seu propi `strings.xml`.
  *
- * Els que falten arriben a la seva fita: InboxRail i CalendarGrid a M7, QuickAddInput
- * i MentionPopover a M6, ChecklistRow a M8, ShareDialog a M12, SyncPill a M9.
+ * Els tretze de docs/04 §6 hi són. `InboxRail` viu a l'app i no aquí: és l'únic que
+ * necessita l'estat de l'aplicació (P4), i portar-lo al paquet obligaria el paquet a
+ * conèixer el model de dades.
  */
 
 export { TaskCard } from './TaskCard.jsx';
@@ -18,3 +19,7 @@ export { QuickAddInput } from './QuickAddInput.jsx';
 export { MonthView, WeekView, DayView, monthCells, mondayIndex } from './CalendarGrid.jsx';
 export { AiModeBadge, UnseenAiDot } from './AiModeBadge.jsx';
 export { ActivityTimeline } from './ActivityTimeline.jsx';
+export { ChecklistRow } from './ChecklistRow.jsx';
+export { SyncPill } from './SyncPill.jsx';
+export { MentionPopover, useIsMobile } from './MentionPopover.jsx';
+export { ShareDialog } from './ShareDialog.jsx';

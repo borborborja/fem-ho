@@ -2728,8 +2728,19 @@ components:
         source: { type: string }
         changes:
           type: [object, 'null']
-          additionalProperties: true
-          description: '`{camp: {from, to}}`. És el que fa possible el botó Desfés.'
+          description: |
+            `{camp: {from, to}}`. És el que fa possible el botó Desfés: sense el valor
+            anterior no hi ha res a què tornar.
+
+            La forma és fixa i el contracte ho diu, perquè `additionalProperties: true`
+            generava un `unknown` per valor i obligava cada client a assumir-ne la forma
+            pel seu compte, que és exactament el que la regla 5 evita.
+          additionalProperties:
+            type: object
+            required: [from, to]
+            properties:
+              from: {}
+              to: {}
         created_at: { type: string, format: date-time }
         undoable:
           type: boolean

@@ -45,6 +45,15 @@
   --femho-scope-6: #6aa84f;
   --femho-scope-7: #b5763f;
   --femho-scope-8: #7a8fa6;
+
+  /**
+   * El vel de darrere dels modals.
+   *
+   * Plou no en porta cap: els seus diàlegs són targetes damunt d'una pàgina, i el vel
+   * és cosa de qui els munta. En tema clar cal que sigui prou fosc perquè el contingut
+   * de sota es llegeixi com a inactiu, sense arribar a amagar-lo.
+   */
+  --scrim: rgba(20, 21, 26, 0.35);
 }
 
 [data-theme='dark'] {
@@ -62,4 +71,7 @@
   --femho-scope-6: #85c268;
   --femho-scope-7: #cc8f58;
   --femho-scope-8: #9aadc2;
+
+  /* Sobre un fons ja fosc, el mateix vel no es notaria: se n'hi posa més. */
+  --scrim: rgba(0, 0, 0, 0.55);
 }

@@ -9,7 +9,7 @@
 import { expect, test } from '@playwright/test';
 
 test.beforeEach(async ({ page }) => {
-  await page.goto('/ai');
+  await page.goto('/proof/ai');
 });
 
 test('AQUESTA és la de docs/09 §3: manual no pinta cap pastilla', async ({ page }) => {

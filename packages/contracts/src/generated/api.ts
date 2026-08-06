@@ -1767,9 +1767,19 @@ export interface components {
             /** @description "Borja", "IA · Claude", "Extern · Marta". */
             actor_label?: string | null;
             source: string;
-            /** @description `{camp: {from, to}}`. És el que fa possible el botó Desfés. */
+            /**
+             * @description `{camp: {from, to}}`. És el que fa possible el botó Desfés: sense el valor
+             *     anterior no hi ha res a què tornar.
+             *
+             *     La forma és fixa i el contracte ho diu, perquè `additionalProperties: true`
+             *     generava un `unknown` per valor i obligava cada client a assumir-ne la forma
+             *     pel seu compte, que és exactament el que la regla 5 evita.
+             */
             changes?: {
-                [key: string]: unknown;
+                [key: string]: {
+                    from: unknown;
+                    to: unknown;
+                };
             } | null;
             /** Format: date-time */
             created_at: string;

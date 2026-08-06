@@ -7,31 +7,19 @@ import '@fem-ho/design-system/styles.css';
 // Els tokens propis de Fem-ho van DESPRÉS de Plou: en depenen (docs/04 §2).
 import '@fem-ho/design-system/femho.css';
 
-import { BoardProof } from './BoardProof.js';
-import { AiModeProof } from './AiModeProof.js';
-import { OfflineProof } from './OfflineProof.js';
-import { CalendarProof } from './CalendarProof.js';
-import { QuickAddProof } from './QuickAddProof.js';
-import { TokenProof } from './TokenProof.js';
+import { App } from './app/App.js';
+import { RouterProvider } from './app/router.js';
+import { SessionProvider } from './app/session.js';
 
 const root = document.getElementById('root');
 if (root === null) throw new Error('Falta #root');
 
-// Mentre no hi ha encaminament (M5 el porta sencer a la fita següent), la pàgina es
-// tria per la ruta: així les proves de navegador poden apuntar a cadascuna.
-const path = window.location.pathname;
-const page = path.startsWith('/ai') ? (
-  <AiModeProof />
-) : path.startsWith('/offline') ? (
-  <OfflineProof />
-) : path.startsWith('/calendar') ? (
-  <CalendarProof />
-) : path.startsWith('/quickadd') ? (
-  <QuickAddProof />
-) : path.startsWith('/board') ? (
-  <BoardProof />
-) : (
-  <TokenProof />
+createRoot(root).render(
+  <StrictMode>
+    <RouterProvider>
+      <SessionProvider>
+        <App />
+      </SessionProvider>
+    </RouterProvider>
+  </StrictMode>,
 );
-
-createRoot(root).render(<StrictMode>{page}</StrictMode>);

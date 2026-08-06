@@ -9,7 +9,7 @@
 import { expect, test } from '@playwright/test';
 
 test.beforeEach(async ({ page }) => {
-  await page.goto('/offline');
+  await page.goto('/proof/offline');
   await expect(page.locator('[data-testid="task-tasca-1"]')).toBeVisible();
 });
 
@@ -70,7 +70,7 @@ test('la cua sobreviu a tancar la pestanya', async ({ page, context }) => {
 
   // IndexedDB és per origen, no per pestanya: una pestanya nova ha de trobar la cua.
   const altra = await context.newPage();
-  await altra.goto('/offline');
+  await altra.goto('/proof/offline');
   await expect(altra.locator('[data-testid="task-tasca-1"]')).toBeVisible();
   await expect(altra.locator('[data-testid="queue"]')).toHaveAttribute('data-count', '1');
   await altra.close();

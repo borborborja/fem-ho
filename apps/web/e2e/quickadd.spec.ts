@@ -12,7 +12,7 @@
 import { expect, test } from '@playwright/test';
 
 test.beforeEach(async ({ page }) => {
-  await page.goto('/quickadd');
+  await page.goto('/proof/quickadd');
 });
 
 test('AQUESTA és la de docs/13: àmbit, projecte, persona i títol net', async ({ page }) => {

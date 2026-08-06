@@ -1,4 +1,5 @@
 import React from 'react';
+import { MentionPopover } from './MentionPopover.jsx';
 
 /**
  * QuickAddInput — el camp d'afegida ràpida amb xips reversibles i autocompletat.
@@ -121,63 +122,12 @@ export function QuickAddInput({
       </div>
 
       {open ? (
-        <ul
+        <MentionPopover
           id={listId}
-          role="listbox"
-          data-testid="quickadd-suggestions"
-          style={{
-            listStyle: 'none',
-            margin: '4px 0 0',
-            padding: 4,
-            background: 'var(--card-bg)',
-            border: '1px solid var(--card-border)',
-            borderRadius: 14,
-            boxShadow: 'var(--card-shadow)',
-            maxHeight: 260,
-            overflowY: 'auto',
-          }}
-        >
-          {suggestions.map((suggestion, index) => (
-            <li
-              key={suggestion.id}
-              id={`${listId}-${index}`}
-              role="option"
-              aria-selected={index === activeSuggestion}
-              data-testid={`suggestion-${suggestion.id}`}
-              onMouseDown={(event) => {
-                // `mousedown` i no `click`: amb `click`, l'input perd el focus abans i
-                // el desplegable es tanca sol.
-                event.preventDefault();
-                onSuggestionPick?.(suggestion);
-              }}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                padding: '7px 10px',
-                borderRadius: 10,
-                cursor: 'pointer',
-                fontSize: 13,
-                color: 'var(--ink)',
-                background: index === activeSuggestion ? 'var(--ghost-bg)' : 'transparent',
-              }}
-            >
-              {suggestion.color ? (
-                <span
-                  aria-hidden="true"
-                  style={{
-                    width: 7,
-                    height: 7,
-                    borderRadius: '50%',
-                    background: suggestion.color,
-                    flexShrink: 0,
-                  }}
-                />
-              ) : null}
-              {suggestion.label}
-            </li>
-          ))}
-        </ul>
+          suggestions={suggestions}
+          activeIndex={activeSuggestion}
+          onPick={onSuggestionPick}
+        />
       ) : null}
 
       {error ? (

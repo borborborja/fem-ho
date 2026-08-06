@@ -18,7 +18,14 @@ export function registerSetupRoutes(app: FastifyInstance): void {
    * És **pública i sense credencials**: la interfície l'ha de poder consultar abans que
    * existeixi cap usuari. No filtra res que no es pugui deduir provant `POST /setup`.
    */
-  app.get('/setup', async (_request, reply) => {
+  /**
+   * L'estat de la porta, en JSON.
+   *
+   * Va sota `/api/v1` i no a `/setup` a seques perquè **`/setup` és una pàgina**
+   * (docs/12 §3: "mostra un formulari per crear el primer administrador"). Amb les dues
+   * coses al mateix camí, obrir-lo al navegador donava el JSON i no el formulari.
+   */
+  app.get('/api/v1/setup', async (_request, reply) => {
     if (app.connection === undefined) {
       void reply.code(503).send({ error: 'La instància no té base de dades.' });
       return;

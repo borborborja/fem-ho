@@ -21,6 +21,10 @@
       "version": "10.0.1",
       "checkedAt": "2026-08-05"
     },
+    "@fastify/static": {
+      "version": "10.1.2",
+      "checkedAt": "2026-08-06"
+    },
     "@modelcontextprotocol/sdk": {
       "version": "1.30.0",
       "checkedAt": "2026-08-06",

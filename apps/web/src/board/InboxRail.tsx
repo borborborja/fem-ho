@@ -22,6 +22,17 @@ import type { BoardScope, BoardTask } from './KanbanBoard.js';
 
 export interface InboxRailProps {
   tasks: BoardTask[];
+  /**
+   * La secció "SENSE DIA" (docs/02 §5).
+   *
+   * Al calendari, el rail té dues seccions: el dia seleccionat i les tasques sense
+   * data. Al kanban no n'hi ha cap de separada perquè la columna JA és "tot l'Inbox",
+   * i per això és una prop opcional i no dues columnes: el component és el mateix (P4)
+   * i el que canvia és què se li dona.
+   */
+  undated?: BoardTask[] | undefined;
+  /** L'epígraf del dia seleccionat. Sense ell, no es pinta cap epígraf. */
+  dayLabel?: string | undefined;
   scopes: BoardScope[];
   /** `column` al kanban, `rail` al calendari. Només canvia la disposició, no el contingut. */
   placement?: 'column' | 'rail' | undefined;
@@ -39,6 +50,8 @@ export interface InboxRailProps {
 
 export function InboxRail({
   tasks,
+  undated,
+  dayLabel,
   scopes,
   placement = 'column',
   header,
@@ -107,18 +120,50 @@ export function InboxRail({
       });
   }
 
+  const section = (label: string | undefined, content: ReactNode): ReactNode =>
+    label === undefined ? (
+      content
+    ) : (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+        <span
+          style={{
+            fontSize: 11.5,
+            fontWeight: 700,
+            letterSpacing: '0.04em',
+            textTransform: 'uppercase',
+            color: 'var(--ink-faint)',
+          }}
+        >
+          {label}
+        </span>
+        {content}
+      </div>
+    );
+
   return (
     <KanbanColumn
       data-testid="inbox-rail"
       data-column-status="inbox"
       data-placement={placement}
       label={t('board.column.inbox')}
-      count={tasks.length}
+      count={tasks.length + (undated?.length ?? 0)}
       variant="inbox"
       headerExtra={header}
       footer={footer}
     >
-      {body}
+      {section(dayLabel, body)}
+      {undated === undefined ? null : (
+        <div data-testid="inbox-undated" style={{ paddingTop: 14 }}>
+          {section(
+            t('calendar.noDate'),
+            undated.length === 0 ? (
+              <EmptyState>{t('board.empty.inbox')}</EmptyState>
+            ) : (
+              undated.map(cardFor)
+            ),
+          )}
+        </div>
+      )}
     </KanbanColumn>
   );
 }

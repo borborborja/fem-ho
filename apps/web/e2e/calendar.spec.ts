@@ -10,7 +10,7 @@
 import { expect, test } from '@playwright/test';
 
 test('les tres vistes existeixen i es poden canviar', async ({ page }) => {
-  await page.goto('/calendar');
+  await page.goto('/proof/calendar');
 
   await expect(page.locator('[data-testid="calendar-month"]')).toBeVisible();
 
@@ -23,7 +23,7 @@ test('les tres vistes existeixen i es poden canviar', async ({ page }) => {
 });
 
 test('AQUESTA és la de docs/00: la setmana comença en dilluns', async ({ page }) => {
-  await page.goto('/calendar');
+  await page.goto('/proof/calendar');
 
   // Els encapçalaments, en ordre i en minúscula (docs/00).
   const headers = page.locator('[data-testid="calendar-month"] > div:nth-child(2) > div');
@@ -41,7 +41,7 @@ test('AQUESTA és la de docs/00: la setmana comença en dilluns', async ({ page 
 });
 
 test('seleccionar un dia el marca', async ({ page }) => {
-  await page.goto('/calendar');
+  await page.goto('/proof/calendar');
 
   await expect(page.locator('[data-testid="day-2026-08-05"]')).toHaveAttribute(
     'data-selected',
@@ -60,7 +60,7 @@ test('seleccionar un dia el marca', async ({ page }) => {
 });
 
 test('navegar de mes funciona i no perd la graella', async ({ page }) => {
-  await page.goto('/calendar');
+  await page.goto('/proof/calendar');
   await page.getByRole('button', { name: 'Mes següent' }).click();
   await expect(page.locator('[data-testid="day-2026-09-01"]')).toBeVisible();
 
@@ -96,20 +96,20 @@ test('AQUESTA és la de P4: el rail és el MATEIX component que la columna del k
     });
   };
 
-  const alKanban = await estructura('/board', '[data-testid="board-light"]');
-  const alCalendari = await estructura('/calendar', 'body');
+  const alKanban = await estructura('/proof/board', '[data-testid="board-light"]');
+  const alCalendari = await estructura('/proof/calendar', 'body');
 
   expect(alCalendari).toBe(alKanban);
 });
 
 test('el rail sap on és, però no canvia de contingut per això', async ({ page }) => {
-  await page.goto('/calendar');
+  await page.goto('/proof/calendar');
   await expect(page.locator('[data-testid="inbox-rail"]')).toHaveAttribute(
     'data-placement',
     'rail',
   );
 
-  await page.goto('/board');
+  await page.goto('/proof/board');
   await expect(
     page.locator('[data-testid="board-light"] [data-testid="inbox-rail"]'),
   ).toHaveAttribute('data-placement', 'column');
@@ -117,14 +117,14 @@ test('el rail sap on és, però no canvia de contingut per això', async ({ page
 
 test('les accions ràpides hi són als dos llocs', async ({ page }) => {
   // Són de l'Inbox, no del kanban: si el rail no les tingués, seria una divergència.
-  await page.goto('/calendar');
+  await page.goto('/proof/calendar');
   await expect(
     page.locator('[data-testid="inbox-rail"]').getByRole('button', { name: '→ Per fer' }).first(),
   ).toBeVisible();
 });
 
 test('captura del calendari', async ({ page }) => {
-  await page.goto('/calendar');
+  await page.goto('/proof/calendar');
   await page.waitForLoadState('networkidle');
   await expect(page).toHaveScreenshot('calendar.png', { fullPage: true });
 });
