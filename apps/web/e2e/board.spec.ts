@@ -68,21 +68,47 @@ test("les tres columnes van dins d'una sola targeta", async ({ page }) => {
   expect(await contenidor('inbox')).not.toBe(perFer);
 });
 
-test("les accions ràpides són només a l'Inbox", async ({ page }) => {
+/**
+ * La barra de la dreta de la targeta, del disseny validat.
+ *
+ * **A la bústia i a "Per fer" és una fletxa** que la mou una columna endavant; a "Fent"
+ * i a "Fet" és la casella d'estat. Substitueix els dos botons "→ Per fer" i "→ Fent"
+ * que hi havia sota el títol i el cercle que hi havia a dalt a l'esquerra: un sol lloc
+ * per a un sol gest, fer avançar la targeta.
+ */
+test('la barra de la dreta és fletxa fins a Fent, i allà casella', async ({ page }) => {
   await page.goto('/proof/board');
   const surface = page.locator('[data-testid="board-light"]');
 
-  // docs/02 §4: "Accions ràpides: només a les targetes de l'Inbox".
-  await expect(
-    surface
-      .locator('[data-column-status="inbox"]')
-      .getByRole('button', { name: '→ Per fer' })
-      .first(),
-  ).toBeVisible();
+  for (const status of ['inbox', 'todo']) {
+    const column = surface.locator(`[data-column-status="${status}"]`);
+    await expect(column.locator('[data-testid="card-advance"]').first()).toBeVisible();
+    await expect(column.locator('[data-testid="card-toggle-done"]')).toHaveCount(0);
+  }
 
-  await expect(
-    surface.locator('[data-column-status="todo"]').getByRole('button', { name: '→ Per fer' }),
-  ).toHaveCount(0);
+  for (const status of ['doing', 'done']) {
+    const column = surface.locator(`[data-column-status="${status}"]`);
+    await expect(column.locator('[data-testid="card-toggle-done"]').first()).toBeVisible();
+    await expect(column.locator('[data-testid="card-advance"]')).toHaveCount(0);
+  }
+});
+
+test('la fletxa mou la targeta una columna endavant', async ({ page }) => {
+  await page.goto('/proof/board');
+  const surface = page.locator('[data-testid="board-light"]');
+  const todo = surface.locator('[data-column-status="todo"]');
+
+  await expect(todo).toContainText('Revisar el pressupost');
+  await todo
+    .locator('[data-testid^="task-"]')
+    .filter({ hasText: 'Revisar el pressupost' })
+    .locator('[data-testid="card-advance"]')
+    .click();
+
+  await expect(surface.locator('[data-column-status="doing"]')).toContainText(
+    'Revisar el pressupost',
+  );
+  await expect(todo).not.toContainText('Revisar el pressupost');
 });
 
 test('captura del tauler als dos temes', async ({ page }) => {

@@ -126,7 +126,6 @@ export function TaskCard({
   time,
   aiMode = 'manual',
   aiModeLabel,
-  quickActions = [],
   checklistProgress,
   lists,
   listsExpanded = false,
@@ -140,6 +139,15 @@ export function TaskCard({
   dragging = false,
   onOpen,
   onToggleDone,
+  toggleLabel,
+  /**
+   * La fletxa de la barra dreta: mou la targeta a la columna següent.
+   *
+   * Si hi és, la barra és una fletxa; si no, és la casella d'estat. Ho decideix qui
+   * munta el tauler perquè és qui sap a quina columna és la targeta.
+   */
+  onAdvance,
+  advanceLabel,
   done = false,
   style,
   ...rest
@@ -179,8 +187,14 @@ export function TaskCard({
       }}
       {...rest}
     >
-      {/* Canvi autònom no vist: punt de 6px a la cantonada superior dreta amb
-          --plou-orange (docs/09 §3). Desapareix en obrir la tasca. */}
+      {/*
+        Canvi autònom no vist: punt de 6px a la cantonada superior dreta amb
+        --plou-orange (docs/09 §3). Desapareix en obrir la tasca.
+
+        Ara la cantonada dreta és la barra de moure, que amb la tasca feta va amb el
+        gradient de marca: sense l'anell del color de la targeta, el punt taronja s'hi
+        perdria a dins. L'anell és el que el fa llegible sobre qualsevol de les dues.
+      */}
       {hasUnseenAiChange ? (
         <span
           data-testid="unseen-ai-change"
@@ -193,6 +207,8 @@ export function TaskCard({
             height: 6,
             borderRadius: '50%',
             background: 'var(--plou-orange)',
+            boxShadow: '0 0 0 1.5px var(--card-bg)',
+            zIndex: 2,
           }}
         />
       ) : null}
@@ -254,39 +270,6 @@ export function TaskCard({
             paddingRight: onEdit === undefined && addForm === undefined ? 0 : 66,
           }}
         >
-          {/* Cercle d'estat de 22px. Clicar-lo NOMÉS commuta l'estat i no obre res
-              (docs/02 §4). */}
-          <button
-            type="button"
-            onClick={onToggleDone}
-            aria-pressed={done}
-            style={{
-              width: 22,
-              height: 22,
-              borderRadius: '50%',
-              flexShrink: 0,
-              border: done ? 'none' : '2px solid var(--card-border)',
-              background: done ? 'var(--gradient-brand-2stop)' : 'transparent',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-              padding: 0,
-            }}
-          >
-            {done ? (
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <polyline
-                  points="20 6 9 17 4 12"
-                  stroke="var(--on-brand)"
-                  strokeWidth="2.4"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            ) : null}
-          </button>
-
           <button
             type="button"
             onClick={onOpen}
@@ -543,33 +526,98 @@ export function TaskCard({
             ) : null}
           </div>
         ) : null}
-
-        {/* Accions ràpides: NOMÉS a les targetes de l'Inbox (docs/02 §4). */}
-        {quickActions.length > 0 ? (
-          <div style={{ display: 'flex', gap: 6 }}>
-            {quickActions.map((action) => (
-              <button
-                key={action.label}
-                type="button"
-                onClick={action.onClick}
-                style={{
-                  fontSize: 10.5,
-                  fontWeight: 700,
-                  padding: '4px 10px',
-                  borderRadius: 100,
-                  background: 'var(--ghost-bg)',
-                  color: 'var(--ink-soft)',
-                  border: 'none',
-                  cursor: 'pointer',
-                  fontFamily: 'var(--font-sans)',
-                }}
-              >
-                {action.label}
-              </button>
-            ))}
-          </div>
-        ) : null}
       </div>
+
+      {/*
+        La barra de la dreta, de 28px i tota l'alçada de la targeta.
+
+        **A les dues primeres columnes és una fletxa** que mou la targeta una columna
+        endavant; a les dues últimes és la casella d'estat. Són el mateix lloc perquè és
+        el mateix gest: fer avançar la targeta. Abans hi havia dos botons de destinació
+        sota el títol i el cercle d'estat a dalt a l'esquerra; el disseny validat ho ha
+        ajuntat tot aquí i la targeta ha quedat molt més neta.
+
+        Quina de les dues surt ho decideix qui munta el tauler, amb `onAdvance`: és qui
+        sap a quina columna és la targeta.
+      */}
+      {onAdvance !== undefined ? (
+        <button
+          type="button"
+          onClick={onAdvance}
+          title={advanceLabel}
+          aria-label={advanceLabel}
+          data-testid="card-advance"
+          style={{
+            width: 28,
+            flexShrink: 0,
+            border: 'none',
+            background: 'var(--ghost-bg)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            padding: 0,
+          }}
+        >
+          <svg
+            width="15"
+            height="15"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="var(--ink-soft)"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M9 6l6 6-6 6" />
+          </svg>
+        </button>
+      ) : onToggleDone === undefined ? null : (
+        <button
+          type="button"
+          onClick={onToggleDone}
+          aria-pressed={done}
+          aria-label={toggleLabel}
+          title={toggleLabel}
+          data-testid="card-toggle-done"
+          style={{
+            width: 28,
+            flexShrink: 0,
+            border: 'none',
+            background: done ? 'var(--gradient-brand-2stop)' : 'var(--ghost-bg)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            padding: 0,
+          }}
+        >
+          {done ? (
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <polyline
+                points="20 6 9 17 4 12"
+                stroke="var(--on-brand)"
+                strokeWidth="2.4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          ) : (
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="var(--ink-soft)"
+              strokeWidth="2"
+              aria-hidden="true"
+            >
+              <circle cx="12" cy="12" r="9" />
+            </svg>
+          )}
+        </button>
+      )}
     </div>
   );
 }

@@ -300,6 +300,7 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: (
     val addToggleLabel = stringResource(R.string.card_add)
     val addPlaceholder = stringResource(R.string.card_addplaceholder)
     val editLabel = stringResource(R.string.task_edit)
+    val advanceTemplate = stringResource(R.string.board_card_advance)
     val pinLabel = stringResource(R.string.checklist_pin)
     val unpinLabel = stringResource(R.string.checklist_unpinaction)
     val toggleItemTemplate = stringResource(R.string.checklist_toggleitem)
@@ -355,8 +356,16 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: (
                     TaskStatus.DOING to stringResource(R.string.board_empty_doing),
                     TaskStatus.DONE to stringResource(R.string.board_empty_done),
                 ),
-                toTodo = stringResource(R.string.board_card_totodo),
-                toDoing = stringResource(R.string.board_card_todoing),
+                advance = mapOf(
+                    TaskStatus.INBOX to advanceTemplate.replace(
+                        "{column}",
+                        stringResource(R.string.board_column_todo),
+                    ),
+                    TaskStatus.TODO to advanceTemplate.replace(
+                        "{column}",
+                        stringResource(R.string.board_column_doing),
+                    ),
+                ),
                 toggle = stringResource(R.string.sync_complete),
             ),
             onOpen = model::open,

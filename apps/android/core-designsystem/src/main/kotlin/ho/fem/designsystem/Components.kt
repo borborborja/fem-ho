@@ -8,7 +8,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -137,7 +141,14 @@ fun TaskCard(
     toggleLabel: String = "",
     onToggle: () -> Unit = {},
     onOpen: () -> Unit = {},
-    quickActions: List<Pair<String, () -> Unit>> = emptyList(),
+    /**
+     * La fletxa de la barra dreta: mou la targeta una columna endavant.
+     *
+     * Si hi és, la barra és una fletxa; si no, és la casella d'estat. Substitueix els
+     * dos botons "→ Per fer" i "→ Fent" que hi havia sota el títol.
+     */
+    onAdvance: (() -> Unit)? = null,
+    advanceLabel: String = "",
     /** El llapis de la cantonada. Al mòbil surt sempre: no hi ha ratolí per revelar-lo. */
     onEdit: (() -> Unit)? = null,
     editLabel: String = "",
@@ -152,23 +163,26 @@ fun TaskCard(
     onToggleLists: () -> Unit = {},
     addForm: CardAddForm? = null,
 ) {
-    Column(
+    Row(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(FemhoShape.card))
             .background(Femho.colors.cardBg)
             .border(1.dp, Femho.colors.cardBorder, RoundedCornerShape(FemhoShape.card))
-            .clickable(onClick = onOpen)
-            .padding(12.dp)
+            .height(IntrinsicSize.Min)
             .testTag("task-card"),
+    ) {
+    Column(
+        modifier = Modifier
+            .weight(1f)
+            .clickable(onClick = onOpen)
+            .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(FemhoSize.cardGap),
     ) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(FemhoSize.cardGap),
             verticalAlignment = Alignment.Top,
         ) {
-            StatusCircle(done = done, contentDescription = toggleLabel, onClick = onToggle)
-
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
                     text = title,
@@ -317,23 +331,36 @@ fun TaskCard(
             )
         }
 
-        if (quickActions.isNotEmpty()) {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                quickActions.forEach { (label, action) ->
-                    Text(
-                        text = label,
-                        color = Femho.colors.inkSoft,
-                        fontSize = FemhoText.meta,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(FemhoShape.pill))
-                            .background(Femho.colors.ghostBg)
-                            .clickable(onClick = action)
-                            .padding(horizontal = 10.dp, vertical = 5.dp),
-                    )
-                }
-            }
+    }
+
+    /**
+     * La barra de la dreta, de 26dp i tota l'alçada de la targeta.
+     *
+     * **A la bústia i a "Per fer" és una fletxa**; a "Fent" i a "Fet", la casella
+     * d'estat. Són el mateix lloc perquè és el mateix gest: fer avançar la targeta.
+     */
+    Box(
+        modifier = Modifier
+            .width(26.dp)
+            .fillMaxHeight()
+            .background(
+                if (onAdvance == null && done) Femho.brandGradient2
+                else androidx.compose.ui.graphics.SolidColor(Femho.colors.ghostBg),
+            )
+            .clickable(
+                role = Role.Button,
+                onClick = { if (onAdvance != null) onAdvance() else onToggle() },
+            )
+            .semantics { contentDescription = if (onAdvance != null) advanceLabel else toggleLabel }
+            .testTag(if (onAdvance != null) "card-advance" else "card-toggle-done"),
+        contentAlignment = Alignment.Center,
+    ) {
+        when {
+            onAdvance != null -> ChevronGlyph()
+            done -> Text("✓", color = Femho.onBrand, fontSize = FemhoText.body, fontWeight = FontWeight.Bold)
+            else -> CircleGlyph()
         }
+    }
     }
 }
 
@@ -549,4 +576,30 @@ private fun GlyphCanvas(draw: (DrawScope, Color, Float) -> Unit) {
     val color = androidx.compose.material3.LocalContentColor.current
     val stroke = with(androidx.compose.ui.platform.LocalDensity.current) { 1.4.dp.toPx() }
     Canvas(modifier = Modifier.size(12.dp)) { draw(this, color, stroke) }
+}
+
+
+/** La fletxa de la barra dreta: mou la targeta una columna endavant. */
+@Composable
+private fun ChevronGlyph() {
+    val color = Femho.colors.inkSoft
+    val stroke = with(androidx.compose.ui.platform.LocalDensity.current) { 1.8.dp.toPx() }
+    Canvas(modifier = Modifier.size(14.dp)) {
+        val path = Path().apply {
+            moveTo(size.width * 0.37f, size.height * 0.25f)
+            lineTo(size.width * 0.62f, size.height * 0.5f)
+            lineTo(size.width * 0.37f, size.height * 0.75f)
+        }
+        drawPath(path, color, style = Stroke(width = stroke, cap = StrokeCap.Round, join = StrokeJoin.Round))
+    }
+}
+
+/** La casella buida de "Fent": el mateix cercle de sempre, ara a la barra. */
+@Composable
+private fun CircleGlyph() {
+    val color = Femho.colors.inkSoft
+    val stroke = with(androidx.compose.ui.platform.LocalDensity.current) { 1.8.dp.toPx() }
+    Canvas(modifier = Modifier.size(15.dp)) {
+        drawCircle(color, radius = size.minDimension * 0.375f, style = Stroke(width = stroke))
+    }
 }

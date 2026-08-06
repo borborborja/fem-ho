@@ -25,7 +25,11 @@ export interface BoardCardProps {
   progress: { done: number; total: number; lists: number };
   onOpen: () => void;
   onToggleDone: () => void;
-  quickActions: { label: string; onClick: () => void }[];
+  /**
+   * Mou la targeta una columna endavant. Només a la bústia i a "Per fer": a "Fent" i a
+   * "Fet", la barra de la dreta és la casella d'estat.
+   */
+  onAdvance?: (() => void) | undefined;
   dragging?: boolean;
   /** Cal per refrescar el recompte del tauler quan es marca alguna cosa aquí dins. */
   onChanged: () => void;
@@ -36,7 +40,7 @@ export function BoardCard({
   progress,
   onOpen,
   onToggleDone,
-  quickActions,
+  onAdvance,
   dragging = false,
   onChanged,
 }: BoardCardProps) {
@@ -175,7 +179,15 @@ export function BoardCard({
       done={task.status === 'done'}
       onOpen={onOpen}
       onToggleDone={onToggleDone}
-      quickActions={quickActions}
+      toggleLabel={t('sync.complete')}
+      onAdvance={onAdvance}
+      advanceLabel={
+        onAdvance === undefined
+          ? undefined
+          : t('board.card.advance', {
+              column: t(task.status === 'inbox' ? 'board.column.todo' : 'board.column.doing'),
+            })
+      }
       /**
        * El commutador compta **blocs**, no ítems: "Llistes (2)" vol dir les subtasques i
        * una llista. El número ve de l'agregat, perquè plegada la targeta encara no ha

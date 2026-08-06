@@ -86,13 +86,17 @@ L'Inbox també té controls propis a la capçalera que les altres no tenen: nave
 
 `var(--card-bg)`, vora hairline, radi 16px, `var(--card-shadow)`, padding 12px. Flex amb 9px de separació.
 
-**Cercle d'estat**, 22px, a dalt a l'esquerra. Fet: fons `var(--gradient-brand-2stop)` amb una marca blanca de 12px. No fet: només vora de 2px `var(--card-border)`.
+**Barra de moure**, 28px d'ample i tota l'alçada, a la **dreta**. A les dues primeres columnes és una fletxa `›` sobre `var(--ghost-bg)` que mou la targeta una columna endavant; a les dues últimes és la casella d'estat: cercle buit sobre `var(--ghost-bg)`, o `var(--gradient-brand-2stop)` amb una marca blanca quan està feta.
+
+> Fins a l'agost del 2026 això eren tres controls: un cercle d'estat de 22px a dalt a l'esquerra i dos botons "→ Per fer" i "→ Fent" sota el títol, només a l'Inbox. El disseny validat els ha ajuntat en un de sol, **perquè els tres feien el mateix gest**: fer avançar la targeta. Amb dues destinacions a cada targeta, l'usuari havia de triar trenta vegades seguides una cosa que gairebé sempre és la següent.
 
 **Cos**: títol a 13,5px pes 600, interlineat 1.3. Sota, una fila de metadades que embolica: pastilla de projecte (10,5px, `var(--tag-bg)`), inicial de la persona assignada (cercle de 18px), hora si en té, i **el distintiu de mode IA** si no és `manual` (veure [`09-mode-ia.md`](09-mode-ia.md)).
 
-**Accions ràpides**: només a les targetes de l'Inbox, dos botons petits "→ Per fer" i "→ Fent".
+**Accions de la cantonada**: a dalt a la dreta del cos, botons de 20px que **apareixen en passar-hi per sobre** —i amb el focus del teclat, que si no serien inabastables sense ratolí. El llapis obre l'edició completa; el de llista amb un més obre el camp d'afegir.
 
-**Indicador de llista**: si la tasca té llistes senzilles, una pastilla amb `3/7` i icona de llista.
+**Afegir des de la targeta**: un sol camp. `#Llista element` posa l'ítem a aquella llista; sense sigil, és una subtasca. Mateix sigil que l'afegida ràpida.
+
+**Indicador de llista**: si la tasca té llistes senzilles, una pastilla amb `3/7`. A sota, el commutador `▸ Llistes (2)` —que compta **blocs**, no ítems— desplega les subtasques (nues) i les llistes (en caixa, amb el seu nom i una xinxeta).
 
 **Clic** obre el modal d'edició completa. **Clic al cercle** només commuta l'estat i no obre res.
 

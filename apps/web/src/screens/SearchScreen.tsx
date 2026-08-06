@@ -78,8 +78,7 @@ export function SearchScreen({ onOpenTask }: SearchScreenProps) {
             aiMode={task.ai_mode}
             done={task.status === 'done'}
             onOpen={() => onOpenTask(task.id)}
-            quickActions={[]}
-          />
+                />
         ))}
       </div>
     </div>

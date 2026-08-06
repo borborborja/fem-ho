@@ -30,7 +30,7 @@ npm run test:proxy-matrix    # CalDAV i SSE darrere de nginx i Caddy
 | Proves unitàries · SQLite | 640 |
 | Proves unitàries · Postgres | 661 |
 | Comprovacions permanents | 10 de 10 |
-| Proves de navegador | 82, de les quals 34 contra el servidor real |
+| Proves de navegador | 83, de les quals 34 contra el servidor real |
 | Proves de Kotlin | 40 |
 | APK de depuració | es construeix |
 | Primer arrencament amb Compose | 13 comprovacions |
@@ -60,12 +60,15 @@ reimportat el mateix dia perquè n'havia sortit una versió nova). El que en va 
 | Afegir amb **un sol camp**: `#Llista element`, o sense sigil una subtasca | web i Android |
 | Les subtasques van **nues**; les llistes amb nom, en caixa amb xinxeta | web i Android |
 | L'entrada de 200ms en desplegar (`femho-list-in`) | web |
+| **Barra de moure de 28px a la dreta**: fletxa a les dues primeres columnes, casella a les dues últimes | web i Android |
+| Fora el cercle d'estat de dalt a l'esquerra i els botons "→ Per fer" / "→ Fent" | web i Android |
+
+`docs/02` §4 descrivia la targeta antiga —cercle a l'esquerra, dos botons de destinació—
+i **s'ha actualitzat**: un document que descriu una pantalla que ja no existeix és pitjor
+que no tenir-ne cap.
 
 **On no s'ha seguit el disseny, i per què:**
 
-- **El llapis d'edició a la targeta.** El disseny hi posa un botó de 20px; `docs/02` §4
-  diu que **clicar la targeta obre el modal**, que ja hi és i està provat. Amb les dues
-  coses, el llapis és un segon camí cap al mateix lloc.
 - **La pastilla `3/7`.** El disseny la treu i deixa només el commutador de llistes;
   `docs/02` §4 la demana explícitament ("una pastilla amb `3/7`"), i és l'únic que diu
   quant en falta amb la targeta plegada. Hi són les dues: la pastilla informa, el

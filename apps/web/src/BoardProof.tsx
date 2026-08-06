@@ -36,6 +36,17 @@ function Surface({ theme }: { theme: 'light' | 'dark' }) {
         <KanbanBoard
           tasks={tasks}
           scopes={SAMPLE_SCOPES}
+          /**
+           * Moure amb botó i moure arrossegant fan el mateix.
+           *
+           * A l'app les dues crides van al mateix lloc; aquí calen totes dues perquè la
+           * fletxa de la barra dreta passa per `onMove` i l'arrossegament per `onDrop`.
+           */
+          onMove={(taskId, status) => {
+            setTasks((current) =>
+              current.map((task) => (task.id === taskId ? { ...task, status } : task)),
+            );
+          }}
           onDrop={(taskId, status) => {
             // Actualització optimista (docs/02 §4). La reversió si el servidor rebutja
             // arriba amb la cua de sortida, a M9.

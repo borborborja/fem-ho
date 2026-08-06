@@ -1,11 +1,5 @@
 import type * as React from 'react';
 
-export interface QuickAction {
-  /** El text ja traduït. Els components no porten català a dins (regla 3). */
-  label: string;
-  onClick: () => void;
-}
-
 export interface CardListItem {
   id: string;
   text: string;
@@ -52,7 +46,17 @@ export interface TaskCardProps extends React.HTMLAttributes<HTMLDivElement> {
   /** El text del distintiu, traduït. El color no és mai l'únic senyal. */
   aiModeLabel?: string | undefined;
   /** Només a les targetes de l'Inbox (docs/02 §4). */
-  quickActions?: QuickAction[] | undefined;
+  /**
+   * La fletxa de la barra dreta: mou la targeta una columna endavant.
+   *
+   * Si hi és, la barra és una fletxa; si no, és la casella d'estat. Substitueix els dos
+   * botons "→ Per fer" i "→ Fent" que hi havia sota el títol.
+   */
+  onAdvance?: (() => void) | undefined;
+  /** "Moure a Per fer". Del catàleg. */
+  advanceLabel?: string | undefined;
+  /** Etiqueta accessible de la casella d'estat. Del catàleg. */
+  toggleLabel?: string | undefined;
   /** Per exemple `3/7`. */
   checklistProgress?: string | undefined;
   /**

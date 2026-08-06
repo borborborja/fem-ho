@@ -78,10 +78,15 @@ export function InboxRail({
         onOpen={() => onOpen?.(task.id)}
         onToggleDone={() => onToggleDone?.(task.id)}
         onChanged={() => onChanged?.()}
-        quickActions={[
-          { label: t('board.card.toTodo'), onClick: () => onMove?.(task.id, 'todo') },
-          { label: t('board.card.toDoing'), onClick: () => onMove?.(task.id, 'doing') },
-        ]}
+        /**
+         * La fletxa de la bústia porta a "Per fer".
+         *
+         * Abans hi havia dos botons, "→ Per fer" i "→ Fent". El disseny validat els ha
+         * canviat per una sola fletxa que avança una columna: dues destinacions a cada
+         * targeta era una decisió que ningú vol prendre trenta vegades seguides, i des
+         * de "Per fer" la fletxa torna a ser-hi per arribar a "Fent".
+         */
+        onAdvance={() => onMove?.(task.id, 'todo')}
       />
     );
     return wrapCard === undefined ? card : wrapCard(task, card);

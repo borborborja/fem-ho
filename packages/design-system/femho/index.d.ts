@@ -1,7 +1,6 @@
 export { TaskCard } from './TaskCard.js';
 export type {
   TaskCardProps,
-  QuickAction,
   CardList,
   CardListItem,
   CardAddForm,

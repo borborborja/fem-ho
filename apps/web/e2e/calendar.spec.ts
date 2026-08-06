@@ -115,11 +115,11 @@ test('el rail sap on és, però no canvia de contingut per això', async ({ page
   ).toHaveAttribute('data-placement', 'column');
 });
 
-test('les accions ràpides hi són als dos llocs', async ({ page }) => {
-  // Són de l'Inbox, no del kanban: si el rail no les tingués, seria una divergència.
+test('la fletxa de moure hi és als dos llocs', async ({ page }) => {
+  // És de l'Inbox, no del kanban: si el rail no la tingués, seria una divergència.
   await page.goto('/proof/calendar');
   await expect(
-    page.locator('[data-testid="inbox-rail"]').getByRole('button', { name: '→ Per fer' }).first(),
+    page.locator('[data-testid="inbox-rail"] [data-testid="card-advance"]').first(),
   ).toBeVisible();
 });
 

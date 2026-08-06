@@ -162,9 +162,15 @@ export function KanbanBoard({
           onOpen={() => onOpen?.(task.id)}
           onToggleDone={() => onToggleDone?.(task.id)}
           onChanged={() => onChanged?.()}
-          // Accions ràpides NOMÉS a l'Inbox (docs/02 §4). L'Inbox el pinta InboxRail,
-          // o sigui que aquí mai n'hi ha.
-          quickActions={[]}
+          /**
+           * La fletxa **només a "Per fer"**: mou a "Fent".
+           *
+           * A "Fent" i a "Fet" la barra de la dreta és la casella d'estat, que és on
+           * acaba el recorregut. L'Inbox el pinta InboxRail i té la seva.
+           */
+          onAdvance={
+            task.status === 'todo' ? () => onMove?.(task.id, 'doing') : undefined
+          }
         />
       </DraggableCard>
     );

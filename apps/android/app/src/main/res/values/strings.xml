@@ -33,8 +33,7 @@
     <string name="ai_proof_togglelease">Reserva</string>
     <string name="ai_unseen">Hi ha hagut un canvi autònom que no has vist</string>
     <string name="app_name">Fem-ho</string>
-    <string name="board_card_todoing">→ Fent</string>
-    <string name="board_card_totodo">→ Per fer</string>
+    <string name="board_card_advance">Moure a {column}</string>
     <string name="board_column_doing">Fent</string>
     <string name="board_column_done">Fet</string>
     <string name="board_column_inbox">Inbox</string>

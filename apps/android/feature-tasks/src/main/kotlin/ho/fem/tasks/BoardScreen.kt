@@ -40,8 +40,8 @@ import ho.fem.model.TaskStatus
 data class BoardLabels(
     val columns: Map<TaskStatus, String>,
     val empty: Map<TaskStatus, String>,
-    val toTodo: String,
-    val toDoing: String,
+    /** "Moure a {columna}", per a la fletxa de la barra dreta. Ja resolt per columna. */
+    val advance: Map<TaskStatus, String>,
     val toggle: String,
 )
 
@@ -145,6 +145,16 @@ fun BoardScreen(
                             toggleLabel = labels.toggle,
                             onToggle = { onToggle(task) },
                             onOpen = { onOpen(task) },
+                            /**
+                             * La fletxa **només fins a "Fent"**: a "Fent" i a "Fet" la
+                             * barra és la casella d'estat, que és on acaba el recorregut.
+                             */
+                            onAdvance = when (status) {
+                                TaskStatus.INBOX -> ({ onMove(task, TaskStatus.TODO) })
+                                TaskStatus.TODO -> ({ onMove(task, TaskStatus.DOING) })
+                                else -> null
+                            },
+                            advanceLabel = labels.advance[status].orEmpty(),
                             onEdit = extra?.onEdit,
                             editLabel = extra?.editLabel.orEmpty(),
                             lists = extra?.lists.orEmpty(),
@@ -152,15 +162,6 @@ fun BoardScreen(
                             listsToggleLabel = extra?.toggleLabel,
                             onToggleLists = { extra?.onToggleLists?.invoke() },
                             addForm = extra?.addForm,
-                            // Accions ràpides NOMÉS a l'Inbox, com a la web.
-                            quickActions = if (status == TaskStatus.INBOX) {
-                                listOf(
-                                    labels.toTodo to { onMove(task, TaskStatus.TODO) },
-                                    labels.toDoing to { onMove(task, TaskStatus.DOING) },
-                                )
-                            } else {
-                                emptyList()
-                            },
                             modifier = Modifier.padding(bottom = 0.dp),
                         )
                     }
