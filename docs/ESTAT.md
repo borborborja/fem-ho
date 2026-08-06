@@ -27,10 +27,10 @@ npm run test:proxy-matrix    # CalDAV i SSE darrere de nginx i Caddy
 | --- | --- |
 | Construcció des de zero | contracts → server → web |
 | Tipus · estil | 0 · 0 |
-| Proves unitàries · SQLite | 617 |
-| Proves unitàries · Postgres | 638 |
+| Proves unitàries · SQLite | 631 |
+| Proves unitàries · Postgres | 645 |
 | Comprovacions permanents | 9 de 9 |
-| Proves de navegador | 66, de les quals 21 contra el servidor real |
+| Proves de navegador | 68, de les quals 24 contra el servidor real |
 | Proves de Kotlin | 30 |
 | APK de depuració | es construeix |
 | Primer arrencament amb Compose | 13 comprovacions |
