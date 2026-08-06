@@ -70,6 +70,8 @@
     <string name="calendar_selectedday">{day} de {month}</string>
     <string name="calendar_week">Setmanal</string>
     <string name="calendar_weekdays">dl,dt,dc,dj,dv,ds,dg</string>
+    <string name="card_lists_collapsed">▸ Llistes ({count})</string>
+    <string name="card_lists_expanded">▾ Llistes ({count})</string>
     <string name="checklist_additem">+ Afegir ítem…</string>
     <string name="checklist_completed">Completats</string>
     <string name="checklist_completedinline">En línia</string>

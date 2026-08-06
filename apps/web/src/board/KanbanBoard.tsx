@@ -10,13 +10,8 @@
 import { useState, type ReactNode } from 'react';
 import { t } from '@fem-ho/contracts';
 import type { TaskStatus } from '@fem-ho/contracts';
-import {
-  EmptyState,
-  KanbanColumn,
-  KanbanGroup,
-  ScopeGroupHeader,
-  TaskCard,
-} from '@fem-ho/design-system/femho';
+import { EmptyState, KanbanColumn, KanbanGroup, ScopeGroupHeader } from '@fem-ho/design-system/femho';
+import { BoardCard } from './BoardCard.js';
 import { BoardDnd, DraggableCard, DroppableColumn } from './dnd.js';
 import { InboxRail } from './InboxRail.js';
 
@@ -30,7 +25,8 @@ export interface BoardTask {
   time?: string | undefined;
   aiMode?: 'manual' | 'assisted' | 'delegated' | undefined;
   hasUnseenAiChange?: boolean | undefined;
-  checklistProgress?: string | undefined;
+  /** Subtasques i ítems de llista, comptats junts. Ve de `/board` com a agregat. */
+  progress?: { done: number; total: number; lists: number } | undefined;
 }
 
 export interface BoardScope {
@@ -63,6 +59,8 @@ export interface KanbanBoardProps {
    * completa.
    */
   renderFooter?: (status: TaskStatus) => ReactNode;
+  /** Alguna cosa ha canviat dins d'una targeta: cal refrescar el recompte del tauler. */
+  onChanged?: () => void;
   /**
    * El kanban de la IA.
    *
@@ -94,6 +92,7 @@ export function KanbanBoard({
   doneHeaderActions,
   onDrop,
   renderFooter,
+  onChanged,
   aiBoard = false,
   flip,
 }: KanbanBoardProps) {
@@ -106,26 +105,13 @@ export function KanbanBoard({
 
     const cardFor = (task: BoardTask) => (
       <DraggableCard key={task.id} id={task.id} testId={`task-${task.id}`}>
-        <TaskCard
-          data-status={task.status}
-          title={task.title}
-          project={task.project}
-          assigneeInitials={task.assigneeInitials}
-          time={task.time}
-          aiMode={task.aiMode ?? 'manual'}
-          aiModeLabel={
-            task.aiMode === 'delegated'
-              ? t('ai.mode.delegated')
-              : task.aiMode === 'assisted'
-                ? t('ai.mode.assisted')
-                : undefined
-          }
-          hasUnseenAiChange={task.hasUnseenAiChange ?? false}
-          checklistProgress={task.checklistProgress}
+        <BoardCard
+          task={task}
+          progress={task.progress ?? { done: 0, total: 0, lists: 0 }}
           dragging={draggingId === task.id}
-          done={task.status === 'done'}
           onOpen={() => onOpen?.(task.id)}
           onToggleDone={() => onToggleDone?.(task.id)}
+          onChanged={() => onChanged?.()}
           // Accions ràpides NOMÉS a l'Inbox (docs/02 §4). L'Inbox el pinta InboxRail,
           // o sigui que aquí mai n'hi ha.
           quickActions={[]}
@@ -230,6 +216,10 @@ export function KanbanBoard({
               onMove={(taskId, status) => onMove?.(taskId, status)}
               onOpen={onOpen}
               onToggleDone={onToggleDone}
+              // L'Inbox també porta el seu peu d'afegida ràpida. Es passa des d'aquí i
+              // no des de dins d'InboxRail perquè el rail també viu al calendari, on el
+              // peu és un altre.
+              footer={renderFooter?.('inbox')}
               wrapCard={(task, card) => (
                 <DraggableCard key={task.id} id={task.id} testId={`task-${task.id}`}>
                   {card}
@@ -267,8 +257,14 @@ export function KanbanBoard({
           <div
             data-ai-board={aiBoard ? 'true' : 'false'}
             style={{
-              transform: flip?.transform ?? 'rotateY(0deg)',
-              transition: flip?.transition ?? 'transform 260ms cubic-bezier(0.2,0,0,1)',
+              /**
+               * En repòs, **cap transformada**: `rotateY(0deg)` és visualment el mateix
+               * que no tenir-ne, però és una transformada 3D i promou la capa, i llavors
+               * Chromium deixa de fer suavitzat de subpíxel i tot el text del tauler es
+               * veu més prim. Es posa només mentre gira.
+               */
+              transform: flip?.transform ?? 'none',
+              transition: flip?.transition,
             }}
           >
             <KanbanGroup borderColor={aiBoard ? 'var(--plou-blue-ink)' : undefined}>

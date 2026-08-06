@@ -1,4 +1,5 @@
 import React from 'react';
+import { ChecklistRow } from './ChecklistRow.jsx';
 
 /**
  * TaskCard — la targeta del kanban.
@@ -25,6 +26,11 @@ export function TaskCard({
   aiModeLabel,
   quickActions = [],
   checklistProgress,
+  lists,
+  listsExpanded = false,
+  listsToggleLabel,
+  onToggleLists,
+  addForm,
   hasUnseenAiChange = false,
   dragging = false,
   onOpen,
@@ -236,6 +242,193 @@ export function TaskCard({
             </span>
           </button>
         </div>
+
+        {/*
+          Les subtasques i les llistes, desplegades a la mateixa targeta.
+          **Un sol commutador per a totes dues.** Per a qui mira el tauler són el
+          mateix: coses que falten dins d'aquesta tasca. La distinció —una subtasca no
+          té nom, una llista sí— es veu dins, a l'epígraf de cada bloc.
+        */}
+        {listsToggleLabel === undefined ? null : (
+          <button
+            type="button"
+            onClick={onToggleLists}
+            aria-expanded={listsExpanded}
+            data-testid="card-lists-toggle"
+            style={{
+              alignSelf: 'flex-start',
+              fontSize: 11,
+              fontWeight: 700,
+              color: 'var(--ink-soft)',
+              padding: '2px 0',
+              border: 'none',
+              background: 'transparent',
+              cursor: 'pointer',
+              fontFamily: 'var(--font-sans)',
+            }}
+          >
+            {listsToggleLabel}
+          </button>
+        )}
+
+        {listsExpanded && lists !== undefined
+          ? lists.map((list) => (
+              <div
+                key={list.id}
+                data-testid="card-list"
+                style={{
+                  background: 'var(--tag-bg)',
+                  borderRadius: 12,
+                  padding: '8px 10px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 6,
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <div style={{ flex: 1, fontSize: 11.5, color: 'var(--ink-soft)' }}>
+                    {list.name === null || list.name === undefined || list.name === '' ? (
+                      <span
+                        style={{
+                          fontWeight: 600,
+                          textTransform: 'uppercase',
+                          fontSize: 9.5,
+                          letterSpacing: '0.04em',
+                        }}
+                      >
+                        {list.subtasksLabel}
+                      </span>
+                    ) : (
+                      <span style={{ fontWeight: 700, fontSize: 11.5, color: 'var(--ink)' }}>
+                        {list.name}
+                      </span>
+                    )}
+                  </div>
+                  {list.pinLabel === undefined ? null : (
+                    <button
+                      type="button"
+                      onClick={list.onPinToggle}
+                      style={{
+                        fontSize: 10.5,
+                        fontWeight: 700,
+                        color: 'var(--plou-blue-ink)',
+                        border: 'none',
+                        background: 'transparent',
+                        cursor: 'pointer',
+                        fontFamily: 'var(--font-sans)',
+                      }}
+                    >
+                      {list.pinLabel}
+                    </button>
+                  )}
+                </div>
+
+                {list.items.map((item) => (
+                  <ChecklistRow
+                    key={item.id}
+                    text={item.text}
+                    done={item.done}
+                    toggleLabel={item.toggleLabel}
+                    onToggle={item.onToggle}
+                    style={{ padding: '3px 0' }}
+                  />
+                ))}
+              </div>
+            ))
+          : null}
+
+        {/*
+          Afegir una subtasca o una llista sense sortir de la targeta.
+          El nom buit vol dir subtasca: és el que fa que les dues coses càpiguen en un
+          formulari en comptes de dos.
+        */}
+        {addForm !== undefined ? (
+          <>
+            {addForm.open ? (
+              <div
+                style={{
+                  background: 'var(--tag-bg)',
+                  borderRadius: 12,
+                  padding: '8px 10px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 6,
+                }}
+              >
+                <input
+                  className="plou-input"
+                  placeholder={addForm.listNamePlaceholder}
+                  value={addForm.listName}
+                  onChange={addForm.onListName}
+                  style={{ fontSize: 11.5, padding: '6px 10px' }}
+                />
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <input
+                    className="plou-input"
+                    placeholder={addForm.itemPlaceholder}
+                    value={addForm.itemText}
+                    onChange={addForm.onItemText}
+                    onKeyDown={addForm.onItemKeyDown}
+                    data-testid="card-add-item"
+                    style={{ flex: 1, fontSize: 12, padding: '6px 10px' }}
+                  />
+                  <button
+                    type="button"
+                    onClick={addForm.onSubmit}
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: 'var(--plou-blue-ink)',
+                      padding: '0 4px',
+                      border: 'none',
+                      background: 'transparent',
+                      cursor: 'pointer',
+                      fontFamily: 'var(--font-sans)',
+                    }}
+                  >
+                    {addForm.submitLabel}
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+            <button
+              type="button"
+              onClick={addForm.onToggle}
+              data-testid="card-add-toggle"
+              style={{
+                alignSelf: 'flex-start',
+                fontSize: 11,
+                fontWeight: 600,
+                color: 'var(--ink-faint)',
+                padding: '1px 0',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                border: 'none',
+                background: 'transparent',
+                cursor: 'pointer',
+                fontFamily: 'var(--font-sans)',
+              }}
+            >
+              <svg
+                width="11"
+                height="11"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M12 5v14" />
+                <path d="M5 12h14" />
+              </svg>
+              {addForm.toggleLabel}
+            </button>
+          </>
+        ) : null}
 
         {/* Accions ràpides: NOMÉS a les targetes de l'Inbox (docs/02 §4). */}
         {quickActions.length > 0 ? (

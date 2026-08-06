@@ -58,7 +58,7 @@ export interface Task extends TaskRow {
    * targetes faria que una casa amb tres-centes tasques baixés uns quants milers de
    * files per pintar unes quantes pastilles.
    */
-  progress: { done: number; total: number };
+  progress: { done: number; total: number; lists: number };
 }
 
 const TASK_COLUMNS = sql`
@@ -102,6 +102,26 @@ async function withAssignees(db: MigrationDb, rows: TaskRow[]): Promise<Task[]> 
     GROUP BY task_id
   `.execute(db);
 
+  /**
+   * I quants **blocs** hi ha, que no és el mateix que quants ítems.
+   *
+   * El commutador de la targeta diu "Llistes (2)": les subtasques compten com un bloc
+   * —totes juntes, sense nom— i cada llista com un altre. Sense aquest número, saber-lo
+   * obligaria a baixar les llistes de cada targeta, que és justament el que l'agregat
+   * evita.
+   */
+  const blocks = await sql<{ task_id: string; lists: number }>`
+    SELECT task_id, SUM(n) AS lists FROM (
+      SELECT DISTINCT task_id, 1 AS n FROM subtasks
+      WHERE deleted_at IS NULL AND task_id IN (${sql.join(ids)})
+      UNION ALL
+      SELECT task_id, 1 AS n FROM checklists
+      WHERE deleted_at IS NULL AND task_id IN (${sql.join(ids)})
+    ) AS l
+    GROUP BY task_id
+  `.execute(db);
+
+  const listCounts = new Map(blocks.rows.map((row) => [row.task_id, Number(row.lists)]));
   const counts = new Map(
     progress.rows.map((row) => [row.task_id, { done: Number(row.done), total: Number(row.total) }]),
   );
@@ -109,7 +129,10 @@ async function withAssignees(db: MigrationDb, rows: TaskRow[]): Promise<Task[]> 
   return rows.map((row) => ({
     ...row,
     assignee_ids: (byTask.get(row.id) ?? []).sort(),
-    progress: counts.get(row.id) ?? { done: 0, total: 0 },
+    progress: {
+      ...(counts.get(row.id) ?? { done: 0, total: 0 }),
+      lists: listCounts.get(row.id) ?? 0,
+    },
   }));
 }
 

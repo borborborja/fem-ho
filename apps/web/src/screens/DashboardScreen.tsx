@@ -17,14 +17,17 @@ import { useSessionData } from '../app/session.js';
 import { useApi } from '../app/useApi.js';
 import type { Dashboard, Task } from '../app/types.js';
 import { QuickAdd } from '../board/QuickAdd.js';
+import { PlusIcon } from '../board/ColumnQuickAdd.js';
 import { ErrorBanner } from './BoardScreen.js';
 
 export interface DashboardScreenProps {
   onOpenTask: (id: string) => void;
   onPickScope: (scopeId: string) => void;
+  /** L'edició completa des de l'afegida ràpida, com a cada columna del tauler. */
+  onNewTask: () => void;
 }
 
-export function DashboardScreen({ onOpenTask, onPickScope }: DashboardScreenProps) {
+export function DashboardScreen({ onOpenTask, onPickScope, onNewTask }: DashboardScreenProps) {
   const { scopes, projects, people, settings } = useSessionData();
   const dashboard = useApi<Dashboard>('/api/v1/dashboard');
 
@@ -91,7 +94,8 @@ export function DashboardScreen({ onOpenTask, onPickScope }: DashboardScreenProp
     >
       {dashboard.error !== undefined ? <ErrorBanner onRetry={dashboard.reload} /> : null}
 
-      <div style={{ maxWidth: 620 }}>
+      <div style={{ maxWidth: 620, display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
         <QuickAdd
           context={context}
           columnLabel={t('dashboard.title')}
@@ -109,6 +113,29 @@ export function DashboardScreen({ onOpenTask, onPickScope }: DashboardScreenProp
               });
           }}
         />
+        </div>
+        <button
+          type="button"
+          data-testid="full-edit-dashboard"
+          title={t('board.fullEdit')}
+          aria-label={t('board.fullEdit')}
+          onClick={onNewTask}
+          style={{
+            width: 38,
+            height: 38,
+            borderRadius: '50%',
+            border: 'none',
+            background: 'var(--tag-bg)',
+            color: 'var(--ink-soft)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
+            cursor: 'pointer',
+          }}
+        >
+          <PlusIcon />
+        </button>
       </div>
 
       <div

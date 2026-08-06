@@ -2113,6 +2113,12 @@ export interface components {
             progress?: {
                 done: number;
                 total: number;
+                /**
+                 * @description Quants blocs desplegables té la targeta: un per les subtasques, si en té,
+                 *     i un per cada llista. És el número del commutador "Llistes (2)", que
+                 *     compta blocs i no ítems.
+                 */
+                lists: number;
             };
             /** @description Persones. El brief demana "persona o persones". */
             assignee_ids?: string[];

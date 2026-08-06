@@ -77,6 +77,8 @@
   "calendar.selectedDay": "{day} de {month}",
   "calendar.week": "Setmanal",
   "calendar.weekdays": "dl,dt,dc,dj,dv,ds,dg",
+  "card.lists.collapsed": "▸ Llistes ({count})",
+  "card.lists.expanded": "▾ Llistes ({count})",
   "checklist.addItem": "+ Afegir ítem…",
   "checklist.completed": "Completats",
   "checklist.completedInline": "En línia",

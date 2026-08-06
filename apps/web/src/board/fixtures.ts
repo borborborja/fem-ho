@@ -38,7 +38,7 @@ export const SAMPLE_TASKS: BoardTask[] = [
     title: 'Comprar per al cap de setmana',
     status: 'todo',
     scope_id: 'familia',
-    checklistProgress: '3/7',
+    progress: { done: 3, total: 7, lists: 2 },
   },
   {
     id: '6',

@@ -152,6 +152,7 @@ export function CalendarScreen({ activeScopeIds, onOpenTask }: CalendarScreenPro
         month: months[Number(selected.slice(5, 7)) - 1] ?? '',
       })}
       onOpen={onOpenTask}
+      onChanged={inbox.reload}
       onMove={(taskId, status) => {
         void api.post(`/api/v1/tasks/${taskId}/move`, { status }).then(() => {
           inbox.reload();

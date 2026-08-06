@@ -124,6 +124,9 @@ function AppShell() {
             transform: 'rotateY(0deg)',
             transition: 'transform 240ms cubic-bezier(0,0,0.2,1)',
           });
+          // I en acabar, es treu del tot: mentre hi hagi una transformada 3D, la capa
+          // queda promoguda i el text del tauler perd el suavitzat de subpíxel.
+          setTimeout(() => setFlip(undefined), 260);
         });
       });
     }, 240);
@@ -239,6 +242,7 @@ function AppShell() {
         ) : route.path === '/dashboard' ? (
           <DashboardScreen
             onOpenTask={setOpenTask}
+            onNewTask={() => setNewTask({ status: 'inbox', forAi: false })}
             onPickScope={(scopeId) => {
               navigate(`/?scopes=${scopeId}`);
             }}

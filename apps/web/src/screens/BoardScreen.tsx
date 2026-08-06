@@ -44,6 +44,7 @@ function toBoardTask(task: Task, projectName: string | undefined, initials: stri
     assigneeInitials: initials,
     time: task.due_time ?? undefined,
     aiMode: task.ai_mode,
+    progress: task.progress,
   };
 }
 
@@ -243,7 +244,9 @@ export function BoardScreen({
         aiBoard={aiBoard}
         flip={flip}
         renderFooter={(status) =>
-          aiBoard ? (
+          // L'Inbox conserva l'afegida ràpida als dos taulers: és l'entrada de tot, i al
+          // tauler de la IA no hi ha cap columna d'inbox pròpia — és la mateixa.
+          aiBoard && status !== 'inbox' ? (
             <button
               type="button"
               data-testid={`ai-new-task-${status}`}
@@ -276,7 +279,9 @@ export function BoardScreen({
               context={context}
               scopes={scopes}
               onCreate={(task) => void create(task, status)}
-              onFullEdit={() => onNewTask(status, false)}
+              // Des del tauler de la IA, el formulari s'obre ja amb els camps d'IA
+              // desplegats: és l'únic peu que hi queda i seria absurd que no ho fes.
+              onFullEdit={() => onNewTask(status, aiBoard)}
             />
           )
         }
@@ -289,6 +294,7 @@ export function BoardScreen({
         collapsed={collapsed}
         onToggleGroup={toggleGroup}
         onOpen={onOpenTask}
+        onChanged={board.reload}
         onDrop={(taskId, status) => void move(taskId, status)}
         onMove={(taskId, status) => void move(taskId, status)}
         onToggleDone={(taskId) => {

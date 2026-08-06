@@ -1,5 +1,11 @@
 export { TaskCard } from './TaskCard.js';
-export type { TaskCardProps, QuickAction } from './TaskCard.js';
+export type {
+  TaskCardProps,
+  QuickAction,
+  CardList,
+  CardListItem,
+  CardAddForm,
+} from './TaskCard.js';
 export { KanbanColumn, KanbanGroup, ScopeGroupHeader } from './KanbanColumn.js';
 export type { KanbanColumnProps, KanbanGroupProps, ScopeGroupHeaderProps } from './KanbanColumn.js';
 export { EmptyState } from './EmptyState.js';

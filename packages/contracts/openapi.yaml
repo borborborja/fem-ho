@@ -3157,7 +3157,7 @@ components:
           description: La instància de la qual ve, si n'és una repetició.
         progress:
           type: object
-          required: [done, total]
+          required: [done, total, lists]
           description: |
             Subtasques i ítems de llista **comptats junts**. La targeta els ensenya sota
             un sol commutador ("3/7 fets") perquè per a qui mira el tauler són el mateix:
@@ -3168,6 +3168,12 @@ components:
           properties:
             done: { type: integer }
             total: { type: integer }
+            lists:
+              type: integer
+              description: |
+                Quants blocs desplegables té la targeta: un per les subtasques, si en té,
+                i un per cada llista. És el número del commutador "Llistes (2)", que
+                compta blocs i no ítems.
         assignee_ids:
           type: array
           items: { type: string }

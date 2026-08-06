@@ -368,3 +368,70 @@ describe('el commutador de completats', () => {
     expect(res.json<{ show_completed_inline: boolean }>().show_completed_inline).toBe(false);
   });
 });
+
+/**
+ * L'agregat que la targeta del tauler necessita per pintar-se **plegada**.
+ *
+ * Sense ell, saber si una tasca té llistes obligaria a baixar-les totes de totes les
+ * targetes. Per això el tauler porta els tres números fets: quants ítems hi ha, quants
+ * n'hi ha de fets, i quants **blocs** desplegables — que no és el mateix, perquè totes
+ * les subtasques compten com un de sol.
+ */
+describe("l'agregat de la targeta", () => {
+  it('compta subtasques i ítems junts, i els blocs a part', async () => {
+    const taskId = (
+      await api('POST', '/api/v1/tasks', { scope_id: scopeId, title: 'Amb de tot' })
+    ).json<{ id: string }>().id;
+
+    // Dues subtasques: un sol bloc.
+    for (const title of ['Una', 'Dues']) {
+      const res = await api('POST', `/api/v1/tasks/${taskId}/subtasks`, { title });
+      expect(res.statusCode, res.body).toBe(201);
+    }
+
+    // I una llista amb tres ítems: un altre bloc.
+    const listId = (
+      await api('POST', `/api/v1/tasks/${taskId}/checklists`, { name: 'La compra' })
+    ).json<{ id: string }>().id;
+    const itemIds: string[] = [];
+    for (const text of ['Pa', 'Llet', 'Ous']) {
+      itemIds.push(
+        (await api('POST', `/api/v1/checklists/${listId}/items`, { text })).json<{ id: string }>()
+          .id,
+      );
+    }
+
+    await api('PATCH', `/api/v1/checklist-items/${itemIds[0]}`, { done: true });
+
+    const tasca = await api('GET', `/api/v1/tasks/${taskId}`);
+    const progress = tasca.json<{ progress: { done: number; total: number; lists: number } }>()
+      .progress;
+    expect(progress.total).toBe(5);
+    expect(progress.done).toBe(1);
+    // Dos blocs: el de les subtasques i la llista. No cinc.
+    expect(progress.lists).toBe(2);
+  });
+
+  it('una tasca pelada no en té cap', async () => {
+    const taskId = (
+      await api('POST', '/api/v1/tasks', { scope_id: scopeId, title: 'Pelada' })
+    ).json<{ id: string }>().id;
+
+    const progress = (await api('GET', `/api/v1/tasks/${taskId}`)).json<{
+      progress: { done: number; total: number; lists: number };
+    }>().progress;
+    expect(progress).toEqual({ done: 0, total: 0, lists: 0 });
+  });
+
+  it('una llista buida ja compta com a bloc: hi ha alguna cosa a desplegar', async () => {
+    const taskId = (
+      await api('POST', '/api/v1/tasks', { scope_id: scopeId, title: 'Llista buida' })
+    ).json<{ id: string }>().id;
+    await api('POST', `/api/v1/tasks/${taskId}/checklists`, { name: 'Encara res' });
+
+    const progress = (await api('GET', `/api/v1/tasks/${taskId}`)).json<{
+      progress: { done: number; total: number; lists: number };
+    }>().progress;
+    expect(progress).toEqual({ done: 0, total: 0, lists: 1 });
+  });
+});

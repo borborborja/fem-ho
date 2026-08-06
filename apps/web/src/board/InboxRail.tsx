@@ -17,7 +17,8 @@
 
 import type { ReactNode } from 'react';
 import { t } from '@fem-ho/contracts';
-import { EmptyState, KanbanColumn, ScopeGroupHeader, TaskCard } from '@fem-ho/design-system/femho';
+import { EmptyState, KanbanColumn, ScopeGroupHeader } from '@fem-ho/design-system/femho';
+import { BoardCard } from './BoardCard.js';
 import type { BoardScope, BoardTask } from './KanbanBoard.js';
 
 export interface InboxRailProps {
@@ -44,6 +45,8 @@ export interface InboxRailProps {
   onMove?: ((taskId: string, status: 'todo' | 'doing') => void) | undefined;
   onOpen?: ((taskId: string) => void) | undefined;
   onToggleDone?: ((taskId: string) => void) | undefined;
+  /** Alguna cosa ha canviat dins d'una targeta: cal refrescar el recompte. */
+  onChanged?: (() => void) | undefined;
   /** Embolcall de cada targeta. El kanban hi posa l'arrossegable; el rail, no. */
   wrapCard?: ((task: BoardTask, card: ReactNode) => ReactNode) | undefined;
 }
@@ -61,32 +64,20 @@ export function InboxRail({
   onMove,
   onOpen,
   onToggleDone,
+  onChanged,
   wrapCard,
 }: InboxRailProps) {
   const grouped = scopes.length > 1;
 
   const cardFor = (task: BoardTask): ReactNode => {
     const card = (
-      <TaskCard
+      <BoardCard
         key={task.id}
-        data-status={task.status}
-        title={task.title}
-        project={task.project}
-        assigneeInitials={task.assigneeInitials}
-        time={task.time}
-        aiMode={task.aiMode ?? 'manual'}
-        aiModeLabel={
-          task.aiMode === 'delegated'
-            ? t('ai.mode.delegated')
-            : task.aiMode === 'assisted'
-              ? t('ai.mode.assisted')
-              : undefined
-        }
-        hasUnseenAiChange={task.hasUnseenAiChange ?? false}
-        checklistProgress={task.checklistProgress}
-        done={task.status === 'done'}
+        task={task}
+        progress={task.progress ?? { done: 0, total: 0, lists: 0 }}
         onOpen={() => onOpen?.(task.id)}
         onToggleDone={() => onToggleDone?.(task.id)}
+        onChanged={() => onChanged?.()}
         quickActions={[
           { label: t('board.card.toTodo'), onClick: () => onMove?.(task.id, 'todo') },
           { label: t('board.card.toDoing'), onClick: () => onMove?.(task.id, 'doing') },
