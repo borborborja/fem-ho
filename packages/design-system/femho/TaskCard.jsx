@@ -1,5 +1,107 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { ChecklistRow } from './ChecklistRow.jsx';
+import { useIsMobile } from './MentionPopover.jsx';
+
+/** El llapis d'editar. Del disseny validat: 12px, traç 1.8. */
+function PencilIcon() {
+  return (
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+    </svg>
+  );
+}
+
+/** Llista amb un més: afegir una subtasca o una llista. */
+function ListPlusIcon() {
+  return (
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M4 6h9" />
+      <path d="M4 12h9" />
+      <path d="M4 18h5" />
+      <path d="M17 14v7" />
+      <path d="M13.5 17.5h7" />
+    </svg>
+  );
+}
+
+/** La xinxeta de pinejar. Plena quan ho està. */
+function PinIcon({ size = 13, filled = false }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill={filled ? 'currentColor' : 'none'}
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M12 21s-6-5.686-6-10a6 6 0 1 1 12 0c0 4.314-6 10-6 10Z" />
+      <circle cx="12" cy="11" r="2" />
+    </svg>
+  );
+}
+
+/** El botó rodó de 20px de la cantonada, que apareix en passar-hi per sobre. */
+function CardAction({ label, onClick, revealed, testId, color, children }) {
+  return (
+    <button
+      type="button"
+      onClick={(event) => {
+        // La targeta sencera obre el modal: aquestes accions no l'han de disparar.
+        event.stopPropagation();
+        onClick?.();
+      }}
+      title={label}
+      aria-label={label}
+      data-testid={testId}
+      style={{
+        width: 20,
+        height: 20,
+        borderRadius: '50%',
+        border: 'none',
+        background: 'transparent',
+        padding: 0,
+        cursor: 'pointer',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexShrink: 0,
+        color: color ?? 'var(--ink-faint)',
+        opacity: revealed ? 1 : 0,
+        // Amagat de veritat mentre no es revela: si només fos transparent, el ratolí
+        // i el lector de pantalla hi arribarien igual i el cursor canviaria sol.
+        pointerEvents: revealed ? 'auto' : 'none',
+        transition: 'opacity 150ms',
+      }}
+    >
+      {children}
+    </button>
+  );
+}
 
 /**
  * TaskCard — la targeta del kanban.
@@ -31,6 +133,9 @@ export function TaskCard({
   listsToggleLabel,
   onToggleLists,
   addForm,
+  /** Les accions que surten a la cantonada en passar-hi per sobre. */
+  onEdit,
+  editLabel,
   hasUnseenAiChange = false,
   dragging = false,
   onOpen,
@@ -39,8 +144,26 @@ export function TaskCard({
   style,
   ...rest
 }) {
+  /**
+   * Les accions de la cantonada surten **en passar-hi per sobre**, com al disseny.
+   *
+   * Al mòbil no hi ha ratolí, i el disseny mòbil les pinta sempre; aquí es fa igual.
+   * I es revelen també amb el focus del teclat: una acció que només existeix amb el
+   * ratolí no la pot fer qui navega amb tabulador, i aquí n'hi ha dues que no tenen
+   * cap altre camí.
+   */
+  const mobile = useIsMobile();
+  const [active, setActive] = useState(false);
+  const revealed = mobile || active;
+
   return (
     <div
+      onMouseEnter={() => setActive(true)}
+      onMouseLeave={() => setActive(false)}
+      onFocus={() => setActive(true)}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) setActive(false);
+      }}
       style={{
         background: 'var(--card-bg)',
         border: '1px solid var(--card-border)',
@@ -79,12 +202,58 @@ export function TaskCard({
           flex: 1,
           minWidth: 0,
           padding: 12,
+          position: 'relative',
           display: 'flex',
           flexDirection: 'column',
           gap: 9,
         }}
       >
-        <div style={{ display: 'flex', gap: 9, alignItems: 'flex-start' }}>
+        {/*
+          Les accions de la targeta, a la cantonada. `paddingRight` a la fila del títol
+          perquè el text no hi passi per sota: les icones són absolutes i no aparten res.
+        */}
+        <div
+          style={{
+            position: 'absolute',
+            top: 10,
+            right: 10,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 4,
+            zIndex: 1,
+          }}
+        >
+          {onEdit === undefined ? null : (
+            <CardAction
+              label={editLabel}
+              onClick={onEdit}
+              revealed={revealed}
+              testId="card-edit"
+            >
+              <PencilIcon />
+            </CardAction>
+          )}
+          {addForm === undefined ? null : (
+            <CardAction
+              label={addForm.toggleLabel}
+              onClick={addForm.onToggle}
+              revealed={revealed}
+              testId="card-add-toggle"
+            >
+              <ListPlusIcon />
+            </CardAction>
+          )}
+        </div>
+
+        <div
+          style={{
+            display: 'flex',
+            gap: 9,
+            alignItems: 'flex-start',
+            // 66px: dues icones de 20 amb 4 de separació, i aire fins a la vora.
+            paddingRight: onEdit === undefined && addForm === undefined ? 0 : 66,
+          }}
+        >
           {/* Cercle d'estat de 22px. Clicar-lo NOMÉS commuta l'estat i no obre res
               (docs/02 §4). */}
           <button
@@ -271,163 +440,108 @@ export function TaskCard({
           </button>
         )}
 
-        {listsExpanded && lists !== undefined
-          ? lists.map((list) => (
-              <div
-                key={list.id}
-                data-testid="card-list"
-                style={{
-                  background: 'var(--tag-bg)',
-                  borderRadius: 12,
-                  padding: '8px 10px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 6,
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <div style={{ flex: 1, fontSize: 11.5, color: 'var(--ink-soft)' }}>
-                    {list.name === null || list.name === undefined || list.name === '' ? (
-                      <span
-                        style={{
-                          fontWeight: 600,
-                          textTransform: 'uppercase',
-                          fontSize: 9.5,
-                          letterSpacing: '0.04em',
-                        }}
-                      >
-                        {list.subtasksLabel}
-                      </span>
-                    ) : (
-                      <span style={{ fontWeight: 700, fontSize: 11.5, color: 'var(--ink)' }}>
-                        {list.name}
-                      </span>
-                    )}
-                  </div>
-                  {list.pinLabel === undefined ? null : (
-                    <button
-                      type="button"
-                      onClick={list.onPinToggle}
+        {/*
+          La secció desplegada, amb l'entrada de 200ms del disseny.
+
+          **Les subtasques van nues i les llistes en caixa.** Al disseny anterior totes
+          dues portaven caixa i epígraf; ara la distinció es veu sense dir-la: el que no
+          té nom és el que pertoca a la tasca i prou, i posar-hi "SUBTASQUES" a sobre era
+          etiquetar l'obvi dins d'una targeta que ja va justa d'espai.
+        */}
+        {(listsExpanded && lists !== undefined && lists.length > 0) || addForm?.open === true ? (
+          <div
+            className="femho-list-in"
+            style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingTop: 2 }}
+          >
+            {listsExpanded && lists !== undefined
+              ? lists.map((list) =>
+                  list.name === null || list.name === undefined || list.name === '' ? (
+                    <div
+                      key={list.id}
+                      data-testid="card-list"
+                      style={{ display: 'flex', flexDirection: 'column', gap: 5 }}
+                    >
+                      {list.items.map((item) => (
+                        <ChecklistRow
+                          key={item.id}
+                          text={item.text}
+                          done={item.done}
+                          toggleLabel={item.toggleLabel}
+                          onToggle={item.onToggle}
+                          style={{ padding: 0 }}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <div
+                      key={list.id}
+                      data-testid="card-list"
                       style={{
-                        fontSize: 10.5,
-                        fontWeight: 700,
-                        color: 'var(--plou-blue-ink)',
-                        border: 'none',
-                        background: 'transparent',
-                        cursor: 'pointer',
-                        fontFamily: 'var(--font-sans)',
+                        background: 'var(--tag-bg)',
+                        borderRadius: 12,
+                        padding: '8px 10px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 6,
                       }}
                     >
-                      {list.pinLabel}
-                    </button>
-                  )}
-                </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--ink)' }}>
+                          {list.name}
+                        </div>
+                        {list.pinLabel === undefined ? null : (
+                          <CardAction
+                            label={list.pinLabel}
+                            onClick={list.onPinToggle}
+                            testId={`card-list-pin-${list.id}`}
+                            // Una llista pinejada ho ensenya sempre: si només es veiés
+                            // passant-hi per sobre, no hi hauria manera de saber quines
+                            // ho estan sense recórrer-les una per una.
+                            revealed={revealed || list.pinned === true}
+                            color={
+                              list.pinned === true ? 'var(--plou-blue-ink)' : 'var(--ink-faint)'
+                            }
+                          >
+                            <PinIcon filled={list.pinned === true} />
+                          </CardAction>
+                        )}
+                      </div>
 
-                {list.items.map((item) => (
-                  <ChecklistRow
-                    key={item.id}
-                    text={item.text}
-                    done={item.done}
-                    toggleLabel={item.toggleLabel}
-                    onToggle={item.onToggle}
-                    style={{ padding: '3px 0' }}
-                  />
-                ))}
-              </div>
-            ))
-          : null}
+                      {list.items.map((item) => (
+                        <ChecklistRow
+                          key={item.id}
+                          text={item.text}
+                          done={item.done}
+                          toggleLabel={item.toggleLabel}
+                          onToggle={item.onToggle}
+                          style={{ padding: '3px 0' }}
+                        />
+                      ))}
+                    </div>
+                  ),
+                )
+              : null}
 
-        {/*
-          Afegir una subtasca o una llista sense sortir de la targeta.
-          El nom buit vol dir subtasca: és el que fa que les dues coses càpiguen en un
-          formulari en comptes de dos.
-        */}
-        {addForm !== undefined ? (
-          <>
-            {addForm.open ? (
-              <div
-                style={{
-                  background: 'var(--tag-bg)',
-                  borderRadius: 12,
-                  padding: '8px 10px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 6,
-                }}
-              >
-                <input
-                  className="plou-input"
-                  placeholder={addForm.listNamePlaceholder}
-                  value={addForm.listName}
-                  onChange={addForm.onListName}
-                  style={{ fontSize: 11.5, padding: '6px 10px' }}
-                />
-                <div style={{ display: 'flex', gap: 6 }}>
-                  <input
-                    className="plou-input"
-                    placeholder={addForm.itemPlaceholder}
-                    value={addForm.itemText}
-                    onChange={addForm.onItemText}
-                    onKeyDown={addForm.onItemKeyDown}
-                    data-testid="card-add-item"
-                    style={{ flex: 1, fontSize: 12, padding: '6px 10px' }}
-                  />
-                  <button
-                    type="button"
-                    onClick={addForm.onSubmit}
-                    style={{
-                      fontSize: 11,
-                      fontWeight: 700,
-                      color: 'var(--plou-blue-ink)',
-                      padding: '0 4px',
-                      border: 'none',
-                      background: 'transparent',
-                      cursor: 'pointer',
-                      fontFamily: 'var(--font-sans)',
-                    }}
-                  >
-                    {addForm.submitLabel}
-                  </button>
-                </div>
-              </div>
+            {/*
+              Afegir, amb **un sol camp**.
+
+              `#Llista element` hi posa l'ítem; sense sigil, és una subtasca. És el
+              mateix gest que l'afegida ràpida del peu de columna —escriure una línia i
+              prémer Enter— i per això el disseny va treure els dos camps i el botó.
+            */}
+            {addForm !== undefined && addForm.open ? (
+              <input
+                className="plou-input"
+                placeholder={addForm.placeholder}
+                value={addForm.text}
+                onChange={addForm.onText}
+                onKeyDown={addForm.onKeyDown}
+                data-testid="card-add-item"
+                autoFocus
+                style={{ fontSize: 12, padding: '7px 10px' }}
+              />
             ) : null}
-
-            <button
-              type="button"
-              onClick={addForm.onToggle}
-              data-testid="card-add-toggle"
-              style={{
-                alignSelf: 'flex-start',
-                fontSize: 11,
-                fontWeight: 600,
-                color: 'var(--ink-faint)',
-                padding: '1px 0',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 4,
-                border: 'none',
-                background: 'transparent',
-                cursor: 'pointer',
-                fontFamily: 'var(--font-sans)',
-              }}
-            >
-              <svg
-                width="11"
-                height="11"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <path d="M12 5v14" />
-                <path d="M5 12h14" />
-              </svg>
-              {addForm.toggleLabel}
-            </button>
-          </>
+          </div>
         ) : null}
 
         {/* Accions ràpides: NOMÉS a les targetes de l'Inbox (docs/02 §4). */}

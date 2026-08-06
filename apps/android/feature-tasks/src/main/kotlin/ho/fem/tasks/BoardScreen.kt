@@ -54,6 +54,9 @@ data class BoardLabels(
  * que la criden.
  */
 data class CardExtras(
+    /** El llapis de la cantonada: obre el detall sense haver de clicar la targeta. */
+    val onEdit: () -> Unit,
+    val editLabel: String,
     val lists: List<CardList>,
     val expanded: Boolean,
     val toggleLabel: String?,
@@ -142,6 +145,8 @@ fun BoardScreen(
                             toggleLabel = labels.toggle,
                             onToggle = { onToggle(task) },
                             onOpen = { onOpen(task) },
+                            onEdit = extra?.onEdit,
+                            editLabel = extra?.editLabel.orEmpty(),
                             lists = extra?.lists.orEmpty(),
                             listsExpanded = extra?.expanded == true,
                             listsToggleLabel = extra?.toggleLabel,

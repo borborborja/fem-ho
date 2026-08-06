@@ -1,5 +1,6 @@
 package ho.fem.designsystem
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -17,7 +18,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Fill
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -81,8 +89,11 @@ fun StatusCircle(
  */
 data class CardList(
     val id: String,
+    /** `null` per al bloc de subtasques: no en té, i per això va sense caixa. */
     val name: String?,
-    val subtasksLabel: String,
+    val pinned: Boolean = false,
+    val pinLabel: String? = null,
+    val onPinToggle: (() -> Unit)? = null,
     val items: List<CardListItem>,
 )
 
@@ -95,21 +106,17 @@ data class CardListItem(
 )
 
 /**
- * El formulari d'afegir de la targeta. **El nom buit vol dir subtasca**: és el que fa
- * que les dues coses càpiguen en un formulari en comptes de dos.
+ * El formulari d'afegir de la targeta. **Un sol camp**: `#Llista element` hi posa
+ * l'ítem, i sense sigil és una subtasca. És el mateix gest que l'afegida ràpida.
  */
 data class CardAddForm(
     val open: Boolean,
     val onToggle: () -> Unit,
     val toggleLabel: String,
-    val listNamePlaceholder: String,
-    val listName: String,
-    val onListName: (String) -> Unit,
-    val itemPlaceholder: String,
-    val itemText: String,
-    val onItemText: (String) -> Unit,
+    val placeholder: String,
+    val text: String,
+    val onText: (String) -> Unit,
     val onSubmit: () -> Unit,
-    val submitLabel: String,
 )
 
 /**
@@ -131,6 +138,9 @@ fun TaskCard(
     onToggle: () -> Unit = {},
     onOpen: () -> Unit = {},
     quickActions: List<Pair<String, () -> Unit>> = emptyList(),
+    /** El llapis de la cantonada. Al mòbil surt sempre: no hi ha ratolí per revelar-lo. */
+    onEdit: (() -> Unit)? = null,
+    editLabel: String = "",
     lists: List<CardList> = emptyList(),
     listsExpanded: Boolean = false,
     /**
@@ -153,7 +163,10 @@ fun TaskCard(
             .testTag("task-card"),
         verticalArrangement = Arrangement.spacedBy(FemhoSize.cardGap),
     ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(FemhoSize.cardGap)) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(FemhoSize.cardGap),
+            verticalAlignment = Alignment.Top,
+        ) {
             StatusCircle(done = done, contentDescription = toggleLabel, onClick = onToggle)
 
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -173,6 +186,33 @@ fun TaskCard(
                     }
                 }
             }
+
+            /**
+             * Les accions de la targeta.
+             *
+             * A la web surten en passar-hi el ratolí per sobre; **aquí surten sempre**,
+             * perquè en un telèfon no hi ha res a passar-hi. És el que fa el disseny
+             * mòbil, i és el mateix motiu pel qual les icones hi són a 19dp i no a 20.
+             */
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(3.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (onEdit != null) {
+                    CardActionIcon(
+                        label = editLabel,
+                        onClick = onEdit,
+                        testTag = "card-edit",
+                    ) { PencilGlyph() }
+                }
+                if (addForm != null) {
+                    CardActionIcon(
+                        label = addForm.toggleLabel,
+                        onClick = addForm.onToggle,
+                        testTag = "card-add-toggle",
+                    ) { ListPlusGlyph() }
+                }
+            }
         }
 
         if (listsToggleLabel != null) {
@@ -188,8 +228,31 @@ fun TaskCard(
             )
         }
 
+        /**
+         * **Les subtasques van nues i les llistes en caixa.**
+         *
+         * Al disseny anterior totes dues portaven caixa i epígraf; ara la distinció es
+         * veu sense dir-la: el que no té nom és el que pertoca a la tasca i prou.
+         */
         if (listsExpanded) {
             lists.forEach { list ->
+                if (list.name == null) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().testTag("card-list"),
+                        verticalArrangement = Arrangement.spacedBy(5.dp),
+                    ) {
+                        list.items.forEach { item ->
+                            ChecklistRow(
+                                text = item.text,
+                                done = item.done,
+                                toggleLabel = item.toggleLabel,
+                                onToggle = item.onToggle,
+                            )
+                        }
+                    }
+                    return@forEach
+                }
+
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -199,12 +262,29 @@ fun TaskCard(
                         .testTag("card-list"),
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    Text(
-                        text = list.name ?: list.subtasksLabel.uppercase(),
-                        color = if (list.name == null) Femho.colors.inkSoft else Femho.colors.ink,
-                        fontSize = FemhoText.meta,
-                        fontWeight = if (list.name == null) FontWeight.SemiBold else FontWeight.Bold,
-                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = list.name,
+                            color = Femho.colors.ink,
+                            fontSize = FemhoText.meta,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        if (list.pinLabel != null && list.onPinToggle != null) {
+                            CardActionIcon(
+                                label = list.pinLabel,
+                                onClick = list.onPinToggle,
+                                testTag = "card-list-pin",
+                                tint = if (list.pinned) {
+                                    Femho.colors.plouBlueInk
+                                } else {
+                                    Femho.colors.inkFaint
+                                },
+                            ) { PinGlyph(filled = list.pinned) }
+                        }
+                    }
                     list.items.forEach { item ->
                         ChecklistRow(
                             text = item.text,
@@ -218,58 +298,22 @@ fun TaskCard(
         }
 
         /**
-         * El formulari **hi és sempre**, no només amb la targeta desplegada: si només
-         * sortís quan ja hi ha alguna cosa, la primera subtasca no es podria afegir mai
-         * des d'aquí.
+         * Afegir, amb **un sol camp**: `#Llista element` va a la llista i sense sigil
+         * és una subtasca. El botó de la cantonada l'obre; el teclat el tanca amb Enter.
          */
-        if (addForm != null) {
-            if (addForm.open) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(FemhoShape.input))
-                        .background(Femho.colors.tagBg)
-                        .padding(horizontal = 10.dp, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    androidx.compose.material3.OutlinedTextField(
-                        value = addForm.listName,
-                        onValueChange = addForm.onListName,
-                        singleLine = true,
-                        placeholder = { Text(addForm.listNamePlaceholder, fontSize = FemhoText.meta) },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        androidx.compose.material3.OutlinedTextField(
-                            value = addForm.itemText,
-                            onValueChange = addForm.onItemText,
-                            singleLine = true,
-                            placeholder = { Text(addForm.itemPlaceholder, fontSize = FemhoText.meta) },
-                            modifier = Modifier.weight(1f).testTag("card-add-item"),
-                        )
-                        Text(
-                            text = addForm.submitLabel,
-                            color = Femho.colors.plouBlueInk,
-                            fontSize = FemhoText.meta,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.clickable(onClick = addForm.onSubmit).padding(4.dp),
-                        )
-                    }
-                }
-            }
-
-            Text(
-                text = "+ ${'$'}{addForm.toggleLabel}",
-                color = Femho.colors.inkFaint,
-                fontSize = FemhoText.meta,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier
-                    .clickable(onClick = addForm.onToggle)
-                    .padding(vertical = 1.dp)
-                    .testTag("card-add-toggle"),
+        if (addForm != null && addForm.open) {
+            androidx.compose.material3.OutlinedTextField(
+                value = addForm.text,
+                onValueChange = addForm.onText,
+                singleLine = true,
+                placeholder = { Text(addForm.placeholder, fontSize = FemhoText.meta) },
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                    imeAction = androidx.compose.ui.text.input.ImeAction.Done,
+                ),
+                keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                    onDone = { addForm.onSubmit() },
+                ),
+                modifier = Modifier.fillMaxWidth().testTag("card-add-item"),
             )
         }
 
@@ -418,4 +462,91 @@ fun ChecklistRow(
             },
         )
     }
+}
+
+
+/** El botó d'icona de la cantonada de la targeta. 19dp, com al disseny mòbil. */
+@Composable
+private fun CardActionIcon(
+    label: String,
+    onClick: () -> Unit,
+    testTag: String,
+    tint: Color? = null,
+    content: @Composable () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .size(19.dp)
+            .clip(CircleShape)
+            .clickable(role = Role.Button, onClick = onClick)
+            .semantics { contentDescription = label }
+            .testTag(testTag),
+        contentAlignment = Alignment.Center,
+    ) {
+        androidx.compose.runtime.CompositionLocalProvider(
+            androidx.compose.material3.LocalContentColor provides (tint ?: Femho.colors.inkFaint),
+        ) {
+            content()
+        }
+    }
+}
+
+/**
+ * Les icones, dibuixades amb `Canvas` i no amb un `.svg` a `res/`.
+ *
+ * Són quatre traços i així viuen al costat del component que les fa servir, amb el
+ * mateix gruix de traç que la web (1.8) i el color que els doni qui les munta.
+ */
+@Composable
+private fun PencilGlyph() {
+    GlyphCanvas { scope, color, stroke ->
+        with(scope) {
+            drawLine(color, Offset(size.width * 0.50f, size.height * 0.83f), Offset(size.width * 0.87f, size.height * 0.83f), stroke, StrokeCap.Round)
+            val path = Path().apply {
+                moveTo(size.width * 0.69f, size.height * 0.15f)
+                lineTo(size.width * 0.85f, size.height * 0.31f)
+                lineTo(size.width * 0.29f, size.height * 0.79f)
+                lineTo(size.width * 0.13f, size.height * 0.83f)
+                lineTo(size.width * 0.17f, size.height * 0.67f)
+                close()
+            }
+            drawPath(path, color, style = Stroke(width = stroke, cap = StrokeCap.Round, join = StrokeJoin.Round))
+        }
+    }
+}
+
+@Composable
+private fun ListPlusGlyph() {
+    GlyphCanvas { scope, color, stroke ->
+        with(scope) {
+            for ((y, right) in listOf(0.25f to 0.54f, 0.5f to 0.54f, 0.75f to 0.37f)) {
+                drawLine(color, Offset(size.width * 0.17f, size.height * y), Offset(size.width * right, size.height * y), stroke, StrokeCap.Round)
+            }
+            drawLine(color, Offset(size.width * 0.71f, size.height * 0.58f), Offset(size.width * 0.71f, size.height * 0.87f), stroke, StrokeCap.Round)
+            drawLine(color, Offset(size.width * 0.56f, size.height * 0.73f), Offset(size.width * 0.87f, size.height * 0.73f), stroke, StrokeCap.Round)
+        }
+    }
+}
+
+@Composable
+private fun PinGlyph(filled: Boolean) {
+    GlyphCanvas { scope, color, stroke ->
+        with(scope) {
+            val path = Path().apply {
+                moveTo(size.width * 0.5f, size.height * 0.9f)
+                cubicTo(size.width * 0.25f, size.height * 0.66f, size.width * 0.25f, size.height * 0.42f, size.width * 0.5f, size.height * 0.42f)
+                cubicTo(size.width * 0.75f, size.height * 0.42f, size.width * 0.75f, size.height * 0.66f, size.width * 0.5f, size.height * 0.9f)
+                close()
+            }
+            drawCircle(color, radius = size.minDimension * 0.26f, center = Offset(size.width * 0.5f, size.height * 0.42f), style = if (filled) Fill else Stroke(width = stroke))
+            drawPath(path, color, style = if (filled) Fill else Stroke(width = stroke, cap = StrokeCap.Round, join = StrokeJoin.Round))
+        }
+    }
+}
+
+@Composable
+private fun GlyphCanvas(draw: (DrawScope, Color, Float) -> Unit) {
+    val color = androidx.compose.material3.LocalContentColor.current
+    val stroke = with(androidx.compose.ui.platform.LocalDensity.current) { 1.4.dp.toPx() }
+    Canvas(modifier = Modifier.size(12.dp)) { draw(this, color, stroke) }
 }

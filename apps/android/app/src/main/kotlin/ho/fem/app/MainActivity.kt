@@ -297,11 +297,11 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: (
     val columnAddTemplate = stringResource(R.string.board_quickadd_placeholder)
     val listsCollapsed = stringResource(R.string.card_lists_collapsed)
     val listsExpandedLabel = stringResource(R.string.card_lists_expanded)
-    val subtasksEyebrow = stringResource(R.string.task_subtaskseyebrow)
-    val addToggleLabel = stringResource(R.string.task_addsubtaskorlist)
-    val addListNameLabel = stringResource(R.string.task_addlistname)
-    val addItemLabel = stringResource(R.string.task_additemtext)
-    val addSubmitLabel = stringResource(R.string.task_addsubmit)
+    val addToggleLabel = stringResource(R.string.card_add)
+    val addPlaceholder = stringResource(R.string.card_addplaceholder)
+    val editLabel = stringResource(R.string.task_edit)
+    val pinLabel = stringResource(R.string.checklist_pin)
+    val unpinLabel = stringResource(R.string.checklist_unpinaction)
     val toggleItemTemplate = stringResource(R.string.checklist_toggleitem)
     // "+ Afegir a {columna}…" per a cada columna: el text porta el nom de la columna i
     // `stringResource` no es pot cridar des del `footer`, que no és `@Composable` allà.
@@ -414,9 +414,11 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: (
                 val blocs = task.progress?.lists ?: 0
                 val expanded = task.id in expandedCards
                 val carregat = cardLists[task.id]
-                val draft = cardDrafts[task.id] ?: AppViewModel.CardDraft()
+                val draft = cardDrafts[task.id].orEmpty()
 
                 CardExtras(
+                    onEdit = { model.open(task) },
+                    editLabel = editLabel,
                     lists = buildList {
                         val subtasks = carregat?.subtasks.orEmpty()
                         if (subtasks.isNotEmpty()) {
@@ -424,7 +426,6 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: (
                                 CardList(
                                     id = "subtasks-${'$'}{task.id}",
                                     name = null,
-                                    subtasksLabel = subtasksEyebrow,
                                     items = subtasks.map { sub ->
                                         CardListItem(
                                             id = sub.id,
@@ -444,7 +445,9 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: (
                                 CardList(
                                     id = llista.id,
                                     name = llista.name,
-                                    subtasksLabel = subtasksEyebrow,
+                                    pinned = llista.pinned,
+                                    pinLabel = if (llista.pinned) unpinLabel else pinLabel,
+                                    onPinToggle = { model.togglePinList(task.id, llista) },
                                     items = llista.items.map { item ->
                                         CardListItem(
                                             id = item.id,
@@ -473,14 +476,10 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: (
                         open = task.id in openCards,
                         onToggle = { model.toggleCardForm(task) },
                         toggleLabel = addToggleLabel,
-                        listNamePlaceholder = addListNameLabel,
-                        listName = draft.listName,
-                        onListName = { model.setCardDraft(task.id, listName = it) },
-                        itemPlaceholder = addItemLabel,
-                        itemText = draft.itemText,
-                        onItemText = { model.setCardDraft(task.id, itemText = it) },
+                        placeholder = addPlaceholder,
+                        text = draft,
+                        onText = { model.setCardDraft(task.id, it) },
                         onSubmit = { model.submitCardAdd(task) },
-                        submitLabel = addSubmitLabel,
                     ),
                 )
             },

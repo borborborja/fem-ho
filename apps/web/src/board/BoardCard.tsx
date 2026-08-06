@@ -42,8 +42,7 @@ export function BoardCard({
 }: BoardCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
-  const [listName, setListName] = useState('');
-  const [itemText, setItemText] = useState('');
+  const [draft, setDraft] = useState('');
 
   /**
    * `null` mentre no calgui: `useApi` no demana res amb un camí nul.
@@ -63,8 +62,8 @@ export function BoardCard({
   };
 
   /**
-   * Les subtasques van primer i **sense nom**: la targeta les pinta amb l'epígraf
-   * "Subtasques". Les llistes van després, cadascuna amb el seu.
+   * Les subtasques van primer i **sense nom**: la targeta les pinta nues, sense caixa.
+   * Les llistes van després, cadascuna amb el seu nom i la seva xinxeta.
    */
   const lists: CardList[] = [
     ...((subtasks.data ?? []).length === 0
@@ -73,7 +72,6 @@ export function BoardCard({
           {
             id: `subtasks-${task.id}`,
             name: null,
-            subtasksLabel: t('task.subtasksEyebrow'),
             items: (subtasks.data ?? []).map((subtask) => ({
               id: subtask.id,
               text: subtask.title,
@@ -91,6 +89,7 @@ export function BoardCard({
       id: checklist.id,
       name: checklist.name,
       // Les subtasques no es pinegen; les llistes sí (P1).
+      pinned: checklist.pinned,
       pinLabel: checklist.pinned ? t('checklist.unpinAction') : t('checklist.pin'),
       onPinToggle: () => {
         const call = checklist.pinned ? api.delete : api.post;
@@ -109,16 +108,25 @@ export function BoardCard({
   ];
 
   /**
-   * Afegir: el nom buit vol dir subtasca.
+   * Afegir, amb **un sol camp**: `#Llista element` hi posa l'ítem, i sense sigil és una
+   * subtasca.
+   *
+   * És el mateix gest que l'afegida ràpida del peu de columna, i el mateix sigil que
+   * `#Àmbit` — d'aquí que el disseny validat es quedés amb un camp i no amb dos i un
+   * botó. El regex és el del disseny: `#` enganxat al nom, un espai, i la resta és el
+   * text.
    *
    * Amb nom, es busca la llista que ja el porti i s'hi afegeix l'ítem; si no n'hi ha
    * cap, se'n crea una. Crear-ne una de nova cada vegada faria que escriure el mateix
    * nom dues vegades donés dues llistes iguals, que és el que ningú espera.
    */
   const submitAdd = async (): Promise<void> => {
-    const text = itemText.trim();
+    const raw = draft.trim();
+    if (raw === '') return;
+    const sigil = /^#(\S+)\s+(.+)$/u.exec(raw);
+    const name = sigil?.[1] ?? '';
+    const text = (sigil?.[2] ?? raw).trim();
     if (text === '') return;
-    const name = listName.trim();
 
     if (name === '') {
       await api.post(`/api/v1/tasks/${task.id}/subtasks`, { id: uuidv7(), title: text });
@@ -135,8 +143,8 @@ export function BoardCard({
       await api.post(`/api/v1/checklists/${target.id}/items`, { id: uuidv7(), text });
     }
 
-    // El nom es queda per poder-hi encadenar ítems; el text es buida.
-    setItemText('');
+    // El camp es buida sencer: el sigil es torna a escriure, com a l'afegida ràpida.
+    setDraft('');
     reload();
   };
 
@@ -184,23 +192,28 @@ export function BoardCard({
             })
       }
       onToggleLists={() => setExpanded(!expanded)}
+      // El llapis de la cantonada: obre el mateix modal que clicar la targeta, però
+      // sense haver-hi de clicar a sobre —que és el que fa que arrossegar-la i obrir-la
+      // es trepitgin.
+      onEdit={onOpen}
+      editLabel={t('task.edit')}
       addForm={{
         open: addOpen,
-        onToggle: () => setAddOpen(!addOpen),
-        toggleLabel: t('task.addSubtaskOrList'),
-        listNamePlaceholder: t('task.addListName'),
-        listName,
-        onListName: (event) => setListName(event.target.value),
-        itemPlaceholder: t('task.addItemText'),
-        itemText,
-        onItemText: (event) => setItemText(event.target.value),
-        onItemKeyDown: (event) => {
+        onToggle: () => {
+          // Obrir el formulari desplega la targeta: afegir-hi alguna cosa i no veure-la
+          // aparèixer sembla que no hagi passat res.
+          if (!addOpen) setExpanded(true);
+          setAddOpen(!addOpen);
+        },
+        toggleLabel: t('card.add'),
+        placeholder: t('card.addPlaceholder'),
+        text: draft,
+        onText: (event) => setDraft(event.target.value),
+        onKeyDown: (event) => {
           if (event.key !== 'Enter') return;
           event.preventDefault();
           void submitAdd();
         },
-        onSubmit: () => void submitAdd(),
-        submitLabel: t('task.addSubmit'),
       }}
     />
   );

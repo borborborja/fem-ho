@@ -303,8 +303,6 @@ class AppViewModel(private val container: Container) : ViewModel() {
         val checklists: List<Checklist> = emptyList(),
     )
 
-    /** El que s'està escrivint al formulari d'una targeta. El nom buit vol dir subtasca. */
-    data class CardDraft(val listName: String = "", val itemText: String = "")
 
     private val _expandedCards = MutableStateFlow<Set<String>>(emptySet())
     val expandedCards: StateFlow<Set<String>> = _expandedCards.asStateFlow()
@@ -315,8 +313,9 @@ class AppViewModel(private val container: Container) : ViewModel() {
     private val _cardLists = MutableStateFlow<Map<String, CardLists>>(emptyMap())
     val cardLists: StateFlow<Map<String, CardLists>> = _cardLists.asStateFlow()
 
-    private val _cardDrafts = MutableStateFlow<Map<String, CardDraft>>(emptyMap())
-    val cardDrafts: StateFlow<Map<String, CardDraft>> = _cardDrafts.asStateFlow()
+    /** El que s'està escrivint al formulari d'una targeta. Un sol camp. */
+    private val _cardDrafts = MutableStateFlow<Map<String, String>>(emptyMap())
+    val cardDrafts: StateFlow<Map<String, String>> = _cardDrafts.asStateFlow()
 
     /**
      * Desplega —o plega— una targeta.
@@ -343,14 +342,8 @@ class AppViewModel(private val container: Container) : ViewModel() {
         if (open) loadCard(task.id)
     }
 
-    fun setCardDraft(taskId: String, listName: String? = null, itemText: String? = null) {
-        val current = _cardDrafts.value[taskId] ?: CardDraft()
-        _cardDrafts.value = _cardDrafts.value + (
-            taskId to current.copy(
-                listName = listName ?: current.listName,
-                itemText = itemText ?: current.itemText,
-            )
-            )
+    fun setCardDraft(taskId: String, text: String) {
+        _cardDrafts.value = _cardDrafts.value + (taskId to text)
     }
 
     fun toggleCardSubtask(taskId: String, subtaskId: String, done: Boolean) {
@@ -359,6 +352,15 @@ class AppViewModel(private val container: Container) : ViewModel() {
             runCatching { container.api(base).setSubtask(subtaskId, done) }
             loadCard(taskId)
             refresh()
+        }
+    }
+
+    /** Pineja o despineja una llista des de la targeta (P1: el pinejat és per usuari). */
+    fun togglePinList(taskId: String, checklist: Checklist) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).setChecklistPin(checklist.id, !checklist.pinned) }
+            loadCard(taskId)
         }
     }
 
@@ -372,7 +374,11 @@ class AppViewModel(private val container: Container) : ViewModel() {
     }
 
     /**
-     * Afegeix des de la targeta. **El nom buit vol dir subtasca.**
+     * Afegeix des de la targeta, amb **un sol camp**.
+     *
+     * `#Llista element` hi posa l'ítem; sense sigil, és una subtasca. És el mateix gest
+     * i el mateix sigil que l'afegida ràpida, i per això el disseny validat va deixar un
+     * camp en comptes de dos i un botó.
      *
      * Amb nom, es busca la llista que ja el porti i s'hi afegeix l'ítem; només se'n crea
      * una de nova si no n'hi ha cap, perquè escriure dues vegades el mateix nom hauria de
@@ -380,10 +386,12 @@ class AppViewModel(private val container: Container) : ViewModel() {
      */
     fun submitCardAdd(task: Task) {
         val base = serverUrl ?: return
-        val draft = _cardDrafts.value[task.id] ?: return
-        val text = draft.itemText.trim()
+        val raw = (_cardDrafts.value[task.id] ?: "").trim()
+        if (raw.isEmpty()) return
+        val sigil = Regex("^#(\\S+)\\s+(.+)$").find(raw)
+        val name = sigil?.groupValues?.get(1).orEmpty()
+        val text = (sigil?.groupValues?.get(2) ?: raw).trim()
         if (text.isEmpty()) return
-        val name = draft.listName.trim()
 
         viewModelScope.launch {
             val api = container.api(base)
@@ -401,9 +409,8 @@ class AppViewModel(private val container: Container) : ViewModel() {
                     api.createChecklistItem(listId, UUID.randomUUID().toString(), text)
                 }
             }
-            // El nom es queda per poder encadenar ítems a la mateixa llista; el text no.
-            setCardDraft(task.id, itemText = "")
-            _cardDrafts.value = _cardDrafts.value + (task.id to CardDraft(name, ""))
+            // El camp es buida sencer: el sigil es torna a escriure, com a l'afegida ràpida.
+            setCardDraft(task.id, "")
             loadCard(task.id)
             refresh()
         }

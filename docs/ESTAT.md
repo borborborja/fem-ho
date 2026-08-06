@@ -30,7 +30,7 @@ npm run test:proxy-matrix    # CalDAV i SSE darrere de nginx i Caddy
 | Proves unitàries · SQLite | 640 |
 | Proves unitàries · Postgres | 661 |
 | Comprovacions permanents | 10 de 10 |
-| Proves de navegador | 80, de les quals 32 contra el servidor real |
+| Proves de navegador | 82, de les quals 34 contra el servidor real |
 | Proves de Kotlin | 40 |
 | APK de depuració | es construeix |
 | Primer arrencament amb Compose | 13 comprovacions |
@@ -42,8 +42,8 @@ npm run test:proxy-matrix    # CalDAV i SSE darrere de nginx i Caddy
 
 ## El disseny validat
 
-El projecte s'ha ajustat al disseny validat (`design/prototip/`, comparat el 2026-08-06
-amb la versió del llenç). El que en va sortir:
+El projecte s'ha ajustat al disseny validat (importat del llenç el 2026-08-06, i
+reimportat el mateix dia perquè n'havia sortit una versió nova). El que en va sortir:
 
 | Canvi | On |
 | --- | --- |
@@ -55,6 +55,11 @@ amb la versió del llenç). El que en va sortir:
 | Les tasques d'altres, darrere el commutador de l'epígraf i atenuades | web |
 | El tauler omple la pantalla i cada columna es desplaça per dins | web |
 | Per sota de 860px, columnes desplaçables al 78% amb ajust (`docs/02` §10) | web |
+| **Accions a la cantonada de la targeta**: llapis d'editar i afegir subtasca/llista | web i Android |
+| A la web surten **en passar-hi per sobre** i amb el focus del teclat; al mòbil, sempre | web i Android |
+| Afegir amb **un sol camp**: `#Llista element`, o sense sigil una subtasca | web i Android |
+| Les subtasques van **nues**; les llistes amb nom, en caixa amb xinxeta | web i Android |
+| L'entrada de 200ms en desplegar (`femho-list-in`) | web |
 
 **On no s'ha seguit el disseny, i per què:**
 
@@ -68,6 +73,16 @@ amb la versió del llenç). El que en va sortir:
 - **El camp de persones en crear una tasca.** El disseny l'ensenya; aquí l'assignació és
   una crida a part sobre una tasca que ja existeix, o sigui que surt en obrir-la. Abans
   d'aquest canvi, en crear, escrivia a `/tasks/undefined/assignees`.
+- **La tercera icona de la targeta: "Pinejar la tasca".** Al disseny pineja el bloc de
+  subtasques, que allà és una llista sense nom. Aquí les subtasques **no són una llista**:
+  són una taula pròpia, i `pinned_by` viu a `checklists` (P1). Fer-ho voldria dir decidir
+  què vol dir pinejar una cosa que no és una llista, i això és producte, no disseny. Les
+  altres dues icones —llapis i afegir— sí que hi són.
+- **La pantalla "Vista general" i els dos interruptors d'Ajustos.** La versió nova del
+  disseny els treu. `docs/02` §8 descriu el tauler general amb nom i cognoms i el brief
+  el demana a la línia 38, i els interruptors són els que la mateixa secció fa servir per
+  amagar les endarrerides. Esborrar una pantalla documentada perquè una iteració del
+  llenç no la porta seria perdre una funcionalitat sense que ningú ho hagi decidit.
 
 ---
 

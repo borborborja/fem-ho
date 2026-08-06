@@ -255,6 +255,10 @@ class FemhoApi(
     suspend fun agents(): List<Agent> =
         runCatching { get<List<Agent>>("/api/v1/ai/agents") }.getOrDefault(emptyList())
 
+    /** Pinejar és **per usuari** (P1): `POST` pineja, `DELETE` despineja. */
+    suspend fun setChecklistPin(checklistId: String, pinned: Boolean): String =
+        raw(if (pinned) "POST" else "DELETE", "/api/v1/checklists/$checklistId/pin", null, authenticated = true)
+
     suspend fun subtasks(taskId: String): List<Subtask> = get("/api/v1/tasks/$taskId/subtasks")
 
     suspend fun setSubtask(id: String, done: Boolean): String =

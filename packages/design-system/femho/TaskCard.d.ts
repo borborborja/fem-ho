@@ -17,11 +17,11 @@ export interface CardListItem {
 
 export interface CardList {
   id: string;
-  /** `null` o buit = són les subtasques de la tasca, i es pinta l'epígraf. */
-  name?: string | null | undefined;
-  /** El text de l'epígraf quan no hi ha nom. Del catàleg. */
-  subtasksLabel?: string | undefined;
-  /** Sense etiqueta, no es pinta el botó: les subtasques no es pinegen. */
+  /** `null` per al bloc de subtasques: no en té, i per això va sense caixa ni epígraf. */
+  name: string | null;
+  /** Si està pinejada. La xinxeta plena es veu sempre; la buida, en passar-hi per sobre. */
+  pinned?: boolean | undefined;
+  /** Del catàleg. Si no hi és, la llista no es pot pinejar. */
   pinLabel?: string | undefined;
   onPinToggle?: (() => void) | undefined;
   items: CardListItem[];
@@ -30,16 +30,13 @@ export interface CardList {
 export interface CardAddForm {
   open: boolean;
   onToggle: () => void;
+  /** Text del botó de la cantonada. Del catàleg. */
   toggleLabel: string;
-  listNamePlaceholder: string;
-  listName: string;
-  onListName: (event: { target: { value: string } }) => void;
-  itemPlaceholder: string;
-  itemText: string;
-  onItemText: (event: { target: { value: string } }) => void;
-  onItemKeyDown?: ((event: { key: string; preventDefault: () => void }) => void) | undefined;
-  onSubmit: () => void;
-  submitLabel: string;
+  /** "Nova subtasca… o #Llista element". Del catàleg. */
+  placeholder: string;
+  text: string;
+  onText: (event: React.ChangeEvent<HTMLInputElement>) => void;
+  onKeyDown: (event: React.KeyboardEvent<HTMLInputElement>) => void;
 }
 
 export interface TaskCardProps extends React.HTMLAttributes<HTMLDivElement> {
@@ -76,6 +73,10 @@ export interface TaskCardProps extends React.HTMLAttributes<HTMLDivElement> {
   listsToggleLabel?: string | undefined;
   onToggleLists?: (() => void) | undefined;
   addForm?: CardAddForm | undefined;
+  /** Obre l'edició completa. Surt com a llapis a la cantonada, en passar-hi per sobre. */
+  onEdit?: (() => void) | undefined;
+  /** L'etiqueta del llapis. Del catàleg. */
+  editLabel?: string | undefined;
   /** Punt taronja de 6px: la IA hi ha tocat i l'usuari encara no ho ha mirat. */
   hasUnseenAiChange?: boolean | undefined;
   /** Mentre s'arrossega, la targeta original queda a opacity 0.4. */

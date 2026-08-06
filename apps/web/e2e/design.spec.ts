@@ -61,6 +61,18 @@ function card(page: Page, title: string) {
   return page.locator('[data-testid^="task-"]').filter({ hasText: title }).first();
 }
 
+/**
+ * Les accions de la cantonada **surten en passar-hi per sobre** (disseny validat).
+ *
+ * Mentre no s'hi passa no reben el ratolí, a posta: un botó invisible que igualment es
+ * pot clicar és una trampa. Per això les proves fan el mateix gest que una persona —
+ * primer el ratolí sobre la targeta, després el clic.
+ */
+async function cardAction(page: Page, title: string, testId: string) {
+  await card(page, title).hover();
+  return card(page, title).locator(`[data-testid="${testId}"]`);
+}
+
 test('cada columna té la seva afegida ràpida, i crea a la seva columna', async ({ page }) => {
   await enter(page);
 
@@ -105,7 +117,13 @@ test('des de la targeta es pot afegir una subtasca sense obrir-la', async ({ pag
   // Sense res a dins, no hi ha commutador: no hi hauria res a desplegar.
   await expect(card(page, title).locator('[data-testid="card-lists-toggle"]')).toHaveCount(0);
 
-  await card(page, title).locator('[data-testid="card-add-toggle"]').click();
+  // Sense passar-hi el ratolí, el botó d'afegir no hi és per a ningú.
+  await expect(card(page, title).locator('[data-testid="card-add-toggle"]')).toHaveCSS(
+    'opacity',
+    '0',
+  );
+
+  await (await cardAction(page, title, 'card-add-toggle')).click();
   const field = card(page, title).locator('[data-testid="card-add-item"]');
   await field.fill('Passaport');
   await field.press('Enter');
@@ -120,21 +138,19 @@ test('i una llista amb nom, que compta com un bloc a part', async ({ page }) => 
   await enter(page);
 
   const title = 'Fer la maleta';
-  await card(page, title).locator('[data-testid="card-add-toggle"]').click();
+  await (await cardAction(page, title, 'card-add-toggle')).click();
 
-  const nom = card(page, title).locator('input').first();
-  await nom.fill('Farmaciola');
+  // **Un sol camp**: `#Llista element` va a la llista, sense sigil és una subtasca.
   const field = card(page, title).locator('[data-testid="card-add-item"]');
-  await field.fill('Ibuprofè');
+  await field.fill('#Farmaciola Ibuprofè');
   await field.press('Enter');
 
   await expect(card(page, title).locator('[data-testid="card-lists-toggle"]')).toContainText('(2)', {
     timeout: 10_000,
   });
 
-  // El nom es queda per poder encadenar ítems a la mateixa llista, i **no en crea una
-  // altra d'igual**: escriure dues vegades "Farmaciola" donaria dues llistes bessones.
-  await field.fill('Tiretes');
+  // I escriure el mateix nom una segona vegada **no crea una llista bessona**.
+  await field.fill('#Farmaciola Tiretes');
   await field.press('Enter');
   await expect(card(page, title).locator('[data-testid="card-lists-toggle"]')).toContainText('(2)');
 });
@@ -147,8 +163,7 @@ test('desplegar ensenya els ítems, i marcar-ne un mou el recompte', async ({ pa
 
   await expect(card(page, title)).toContainText('Passaport');
   await expect(card(page, title)).toContainText('Ibuprofè');
-  // L'epígraf distingeix el bloc sense nom dels que en tenen.
-  await expect(card(page, title)).toContainText('Subtasques');
+  // Les subtasques van nues; la llista amb nom, en caixa amb el seu nom.
   await expect(card(page, title)).toContainText('Farmaciola');
 
   await expect(card(page, title)).toContainText('0/3');
@@ -208,4 +223,38 @@ test("i a un de col·lectiu, només mentre la tasca és a la bústia", async ({ 
   await card(page, 'Buidar la nevera').getByText('Buidar la nevera').click();
   await expect(page.locator('[data-testid="task-modal"]')).toBeVisible();
   await expect(page.locator('[data-testid="task-assignees"]')).toHaveCount(0);
+});
+
+/**
+ * El llapis d'editar, a la cantonada i **només en passar-hi per sobre**.
+ *
+ * El disseny validat el va treure de la columna esquerra de la targeta i el va posar
+ * amb els altres dos a dalt a la dreta, amagats fins que hi passes. Amb el teclat també
+ * s'hi ha d'arribar: qui tabula no té ratolí, i si el llapis només existís amb el
+ * cursor a sobre, hi hauria una acció que no es pot fer sense.
+ */
+test('el llapis surt en passar-hi per sobre i obre el modal', async ({ page }) => {
+  await enter(page);
+
+  const title = 'Pintar el rebedor';
+  const pencil = card(page, title).locator('[data-testid="card-edit"]');
+  await expect(pencil).toHaveCSS('opacity', '0');
+
+  await card(page, title).hover();
+  await expect(pencil).toHaveCSS('opacity', '1');
+
+  await pencil.click();
+  await expect(page.locator('[data-testid="task-modal"]')).toBeVisible();
+  await page.locator('[data-testid="task-cancel"]').click();
+});
+
+test('i amb el teclat també, sense ratolí', async ({ page }) => {
+  await enter(page);
+
+  const title = 'Pintar el rebedor';
+  const pencil = card(page, title).locator('[data-testid="card-edit"]');
+  await expect(pencil).toHaveCSS('opacity', '0');
+
+  await pencil.focus();
+  await expect(pencil).toHaveCSS('opacity', '1');
 });
