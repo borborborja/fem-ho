@@ -14,6 +14,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import ho.fem.designsystem.CardAddForm
+import ho.fem.designsystem.CardList
 import ho.fem.designsystem.EmptyState
 import ho.fem.designsystem.FemhoSize
 import ho.fem.designsystem.KanbanColumn
@@ -40,6 +42,22 @@ data class BoardLabels(
     val toTodo: String,
     val toDoing: String,
     val toggle: String,
+)
+
+/**
+ * El que la targeta ensenya per sota del títol: els blocs desplegables i el formulari
+ * d'afegir-n'hi.
+ *
+ * Va en un sol paràmetre i no en vuit: qui munta la pantalla ja té l'estat i les crides,
+ * i escampar-los per la signatura faria que afegir-ne un de nou toqués tots els llocs
+ * que la criden.
+ */
+data class CardExtras(
+    val lists: List<CardList>,
+    val expanded: Boolean,
+    val toggleLabel: String?,
+    val onToggleLists: () -> Unit,
+    val addForm: CardAddForm,
 )
 
 private val ORDER = listOf(TaskStatus.INBOX, TaskStatus.TODO, TaskStatus.DOING, TaskStatus.DONE)
@@ -70,6 +88,8 @@ fun BoardScreen(
      * i abans n'hi havia una de sola sota el tauler que ho enviava tot a la bústia.
      */
     footer: @Composable (TaskStatus) -> Unit = {},
+    /** Subtasques, llistes i el formulari d'afegir. `null` vol dir una targeta pelada. */
+    extras: (Task) -> CardExtras? = { null },
 ) {
     val pager = rememberPagerState(pageCount = { ORDER.size })
 
@@ -98,6 +118,7 @@ fun BoardScreen(
                     EmptyState(labels.empty[status].orEmpty())
                 } else {
                     ofColumn.forEach { task ->
+                        val extra = extras(task)
                         TaskCard(
                             title = task.title,
                             time = task.dueTime,
@@ -105,6 +126,11 @@ fun BoardScreen(
                             toggleLabel = labels.toggle,
                             onToggle = { onToggle(task) },
                             onOpen = { onOpen(task) },
+                            lists = extra?.lists.orEmpty(),
+                            listsExpanded = extra?.expanded == true,
+                            listsToggleLabel = extra?.toggleLabel,
+                            onToggleLists = { extra?.onToggleLists?.invoke() },
+                            addForm = extra?.addForm,
                             // Accions ràpides NOMÉS a l'Inbox, com a la web.
                             quickActions = if (status == TaskStatus.INBOX) {
                                 listOf(

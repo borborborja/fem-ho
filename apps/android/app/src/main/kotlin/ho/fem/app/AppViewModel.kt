@@ -10,10 +10,12 @@ import ho.fem.model.Inbox
 import ho.fem.model.Person
 import ho.fem.model.Project
 import ho.fem.model.Scope
+import ho.fem.model.Subtask
 import ho.fem.model.Task
 import ho.fem.model.TaskStatus
 import ho.fem.model.serverCandidates
 import ho.fem.network.FemhoApi
+import java.util.UUID
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -258,6 +260,130 @@ class AppViewModel(private val container: Container) : ViewModel() {
                 .maxByOrNull { it.position }?.position
             repository.moveTask(task, status, last to null)
             repository.flush()
+        }
+    }
+
+    // ------------------------------------------------- les llistes de la targeta
+
+    /** El que s'ha demanat d'una targeta desplegada. Buit mentre no arriba. */
+    data class CardLists(
+        val subtasks: List<Subtask> = emptyList(),
+        val checklists: List<Checklist> = emptyList(),
+    )
+
+    /** El que s'està escrivint al formulari d'una targeta. El nom buit vol dir subtasca. */
+    data class CardDraft(val listName: String = "", val itemText: String = "")
+
+    private val _expandedCards = MutableStateFlow<Set<String>>(emptySet())
+    val expandedCards: StateFlow<Set<String>> = _expandedCards.asStateFlow()
+
+    private val _openCards = MutableStateFlow<Set<String>>(emptySet())
+    val openCards: StateFlow<Set<String>> = _openCards.asStateFlow()
+
+    private val _cardLists = MutableStateFlow<Map<String, CardLists>>(emptyMap())
+    val cardLists: StateFlow<Map<String, CardLists>> = _cardLists.asStateFlow()
+
+    private val _cardDrafts = MutableStateFlow<Map<String, CardDraft>>(emptyMap())
+    val cardDrafts: StateFlow<Map<String, CardDraft>> = _cardDrafts.asStateFlow()
+
+    /**
+     * Desplega —o plega— una targeta.
+     *
+     * **Els ítems només es demanen en desplegar.** El tauler ja porta el recompte com a
+     * agregat, que és tot el que la targeta plegada necessita; baixar les llistes de
+     * totes les targetes faria la primera pantalla llarga per a un contingut que la
+     * majoria de tasques no tenen.
+     */
+    fun toggleCard(task: Task) {
+        val open = task.id !in _expandedCards.value
+        _expandedCards.value = if (open) _expandedCards.value + task.id else _expandedCards.value - task.id
+        if (open) loadCard(task.id)
+    }
+
+    fun toggleCardForm(task: Task) {
+        val open = task.id !in _openCards.value
+        _openCards.value = if (open) _openCards.value + task.id else _openCards.value - task.id
+        // Obrir el formulari desplega la targeta: afegir-hi una cosa i no veure-la
+        // aparèixer sembla que no hagi passat res.
+        if (open && task.id !in _expandedCards.value) {
+            _expandedCards.value = _expandedCards.value + task.id
+        }
+        if (open) loadCard(task.id)
+    }
+
+    fun setCardDraft(taskId: String, listName: String? = null, itemText: String? = null) {
+        val current = _cardDrafts.value[taskId] ?: CardDraft()
+        _cardDrafts.value = _cardDrafts.value + (
+            taskId to current.copy(
+                listName = listName ?: current.listName,
+                itemText = itemText ?: current.itemText,
+            )
+            )
+    }
+
+    fun toggleCardSubtask(taskId: String, subtaskId: String, done: Boolean) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).setSubtask(subtaskId, done) }
+            loadCard(taskId)
+            refresh()
+        }
+    }
+
+    fun toggleCardItem(taskId: String, itemId: String, done: Boolean) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).setChecklistItem(itemId, done) }
+            loadCard(taskId)
+            refresh()
+        }
+    }
+
+    /**
+     * Afegeix des de la targeta. **El nom buit vol dir subtasca.**
+     *
+     * Amb nom, es busca la llista que ja el porti i s'hi afegeix l'ítem; només se'n crea
+     * una de nova si no n'hi ha cap, perquè escriure dues vegades el mateix nom hauria de
+     * donar una llista, no dues de bessones.
+     */
+    fun submitCardAdd(task: Task) {
+        val base = serverUrl ?: return
+        val draft = _cardDrafts.value[task.id] ?: return
+        val text = draft.itemText.trim()
+        if (text.isEmpty()) return
+        val name = draft.listName.trim()
+
+        viewModelScope.launch {
+            val api = container.api(base)
+            runCatching {
+                if (name.isEmpty()) {
+                    api.createSubtask(task.id, UUID.randomUUID().toString(), text)
+                } else {
+                    val existing = _cardLists.value[task.id]?.checklists
+                        ?.firstOrNull { it.name.equals(name, ignoreCase = true) }
+                    val listId = existing?.id ?: api.createChecklist(
+                        task.id,
+                        UUID.randomUUID().toString(),
+                        name,
+                    ).id
+                    api.createChecklistItem(listId, UUID.randomUUID().toString(), text)
+                }
+            }
+            // El nom es queda per poder encadenar ítems a la mateixa llista; el text no.
+            setCardDraft(task.id, itemText = "")
+            _cardDrafts.value = _cardDrafts.value + (task.id to CardDraft(name, ""))
+            loadCard(task.id)
+            refresh()
+        }
+    }
+
+    private fun loadCard(taskId: String) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            val api = container.api(base)
+            val subtasks = runCatching { api.subtasks(taskId) }.getOrDefault(emptyList())
+            val checklists = runCatching { api.checklists(taskId) }.getOrDefault(emptyList())
+            _cardLists.value = _cardLists.value + (taskId to CardLists(subtasks, checklists))
         }
     }
 

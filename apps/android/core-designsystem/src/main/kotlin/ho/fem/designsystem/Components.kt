@@ -74,6 +74,45 @@ fun StatusCircle(
 }
 
 /**
+ * Un bloc desplegable de la targeta: les subtasques —sense nom— o una llista.
+ *
+ * La distinció es veu a l'epígraf i no a l'estructura: per a qui mira el tauler són el
+ * mateix, coses que falten dins d'aquesta tasca.
+ */
+data class CardList(
+    val id: String,
+    val name: String?,
+    val subtasksLabel: String,
+    val items: List<CardListItem>,
+)
+
+data class CardListItem(
+    val id: String,
+    val text: String,
+    val done: Boolean,
+    val toggleLabel: String,
+    val onToggle: () -> Unit,
+)
+
+/**
+ * El formulari d'afegir de la targeta. **El nom buit vol dir subtasca**: és el que fa
+ * que les dues coses càpiguen en un formulari en comptes de dos.
+ */
+data class CardAddForm(
+    val open: Boolean,
+    val onToggle: () -> Unit,
+    val toggleLabel: String,
+    val listNamePlaceholder: String,
+    val listName: String,
+    val onListName: (String) -> Unit,
+    val itemPlaceholder: String,
+    val itemText: String,
+    val onItemText: (String) -> Unit,
+    val onSubmit: () -> Unit,
+    val submitLabel: String,
+)
+
+/**
  * La targeta d'una tasca. docs/02 §4.
  *
  * Les accions ràpides són **només a les targetes de l'Inbox**: a la resta de columnes,
@@ -92,6 +131,16 @@ fun TaskCard(
     onToggle: () -> Unit = {},
     onOpen: () -> Unit = {},
     quickActions: List<Pair<String, () -> Unit>> = emptyList(),
+    lists: List<CardList> = emptyList(),
+    listsExpanded: Boolean = false,
+    /**
+     * "▸ Llistes (2)". **És el que decideix si el commutador surt**, i no `lists`: amb
+     * la targeta plegada encara no s'ha demanat cap ítem, i el número ve de l'agregat
+     * del tauler.
+     */
+    listsToggleLabel: String? = null,
+    onToggleLists: () -> Unit = {},
+    addForm: CardAddForm? = null,
 ) {
     Column(
         modifier = modifier
@@ -124,6 +173,104 @@ fun TaskCard(
                     }
                 }
             }
+        }
+
+        if (listsToggleLabel != null) {
+            Text(
+                text = listsToggleLabel,
+                color = Femho.colors.inkSoft,
+                fontSize = FemhoText.meta,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .clickable(onClick = onToggleLists)
+                    .padding(vertical = 2.dp)
+                    .testTag("card-lists-toggle"),
+            )
+        }
+
+        if (listsExpanded) {
+            lists.forEach { list ->
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(FemhoShape.input))
+                        .background(Femho.colors.tagBg)
+                        .padding(horizontal = 10.dp, vertical = 8.dp)
+                        .testTag("card-list"),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text(
+                        text = list.name ?: list.subtasksLabel.uppercase(),
+                        color = if (list.name == null) Femho.colors.inkSoft else Femho.colors.ink,
+                        fontSize = FemhoText.meta,
+                        fontWeight = if (list.name == null) FontWeight.SemiBold else FontWeight.Bold,
+                    )
+                    list.items.forEach { item ->
+                        ChecklistRow(
+                            text = item.text,
+                            done = item.done,
+                            toggleLabel = item.toggleLabel,
+                            onToggle = item.onToggle,
+                        )
+                    }
+                }
+            }
+        }
+
+        /**
+         * El formulari **hi és sempre**, no només amb la targeta desplegada: si només
+         * sortís quan ja hi ha alguna cosa, la primera subtasca no es podria afegir mai
+         * des d'aquí.
+         */
+        if (addForm != null) {
+            if (addForm.open) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(FemhoShape.input))
+                        .background(Femho.colors.tagBg)
+                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    androidx.compose.material3.OutlinedTextField(
+                        value = addForm.listName,
+                        onValueChange = addForm.onListName,
+                        singleLine = true,
+                        placeholder = { Text(addForm.listNamePlaceholder, fontSize = FemhoText.meta) },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        androidx.compose.material3.OutlinedTextField(
+                            value = addForm.itemText,
+                            onValueChange = addForm.onItemText,
+                            singleLine = true,
+                            placeholder = { Text(addForm.itemPlaceholder, fontSize = FemhoText.meta) },
+                            modifier = Modifier.weight(1f).testTag("card-add-item"),
+                        )
+                        Text(
+                            text = addForm.submitLabel,
+                            color = Femho.colors.plouBlueInk,
+                            fontSize = FemhoText.meta,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.clickable(onClick = addForm.onSubmit).padding(4.dp),
+                        )
+                    }
+                }
+            }
+
+            Text(
+                text = "+ ${'$'}{addForm.toggleLabel}",
+                color = Femho.colors.inkFaint,
+                fontSize = FemhoText.meta,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier
+                    .clickable(onClick = addForm.onToggle)
+                    .padding(vertical = 1.dp)
+                    .testTag("card-add-toggle"),
+            )
         }
 
         if (quickActions.isNotEmpty()) {

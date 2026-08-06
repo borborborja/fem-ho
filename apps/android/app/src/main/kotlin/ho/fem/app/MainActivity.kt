@@ -47,7 +47,11 @@ import ho.fem.calendar.WeekList
 import ho.fem.settings.SettingsLabels
 import ho.fem.settings.SettingsScreen
 import ho.fem.tasks.BoardLabels
+import ho.fem.designsystem.CardAddForm
+import ho.fem.designsystem.CardList
+import ho.fem.designsystem.CardListItem
 import ho.fem.tasks.BoardScreen
+import ho.fem.tasks.CardExtras
 import ho.fem.tasks.QuickAddField
 import ho.fem.tasks.TaskDetail
 import ho.fem.tasks.TaskDetailLabels
@@ -272,12 +276,24 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: (
     val people by model.people.collectAsStateWithLifecycle()
     val openTask by model.openTask.collectAsStateWithLifecycle()
     val openChecklists by model.openChecklists.collectAsStateWithLifecycle()
+    val expandedCards by model.expandedCards.collectAsStateWithLifecycle()
+    val openCards by model.openCards.collectAsStateWithLifecycle()
+    val cardLists by model.cardLists.collectAsStateWithLifecycle()
+    val cardDrafts by model.cardDrafts.collectAsStateWithLifecycle()
     var active by remember { mutableStateOf<Set<String>>(emptySet()) }
 
     // Els textos es resolen aquí i no dins dels callbacks: `stringResource` és
     // `@Composable` i no es pot cridar des d'una lambda que no ho és.
     val quickAddError = stringResource(R.string.board_quickadd_scoperequiredprefix)
     val columnAddTemplate = stringResource(R.string.board_quickadd_placeholder)
+    val listsCollapsed = stringResource(R.string.card_lists_collapsed)
+    val listsExpandedLabel = stringResource(R.string.card_lists_expanded)
+    val subtasksEyebrow = stringResource(R.string.task_subtaskseyebrow)
+    val addToggleLabel = stringResource(R.string.task_addsubtaskorlist)
+    val addListNameLabel = stringResource(R.string.task_addlistname)
+    val addItemLabel = stringResource(R.string.task_additemtext)
+    val addSubmitLabel = stringResource(R.string.task_addsubmit)
+    val toggleItemTemplate = stringResource(R.string.checklist_toggleitem)
     // "+ Afegir a {columna}…" per a cada columna: el text porta el nom de la columna i
     // `stringResource` no es pot cridar des del `footer`, que no és `@Composable` allà.
     val columnAddLabels = mapOf(
@@ -372,6 +388,86 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: (
                     },
                     onCreate = { title, scopeId, _, _ -> model.create(scopeId, title, status) },
                     modifier = Modifier.padding(top = 8.dp).testTag("quick-add-${'$'}{status.name.lowercase()}"),
+                )
+            },
+            /**
+             * Les subtasques i les llistes, a la mateixa targeta.
+             *
+             * **Un sol commutador per a totes dues**, i el número que hi surt compta
+             * blocs i no ítems: les subtasques, totes juntes, en són un.
+             */
+            extras = { task ->
+                val blocs = task.progress?.lists ?: 0
+                val expanded = task.id in expandedCards
+                val carregat = cardLists[task.id]
+                val draft = cardDrafts[task.id] ?: AppViewModel.CardDraft()
+
+                CardExtras(
+                    lists = buildList {
+                        val subtasks = carregat?.subtasks.orEmpty()
+                        if (subtasks.isNotEmpty()) {
+                            add(
+                                CardList(
+                                    id = "subtasks-${'$'}{task.id}",
+                                    name = null,
+                                    subtasksLabel = subtasksEyebrow,
+                                    items = subtasks.map { sub ->
+                                        CardListItem(
+                                            id = sub.id,
+                                            text = sub.title,
+                                            done = sub.done,
+                                            toggleLabel = toggleItemTemplate.replace("{text}", sub.title),
+                                            onToggle = {
+                                                model.toggleCardSubtask(task.id, sub.id, !sub.done)
+                                            },
+                                        )
+                                    },
+                                ),
+                            )
+                        }
+                        carregat?.checklists.orEmpty().forEach { llista ->
+                            add(
+                                CardList(
+                                    id = llista.id,
+                                    name = llista.name,
+                                    subtasksLabel = subtasksEyebrow,
+                                    items = llista.items.map { item ->
+                                        CardListItem(
+                                            id = item.id,
+                                            text = item.text,
+                                            done = item.done,
+                                            toggleLabel = toggleItemTemplate.replace("{text}", item.text),
+                                            onToggle = {
+                                                model.toggleCardItem(task.id, item.id, !item.done)
+                                            },
+                                        )
+                                    },
+                                ),
+                            )
+                        }
+                    },
+                    expanded = expanded,
+                    // Sense cap bloc no hi ha res a desplegar, i el commutador no surt.
+                    toggleLabel = if (blocs == 0) {
+                        null
+                    } else {
+                        (if (expanded) listsExpandedLabel else listsCollapsed)
+                            .replace("{count}", blocs.toString())
+                    },
+                    onToggleLists = { model.toggleCard(task) },
+                    addForm = CardAddForm(
+                        open = task.id in openCards,
+                        onToggle = { model.toggleCardForm(task) },
+                        toggleLabel = addToggleLabel,
+                        listNamePlaceholder = addListNameLabel,
+                        listName = draft.listName,
+                        onListName = { model.setCardDraft(task.id, listName = it) },
+                        itemPlaceholder = addItemLabel,
+                        itemText = draft.itemText,
+                        onItemText = { model.setCardDraft(task.id, itemText = it) },
+                        onSubmit = { model.submitCardAdd(task) },
+                        submitLabel = addSubmitLabel,
+                    ),
                 )
             },
         )
