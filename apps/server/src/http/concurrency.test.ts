@@ -28,6 +28,7 @@ import { buildApp } from '../app.js';
 import { loadConfig } from '../config.js';
 import { hashPassword } from '../auth/password.js';
 import { connect, type Connection } from '../db/connection.js';
+import { connectTestSchema, type TestSchema } from '../db/test-postgres.js';
 import { migrateToLatest } from '../db/migrator.js';
 
 const tmp = mkdtempSync(join(tmpdir(), 'femho-conc-'));
@@ -41,6 +42,7 @@ const MOTORS: { engine: 'sqlite' | 'postgres'; url: string }[] = [
 if (pgUrl !== undefined && pgUrl !== '') MOTORS.push({ engine: 'postgres', url: pgUrl });
 
 let conn: Connection;
+let schema: TestSchema | null = null;
 let app: FastifyInstance;
 let auth: Record<string, string>;
 let scopeId: string;
@@ -57,13 +59,12 @@ async function api(
 
 describe.each(MOTORS)('motor $engine', (motor) => {
   beforeAll(async () => {
-    conn = connect(motor.url);
+    // Esquema propi per no xocar amb les altres suites que corren alhora contra la
+    // mateixa base (veure `db/test-postgres.ts`).
+    schema =
+      motor.engine === 'postgres' ? await connectTestSchema(motor.url, 'concurrency') : null;
+    conn = schema ?? connect(motor.url);
 
-    // A Postgres la base es comparteix entre execucions: es deixa neta abans.
-    if (motor.engine === 'postgres') {
-      await sql`DROP SCHEMA public CASCADE`.execute(conn.db);
-      await sql`CREATE SCHEMA public`.execute(conn.db);
-    }
     await migrateToLatest(conn.db, { engine: motor.engine });
 
     const uid = uuidv7();
@@ -93,7 +94,8 @@ describe.each(MOTORS)('motor $engine', (motor) => {
 
   afterAll(async () => {
     await app.close();
-    await conn.close();
+    if (schema !== null) await schema.drop();
+    else await conn.close();
     rmSync(tmp, { recursive: true, force: true });
   });
 

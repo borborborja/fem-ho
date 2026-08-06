@@ -14,7 +14,8 @@ import { match, useRouter } from './router.js';
 import { useSession, useSessionData } from './session.js';
 import { installShortcuts } from './shortcuts.js';
 import { TopBar } from './TopBar.js';
-import type { Checklist } from './types.js';
+import type { Agent, Checklist } from './types.js';
+import type { TaskStatus } from '@fem-ho/contracts';
 import { useApi } from './useApi.js';
 import { BoardScreen } from '../screens/BoardScreen.js';
 import { CalendarScreen } from '../screens/CalendarScreen.js';
@@ -85,12 +86,48 @@ function AppShell() {
   const projectId = route.query.get('project');
   const [warning, setWarning] = useState<string | null>(null);
   const [openTask, setOpenTask] = useState<string | null>(null);
+  /** Una tasca nova des de l'edició completa: quina columna, i si és per a la IA. */
+  const [newTask, setNewTask] = useState<{ status: TaskStatus; forAi: boolean } | null>(null);
+  const [aiBoard, setAiBoard] = useState(false);
+  const [flip, setFlip] = useState<{ transform: string; transition: string } | undefined>(undefined);
   const [sharingTask, setSharingTask] = useState<string | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const boardRef = useRef<HTMLDivElement | null>(null);
 
   const pinned = useApi<Checklist[]>('/api/v1/pinned-checklists');
+  /**
+   * Hi ha IA si hi ha algun agent actiu.
+   *
+   * No és una preferència a part: un commutador "activar la IA" que es pogués encendre
+   * sense cap agent giraria el tauler cap a un tauler que no pot rebre res.
+   */
+  const agents = useApi<Agent[]>('/api/v1/ai/agents');
+  const aiEnabled = (agents.data ?? []).some((agent) => agent.enabled);
+
+  /**
+   * El gir del tauler.
+   *
+   * Mig gir cap a fora, es canvia el contingut amagat de perfil, i mig gir cap a dins.
+   * El salt del mig va sense transició i amb dos `requestAnimationFrame`: amb un de sol,
+   * el navegador encara no ha pintat l'estat sense transició i anima el salt sencer, que
+   * es veu com un gir de 180 graus a l'inrevés.
+   */
+  const toggleAiBoard = useCallback(() => {
+    setFlip({ transform: 'rotateY(90deg)', transition: 'transform 240ms cubic-bezier(0.4,0,1,1)' });
+    setTimeout(() => {
+      setAiBoard((active) => !active);
+      setFlip({ transform: 'rotateY(-90deg)', transition: 'none' });
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setFlip({
+            transform: 'rotateY(0deg)',
+            transition: 'transform 240ms cubic-bezier(0,0,0.2,1)',
+          });
+        });
+      });
+    }, 240);
+  }, []);
 
   /**
    * Els paràmetres es llegeixen de la ubicació VIVA, no de la del render.
@@ -165,6 +202,9 @@ function AppShell() {
         onNewProject={() => navigate('/settings')}
         onNewChecklist={() => navigate('/settings')}
         onScopeWarning={setWarning}
+        aiEnabled={aiEnabled}
+        aiBoardActive={aiBoard}
+        onToggleAiBoard={toggleAiBoard}
       />
 
       <main
@@ -211,6 +251,9 @@ function AppShell() {
             activeScopeIds={activeScopeIds}
             projectId={projectId}
             onOpenTask={setOpenTask}
+            onNewTask={(status, forAi) => setNewTask({ status, forAi })}
+            aiBoard={aiBoard}
+            flip={flip}
           />
         )}
       </main>
@@ -225,6 +268,19 @@ function AppShell() {
       >
         <ConnectionPill />
       </div>
+
+      {newTask === null ? null : (
+        <TaskModal
+          create={newTask}
+          onClose={() => setNewTask(null)}
+          onChanged={() => setReloadKey((value) => value + 1)}
+          onShare={setSharingTask}
+          onOpenList={(checklistId) => {
+            setNewTask(null);
+            navigate(`/lists/${checklistId}`);
+          }}
+        />
+      )}
 
       {openTask === null ? null : (
         <TaskModal

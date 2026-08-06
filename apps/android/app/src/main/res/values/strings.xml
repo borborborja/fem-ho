@@ -50,6 +50,11 @@
     <string name="board_empty_done">Encara no has acabat res avui.</string>
     <string name="board_empty_inbox">Cap tasca a la bústia.</string>
     <string name="board_empty_todo">Cap tasca a Per fer.</string>
+    <string name="board_fulledit">Edició completa</string>
+    <string name="board_ia_badge">Kanban de la IA</string>
+    <string name="board_ia_empty">La IA no té res en aquesta columna.</string>
+    <string name="board_ia_newtask">Nova tasca per a la IA</string>
+    <string name="board_ia_toggle">Kanban de la IA</string>
     <string name="board_quickadd_placeholder">+ Afegir a {column}… #Àmbit @Persona</string>
     <string name="board_quickadd_revert">Tornar «{label}» a text</string>
     <string name="board_quickadd_scoperequired">Indica l\'àmbit amb #{scopes}</string>
@@ -264,6 +269,10 @@
     <string name="sync_synced">Sincronitzat</string>
     <string name="sync_title">Sincronització</string>
     <string name="task_activity">Historial</string>
+    <string name="task_additemtext">Nou element…</string>
+    <string name="task_addlistname">Nom de llista (deixa buit = subtasca)</string>
+    <string name="task_addsubmit">Afegir</string>
+    <string name="task_addsubtaskorlist">Subtasca o llista</string>
     <string name="task_aiinstructions">Instruccions per a la IA</string>
     <string name="task_aimode">Mode d\'IA</string>
     <string name="task_assignees">Assignat a</string>
@@ -274,10 +283,12 @@
     <string name="task_description">Descripció</string>
     <string name="task_duedate">Data</string>
     <string name="task_duetime">Hora</string>
+    <string name="task_edit">Editar tasca</string>
     <string name="task_empty_activity">Encara no ha passat res en aquesta tasca.</string>
     <string name="task_empty_comments">Encara no hi ha cap comentari.</string>
     <string name="task_empty_subtasks">Aquesta tasca no té subtasques.</string>
     <string name="task_labels">Etiquetes</string>
+    <string name="task_new">Nova tasca</string>
     <string name="task_newchecklist">+ Nova llista</string>
     <string name="task_newcomment">Escriu un comentari…</string>
     <string name="task_newsubtask">+ Afegir subtasca…</string>
@@ -295,6 +306,7 @@
     <string name="task_send">Envia</string>
     <string name="task_share">Compartir</string>
     <string name="task_subtasks">Subtasques</string>
+    <string name="task_subtaskseyebrow">Subtasques</string>
     <string name="task_title">Títol</string>
     <string name="tokens_capabilities">Capacitats</string>
     <string name="tokens_copy">Copia</string>

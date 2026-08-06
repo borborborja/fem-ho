@@ -2102,6 +2102,18 @@ export interface components {
             recurrence_mode?: "schedule" | "completion" | null;
             /** @description La instància de la qual ve, si n'és una repetició. */
             recurrence_parent_id?: string | null;
+            /**
+             * @description Subtasques i ítems de llista **comptats junts**. La targeta els ensenya sota
+             *     un sol commutador ("3/7 fets") perquè per a qui mira el tauler són el mateix:
+             *     coses que falten dins d'aquesta tasca. La distinció importa en obrir-la.
+             *
+             *     És un agregat i no la llista: portar tots els ítems de totes les targetes
+             *     faria baixar milers de files per pintar unes quantes pastilles.
+             */
+            progress?: {
+                done: number;
+                total: number;
+            };
             /** @description Persones. El brief demana "persona o persones". */
             assignee_ids?: string[];
             created_by?: string;

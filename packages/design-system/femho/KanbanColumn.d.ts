@@ -34,6 +34,8 @@ export interface ScopeGroupHeaderProps {
 
 export interface KanbanGroupProps extends React.HTMLAttributes<HTMLDivElement> {
   children?: React.ReactNode | undefined;
+  /** La vora del grup. Al kanban de la IA, `var(--plou-blue-ink)`. */
+  borderColor?: string | undefined;
 }
 
 export declare function KanbanColumn(props: KanbanColumnProps): React.JSX.Element;

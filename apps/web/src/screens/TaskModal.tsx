@@ -12,7 +12,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { t } from '@fem-ho/contracts';
+import { t, type TaskStatus } from '@fem-ho/contracts';
 import { v7 as uuidv7 } from 'uuid';
 import { ActivityTimeline, ChecklistRow, EmptyState } from '@fem-ho/design-system/femho';
 import { api } from '../app/api.js';
@@ -44,7 +44,16 @@ const VERBS = [
 ] as const;
 
 export interface TaskModalProps {
-  taskId: string;
+  /** Editar una tasca que ja hi és. Excloent amb `create`. */
+  taskId?: string;
+  /**
+   * Crear-ne una de nova en aquesta columna.
+   *
+   * `forAi` ve del botó "Nova tasca per a la IA" del kanban de la IA i neix delegada:
+   * és l'única manera del disseny validat de crear feina per a la IA amb instruccions,
+   * perquè un camp d'afegida ràpida no té on posar-les.
+   */
+  create?: { status: TaskStatus; forAi: boolean };
   onClose: () => void;
   onChanged: () => void;
   onShare: (taskId: string) => void;
@@ -79,13 +88,25 @@ const RECURRENCES = [
   { rrule: 'FREQ=YEARLY', key: 'yearly' },
 ] as const;
 
-export function TaskModal({ taskId, onClose, onChanged, onShare, onOpenList }: TaskModalProps) {
+export function TaskModal({
+  taskId,
+  create,
+  onClose,
+  onChanged,
+  onShare,
+  onOpenList,
+}: TaskModalProps) {
   const { scopes, projects, people } = useSessionData();
-  const task = useApi<Task>(`/api/v1/tasks/${taskId}`);
-  const subtasks = useApi<Subtask[]>(`/api/v1/tasks/${taskId}/subtasks`);
-  const checklists = useApi<Checklist[]>(`/api/v1/tasks/${taskId}/checklists`);
-  const comments = useApi<Comment[]>(`/api/v1/tasks/${taskId}/comments`);
-  const activity = useApi<{ data: ActivityEntry[] }>(`/api/v1/tasks/${taskId}/activity`);
+  const creating = create !== undefined;
+
+  // Una tasca que encara no existeix no té res a demanar: cap crida fins que es desa.
+  const task = useApi<Task>(creating ? null : `/api/v1/tasks/${taskId ?? ''}`);
+  const subtasks = useApi<Subtask[]>(creating ? null : `/api/v1/tasks/${taskId ?? ''}/subtasks`);
+  const checklists = useApi<Checklist[]>(creating ? null : `/api/v1/tasks/${taskId ?? ''}/checklists`);
+  const comments = useApi<Comment[]>(creating ? null : `/api/v1/tasks/${taskId ?? ''}/comments`);
+  const activity = useApi<{ data: ActivityEntry[] }>(
+    creating ? null : `/api/v1/tasks/${taskId ?? ''}/activity`,
+  );
 
   const [draft, setDraft] = useState<Draft | null>(null);
   const [dirty, setDirty] = useState(false);
@@ -96,6 +117,21 @@ export function TaskModal({ taskId, onClose, onChanged, onShare, onOpenList }: T
   const labels = useApi<Label[]>('/api/v1/labels');
 
   useEffect(() => {
+    if (creating && draft === null) {
+      setDraft({
+        title: '',
+        description: '',
+        due_date: '',
+        due_time: '',
+        deadline: '',
+        rrule: '',
+        recurrence_mode: 'schedule',
+        // La creada des del tauler de la IA neix delegada; la resta, manual.
+        ai_mode: create.forAi ? 'delegated' : 'manual',
+        ai_instructions: '',
+      });
+      return;
+    }
     if (task.data === undefined || draft !== null) return;
     setDraft({
       title: task.data.title,
@@ -112,7 +148,25 @@ export function TaskModal({ taskId, onClose, onChanged, onShare, onOpenList }: T
 
   const save = useMutation(async () => {
     if (draft === null) return;
-    await api.patch(`/api/v1/tasks/${taskId}`, {
+
+    if (creating) {
+      const scopeId = scopes[0]?.id;
+      if (scopeId === undefined) return;
+      await api.post('/api/v1/tasks', {
+        id: uuidv7(),
+        scope_id: scopeId,
+        title: draft.title.trim() === '' ? t('task.new') : draft.title,
+        status: create.status,
+        description: draft.description === '' ? undefined : draft.description,
+        due_date: draft.due_date === '' ? undefined : draft.due_date,
+      });
+      setDirty(false);
+      onChanged();
+      onClose();
+      return;
+    }
+
+    await api.patch(`/api/v1/tasks/${taskId ?? ''}`, {
       title: draft.title,
       description: draft.description === '' ? null : draft.description,
       due_date: draft.due_date === '' ? null : draft.due_date,
@@ -200,6 +254,13 @@ export function TaskModal({ taskId, onClose, onChanged, onShare, onOpenList }: T
           <p style={{ margin: 0, fontSize: 13, color: 'var(--ink-faint)' }}>{t('state.loading')}</p>
         ) : (
           <>
+            <div
+              data-testid="task-modal-title"
+              style={{ fontSize: 17, fontWeight: 800, color: 'var(--ink)' }}
+            >
+              {creating ? t('task.new') : t('task.edit')}
+            </div>
+
             <input
               value={draft.title}
               data-testid="task-title"
@@ -371,35 +432,19 @@ export function TaskModal({ taskId, onClose, onChanged, onShare, onOpenList }: T
               )}
             </div>
 
-            <div style={{ display: 'grid', gap: 5 }}>
-              {label(t('task.aiMode'))}
-              <div style={{ display: 'flex', gap: 6 }}>
-                {(['manual', 'assisted', 'delegated'] as const).map((mode) => (
-                  <button
-                    key={mode}
-                    type="button"
-                    data-testid={`task-ai-${mode}`}
-                    aria-pressed={draft.ai_mode === mode}
-                    onClick={() => patch({ ai_mode: mode })}
-                    style={{
-                      padding: '6px 12px',
-                      borderRadius: 100,
-                      cursor: 'pointer',
-                      font: 'inherit',
-                      fontSize: 12,
-                      fontWeight: draft.ai_mode === mode ? 700 : 500,
-                      border: '1px solid var(--card-border)',
-                      background: draft.ai_mode === mode ? 'var(--ghost-bg)' : 'transparent',
-                      color: 'var(--ink)',
-                    }}
-                  >
-                    {t(`ai.mode.${mode}`)}
-                  </button>
-                ))}
-              </div>
-            </div>
+            {/*
+              **El mode d'IA no s'edita aquí.** El disseny validat el va treure del
+              formulari: el decideix el tauler on és la tasca. Arrossegar-la al kanban de
+              la IA la delega, tornar-la a la bústia des d'allà l'hi treu, i "Nova tasca
+              per a la IA" la crea ja delegada.
 
-            {/* Les instruccions només tenen sentit si la IA hi ha de fer alguna cosa. */}
+              El motiu és que el mode no és una propietat que s'ompli com una data: és on
+              vius la tasca, i tenir-lo als dos llocs feia que el tauler i el desplegable
+              es contradiguessin.
+
+              Les instruccions sí que es queden, perquè són el QUÈ ha de fer i sense
+              elles delegar no vol dir res.
+            */}
             {draft.ai_mode === 'manual' ? null : (
               <label style={{ display: 'grid', gap: 5 }}>
                 {label(t('task.aiInstructions'))}
@@ -679,10 +724,14 @@ export function TaskModal({ taskId, onClose, onChanged, onShare, onOpenList }: T
             </section>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 9 }}>
+              {/* Una tasca que encara no existeix no es pot compartir. */}
               <button
                 type="button"
                 data-testid="task-share"
-                onClick={() => onShare(taskId)}
+                disabled={creating}
+                onClick={() => {
+                  if (taskId !== undefined) onShare(taskId);
+                }}
                 style={{
                   border: 'none',
                   background: 'transparent',

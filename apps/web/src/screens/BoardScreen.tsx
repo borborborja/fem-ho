@@ -19,13 +19,18 @@ import { useSessionData, useSession } from '../app/session.js';
 import { useApi } from '../app/useApi.js';
 import type { Board, Task } from '../app/types.js';
 import { KanbanBoard, type BoardTask } from '../board/KanbanBoard.js';
-import { QuickAdd } from '../board/QuickAdd.js';
+import { ColumnQuickAdd, PlusIcon } from '../board/ColumnQuickAdd.js';
 import { DoneHeader } from '../board/DoneColumnView.js';
 
 export interface BoardScreenProps {
   activeScopeIds: string[];
   projectId: string | null;
   onOpenTask: (id: string) => void;
+  /** Obre l'edició completa per a una tasca NOVA en aquesta columna. */
+  onNewTask: (status: TaskStatus, forAi: boolean) => void;
+  /** El kanban de la IA. Les columnes són les mateixes; el que canvia és què hi surt. */
+  aiBoard?: boolean;
+  flip?: { transform: string; transition: string } | undefined;
 }
 
 /** La targeta tal com la vol el component, des de la tasca tal com la dona l'API. */
@@ -42,7 +47,14 @@ function toBoardTask(task: Task, projectName: string | undefined, initials: stri
   };
 }
 
-export function BoardScreen({ activeScopeIds, projectId, onOpenTask }: BoardScreenProps) {
+export function BoardScreen({
+  activeScopeIds,
+  projectId,
+  onOpenTask,
+  onNewTask,
+  aiBoard = false,
+  flip,
+}: BoardScreenProps) {
   const { scopes, projects, people, settings } = useSessionData();
   const { updateSettings } = useSession();
 
@@ -80,18 +92,32 @@ export function BoardScreen({ activeScopeIds, projectId, onOpenTask }: BoardScre
 
   const tasks = useMemo<BoardTask[]>(() => {
     const columns = board.data?.columns ?? [];
-    return columns
-      .flatMap((column) => column.groups.flatMap((group) => group.tasks))
-      .map((task) => {
-        const card = toBoardTask(
-          task,
-          projectName(task.project_id ?? null),
-          initialsOf(task.assignee_ids ?? []),
-        );
-        const moved = optimistic[task.id];
-        return moved === undefined ? card : { ...card, status: moved };
-      });
-  }, [board.data, optimistic, projectName, initialsOf]);
+    return (
+      columns
+        .flatMap((column) => column.groups.flatMap((group) => group.tasks))
+        /**
+         * **La bústia surt sencera als dos taulers; les altres tres es reparteixen.**
+         *
+         * Una tasca amb mode d'IA no és feina teva encara, i barrejar-la amb la resta a
+         * "Per fer" fa que la columna deixi de dir què has de fer tu. La bústia és
+         * l'excepció perquè és on tot arriba abans de decidir-ho.
+         */
+        .filter((task) => {
+          if (task.status === 'inbox') return true;
+          const delegated = task.ai_mode !== 'manual';
+          return aiBoard ? delegated : !delegated;
+        })
+        .map((task) => {
+          const card = toBoardTask(
+            task,
+            projectName(task.project_id ?? null),
+            initialsOf(task.assignee_ids ?? []),
+          );
+          const moved = optimistic[task.id];
+          return moved === undefined ? card : { ...card, status: moved };
+        })
+    );
+  }, [board.data, optimistic, projectName, initialsOf, aiBoard]);
 
   const activeScopes = scopes.filter((scope) => activeScopeIds.includes(scope.id));
 
@@ -115,6 +141,26 @@ export function BoardScreen({ activeScopeIds, projectId, onOpenTask }: BoardScre
     setOptimistic((current) => ({ ...current, [taskId]: status }));
 
     try {
+      /**
+       * **Al kanban de la IA, treure una targeta de la bústia la delega.**
+       *
+       * És el gest que el disseny validat fa servir per posar-hi feina: arrossegar-la a
+       * "Per fer" del tauler de la IA vol dir "encarrega-t'ho". I a l'inrevés, tornar-la
+       * a la bústia des d'allà l'hi treu — sense això seria una porta d'un sol sentit i
+       * una tasca delegada per error no es podria recuperar.
+       */
+      if (aiBoard) {
+        const current = board.data?.columns
+          .flatMap((column) => column.groups.flatMap((group) => group.tasks))
+          .find((task) => task.id === taskId);
+
+        if (status !== 'inbox' && current?.ai_mode === 'manual') {
+          await api.post(`/api/v1/tasks/${taskId}/ai-mode`, { ai_mode: 'assisted' });
+        } else if (status === 'inbox' && current !== undefined && current.ai_mode !== 'manual') {
+          await api.post(`/api/v1/tasks/${taskId}/ai-mode`, { ai_mode: 'manual' });
+        }
+      }
+
       /**
        * La posició la calcula el client (D3). Es posa al final de la columna de destí
        * perquè és on el gest deixa la targeta quan no s'ha afinat entre dues.
@@ -144,13 +190,16 @@ export function BoardScreen({ activeScopeIds, projectId, onOpenTask }: BoardScre
     }
   };
 
-  const create = async (input: {
-    title: string;
-    scopeId: string;
-    projectId: string | null;
-    assigneeIds: string[];
-    aiMode: 'manual' | 'assisted' | 'delegated';
-  }): Promise<void> => {
+  const create = async (
+    input: {
+      title: string;
+      scopeId: string;
+      projectId: string | null;
+      assigneeIds: string[];
+      aiMode: 'manual' | 'assisted' | 'delegated';
+    },
+    status: TaskStatus = 'inbox',
+  ): Promise<void> => {
     // L'identificador el genera el client (D4): així la creació és idempotent i la cua
     // de sortida pot reintentar-la sense duplicar res.
     await api.post('/api/v1/tasks', {
@@ -158,6 +207,7 @@ export function BoardScreen({ activeScopeIds, projectId, onOpenTask }: BoardScre
       scope_id: input.scopeId,
       project_id: input.projectId ?? undefined,
       title: input.title,
+      status,
       assignee_ids: input.assigneeIds.length > 0 ? input.assigneeIds : undefined,
     });
     board.reload();
@@ -190,6 +240,46 @@ export function BoardScreen({ activeScopeIds, projectId, onOpenTask }: BoardScre
       ) : null}
 
       <KanbanBoard
+        aiBoard={aiBoard}
+        flip={flip}
+        renderFooter={(status) =>
+          aiBoard ? (
+            <button
+              type="button"
+              data-testid={`ai-new-task-${status}`}
+              onClick={() => onNewTask(status, true)}
+              style={{
+                marginTop: 10,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6,
+                padding: '9px 0',
+                borderRadius: 100,
+                // Discontínua: no és un camp on escriure, és una porta cap al formulari.
+                border: '1px dashed var(--plou-blue-ink)',
+                background: 'transparent',
+                color: 'var(--plou-blue-ink)',
+                font: 'inherit',
+                fontSize: 12.5,
+                fontWeight: 700,
+                cursor: 'pointer',
+                width: '100%',
+              }}
+            >
+              <PlusIcon size={14} />
+              {t('board.ia.newTask')}
+            </button>
+          ) : (
+            <ColumnQuickAdd
+              status={status}
+              context={context}
+              scopes={scopes}
+              onCreate={(task) => void create(task, status)}
+              onFullEdit={() => onNewTask(status, false)}
+            />
+          )
+        }
         tasks={tasks}
         scopes={activeScopes.map((scope) => ({
           id: scope.id,
@@ -213,15 +303,6 @@ export function BoardScreen({ activeScopeIds, projectId, onOpenTask }: BoardScre
           />
         }
       />
-
-      <div style={{ maxWidth: 420 }}>
-        <QuickAdd
-          context={context}
-          columnLabel={t('board.column.inbox')}
-          scopeColors={Object.fromEntries(scopes.map((scope) => [scope.id, `var(${scope.color})`]))}
-          onCreate={(task) => void create(task)}
-        />
-      </div>
     </div>
   );
 }

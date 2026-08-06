@@ -47,6 +47,18 @@ export interface TaskRow {
 
 export interface Task extends TaskRow {
   assignee_ids: string[];
+  /**
+   * Subtasques i ítems de llista, comptats junts.
+   *
+   * La targeta els ensenya sota **un sol** commutador —"3/7 fets"— perquè per a qui
+   * mira el tauler són el mateix: coses que falten dins d'aquesta tasca. La distinció
+   * entre subtasca i llista només importa en obrir-la.
+   *
+   * Va al tauler com a agregat i no com a llista: portar tots els ítems de totes les
+   * targetes faria que una casa amb tres-centes tasques baixés uns quants milers de
+   * files per pintar unes quantes pastilles.
+   */
+  progress: { done: number; total: number };
 }
 
 const TASK_COLUMNS = sql`
@@ -70,7 +82,35 @@ async function withAssignees(db: MigrationDb, rows: TaskRow[]): Promise<Task[]> 
     byTask.set(link.task_id, list);
   }
 
-  return rows.map((row) => ({ ...row, assignee_ids: (byTask.get(row.id) ?? []).sort() }));
+  /**
+   * El recompte, en **una** consulta per a tot el tauler i no una per targeta.
+   *
+   * Subtasques i ítems de llista se sumen: la targeta els ensenya sota un sol
+   * commutador. `UNION ALL` i no dues consultes perquè el motor les recorre alhora.
+   */
+  const progress = await sql<{ task_id: string; done: number; total: number }>`
+    SELECT task_id, SUM(done) AS done, COUNT(*) AS total FROM (
+      SELECT s.task_id AS task_id, CASE WHEN s.done = ${dbBool(true)} THEN 1 ELSE 0 END AS done
+      FROM subtasks s
+      WHERE s.deleted_at IS NULL AND s.task_id IN (${sql.join(ids)})
+      UNION ALL
+      SELECT c.task_id AS task_id, CASE WHEN i.done = ${dbBool(true)} THEN 1 ELSE 0 END AS done
+      FROM checklist_items i
+      JOIN checklists c ON c.id = i.checklist_id AND c.deleted_at IS NULL
+      WHERE i.deleted_at IS NULL AND c.task_id IN (${sql.join(ids)})
+    ) AS tot
+    GROUP BY task_id
+  `.execute(db);
+
+  const counts = new Map(
+    progress.rows.map((row) => [row.task_id, { done: Number(row.done), total: Number(row.total) }]),
+  );
+
+  return rows.map((row) => ({
+    ...row,
+    assignee_ids: (byTask.get(row.id) ?? []).sort(),
+    progress: counts.get(row.id) ?? { done: 0, total: 0 },
+  }));
 }
 
 export async function getTask(db: MigrationDb, principal: Principal, id: string): Promise<Task> {

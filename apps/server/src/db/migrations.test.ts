@@ -15,6 +15,7 @@ import { join } from 'node:path';
 import { sql } from 'kysely';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { connect, type Connection } from './connection.js';
+import { connectTestSchema, type TestSchema } from './test-postgres.js';
 import type { Engine } from './dialect.js';
 import { MIGRATIONS, migrateDown, migrateToLatest } from './migrator.js';
 
@@ -67,7 +68,9 @@ async function tableNames(conn: Connection): Promise<string[]> {
   const query =
     conn.engine === 'sqlite'
       ? `SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'`
-      : `SELECT tablename AS name FROM pg_tables WHERE schemaname='public'`;
+      // `current_schema()` i no `'public'`: la suite corre al seu propi esquema
+      // (`test-postgres.ts`), i buscant a `public` es miraven les taules d'una altra.
+      : `SELECT tablename AS name FROM pg_tables WHERE schemaname = current_schema()`;
   const result = await sql.raw(query).execute(conn.db);
   return (result.rows as { name: string }[]).map((r) => r.name).sort();
 }
@@ -98,17 +101,17 @@ afterAll(() => {
 
 describe.each(motors)('migracions · $engine', (motor) => {
   let conn: Connection;
+  let schema: TestSchema | null = null;
 
   beforeAll(async () => {
-    conn = connect(motor.url);
-    // Postgres pot arribar amb l'esquema d'una execució anterior.
-    if (motor.engine === 'postgres') {
-      await sql.raw('DROP SCHEMA public CASCADE; CREATE SCHEMA public').execute(conn.db);
-    }
+    // Esquema propi per no xocar amb les altres suites (veure `test-postgres.ts`).
+    schema = motor.engine === 'postgres' ? await connectTestSchema(motor.url, 'migrations') : null;
+    conn = schema ?? connect(motor.url);
   });
 
   afterAll(async () => {
-    await conn.close();
+    if (schema !== null) await schema.drop();
+    else await conn.close();
   });
 
   it('up crea totes les taules del document', async () => {

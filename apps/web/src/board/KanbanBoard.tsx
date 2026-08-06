@@ -54,6 +54,25 @@ export interface KanbanBoardProps {
    * optimista i revertir si el servidor rebutja (docs/02 §4).
    */
   onDrop?: (taskId: string, status: TaskStatus) => void;
+  /**
+   * El peu de cada columna. docs/02 §4: "Camp de text al peu de cada columna".
+   *
+   * El decideix qui munta el tauler perquè al kanban de la IA no és un camp sinó un
+   * botó: escriure "comprar pa" i que ho faci la IA no vol dir res sense dir-li què ha
+   * de fer, i el disseny validat hi posa "Nova tasca per a la IA" cap a l'edició
+   * completa.
+   */
+  renderFooter?: (status: TaskStatus) => ReactNode;
+  /**
+   * El kanban de la IA.
+   *
+   * No és una altra pantalla: és **el mateix tauler girat**. Les columnes són les
+   * mateixes i el que canvia és quines targetes hi surten — les que tenen mode d'IA— i
+   * que la vora i el distintiu ho diuen.
+   */
+  aiBoard?: boolean;
+  /** L'estat del gir, mentre dura. Qui el munta el condueix. */
+  flip?: { transform: string; transition: string } | undefined;
 }
 
 /** L'ordre de les columnes és el del producte i no es reordena. */
@@ -74,6 +93,9 @@ export function KanbanBoard({
   onToggleDone,
   doneHeaderActions,
   onDrop,
+  renderFooter,
+  aiBoard = false,
+  flip,
 }: KanbanBoardProps) {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   // L'agrupació per àmbit surt quan hi ha més d'un àmbit actiu (docs/02 §4).
@@ -149,6 +171,7 @@ export function KanbanBoard({
             divider={column.status !== 'todo'}
             dropIndicator={over}
             headerActions={column.status === 'done' ? doneHeaderActions : undefined}
+            footer={renderFooter?.(column.status)}
           >
             {body}
           </KanbanColumn>
@@ -215,7 +238,44 @@ export function KanbanBoard({
             />
           )}
         </DroppableColumn>
-        <KanbanGroup>{rest.map(renderColumn)}</KanbanGroup>
+        {/*
+          El gir viu aquí i no a cada columna: el que gira és la targeta sencera, i
+          animar-ne tres per separat les desincronitzaria a la primera pantalla lenta.
+        */}
+        <div style={{ perspective: 1800, minHeight: 0, position: 'relative' }}>
+          {aiBoard ? (
+            <span
+              data-testid="ai-board-badge"
+              style={{
+                position: 'absolute',
+                top: -9,
+                left: 20,
+                zIndex: 2,
+                fontSize: 9.5,
+                fontWeight: 700,
+                color: 'var(--on-brand)',
+                background: 'var(--gradient-brand-2stop)',
+                borderRadius: 100,
+                padding: '3px 10px',
+                textTransform: 'uppercase',
+                letterSpacing: '.05em',
+              }}
+            >
+              {t('board.ia.badge')}
+            </span>
+          ) : null}
+          <div
+            data-ai-board={aiBoard ? 'true' : 'false'}
+            style={{
+              transform: flip?.transform ?? 'rotateY(0deg)',
+              transition: flip?.transition ?? 'transform 260ms cubic-bezier(0.2,0,0,1)',
+            }}
+          >
+            <KanbanGroup borderColor={aiBoard ? 'var(--plou-blue-ink)' : undefined}>
+              {rest.map(renderColumn)}
+            </KanbanGroup>
+          </div>
+        </div>
       </div>
     </BoardDnd>
   );

@@ -31,6 +31,7 @@ import { buildApp } from '../app.js';
 import { loadConfig } from '../config.js';
 import { hashPassword } from '../auth/password.js';
 import { connect, type Connection } from '../db/connection.js';
+import { connectTestSchema, type TestSchema } from '../db/test-postgres.js';
 import { migrateToLatest } from '../db/migrator.js';
 
 const NOW = '2026-08-06T09:00:00.000Z';
@@ -45,6 +46,7 @@ if (pgUrl !== undefined && pgUrl !== '') MOTORS.push({ engine: 'postgres', url: 
 describe.each(MOTORS)('motor $engine', (motor) => {
   let tmp: string;
   let conn: Connection;
+  let schema: TestSchema | null = null;
   let app: FastifyInstance;
   let auth: Record<string, string>;
   let userId: string;
@@ -62,12 +64,12 @@ describe.each(MOTORS)('motor $engine', (motor) => {
 
   beforeAll(async () => {
     tmp = mkdtempSync(join(tmpdir(), 'femho-dual-'));
-    conn = connect(motor.url ?? `sqlite://${join(tmp, 't.db')}`);
+    // Esquema propi: tres suites comparteixen la base i esborrar `public` les feia
+    // xocar entre elles (veure `db/test-postgres.ts`).
+    schema =
+      motor.url === null ? null : await connectTestSchema(motor.url, 'dual_engine');
+    conn = schema ?? connect(`sqlite://${join(tmp, 't.db')}`);
 
-    if (motor.engine === 'postgres') {
-      await sql`DROP SCHEMA public CASCADE`.execute(conn.db);
-      await sql`CREATE SCHEMA public`.execute(conn.db);
-    }
     await migrateToLatest(conn.db, { engine: motor.engine });
 
     userId = uuidv7();
@@ -98,7 +100,8 @@ describe.each(MOTORS)('motor $engine', (motor) => {
 
   afterAll(async () => {
     await app.close();
-    await conn.close();
+    if (schema !== null) await schema.drop();
+    else await conn.close();
     rmSync(tmp, { recursive: true, force: true });
   });
 

@@ -3155,6 +3155,19 @@ components:
         recurrence_parent_id:
           type: [string, 'null']
           description: La instància de la qual ve, si n'és una repetició.
+        progress:
+          type: object
+          required: [done, total]
+          description: |
+            Subtasques i ítems de llista **comptats junts**. La targeta els ensenya sota
+            un sol commutador ("3/7 fets") perquè per a qui mira el tauler són el mateix:
+            coses que falten dins d'aquesta tasca. La distinció importa en obrir-la.
+
+            És un agregat i no la llista: portar tots els ítems de totes les targetes
+            faria baixar milers de files per pintar unes quantes pastilles.
+          properties:
+            done: { type: integer }
+            total: { type: integer }
         assignee_ids:
           type: array
           items: { type: string }

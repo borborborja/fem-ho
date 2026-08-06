@@ -22,6 +22,30 @@ import type { Checklist } from './types.js';
 
 type Menu = 'project' | 'add' | 'pinned' | 'profile' | null;
 
+/** El robot del commutador de la IA, tal com el dibuixa el prototip validat. */
+function RobotIcon() {
+  return (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M12 8V4H8" />
+      <rect x="4" y="8" width="16" height="12" rx="2" />
+      <path d="M2 14h2" />
+      <path d="M20 14h2" />
+      <path d="M15 13v2" />
+      <path d="M9 13v2" />
+    </svg>
+  );
+}
+
 export interface TopBarProps {
   view: 'tasks' | 'calendar';
   activeScopeIds: string[];
@@ -32,6 +56,15 @@ export interface TopBarProps {
   onNewProject: () => void;
   onNewChecklist: () => void;
   onScopeWarning: (message: string) => void;
+  /**
+   * El commutador del kanban de la IA.
+   *
+   * Només surt si hi ha algun agent actiu: sense IA, un botó que gira el tauler cap a un
+   * tauler buit no és una funció, és una pregunta sense resposta.
+   */
+  aiEnabled?: boolean;
+  aiBoardActive?: boolean;
+  onToggleAiBoard?: () => void;
 }
 
 export function TopBar({
@@ -44,6 +77,9 @@ export function TopBar({
   onNewProject,
   onNewChecklist,
   onScopeWarning,
+  aiEnabled = false,
+  aiBoardActive = false,
+  onToggleAiBoard,
 }: TopBarProps) {
   const { profile, scopes, projects } = useSessionData();
   const { logout } = useSession();
@@ -368,6 +404,36 @@ export function TopBar({
                 )
               : null}
           </div>
+
+          {/*
+            El commutador del kanban de la IA.
+            Actiu, s'omple amb el gradient de marca: és el mateix senyal que fa servir
+            la vora del tauler i el distintiu, perquè els tres diguin el mateix.
+          */}
+          {aiEnabled && view === 'tasks' ? (
+            <button
+              type="button"
+              data-testid="ai-board-toggle"
+              aria-pressed={aiBoardActive}
+              aria-label={t('board.ia.toggle')}
+              title={t('board.ia.toggle')}
+              onClick={onToggleAiBoard}
+              style={{
+                width: 38,
+                height: 38,
+                borderRadius: '50%',
+                border: 'none',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: aiBoardActive ? 'var(--gradient-brand-2stop)' : 'var(--tag-bg)',
+                color: aiBoardActive ? 'var(--on-brand)' : 'var(--ink-soft)',
+              }}
+            >
+              <RobotIcon />
+            </button>
+          ) : null}
 
           {/* Si no n'hi ha cap, el botó no es mostra (docs/02 §3). */}
           {pinned.length > 0 ? (

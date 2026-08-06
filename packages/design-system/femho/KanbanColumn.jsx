@@ -177,7 +177,7 @@ export function ScopeGroupHeader({ label, color, open, onToggle, extra }) {
  * És el que fa que "es sentin un sol element" (brief línia 39): una sola targeta
  * sòlida amb les tres a dins, tal com fa el prototip.
  */
-export function KanbanGroup({ children, style, ...rest }) {
+export function KanbanGroup({ children, borderColor, style, ...rest }) {
   return (
     <div
       style={{
