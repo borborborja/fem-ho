@@ -51,3 +51,28 @@ amb aquests clients és una expectativa raonable, no un fet.
   avisa `docs/07` §7. Per a les col·leccions que publica Fem-ho no hi ha problema —les
   guardem nosaltres i a més tenim `raw_ical`—; el risc és només quan Fem-ho escriu a un
   origen extern, i s'ha de provar per origen.
+
+---
+
+# Android: què hi ha i què no (M13)
+
+**Hi ha el mòdul `core`**, que és Kotlin pur sense Android: el parser d'afegida ràpida i
+l'índex fraccional, tots dos **portats línia a línia** dels de TypeScript i verificats
+contra els **mateixos fixtures compartits**. Es corren amb `npm run test:android` i no
+necessiten emulador, ni SDK, ni llicències.
+
+La comprovació permanent `parser-parity` ara exigeix les dues bandes: si una prova de
+Kotlin deixés de llegir `packages/contracts/fixtures/quickadd.json`, ho diria.
+
+**No hi ha encara l'app de Compose.** El que falta de `docs/03`, i que necessita
+emulador o dispositiu:
+
+- Les pantalles de Compose portades de `design/prototip/Fem-ho Mobile.dc.html`.
+- El login **amb camp de servidor** validat contra `GET /info`.
+- Room i la cua de sortida.
+- UnifiedPush.
+- `androidTest: airplane-mode-reconciliation` i la comparació de captures entre web
+  mòbil i app, que `docs/13` marca com a criteri d'acceptació de la fita.
+
+Això últim **només es pot jutjar amb captures comparades i necessitarà revisió teva**,
+com ja avisava el pla a la taula de riscos.

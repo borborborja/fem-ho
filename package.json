@@ -35,6 +35,7 @@
     "format:check": "prettier --check .",
     "lint": "eslint .",
     "test": "vitest run",
+    "test:android": "cd apps/android && gradle :core:test --console=plain",
     "typecheck": "npm run typecheck --workspaces --if-present"
   },
   "devDependencies": {

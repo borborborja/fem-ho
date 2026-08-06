@@ -26,3 +26,8 @@ playwright-report/
 
 # Captures reals de Playwright (les de referència sí que es versionen)
 apps/web/e2e/**/*-actual.png
+
+# Android
+apps/android/.gradle/
+apps/android/build/
+apps/android/*/build/

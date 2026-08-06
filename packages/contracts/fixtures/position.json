@@ -1,0 +1,121 @@
+{
+  "$comment": [
+    "Fixtures de l'index fraccional, COMPARTITS entre TypeScript i Kotlin (D3).",
+    "",
+    "Amb jitter, dues crides a generatePosition no donen el mateix ni al mateix costat:",
+    "aixo es volgut i es el que evita que dos clients offline produeixin la MATEIXA clau.",
+    "Per tant el que ha de coincidir NO es la sortida de generatePosition, sino:",
+    "",
+    "  1. `midpoints` — el punt mig DETERMINISTA, que no porta jitter i ha de sortir",
+    "     caracter a caracter igual als dos costats. Si divergeix, les claus generades",
+    "     cauran a zones diferents de l'espai i l'ordre acabara sent diferent.",
+    "  2. `comparisons` — la comparacio, que es BINARIA i no linguistica. `localeCompare`",
+    "     donaria un altre ordre i la base es desordenaria sense cap error visible.",
+    "  3. `alphabet` — si els dos costats no fan servir els mateixos digits en el mateix",
+    "     ordre, res de tot aixo te sentit.",
+    "",
+    "Els valors d'aqui els va generar la implementacio de TypeScript, que es la de",
+    "referencia. Canviar-los vol dir haver canviat l'algorisme, i llavors s'han de tornar",
+    "a generar i les dues implementacions han de passar els nous."
+  ],
+  "alphabet": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz",
+  "midpoints": [
+    {
+      "before": null,
+      "after": null,
+      "midpoint": "aV"
+    },
+    {
+      "before": "a0",
+      "after": null,
+      "midpoint": "a1"
+    },
+    {
+      "before": null,
+      "after": "a1",
+      "midpoint": "a0"
+    },
+    {
+      "before": "a0",
+      "after": "a1",
+      "midpoint": "a0V"
+    },
+    {
+      "before": "a0",
+      "after": "a0V",
+      "midpoint": "a0G"
+    },
+    {
+      "before": "Zz",
+      "after": "a0",
+      "midpoint": "ZzV"
+    },
+    {
+      "before": "a0V",
+      "after": "a1",
+      "midpoint": "a0l"
+    },
+    {
+      "before": "a1",
+      "after": "a2",
+      "midpoint": "a1V"
+    },
+    {
+      "before": "a0000",
+      "after": "a0001",
+      "midpoint": "a0000V"
+    },
+    {
+      "before": null,
+      "after": "Zz",
+      "midpoint": "Zy"
+    }
+  ],
+  "comparisons": [
+    {
+      "a": "a0",
+      "b": "a1",
+      "result": -1
+    },
+    {
+      "a": "a1",
+      "b": "a0",
+      "result": 1
+    },
+    {
+      "a": "a0",
+      "b": "a0",
+      "result": 0
+    },
+    {
+      "a": "Zz",
+      "b": "a0",
+      "result": -1
+    },
+    {
+      "a": "a0",
+      "b": "a0V",
+      "result": -1
+    },
+    {
+      "a": "a0V",
+      "b": "a1",
+      "result": -1
+    },
+    {
+      "a": "A",
+      "b": "a",
+      "result": -1
+    },
+    {
+      "a": "0",
+      "b": "z",
+      "result": -1
+    },
+    {
+      "a": "a0",
+      "b": "a0000001",
+      "result": -1
+    }
+  ]
+}

@@ -23,8 +23,8 @@
  * Mentre no hi hagi Kotlin, ho diu clarament en comptes de passar en verd.
  */
 
-import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { join, sep } from 'node:path';
 import { ROOT } from './lib/scan.mjs';
 
 const FIXTURES = join(ROOT, 'packages', 'contracts', 'fixtures', 'quickadd.json');
@@ -94,7 +94,72 @@ if (!existsSync(TS_TEST)) {
   }
 }
 
+/**
+ * El costat de Kotlin, amb **el mateix llistó que el de TypeScript**.
+ *
+ * Comprovar només que `apps/android` existeixi seria una comprovació de mentida: el que
+ * importa no és que hi hagi codi Kotlin, sinó que les seves proves llegeixin **aquest**
+ * fitxer de casos. Una prova de Kotlin amb els casos escrits a dins passaria igual i la
+ * divergència tornaria a ser invisible.
+ */
 const androidExists = existsSync(ANDROID);
+
+if (androidExists) {
+  const kotlinTests = findKotlinTests(ANDROID);
+
+  if (kotlinTests.length === 0) {
+    problems.push(
+      `Hi ha ${ANDROID} però cap prova de Kotlin que parli del parser. Els fixtures ` +
+        'només els executa un dels dos costats.',
+    );
+  } else {
+    const readsFixtures = kotlinTests.some((file) =>
+      /packages\/contracts\/fixtures\/quickadd\.json/.test(readFileSync(file, 'utf8')),
+    );
+
+    if (!readsFixtures) {
+      problems.push(
+        'Cap prova de Kotlin llegeix packages/contracts/fixtures/quickadd.json. Si els ' +
+          'casos són a la prova, TypeScript i Kotlin no proven el mateix.',
+      );
+    }
+
+    // Els mateixos casos escrits a mà al costat de Kotlin: valen com a proves seves,
+    // però no són paritat.
+    const inlineKotlin = kotlinTests.flatMap((file) =>
+      [...readFileSync(file, 'utf8').matchAll(/parseQuickAdd\(\s*"([^"]{12,})"/g)]
+        .map((m) => m[1])
+        .filter((input) => !inputs.includes(input)),
+    );
+
+    if (inlineKotlin.length > 0) {
+      notes.push(
+        `${inlineKotlin.length} entrades escrites a les proves de Kotlin i no als ` +
+          'fixtures. TypeScript no les executarà.',
+      );
+    }
+  }
+}
+
+/** Els fitxers de prova de Kotlin que toquen el parser. */
+function findKotlinTests(root) {
+  const found = [];
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (entry.name === 'build' || entry.name === '.gradle') continue;
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (
+        entry.name.endsWith('.kt') &&
+        /parseQuickAdd|QuickAdd/.test(readFileSync(full, 'utf8'))
+      ) {
+        if (full.includes(`${sep}test${sep}`)) found.push(full);
+      }
+    }
+  };
+  walk(root);
+  return found;
+}
 
 console.log(`parser-parity · ${caseCount} casos compartits als fixtures`);
 for (const note of notes) console.warn(`  nota: ${note}`);
@@ -111,5 +176,5 @@ if (!androidExists) {
       'hagi apps/android.',
   );
 } else {
-  console.log('  els dos costats els executen.');
+  console.log('  els dos costats executen els mateixos casos.');
 }

@@ -199,5 +199,17 @@
     "lucide-react 1.28.0": "PLAUSIBLE. lucide-static és a 1.28.0, o sigui que la renumeració va existir.",
     "@modelcontextprotocol/{core,server,client} a 2.0.0": "FALS, la sospita era bona. El paquet és un de sol, @modelcontextprotocol/sdk, a 1.30.0.",
     "conclusió": "La regla 2 es manté igual, però el motiu no és que research/ menteixi: és que cap versió pot entrar sense procedència comprovable. Aquest fitxer és aquesta procedència."
+  },
+  "resolvedMaven": {
+    "org.jetbrains.kotlin:kotlin-gradle-plugin": {
+      "version": "2.2.0",
+      "checkedAt": "2026-08-06",
+      "note": "Consultat a Maven Central. El primer intent va ser 2.1.0, que em vaig inventar i no resolia: la regla 2 val també per a Maven."
+    },
+    "org.jetbrains.kotlinx:kotlinx-serialization-json": {
+      "version": "1.11.0",
+      "checkedAt": "2026-08-06",
+      "note": "Només a les proves, per llegir els fixtures compartits. El codi de producció no depèn de cap llibreria de JSON."
+    }
   }
 }
