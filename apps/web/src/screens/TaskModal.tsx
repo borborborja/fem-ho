@@ -18,7 +18,7 @@ import { ActivityTimeline, ChecklistRow, EmptyState } from '@fem-ho/design-syste
 import { api } from '../app/api.js';
 import { useSessionData } from '../app/session.js';
 import { useApi, useMutation } from '../app/useApi.js';
-import type { ActivityEntry, Checklist, Comment, Subtask, Task } from '../app/types.js';
+import type { ActivityEntry, Checklist, Comment, Label, Subtask, Task } from '../app/types.js';
 
 /**
  * Els verbs que l'historial sap traduir.
@@ -74,6 +74,7 @@ export function TaskModal({ taskId, onClose, onChanged, onShare, onOpenList }: T
   const [newSubtask, setNewSubtask] = useState('');
   const [newComment, setNewComment] = useState('');
   const [activityFilter, setActivityFilter] = useState<'all' | 'ai' | 'human'>('all');
+  const labels = useApi<Label[]>('/api/v1/labels');
 
   useEffect(() => {
     if (task.data === undefined || draft !== null) return;
@@ -278,6 +279,85 @@ export function TaskModal({ taskId, onClose, onChanged, onShare, onOpenList }: T
                 />
               </label>
             )}
+
+            <section style={{ display: 'grid', gap: 6 }}>
+              {label(t('task.assignees'))}
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {people.map((person) => {
+                  const assigned = (data?.assignee_ids ?? []).includes(person.id);
+                  return (
+                    <button
+                      key={person.id}
+                      type="button"
+                      data-testid={`task-assignee-${person.id}`}
+                      aria-pressed={assigned}
+                      onClick={() => {
+                        // S'aplica de seguida i no al desar: assignar és un gest, no un
+                        // camp del formulari, i el servidor ja el registra com a tal.
+                        const call = assigned ? api.delete : api.post;
+                        void call(`/api/v1/tasks/${taskId}/assignees/${person.id}`).then(() => {
+                          task.reload();
+                          onChanged();
+                        });
+                      }}
+                      style={{
+                        padding: '5px 11px',
+                        borderRadius: 100,
+                        cursor: 'pointer',
+                        font: 'inherit',
+                        fontSize: 12,
+                        fontWeight: assigned ? 700 : 500,
+                        border: '1px solid var(--card-border)',
+                        background: assigned ? 'var(--ghost-bg)' : 'transparent',
+                        color: 'var(--ink)',
+                      }}
+                    >
+                      {person.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+
+            <section style={{ display: 'grid', gap: 6 }}>
+              {label(t('task.labels'))}
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {/*
+                  Només les etiquetes de l'àmbit de la tasca: una d'un altre àmbit el
+                  servidor la rebutja amb un 422, i oferir-la seria oferir un error.
+                */}
+                {(labels.data ?? [])
+                  .filter((entry) => entry.scope_id === data?.scope_id)
+                  .map((entry) => (
+                    <button
+                      key={entry.id}
+                      type="button"
+                      data-testid={`task-label-${entry.id}`}
+                      onClick={() => {
+                        void api
+                          .post(`/api/v1/tasks/${taskId}/labels/${entry.id}`)
+                          .catch(() => api.delete(`/api/v1/tasks/${taskId}/labels/${entry.id}`))
+                          .then(() => {
+                            onChanged();
+                          });
+                      }}
+                      style={{
+                        padding: '4px 10px',
+                        borderRadius: 100,
+                        cursor: 'pointer',
+                        font: 'inherit',
+                        fontSize: 11,
+                        border: 'none',
+                        background: 'var(--tag-bg)',
+                        color: 'var(--tag-text)',
+                        borderLeft: `3px solid var(${entry.color})`,
+                      }}
+                    >
+                      {entry.name}
+                    </button>
+                  ))}
+              </div>
+            </section>
 
             <section style={{ display: 'grid', gap: 4 }}>
               {label(t('task.subtasks'))}
