@@ -1,0 +1,47 @@
+# Fem-ho darrere de Caddy (docs/12 §4).
+#
+# Caddy és el més senzill dels tres: **no bloqueja els verbs DAV** i no fa memòria
+# intermèdia de les respostes per defecte, o sigui que la major part del que als altres
+# cal configurar aquí ja ve bé de sèrie. El certificat el treu sol de Let's Encrypt.
+
+femho.example.com {
+	# El CalDAV va en un port propi del MATEIX procés (D1). Es publica sota /dav perquè
+	# els clients només hagin de saber un amfitrió.
+	handle /dav/* {
+		reverse_proxy localhost:8081 {
+			# Sense això el servidor genera URL amb l'amfitrió intern, i els clients
+			# CalDAV segueixen els `href` que reben.
+			header_up X-Forwarded-Proto {scheme}
+		}
+	}
+
+	# El descobriment de CalDAV. Sense aquesta redirecció, els clients no troben res
+	# encara que la resta estigui perfecta.
+	redir /.well-known/caldav /dav/ 301
+
+	# L'SSE i l'MCP: temps d'espera llargs i cap memòria intermèdia. Caddy no en fa,
+	# però el temps d'espera per defecte sí que tallaria un flux obert.
+	handle /api/v1/stream {
+		reverse_proxy localhost:8080 {
+			flush_interval -1
+			transport http {
+				read_timeout 24h
+			}
+		}
+	}
+
+	handle /mcp {
+		reverse_proxy localhost:8080 {
+			flush_interval -1
+		}
+	}
+
+	handle {
+		reverse_proxy localhost:8080
+	}
+
+	# Les pujades. Ha de coincidir amb FEMHO_MAX_UPLOAD_MB.
+	request_body {
+		max_size 25MB
+	}
+}

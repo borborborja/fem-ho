@@ -17,6 +17,7 @@ import { registerInstanceRoutes } from './http/instance.js';
 import { registerMcpRoutes } from './http/mcp.js';
 import { registerSyncRoutes } from './http/sync.js';
 import { registerPushRoutes } from './http/push.js';
+import { registerSetupRoutes } from './http/setup.js';
 import { registerShareRoutes } from './http/shares.js';
 import { registerTokenRoutes } from './http/tokens.js';
 import { registerChecklistRoutes, registerEventRoutes, registerTaskRoutes } from './http/tasks.js';
@@ -75,6 +76,7 @@ export function buildApp(config: Config, options: BuildOptions = {}): FastifyIns
   registerMcpRoutes(app);
   registerTokenRoutes(app);
   registerPushRoutes(app);
+  registerSetupRoutes(app);
   /**
    * El secret es resol **quan es necessita**, no en construir l'app: `buildApp` no ha de
    * tocar el disc. Una instància que només serveixi `/healthz` no ha de crear cap fitxer,

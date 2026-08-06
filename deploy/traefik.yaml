@@ -1,0 +1,41 @@
+# Fem-ho darrere de Traefik (docs/12 §4), amb etiquetes de Docker.
+#
+# Traefik tampoc bloqueja els verbs DAV. El que sí que cal dir-li explícitament és que
+# **no faci memòria intermèdia de l'SSE**: sense això els esdeveniments arriben a
+# bocins o no arriben.
+#
+# Aquest fitxer és per afegir al `compose.yaml`, no per fer-lo servir sol.
+
+services:
+  femho:
+    labels:
+      - 'traefik.enable=true'
+
+      # --- L'aplicació -------------------------------------------------------
+      - 'traefik.http.routers.femho.rule=Host(`femho.example.com`)'
+      - 'traefik.http.routers.femho.entrypoints=websecure'
+      - 'traefik.http.routers.femho.tls.certresolver=letsencrypt'
+      - 'traefik.http.services.femho.loadbalancer.server.port=8080'
+
+      # --- L'SSE, amb prioritat més alta perquè guanyi a la regla general -----
+      - 'traefik.http.routers.femho-sse.rule=Host(`femho.example.com`) && Path(`/api/v1/stream`)'
+      - 'traefik.http.routers.femho-sse.entrypoints=websecure'
+      - 'traefik.http.routers.femho-sse.tls.certresolver=letsencrypt'
+      - 'traefik.http.routers.femho-sse.priority=100'
+      - 'traefik.http.routers.femho-sse.service=femho'
+      # `flushInterval: -1` és el que fa que cada esdeveniment surti de seguida.
+      - 'traefik.http.services.femho.loadbalancer.responseforwarding.flushinterval=-1'
+
+      # --- El CalDAV, al port propi ------------------------------------------
+      - 'traefik.http.routers.femho-dav.rule=Host(`femho.example.com`) && PathPrefix(`/dav`)'
+      - 'traefik.http.routers.femho-dav.entrypoints=websecure'
+      - 'traefik.http.routers.femho-dav.tls.certresolver=letsencrypt'
+      - 'traefik.http.routers.femho-dav.priority=100'
+      - 'traefik.http.routers.femho-dav.service=femho-dav'
+      - 'traefik.http.services.femho-dav.loadbalancer.server.port=8081'
+
+      # --- El descobriment ---------------------------------------------------
+      - 'traefik.http.middlewares.femho-wellknown.redirectregex.regex=^https?://([^/]+)/\.well-known/caldav$$'
+      - 'traefik.http.middlewares.femho-wellknown.redirectregex.replacement=https://$${1}/dav/'
+      - 'traefik.http.middlewares.femho-wellknown.redirectregex.permanent=true'
+      - 'traefik.http.routers.femho.middlewares=femho-wellknown'

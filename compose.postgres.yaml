@@ -1,0 +1,57 @@
+# Fem-ho amb PostgreSQL (docs/12 §2, D11).
+#
+# **No és el cas recomanat**: per a una casa, SQLite va millor i és més fàcil de copiar.
+# Aquest fitxer hi és perquè qui ja tingui un Postgres el pugui fer servir, i perquè el
+# projecte es prova als dos motors a CI.
+#
+#   docker compose -f compose.postgres.yaml up -d
+
+services:
+  femho:
+    image: ghcr.io/borborborja/fem-ho:1
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - '8080:8080'
+      - '8081:8081'
+    volumes:
+      - femho-data:/data
+    environment:
+      FEMHO_BASE_URL: https://femho.example.com
+      FEMHO_DATABASE_URL: postgres://femho:${POSTGRES_PASSWORD:?cal posar POSTGRES_PASSWORD}@postgres:5432/femho
+      FEMHO_TRUSTED_PROXIES: 172.16.0.0/12
+      FEMHO_REGISTRATION: disabled
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    volumes:
+      - femho-pg:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: femho
+      POSTGRES_DB: femho
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?cal posar POSTGRES_PASSWORD}
+    healthcheck:
+      # `femho` i no `postgres`: `pg_isready` respondria que sí abans que la base de
+      # l'aplicació existeixi, i el servidor arrencaria contra una base que no hi és.
+      test: ['CMD-SHELL', 'pg_isready -U femho -d femho']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+# El volum de dades hi és igualment amb Postgres: hi viuen el secret de la instància,
+# els adjunts i les còpies de seguretat.
+volumes:
+  femho-data:
+  femho-pg:

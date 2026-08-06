@@ -1,0 +1,42 @@
+# Fem-ho amb SQLite: **el cas recomanat per a una casa** (docs/12 §2, D11).
+#
+# Un sol contenidor, un sol volum. No cal cap base de dades a part, i les còpies de
+# seguretat són copiar un fitxer.
+#
+#   docker compose up -d
+#
+# El primer arrencament crea l'esquema i espera: obre https://.../setup per crear
+# l'administrador. Un cop creat, aquella ruta es tanca per sempre.
+
+services:
+  femho:
+    image: ghcr.io/borborborja/fem-ho:1
+    restart: unless-stopped
+    ports:
+      - '8080:8080'
+      # El port del CalDAV. Va al mateix procés però en un port propi (D1).
+      - '8081:8081'
+    volumes:
+      - femho-data:/data
+    environment:
+      # **Obligatòria en producció.** Sense això, CalDAV i els enllaços compartits
+      # generen URL incorrectes, que és la causa número u de problemes (docs/12 §3).
+      FEMHO_BASE_URL: https://femho.example.com
+      FEMHO_DATABASE_URL: sqlite:///data/femho.db
+      # El rang del proxy invers, perquè `X-Forwarded-For` es pugui creure.
+      FEMHO_TRUSTED_PROXIES: 172.16.0.0/12
+      # Per defecte, les altes les fa l'administrador. És el correcte per a una
+      # instància familiar exposada a internet (docs/12 §7).
+      FEMHO_REGISTRATION: disabled
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  femho-data:
