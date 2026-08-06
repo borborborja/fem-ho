@@ -1,0 +1,20 @@
+# De deploy/Caddyfile, amb TLS tret i els amfitrions de Docker. La resta és igual.
+:80 {
+	handle /dav/* {
+		reverse_proxy femho:8081 {
+			header_up X-Forwarded-Proto {scheme}
+		}
+	}
+
+	redir /.well-known/caldav /dav/ 301
+
+	handle /api/v1/stream {
+		reverse_proxy femho:8080 {
+			flush_interval -1
+		}
+	}
+
+	handle {
+		reverse_proxy femho:8080
+	}
+}

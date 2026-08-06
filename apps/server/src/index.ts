@@ -9,6 +9,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { buildApp } from './app.js';
 import { ensureInstanceSecret } from './config/secret.js';
+import { buildDavServer } from './dav/index.js';
 import { loadConfig } from './config.js';
 import { connect } from './db/connection.js';
 import { parseDatabaseUrl } from './db/dialect.js';
@@ -74,11 +75,32 @@ async function main(): Promise<void> {
     );
   }
 
+  /**
+   * El servidor CalDAV, **al mateix procés i en un port propi** (D1 · docs/07 §1).
+   *
+   * "Al mateix procés" no és una manera de parlar: ctag i sync-token surten del mateix
+   * `sync_seq` que s'incrementa dins de la transacció d'escriptura, i un segon procés
+   * hauria de compartir-la.
+   *
+   * Fins ara aquesta línia no hi era. Tota la superfície DAV existia i les seves proves
+   * la muntaven elles mateixes amb `buildDavServer`, o sigui que passaven en verd
+   * mentre en producció el port 8081 no escoltava ningú. Ho va destapar posar-hi un
+   * nginx al davant i rebre un 502.
+   */
+  const dav = buildDavServer(connection);
+  await new Promise<void>((resolve, reject) => {
+    dav.once('error', reject);
+    dav.listen(config.davPort, '0.0.0.0', () => {
+      app.log.info(`CalDAV escoltant al port ${String(config.davPort)}`);
+      resolve();
+    });
+  });
+
   for (const signal of ['SIGTERM', 'SIGINT'] as const) {
     process.once(signal, () => {
       app.log.info({ signal }, 'Tancant');
-      void app
-        .close()
+      void new Promise<void>((resolve) => dav.close(() => resolve()))
+        .then(() => app.close())
         .then(() => connection.close())
         .then(() => process.exit(0));
     });

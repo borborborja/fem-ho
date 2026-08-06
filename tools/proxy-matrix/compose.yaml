@@ -1,0 +1,35 @@
+# `test: proxy-matrix` (docs/13 M14).
+#
+# Aixeca Fem-ho darrere de **nginx** i de **Caddy** i hi llança les mateixes peticions.
+# El que es prova és el que docs/12 §4 diu que falla a la gent:
+#
+#   1. Que un `PROPFIND` arribi al backend en comptes de rebre un 405 del proxy.
+#   2. Que l'SSE surti sense memòria intermèdia.
+#   3. Que `/.well-known/caldav` redirigeixi.
+#
+# Les configuracions són **les de `deploy/`**, adaptades només a HTTP i als noms de
+# servei de Docker: si es provessin unes altres, la prova no diria res del que la gent
+# es descarregarà.
+
+services:
+  femho:
+    image: femho:proxytest
+    environment:
+      FEMHO_BASE_URL: http://localhost
+      FEMHO_LOG_LEVEL: warn
+
+  nginx:
+    image: nginx:alpine
+    depends_on: [femho]
+    ports:
+      - '18090:80'
+    volumes:
+      - ./nginx.test.conf:/etc/nginx/conf.d/default.conf:ro
+
+  caddy:
+    image: caddy:2-alpine
+    depends_on: [femho]
+    ports:
+      - '18091:80'
+    volumes:
+      - ./Caddyfile.test:/etc/caddy/Caddyfile:ro

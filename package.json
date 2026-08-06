@@ -37,6 +37,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:android": "cd apps/android && gradle :core:test --console=plain",
+    "test:proxy-matrix": "./tools/proxy-matrix/run.sh",
     "typecheck": "npm run typecheck --workspaces --if-present"
   },
   "devDependencies": {
