@@ -54,7 +54,7 @@ export async function createLabel(
       'scope-required',
       'Scope required',
       422,
-      "Una etiqueta pertany a un àmbit: la mateixa paraula vol dir coses diferents a cada un.",
+      'A label belongs to a scope: the same word means different things in each one.',
     );
   }
   if (input.name === undefined || input.name.trim() === '') {
@@ -101,7 +101,7 @@ export async function deleteLabel(
     WHERE id = ${id} AND deleted_at IS NULL
   `.execute(ctx.tx);
   const label = found.rows[0];
-  if (label === undefined) throw notFound('etiqueta', id);
+  if (label === undefined) throw notFound('label', id);
   await assertScopeAccess(ctx.tx, principal, label.scope_id);
 
   // Els lligams sí que es treuen de debò: `task_labels` no és una entitat sincronitzable
@@ -151,14 +151,14 @@ export async function setTaskLabel(
     SELECT scope_id FROM tasks WHERE id = ${taskId} AND deleted_at IS NULL
   `.execute(ctx.tx);
   const scopeId = task.rows[0]?.scope_id;
-  if (scopeId === undefined) throw notFound('tasca', taskId);
+  if (scopeId === undefined) throw notFound('task', taskId);
   await assertScopeAccess(ctx.tx, principal, scopeId);
 
   const label = await sql<{ scope_id: string; name: string }>`
     SELECT scope_id, name FROM labels WHERE id = ${labelId} AND deleted_at IS NULL
   `.execute(ctx.tx);
   const found = label.rows[0];
-  if (found === undefined) throw notFound('etiqueta', labelId);
+  if (found === undefined) throw notFound('label', labelId);
 
   // Una etiqueta d'un altre àmbit no s'hi pot posar: seria l'única via per fer que dues
   // targetes de dos àmbits compartissin una etiqueta i trencaria la clau `(scope, name)`.
@@ -167,7 +167,8 @@ export async function setTaskLabel(
       'label-other-scope',
       'Label from another scope',
       422,
-      `L'etiqueta ${found.name} és d'un altre àmbit. Crea-la també en aquest.`,
+      `The ${found.name} label belongs to another scope. Create it in this one too.`,
+      { name: found.name },
     );
   }
 

@@ -166,7 +166,7 @@ export async function release(
       'reason-required',
       'Reason required',
       422,
-      "Alliberar una tasca necessita un motiu: el següent agent l'ha de poder llegir.",
+      'Releasing a task needs a reason: the next agent has to be able to read it.',
     );
   }
 
@@ -174,7 +174,7 @@ export async function release(
     SELECT user_id FROM task_leases WHERE task_id = ${taskId}
   `.execute(ctx.tx);
   if (found.rows.length === 0) {
-    throw new PolicyError('no-lease', 'No lease', 404, 'Aquesta tasca no està reservada.');
+    throw new PolicyError('no-lease', 'No lease', 404, 'This task is not claimed.');
   }
 
   await sql`DELETE FROM task_leases WHERE task_id = ${taskId}`.execute(ctx.tx);

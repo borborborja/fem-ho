@@ -19,7 +19,7 @@ async function handle<T>(
   work: (principal: Principal) => Promise<T>,
 ): Promise<T | undefined> {
   try {
-    if (app.connection === undefined) throw unauthenticated('La instància no té base de dades.');
+    if (app.connection === undefined) throw unauthenticated('The instance has no database.');
     return await work(await principalOf(app, request));
   } catch (error) {
     if (error instanceof PolicyError) {
@@ -61,7 +61,7 @@ export function registerPushRoutes(app: FastifyInstance): void {
           'invalid-subscription',
           'Invalid subscription',
           422,
-          'Una subscripció necessita `endpoint`, `p256dh` i `auth`.',
+          'A subscription needs `endpoint`, `p256dh` and `auth`.',
         );
       }
 
@@ -97,7 +97,7 @@ export function registerPushRoutes(app: FastifyInstance): void {
           'endpoint-required',
           'Endpoint required',
           422,
-          'Cal dir quin `endpoint` es dona de baixa.',
+          'The `endpoint` being unsubscribed has to be given.',
         );
       }
 

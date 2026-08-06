@@ -12,11 +12,31 @@
  * la reutilització d'un de gastat (docs/05 §1). Es comparteix una sola promesa.
  */
 
+import { t } from '@fem-ho/contracts';
+
 export interface Problem {
   type: string;
   title: string;
   status: number;
+  /** En **anglès**, per a màquines: clients CalDAV, agents i qui programi contra l'API. */
   detail: string;
+  /** Les dades de l'error. El client hi posa el text del catàleg. */
+  params?: Record<string, string | number>;
+}
+
+/**
+ * El text d'un error, en l'idioma de qui mira.
+ *
+ * El servidor envia `type` i `params`; el text el posa el catàleg. **Si no en té la
+ * clau, s'ensenya el `detail` anglès**: un error nou del servidor pot ser lleig, però
+ * mai deixa una pantalla muda ni obliga a desplegar les dues coses alhora.
+ */
+export function problemText(problem: Problem | undefined, fallback: string): string {
+  if (problem === undefined) return fallback;
+  const slug = problem.type.slice(problem.type.lastIndexOf('/') + 1);
+  const key = `error.${slug}`;
+  const text = t(key, problem.params ?? {});
+  return text === key ? problem.detail : text;
 }
 
 /** Un error de l'API que la interfície pot ensenyar tal com ve. */
@@ -25,7 +45,7 @@ export class ApiError extends Error {
   readonly problem: Problem | undefined;
 
   constructor(status: number, problem: Problem | undefined, fallback: string) {
-    super(problem?.detail ?? fallback);
+    super(problemText(problem, fallback));
     this.name = 'ApiError';
     this.status = status;
     this.problem = problem;

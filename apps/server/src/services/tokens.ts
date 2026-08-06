@@ -91,7 +91,7 @@ export async function createToken(
       'name-required',
       'Name required',
       422,
-      "Un token sense nom no es pot distingir dels altres a la llista, i llavors no se'n pot revocar cap amb confiança.",
+      'A token with no name cannot be told apart from the others in the list, and then none can be revoked with confidence.',
     );
   }
 
@@ -103,7 +103,7 @@ export async function createToken(
       'capabilities-required',
       'Capabilities required',
       422,
-      'Un token sense cap capacitat no pot fer res: tria almenys una.',
+      'A token with no capabilities cannot do anything: pick at least one.',
     );
   }
 
@@ -119,7 +119,7 @@ export async function createToken(
       'capabilities-exceeded',
       'Capabilities exceeded',
       403,
-      'Cap de les capacitats demanades és teva: un token no pot fer més que qui el crea.',
+      'None of the requested capabilities are yours: a token cannot do more than whoever creates it.',
     );
   }
 

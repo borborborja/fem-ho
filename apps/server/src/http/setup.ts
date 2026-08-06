@@ -27,7 +27,7 @@ export function registerSetupRoutes(app: FastifyInstance): void {
    */
   app.get('/api/v1/setup', async (_request, reply) => {
     if (app.connection === undefined) {
-      void reply.code(503).send({ error: 'La instància no té base de dades.' });
+      void reply.code(503).send({ error: 'The instance has no database.' });
       return;
     }
     return { open: await setupIsOpen(app.connection.db) };
@@ -35,7 +35,7 @@ export function registerSetupRoutes(app: FastifyInstance): void {
 
   app.post('/setup', async (request, reply) => {
     if (app.connection === undefined) {
-      void reply.code(503).send({ error: 'La instància no té base de dades.' });
+      void reply.code(503).send({ error: 'The instance has no database.' });
       return;
     }
 

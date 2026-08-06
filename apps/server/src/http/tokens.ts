@@ -18,7 +18,7 @@ async function handle<T>(
   work: (principal: Principal) => Promise<T>,
 ): Promise<T | undefined> {
   try {
-    if (app.connection === undefined) throw unauthenticated('La instància no té base de dades.');
+    if (app.connection === undefined) throw unauthenticated('The instance has no database.');
     return await work(await principalOf(app, request));
   } catch (error) {
     if (error instanceof PolicyError) {
@@ -89,7 +89,7 @@ export function registerTokenRoutes(app: FastifyInstance): void {
           'invalid-ai-mode',
           'Invalid AI mode',
           422,
-          'El mode ha de ser `manual`, `assisted` o `delegated` (docs/09 §2).',
+          'The mode has to be `manual`, `assisted` or `delegated` (docs/09 §2).',
         );
       }
 

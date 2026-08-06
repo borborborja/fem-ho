@@ -143,14 +143,14 @@ export async function getTask(db: MigrationDb, principal: Principal, id: string)
     SELECT ${TASK_COLUMNS} FROM tasks WHERE id = ${id} AND deleted_at IS NULL
   `.execute(db);
   const row = found.rows[0];
-  if (row === undefined) throw notFound('tasca', id);
+  if (row === undefined) throw notFound('task', id);
 
   // L'abast es comprova SEMPRE, i l'error diu on és la tasca perquè qui el rebi pugui
   // corregir en comptes de reintentar (docs/05 §2).
   await assertScopeAccess(db, principal, row.scope_id, { type: 'La tasca', id });
 
   const [task] = await withAssignees(db, [row]);
-  if (task === undefined) throw notFound('tasca', id);
+  if (task === undefined) throw notFound('task', id);
   return task;
 }
 
@@ -301,7 +301,7 @@ export async function createTask(
       'scope-required',
       'Scope required',
       422,
-      'Una tasca sempre ha de tenir àmbit. Pot no tenir projecte, però mai àmbit.',
+      'A task always has to have a scope. It can have no project, but never no scope.',
     );
   }
   if (input.title === undefined || input.title.trim() === '') {
@@ -417,7 +417,7 @@ export async function createTask(
     SELECT ${TASK_COLUMNS} FROM tasks WHERE id = ${id}
   `.execute(ctx.tx);
   const [task] = await withAssignees(ctx.tx, created.rows);
-  if (task === undefined) throw notFound('tasca', id);
+  if (task === undefined) throw notFound('task', id);
   return { task, created: true };
 }
 
@@ -447,7 +447,7 @@ export async function moveTask(
     SELECT ${TASK_COLUMNS} FROM tasks WHERE id = ${id} AND deleted_at IS NULL
   `.execute(ctx.tx);
   const current = found.rows[0];
-  if (current === undefined) throw notFound('tasca', id);
+  if (current === undefined) throw notFound('task', id);
   await assertScopeAccess(ctx.tx, principal, current.scope_id, { type: 'La tasca', id });
 
   const status = input.status ?? current.status;
@@ -509,7 +509,7 @@ export async function moveTask(
     SELECT ${TASK_COLUMNS} FROM tasks WHERE id = ${id}
   `.execute(ctx.tx);
   const [task] = await withAssignees(ctx.tx, updated.rows);
-  if (task === undefined) throw notFound('tasca', id);
+  if (task === undefined) throw notFound('task', id);
   return task;
 }
 
@@ -530,7 +530,7 @@ export async function completeTask(
     SELECT ${TASK_COLUMNS} FROM tasks WHERE id = ${id} AND deleted_at IS NULL
   `.execute(ctx.tx);
   const current = found.rows[0];
-  if (current === undefined) throw notFound('tasca', id);
+  if (current === undefined) throw notFound('task', id);
   await assertScopeAccess(ctx.tx, principal, current.scope_id, { type: 'La tasca', id });
 
   await sql`
@@ -561,7 +561,7 @@ export async function completeTask(
     SELECT ${TASK_COLUMNS} FROM tasks WHERE id = ${id}
   `.execute(ctx.tx);
   const [task] = await withAssignees(ctx.tx, updated.rows);
-  if (task === undefined) throw notFound('tasca', id);
+  if (task === undefined) throw notFound('task', id);
   return task;
 }
 
@@ -799,7 +799,7 @@ export async function updateTask(
         'title-required',
         'Title required',
         422,
-        'El títol no pot quedar buit.',
+        'The title cannot be left empty.',
       );
     }
     fields.title = input.title.trim();
@@ -830,13 +830,14 @@ export async function updateTask(
         SELECT scope_id, name FROM projects WHERE id = ${input.project_id} AND deleted_at IS NULL
       `.execute(ctx.tx);
       const found = project.rows[0];
-      if (found === undefined) throw notFound('projecte', input.project_id);
+      if (found === undefined) throw notFound('project', input.project_id);
       if (found.scope_id !== before.scope_id) {
         throw new PolicyError(
           'project-other-scope',
           'Project from another scope',
           422,
-          `El projecte ${found.name} és d'un altre àmbit. Una tasca no canvia d'àmbit editant-la.`,
+          `The ${found.name} project belongs to another scope. A task does not change scope by editing it.`,
+      { name: found.name },
         );
       }
     }
@@ -909,7 +910,7 @@ export async function deleteTask(
     SELECT ${TASK_COLUMNS} FROM tasks WHERE id = ${id} AND deleted_at IS NULL
   `.execute(ctx.tx);
   const task = found.rows[0];
-  if (task === undefined) throw notFound('tasca', id);
+  if (task === undefined) throw notFound('task', id);
   await assertScopeAccess(ctx.tx, principal, task.scope_id, { type: 'La tasca', id });
 
   await sql`
@@ -953,7 +954,7 @@ export async function setAssignee(
     SELECT ${TASK_COLUMNS} FROM tasks WHERE id = ${taskId} AND deleted_at IS NULL
   `.execute(ctx.tx);
   const task = found.rows[0];
-  if (task === undefined) throw notFound('tasca', taskId);
+  if (task === undefined) throw notFound('task', taskId);
   const scope = await assertScopeAccess(ctx.tx, principal, task.scope_id, {
     type: 'La tasca',
     id: taskId,
@@ -962,7 +963,7 @@ export async function setAssignee(
   const user = await sql<{ id: string; name: string }>`
     SELECT id, name FROM users WHERE id = ${userId} AND deleted_at IS NULL
   `.execute(ctx.tx);
-  if (user.rows[0] === undefined) throw notFound('usuari', userId);
+  if (user.rows[0] === undefined) throw notFound('user', userId);
 
   if (assigned) {
     // A un àmbit col·lectiu, qui s'assigna ha de ser-ne membre: si no, la persona veuria
@@ -980,7 +981,8 @@ export async function setAssignee(
           'not-a-member',
           'Not a member',
           422,
-          `${user.rows[0].name} no és membre de ${scope.name}: no podria obrir la tasca.`,
+          `${user.rows[0].name} is not a member of ${scope.name}: they could not open the task.`,
+      { person: user.rows[0].name, scope: scope.name },
         );
       }
     }

@@ -62,7 +62,7 @@ async function handle<T>(
   work: (principal: Principal) => Promise<T>,
 ): Promise<T | undefined> {
   try {
-    if (app.connection === undefined) throw unauthenticated('La instància no té base de dades.');
+    if (app.connection === undefined) throw unauthenticated('The instance has no database.');
     return await work(await principalOf(app, request));
   } catch (error) {
     if (error instanceof PolicyError) {
@@ -189,7 +189,7 @@ function registerPublicRoutes(app: FastifyInstance, secret: SecretProvider): voi
     void reply.headers(PUBLIC_HEADERS);
 
     if (app.connection === undefined) {
-      void reply.code(503).send({ error: 'La instància no té base de dades.' });
+      void reply.code(503).send({ error: 'The instance has no database.' });
       return;
     }
 
@@ -256,7 +256,7 @@ function registerPublicRoutes(app: FastifyInstance, secret: SecretProvider): voi
     void reply.headers(PUBLIC_HEADERS);
 
     if (app.connection === undefined) {
-      void reply.code(503).send({ error: 'La instància no té base de dades.' });
+      void reply.code(503).send({ error: 'The instance has no database.' });
       return;
     }
 

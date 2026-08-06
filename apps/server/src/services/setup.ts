@@ -84,13 +84,13 @@ export async function createFirstAdmin(ctx: AuditContext, input: SetupInput): Pr
       'setup-closed',
       'Setup closed',
       403,
-      "Aquesta instància ja té administrador. Si has perdut l'accés, cal entrar a la base de dades.",
+      'This instance already has an administrator. If you have lost access, you have to go into the database.',
     );
   }
 
   const email = input.email.trim().toLowerCase();
   if (!email.includes('@') || email.startsWith('@') || email.endsWith('@')) {
-    throw new PolicyError('invalid-email', 'Invalid email', 422, 'Això no sembla un correu.');
+    throw new PolicyError('invalid-email', 'Invalid email', 422, 'That does not look like an email address.');
   }
   if (input.name.trim() === '') {
     throw new PolicyError('name-required', 'Name required', 422, 'Falta el nom.');

@@ -36,7 +36,7 @@ export function registerMcpRoutes(app: FastifyInstance): void {
 
     const connection = app.connection;
     if (connection === undefined) {
-      void reply.code(503).send({ error: 'La instància no té base de dades.' });
+      void reply.code(503).send({ error: 'The instance has no database.' });
       return;
     }
 

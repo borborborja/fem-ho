@@ -22,7 +22,7 @@ export async function handle<T>(
   work: (principal: Principal) => Promise<T>,
 ): Promise<T | undefined> {
   try {
-    if (app.connection === undefined) throw unauthenticated('La instància no té base de dades.');
+    if (app.connection === undefined) throw unauthenticated('The instance has no database.');
     const principal = await principalOf(app, request);
     return await work(principal);
   } catch (error) {

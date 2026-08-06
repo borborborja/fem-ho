@@ -106,7 +106,7 @@ export function registerAdminRoutes(app: FastifyInstance, secret: () => string):
           'missing-capability',
           'Capability not granted',
           403,
-          'Aquest token no té la capacitat "instance:manage".',
+          'This token does not have the "instance:manage" capability.',
         );
       }
       return diagnostics(app, secret());

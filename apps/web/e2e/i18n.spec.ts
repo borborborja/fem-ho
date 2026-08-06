@@ -183,3 +183,36 @@ test('i la tria manual mana per damunt de l\'idioma', async ({ page }) => {
   await page.locator('[data-testid="week-start-auto"]').click();
   await page.locator('[data-testid="language-chips-ca"]').click();
 });
+
+/**
+ * Els errors del servidor, en l'idioma de qui mira.
+ *
+ * El servidor ja no escriu català: envia `type` i `params`, i el `detail` en anglès per
+ * a les màquines —clients CalDAV, agents d'MCP, qui programi contra l'API—. El text el
+ * posa el catàleg de cada app.
+ *
+ * **I si no en té la clau, ensenya el `detail`.** És el que fa que un error nou del
+ * servidor no deixi mai una pantalla muda ni obligui a desplegar les dues bandes alhora.
+ */
+test('un error del servidor es veu traduït, no en anglès', async ({ page }) => {
+  await enter(page);
+
+  // Un àmbit que no existeix: el servidor respon `not-found` amb el tipus i les dades.
+  const problem = await page.evaluate(async () => {
+    const stored = localStorage.getItem('femho.tokens');
+    const token = stored === null ? '' : (JSON.parse(stored) as { access_token: string }).access_token;
+    const response = await fetch('/api/v1/tasks/no-existeixo', {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    return { status: response.status, body: (await response.json()) as Record<string, unknown> };
+  });
+
+  expect(problem.status).toBe(404);
+  // El `detail` ve en anglès i porta les dades a part.
+  expect(problem.body.detail).toMatch(/^There is no task/u);
+  expect(problem.body.params).toMatchObject({ entityType: 'task', id: 'no-existeixo' });
+
+  // El text no és enlloc de la resposta: el posa el client. Qui el compon és
+  // `problemText`, i el prova `apps/web/src/app/api.test.ts` als tres idiomes.
+  expect(JSON.stringify(problem.body)).not.toContain('Això ja no hi és');
+});

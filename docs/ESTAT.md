@@ -27,10 +27,10 @@ npm run test:proxy-matrix    # CalDAV i SSE darrere de nginx i Caddy
 | --- | --- |
 | Construcció des de zero | contracts → server → web |
 | Tipus · estil | 0 · 0 |
-| Proves unitàries · SQLite | 657 |
-| Proves unitàries · Postgres | 678 |
+| Proves unitàries · SQLite | 661 |
+| Proves unitàries · Postgres | 682 |
 | Comprovacions permanents | 12 de 12 |
-| Proves de navegador | 96, de les quals 44 contra el servidor real |
+| Proves de navegador | 97, de les quals 45 contra el servidor real |
 | Proves de Kotlin | 44 |
 | APK de depuració | es construeix |
 | Primer arrencament amb Compose | 13 comprovacions |
@@ -271,12 +271,25 @@ manera i qui no, d'una altra, amb la mateixa llengua. La taula per idioma viu a
 Firefox no la porta, i el valor ha de ser idèntic a les dues apps. El port de Kotlin fixa
 la mateixa taula amb els mateixos casos.
 
+### Els errors
+
+**Qui llegeix un error no és qui el pateix.** El reben tres públics molt diferents: una
+persona davant de l'app, un agent per MCP, i un client CalDAV com DAVx⁵ o Thunderbird.
+Els dos últims no tenen ni catàleg ni idioma. Per això l'error viatja en dues peces:
+
+- `type`, `title` i `detail` **en anglès**, estables, per programar-hi.
+- `params`, les **dades**. Les apps hi posen el text del seu catàleg amb `error.<slug>`.
+
+**Si l'app no té la clau, ensenya el `detail`.** És el que permet desplegar el servidor
+abans que les apps sense que ningú es quedi mirant un forat: es veu el text anglès, que
+és lleig però es llegeix.
+
+Són 53 tipus d'error, tots amb clau als tres idiomes. `notFound()` rebia la paraula ja
+traduïda i barrejada —`notFound('tasca')` tretze cops i `notFound('task')` sis— i ara rep
+el nom canònic en anglès.
+
 ### El que encara és en català
 
-Per fases, i cada una es pot desplegar sola:
-
-- **Els errors del servidor** (~225 punts, ~100 cadenes). Passaran a `type` + `params`, i
-  cada app els pintarà en el seu idioma; el `detail` es queda en anglès per a màquines.
 - **Notificacions** en l'idioma de qui les rep, llegint `users.locale`.
 - **MCP i CalDAV** a l'anglès: els llegeixen agents, DAVx⁵ i Thunderbird.
 

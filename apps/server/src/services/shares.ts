@@ -146,7 +146,7 @@ export async function createShare(
       'target-required',
       'Target required',
       422,
-      'Un enllaç és per a una tasca **o** per a una llista, no per a totes dues ni per a cap. No es comparteixen projectes ni àmbits sencers.',
+      'A link is for a task **or** for a checklist, not for both and not for neither. Whole projects and scopes are not shared.',
     );
   }
 
@@ -161,7 +161,7 @@ export async function createShare(
       'invalid-permission',
       'Invalid permission',
       422,
-      "El permís ha de ser `view`, `check` o `comment`. No existeix el permís d'edició.",
+      'The permission has to be `view`, `check` or `comment`. There is no edit permission.',
     );
   }
 
@@ -171,7 +171,8 @@ export async function createShare(
       'weak-share-password',
       'Weak password',
       422,
-      `La contrasenya de l'enllaç necessita ${String(MIN_SHARE_PASSWORD_LENGTH)} caràcters com a mínim.`,
+      `The link password needs at least ${String(MIN_SHARE_PASSWORD_LENGTH)} characters.`,
+      { min: MIN_SHARE_PASSWORD_LENGTH },
     );
   }
 
@@ -537,7 +538,7 @@ export async function updateShare(
       'share-revoked',
       'Share revoked',
       409,
-      "Aquest enllaç està revocat: no es pot tornar a obrir. Crea'n un de nou.",
+      'This link is revoked: it cannot be reopened. Create a new one.',
     );
   }
 

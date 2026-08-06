@@ -145,7 +145,7 @@ describe('AQUESTA és la de docs/13: una tasca sense àmbit es rebutja', () => {
     const problem = res.json<{ detail: string; title: string }>();
     expect(problem.title).toBe('Scope required');
     // L'error diu la invariant amb paraules. Un 422 mut no li serveix de res a ningú.
-    expect(problem.detail).toContain('àmbit');
+    expect(problem.detail).toContain('scope');
   });
 
   it('amb scope_id buit, igual', async () => {
@@ -164,7 +164,7 @@ describe('AQUESTA és la de docs/13: una tasca sense àmbit es rebutja', () => {
       title: 'A un àmbit inventat',
     });
     expect(res.statusCode).toBe(403);
-    expect(res.json<{ detail: string }>().detail).toContain('àmbit');
+    expect(res.json<{ detail: string }>().detail).toContain('scope');
   });
 });
 

@@ -2339,9 +2339,18 @@ export interface components {
             schema_version: string;
         };
         /**
-         * @description Error en application/problem+json (RFC 9457, docs/05 §3). `type` i `title` són
-         *     estables i en anglès per poder-hi programar; `detail` va en l'idioma de
-         *     l'Accept-Language.
+         * @description Error en application/problem+json (RFC 9457, docs/05 §3).
+         *
+         *     **Qui llegeix un error no és qui el pateix.** El reben tres públics molt
+         *     diferents: una persona davant de l'app, un agent per MCP, i un client CalDAV com
+         *     DAVx⁵ o Thunderbird. Els dos últims no tenen ni catàleg ni idioma. Per això
+         *     l'error viatja en dues peces:
+         *
+         *     - `type`, `title` i `detail` **en anglès**, estables, per programar-hi.
+         *     - `params`, les **dades** de l'error. Les apps hi posen el text del seu catàleg
+         *       amb la clau `error.<slug>`, on el `slug` és l'últim tram del `type`. Si no en
+         *       tenen la clau, ensenyen el `detail`: així un error nou del servidor no deixa
+         *       mai una pantalla muda ni obliga a desplegar les dues bandes alhora.
          */
         Problem: {
             /**
@@ -2351,6 +2360,17 @@ export interface components {
             type: string;
             /** @example Scope not accessible */
             title: string;
+            /**
+             * @description Les dades de l'error, planes. Plans a posta: el client no ha de saber
+             *     recórrer un JSON dins d'un JSON per pintar un missatge.
+             * @example {
+             *       "name": "Família",
+             *       "count": 3
+             *     }
+             */
+            params?: {
+                [key: string]: string | number;
+            };
             /** @example 403 */
             status: number;
             /** @example Aquest token només té accés a l'àmbit Feina. */

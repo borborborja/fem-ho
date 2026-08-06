@@ -73,7 +73,7 @@ export async function inviteUser(
   const email = input.email?.trim().toLowerCase() ?? '';
   const name = input.name?.trim() ?? '';
   if (email === '' || !email.includes('@')) {
-    throw new PolicyError('invalid-email', 'Invalid email', 422, 'Cal un correu vàlid.');
+    throw new PolicyError('invalid-email', 'Invalid email', 422, 'A valid email address is needed.');
   }
   if (name === '') {
     throw new PolicyError('name-required', 'Name required', 422, 'Cal el nom de la persona.');
@@ -88,7 +88,8 @@ export async function inviteUser(
       'email-taken',
       'Email already used',
       409,
-      `Ja hi ha un compte amb ${email}.`,
+      `There is already an account with ${email}.`,
+      { email },
     );
   }
 
@@ -144,7 +145,7 @@ export async function acceptInvite(
     'invite-invalid',
     'Invalid invitation',
     404,
-    'Aquesta invitació no és vàlida, ja s\'ha fet servir o ha caducat.',
+    'This invitation is not valid, has already been used, or has expired.',
   );
 
   if (password.length < 10) {
@@ -152,7 +153,7 @@ export async function acceptInvite(
       'password-too-short',
       'Password too short',
       422,
-      'La contrasenya ha de tenir com a mínim 10 caràcters.',
+      'The password has to be at least 10 characters.',
     );
   }
 
@@ -187,7 +188,7 @@ export async function updateUser(
     SELECT name, role FROM users WHERE id = ${id} AND deleted_at IS NULL
   `.execute(ctx.tx);
   const before = found.rows[0];
-  if (before === undefined) throw notFound('usuari', id);
+  if (before === undefined) throw notFound('user', id);
 
   const name = input.name?.trim() ?? before.name;
   if (name === '') {
@@ -241,7 +242,7 @@ export async function deleteUser(
       'cannot-delete-self',
       'Cannot delete yourself',
       409,
-      "No et pots esborrar el teu propi compte des d'Admin. Demana-ho a un altre administrador.",
+      'You cannot delete your own account from Admin. Ask another administrator.',
     );
   }
 
@@ -249,7 +250,7 @@ export async function deleteUser(
     SELECT name, role FROM users WHERE id = ${id} AND deleted_at IS NULL
   `.execute(ctx.tx);
   const user = found.rows[0];
-  if (user === undefined) throw notFound('usuari', id);
+  if (user === undefined) throw notFound('user', id);
   if (user.role === 'admin') await assertNotLastAdmin(ctx.tx, id);
 
   // Els àmbits que en són propietat no es toquen: esborrar-los s'enduria la feina de tota
@@ -277,7 +278,7 @@ async function assertNotLastAdmin(tx: MigrationDb, id: string): Promise<void> {
       'last-admin',
       'Last administrator',
       409,
-      'És l\'últim administrador. La instància es quedaria sense ningú que la pogués administrar.',
+      'That is the last administrator. The instance would be left with nobody able to administer it.',
     );
   }
 }
@@ -302,7 +303,8 @@ export async function wipeInstance(
       'confirmation-mismatch',
       'Confirmation does not match',
       422,
-      `Per netejar la instància, escriu-ne el nom exacte: "${instanceName}".`,
+      `To wipe the instance, type its exact name: "${instanceName}".`,
+      { name: instanceName },
     );
   }
 

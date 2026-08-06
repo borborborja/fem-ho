@@ -35,7 +35,7 @@ async function handle<T>(
   work: (principal: Principal) => Promise<T>,
 ): Promise<T | undefined> {
   try {
-    if (app.connection === undefined) throw unauthenticated('La instància no té base de dades.');
+    if (app.connection === undefined) throw unauthenticated('The instance has no database.');
     return await work(await principalOf(app, request));
   } catch (error) {
     if (error instanceof PolicyError) {
@@ -220,7 +220,8 @@ async function createFromBatch(
         'not-creatable',
         'Not creatable',
         422,
-        `"${entity}" no es pot crear des d'un lot.`,
+        `"${entity}" cannot be created from a batch.`,
+        { entity },
       );
   }
 }
@@ -230,7 +231,8 @@ function missingParent(entity: string, field: string): PolicyError {
     'parent-required',
     'Parent required',
     422,
-    `Crear un "${entity}" necessita "${field}" a "data".`,
+    `Creating a "${entity}" needs "${field}" in "data".`,
+    { entity, field },
   );
 }
 

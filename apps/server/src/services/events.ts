@@ -69,7 +69,8 @@ export function assertWritable(calendar: CalendarRow): void {
     'calendar-read-only',
     'Calendar is read-only',
     403,
-    `El calendari "${calendar.name}" és una font de només lectura i no s'hi pot escriure.`,
+    `The "${calendar.name}" calendar is a read-only source and cannot be written to.`,
+    { name: calendar.name },
   );
 }
 
@@ -156,7 +157,7 @@ export async function listEventOccurrences(
       'window-required',
       'Time window required',
       422,
-      'Cal `from` i `to`: sense finestra no es poden expandir les repeticions.',
+      '`from` and `to` are needed: without a window, recurrences cannot be expanded.',
     );
   }
   if (Number.isNaN(Date.parse(options.from)) || Number.isNaN(Date.parse(options.to))) {
@@ -164,7 +165,7 @@ export async function listEventOccurrences(
       'window-invalid',
       'Invalid time window',
       422,
-      '`from` i `to` han de ser instants ISO-8601 vàlids.',
+      '`from` and `to` have to be valid ISO-8601 instants.',
     );
   }
 
@@ -315,7 +316,7 @@ export async function createEvent(
       'event-incomplete',
       'Event incomplete',
       422,
-      "Un esdeveniment necessita calendari, títol i instant d'inici.",
+      'An event needs a calendar, a title and a start instant.',
     );
   }
 
@@ -329,7 +330,8 @@ export async function createEvent(
       'wrong-component',
       'Wrong component type',
       403,
-      `El calendari "${calendar.name}" és de tasques i no accepta esdeveniments.`,
+      `The "${calendar.name}" calendar is for tasks and does not accept events.`,
+      { name: calendar.name },
     );
   }
 
@@ -365,7 +367,7 @@ export async function createEvent(
 
   const created = await sql<EventRow>`SELECT * FROM events WHERE id = ${id}`.execute(ctx.tx);
   const row = created.rows[0];
-  if (row === undefined) throw notFound('esdeveniment', id);
+  if (row === undefined) throw notFound('event', id);
   return { event: row, created: true };
 }
 
@@ -392,7 +394,7 @@ export async function updateEvent(
     SELECT * FROM events WHERE id = ${id} AND deleted_at IS NULL
   `.execute(ctx.tx);
   const master = found.rows[0];
-  if (master === undefined) throw notFound('esdeveniment', id);
+  if (master === undefined) throw notFound('event', id);
 
   const calendar = await loadCalendar(ctx.tx, master.calendar_id);
   await assertScopeAccess(ctx.tx, principal, calendar.scope_id, {
@@ -405,7 +407,8 @@ export async function updateEvent(
       'occurrence-required',
       'Occurrence required',
       422,
-      `El mode "${mode}" necessita saber quina ocurrència es toca.`,
+      `The "${mode}" mode needs to know which occurrence is being touched.`,
+      { mode },
     );
   }
 
@@ -527,14 +530,14 @@ async function loadCalendar(tx: MigrationDb, id: string): Promise<CalendarRow & 
     FROM calendars WHERE id = ${id} AND deleted_at IS NULL
   `.execute(tx);
   const row = found.rows[0];
-  if (row === undefined) throw notFound('calendari', id);
+  if (row === undefined) throw notFound('calendar', id);
   return row;
 }
 
 async function reload(tx: MigrationDb, id: string): Promise<EventRow> {
   const found = await sql<EventRow>`SELECT * FROM events WHERE id = ${id}`.execute(tx);
   const row = found.rows[0];
-  if (row === undefined) throw notFound('esdeveniment', id);
+  if (row === undefined) throw notFound('event', id);
   return row;
 }
 
@@ -549,7 +552,7 @@ export async function getEvent(
     SELECT * FROM events WHERE id = ${id} AND deleted_at IS NULL
   `.execute(db);
   const row = found.rows[0];
-  if (row === undefined) throw notFound('esdeveniment', id);
+  if (row === undefined) throw notFound('event', id);
 
   const calendar = await loadCalendar(db, row.calendar_id);
   await assertScopeAccess(db, principal, calendar.scope_id, { type: "L'esdeveniment", id });
@@ -578,7 +581,7 @@ export async function deleteEvent(
     SELECT * FROM events WHERE id = ${id} AND deleted_at IS NULL
   `.execute(ctx.tx);
   const event = found.rows[0];
-  if (event === undefined) throw notFound('esdeveniment', id);
+  if (event === undefined) throw notFound('event', id);
 
   const calendar = await loadCalendar(ctx.tx, event.calendar_id);
   await assertScopeAccess(ctx.tx, principal, calendar.scope_id, { type: "L'esdeveniment", id });
@@ -671,7 +674,7 @@ export async function createCalendar(
       'scope-required',
       'Scope required',
       422,
-      'Un calendari sempre pertany a un àmbit.',
+      'A calendar always belongs to a scope.',
     );
   }
   if (input.name === undefined || input.name.trim() === '') {
@@ -685,7 +688,7 @@ export async function createCalendar(
       'source-url-required',
       'Source URL required',
       422,
-      "Una subscripció necessita la URL de l'origen.",
+      'A subscription needs the source URL.',
     );
   }
 
@@ -829,7 +832,8 @@ export async function deleteCalendar(
         'calendar-not-empty',
         'Calendar not empty',
         409,
-        `El calendari "${calendar.name}" encara té ${String(n)} ${n === 1 ? 'esdeveniment' : 'esdeveniments'}. Mou-los o esborra'ls abans.`,
+        `The "${calendar.name}" calendar still has ${String(n)} event(s). Move or delete them first.`,
+      { name: calendar.name, count: n },
       );
     }
   }

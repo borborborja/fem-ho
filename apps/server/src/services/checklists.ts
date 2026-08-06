@@ -134,7 +134,7 @@ async function taskOfChecklist(
   `.execute(db);
 
   const row = found.rows[0];
-  if (row === undefined) throw notFound('llista', checklistId);
+  if (row === undefined) throw notFound('checklist', checklistId);
   return { checklist: row, taskId: row.task_id, scopeId: row.scope_id };
 }
 
@@ -149,7 +149,7 @@ export async function listChecklists(
     SELECT scope_id FROM tasks WHERE id = ${taskId} AND deleted_at IS NULL
   `.execute(db);
   const scopeId = task.rows[0]?.scope_id;
-  if (scopeId === undefined) throw notFound('tasca', taskId);
+  if (scopeId === undefined) throw notFound('task', taskId);
   await assertScopeAccess(db, principal, scopeId, { type: 'La tasca', id: taskId });
 
   const rows = await sql<ChecklistRow>`
@@ -210,7 +210,7 @@ export async function createChecklist(
     SELECT scope_id FROM tasks WHERE id = ${taskId} AND deleted_at IS NULL
   `.execute(ctx.tx);
   const scopeId = task.rows[0]?.scope_id;
-  if (scopeId === undefined) throw notFound('tasca', taskId);
+  if (scopeId === undefined) throw notFound('task', taskId);
   await assertScopeAccess(ctx.tx, principal, scopeId, { type: 'La tasca', id: taskId });
 
   const id = input.id ?? uuidv7();
@@ -234,7 +234,7 @@ export async function createChecklist(
            position, version FROM checklists WHERE id = ${id}
   `.execute(ctx.tx);
   const row = created.rows[0];
-  if (row === undefined) throw notFound('llista', id);
+  if (row === undefined) throw notFound('checklist', id);
   return toView(row, [], principal);
 }
 
@@ -246,7 +246,7 @@ export async function createChecklistItem(
 ): Promise<ChecklistItemView> {
   if (!hasCapability(principal, 'checklists:write')) throw missingCapability('checklists:write');
   if (input.text === undefined || input.text.trim() === '') {
-    throw new PolicyError('text-required', 'Text required', 422, "L'ítem necessita text.");
+    throw new PolicyError('text-required', 'Text required', 422, 'The item needs text.');
   }
 
   const { scopeId } = await taskOfChecklist(ctx.tx, checklistId);
@@ -272,7 +272,7 @@ export async function createChecklistItem(
     FROM checklist_items WHERE id = ${id}
   `.execute(ctx.tx);
   const row = created.rows[0];
-  if (row === undefined) throw notFound('ítem', id);
+  if (row === undefined) throw notFound('item', id);
   return toItemView(row);
 }
 
@@ -334,7 +334,7 @@ export async function updateChecklistItem(
     FROM checklist_items WHERE id = ${itemId} AND deleted_at IS NULL
   `.execute(ctx.tx);
   const item = found.rows[0];
-  if (item === undefined) throw notFound('ítem', itemId);
+  if (item === undefined) throw notFound('item', itemId);
 
   const { checklist, taskId, scopeId } = await taskOfChecklist(ctx.tx, item.checklist_id);
   await assertScopeAccess(ctx.tx, principal, scopeId);
@@ -619,7 +619,7 @@ export async function deleteChecklistItem(
     FROM checklist_items WHERE id = ${itemId} AND deleted_at IS NULL
   `.execute(ctx.tx);
   const item = found.rows[0];
-  if (item === undefined) throw notFound('ítem', itemId);
+  if (item === undefined) throw notFound('item', itemId);
 
   const { scopeId } = await taskOfChecklist(ctx.tx, item.checklist_id);
   await assertScopeAccess(ctx.tx, principal, scopeId);

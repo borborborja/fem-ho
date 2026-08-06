@@ -287,7 +287,7 @@ describe('etiquetes', () => {
   it('sense àmbit es rebutja dient per què', async () => {
     const res = await api('POST', '/api/v1/labels', { name: 'Òrfena' });
     expect(res.statusCode).toBe(422);
-    expect(res.json<{ detail: string }>().detail).toContain('àmbit');
+    expect(res.json<{ detail: string }>().detail).toContain('scope');
   });
 
   it("es pot posar i treure d'una tasca", async () => {
@@ -305,7 +305,7 @@ describe('etiquetes', () => {
 
     const res = await api('POST', `/api/v1/tasks/${taskId}/labels/${altra}`);
     expect(res.statusCode).toBe(422);
-    expect(res.json<{ detail: string }>().detail).toContain('altre àmbit');
+    expect(res.json<{ detail: string }>().detail).toContain('another scope');
   });
 
   it("s'esborra i deixa rastre", async () => {
@@ -627,7 +627,7 @@ describe('calendaris', () => {
 
     const res = await api('DELETE', `/api/v1/calendars/${calendarId}`);
     expect(res.statusCode).toBe(409);
-    expect(res.json<{ detail: string }>().detail).toContain('esdeveniment');
+    expect(res.json<{ detail: string }>().detail).toContain('event');
   });
 
   it('i un de buit sí', async () => {
@@ -920,7 +920,7 @@ describe('administració', () => {
   it("un administrador NO es pot esborrar a si mateix", async () => {
     const res = await api('DELETE', `/api/v1/admin/users/${userId}`);
     expect(res.statusCode).toBe(409);
-    expect(res.json<{ detail: string }>().detail).toContain('altre administrador');
+    expect(res.json<{ detail: string }>().detail).toContain('another administrator');
   });
 
   it("ni deixar la instància sense cap", async () => {
@@ -1008,7 +1008,7 @@ describe('data límit i projecte', () => {
     expect(res.statusCode).toBe(422);
     // Una tasca no canvia d'àmbit editant-la: altres membres, altres etiquetes, altra
     // assignació automàtica.
-    expect(res.json<{ detail: string }>().detail).toContain('altre àmbit');
+    expect(res.json<{ detail: string }>().detail).toContain('another scope');
   });
 });
 

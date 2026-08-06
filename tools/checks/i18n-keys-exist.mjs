@@ -32,6 +32,9 @@ const CATALOG = join(ROOT, 'packages', 'contracts', 'i18n', 'ca.json');
 export function literalKeys(text) {
   const found = [];
   text.split('\n').forEach((line, index) => {
+    // Un exemple dins d'un comentari no és una crida. Els blocs de documentació del
+    // codi en porten, i marcar-los faria que la comprovació obligués a no explicar-se.
+    if (/^\s*(\/\/|\*|\/\*)/u.test(line)) return;
     for (const match of line.matchAll(/\bt\(\s*(?:'([^'\n]+)'|"([^"\n]+)")/gu)) {
       found.push({ key: match[1] ?? match[2] ?? '', line: index + 1, text: line.trim() });
     }
@@ -65,6 +68,7 @@ if (process.argv.includes('--self-test')) {
       { rel: 'x.tsx', text: "const a = t('board.column.inbox');" },
       { rel: 'y.tsx', text: "const b = t('board.colum.inbox');" },
       { rel: 'z.tsx', text: 'const c = t(`activity.verb.${verb}`);' },
+      { rel: 'c.tsx', text: " * El client hi posa t('error.<slug>', params) i el pinta." },
       { rel: 'w.tsx', text: "const d = t('board.column.inbox', { count: 2 });" },
     ],
     keys,

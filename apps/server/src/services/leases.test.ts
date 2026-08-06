@@ -236,7 +236,7 @@ describe('alliberar', () => {
       write(principal, async (ctx) => {
         await release(ctx, principal, id, '   ');
       }),
-    ).rejects.toThrow(/motiu/u);
+    ).rejects.toThrow(/reason/u);
   });
 
   it('amb motiu, la torna a deixar disponible', async () => {

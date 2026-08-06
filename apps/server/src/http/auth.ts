@@ -73,7 +73,7 @@ export async function principalOf(
   channel?: Source,
 ): Promise<Principal> {
   const conn = app.connection;
-  if (conn === undefined) throw unauthenticated('La instància no té base de dades.');
+  if (conn === undefined) throw unauthenticated('The instance has no database.');
 
   const now = new Date().toISOString();
   const bearer = bearerFrom(request.headers.authorization);
@@ -85,7 +85,7 @@ export async function principalOf(
   }
 
   const sessionId = sessionIdOfAccessToken(bearer, Date.now());
-  if (sessionId === null) throw unauthenticated("Token d'accés no vàlid o caducat.");
+  if (sessionId === null) throw unauthenticated('Invalid or expired access token.');
   return resolveSession(conn.db, sessionId, channel ?? sourceOf(request), now);
 }
 
@@ -109,7 +109,7 @@ export function registerAuthRoutes(app: FastifyInstance): void {
     if (conn === undefined) {
       sendProblem(
         reply,
-        unauthenticated('La instància no té base de dades.'),
+        unauthenticated('The instance has no database.'),
         '/api/v1/auth/login',
       );
       return undefined;
@@ -134,7 +134,8 @@ export function registerAuthRoutes(app: FastifyInstance): void {
           type: 'https://femho.app/errors/too-many-attempts',
           title: 'Too many attempts',
           status: 429,
-          detail: `Massa intents. Torna-ho a provar d'aquí a ${Math.ceil(espera / 1000)} segons.`,
+          detail: `Too many attempts. Try again in ${Math.ceil(espera / 1000)} seconds.`,
+          params: { seconds: Math.ceil(espera / 1000) },
         });
       return undefined;
     }
@@ -163,7 +164,7 @@ export function registerAuthRoutes(app: FastifyInstance): void {
           'invalid-credentials',
           'Invalid credentials',
           401,
-          'Correu o contrasenya incorrectes.',
+          'Wrong email or password.',
         ),
         '/api/v1/auth/login',
       );
@@ -221,7 +222,7 @@ export function registerAuthRoutes(app: FastifyInstance): void {
       // Els quatre motius donen la mateixa resposta cap enfora. Que un token gastat
       // digui "gastat" i un d'inventat digui "inventat" seria dir-li a l'atacant que
       // el seu token ÉS d'una sessió real.
-      sendProblem(reply, unauthenticated('Token de refresc no vàlid.'), '/api/v1/auth/refresh');
+      sendProblem(reply, unauthenticated('Invalid refresh token.'), '/api/v1/auth/refresh');
       if (resultat.reason === 'reused') {
         app.log.warn(
           { sessionId: resultat.revokedSessionId },

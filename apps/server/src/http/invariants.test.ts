@@ -99,7 +99,7 @@ describe('la invariant central', () => {
 
     // I l'error ho diu amb paraules: un 422 d'un NOT NULL de la base no li serveix de
     // res a ningú (docs/01 §4).
-    expect(res.json<{ detail: string }>().detail).toMatch(/àmbit/u);
+    expect(res.json<{ detail: string }>().detail).toMatch(/scope/u);
   });
 
   it("i l'esquema tampoc ho deixa passar, no només el servei", async () => {

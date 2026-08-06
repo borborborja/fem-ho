@@ -178,7 +178,7 @@ export async function createScope(
   `.execute(ctx.tx);
 
   const row = created.rows[0];
-  if (row === undefined) throw notFound('àmbit', id);
+  if (row === undefined) throw notFound('scope', id);
   return { entity: row, created: true };
 }
 
@@ -274,7 +274,7 @@ export async function createProject(
   `.execute(ctx.tx);
 
   const row = created.rows[0];
-  if (row === undefined) throw notFound('projecte', id);
+  if (row === undefined) throw notFound('project', id);
   return { entity: row, created: true };
 }
 
@@ -375,7 +375,8 @@ export async function deleteScope(
       'not-owner',
       'Not the owner',
       403,
-      `L'àmbit ${scope.name} només el pot esborrar qui el va crear.`,
+      `The ${scope.name} scope can only be deleted by whoever created it.`,
+      { name: scope.name },
     );
   }
 
@@ -397,7 +398,8 @@ export async function deleteScope(
       'scope-not-empty',
       'Scope not empty',
       409,
-      `L'àmbit ${scope.name} encara té ${parts.join(' i ')}. Mou-ho o esborra-ho abans.`,
+      `The ${scope.name} scope still has ${parts.join(' and ')}. Move it or delete it first.`,
+      { name: scope.name, contents: parts.join(', ') },
     );
   }
 
@@ -468,7 +470,8 @@ export async function addMember(
       'scope-not-collective',
       'Scope is not collective',
       422,
-      `L'àmbit ${scope.name} és individual: no té membres. Els àmbits col·lectius sí.`,
+      `The ${scope.name} scope is individual: it has no members. Collective scopes do.`,
+      { name: scope.name },
     );
   }
 
@@ -479,8 +482,8 @@ export async function addMember(
       'member-shape',
       'Invalid member',
       422,
-      'Un membre és o bé un usuari (`user_id`) o bé una subscripció de calendari ' +
-        '(`external_calendar_id`), mai totes dues coses ni cap.',
+      'A member is either a user (`user_id`) or a calendar subscription ' +
+        '(`external_calendar_id`), never both and never neither.',
     );
   }
 
@@ -534,7 +537,7 @@ export async function updateMember(
 
   const members = await listMembersInTx(ctx.tx, scopeId);
   const member = members.find((m) => m.id === memberId);
-  if (member === undefined) throw notFound('membre', memberId);
+  if (member === undefined) throw notFound('member', memberId);
 
   // Deixar un àmbit col·lectiu sense cap propietari el faria ingovernable: ningú no en
   // podria tornar a canviar els permisos.
@@ -545,7 +548,8 @@ export async function updateMember(
         'last-owner',
         'Last owner',
         409,
-        `${scope.name} es quedaria sense cap propietari. Fes propietari algú altre primer.`,
+        `${scope.name} would be left with no owner. Make someone else an owner first.`,
+      { name: scope.name },
       );
     }
   }
@@ -573,7 +577,7 @@ export async function removeMember(
 
   const members = await listMembersInTx(ctx.tx, scopeId);
   const member = members.find((m) => m.id === memberId);
-  if (member === undefined) throw notFound('membre', memberId);
+  if (member === undefined) throw notFound('member', memberId);
 
   if (member.role === 'owner' && members.filter((m) => m.role === 'owner').length <= 1) {
     throw new PolicyError(
@@ -605,7 +609,7 @@ export async function getProject(
     SELECT ${PROJECT_COLUMNS} FROM projects WHERE id = ${id} AND deleted_at IS NULL
   `.execute(db);
   const row = found.rows[0];
-  if (row === undefined) throw notFound('projecte', id);
+  if (row === undefined) throw notFound('project', id);
   await assertScopeAccess(db, principal, row.scope_id, { type: 'El projecte', id });
   return row;
 }

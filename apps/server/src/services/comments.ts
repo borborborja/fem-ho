@@ -39,7 +39,7 @@ export async function addComment(
       'body-required',
       'Body required',
       422,
-      'Un comentari buit no diu res: escriu-hi el motiu.',
+      'An empty comment says nothing: write the reason in it.',
     );
   }
 

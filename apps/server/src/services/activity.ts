@@ -174,7 +174,7 @@ export async function undo(
       'not-undoable',
       'Not undoable',
       422,
-      "Això no és un canvi autònom d'IA amb valors anteriors: no hi ha res a restaurar.",
+      'This is not an autonomous AI change with previous values: there is nothing to restore.',
     );
   }
 
@@ -192,7 +192,7 @@ export async function undo(
       'not-undoable',
       'Not undoable',
       422,
-      'Aquest canvi no diu què hi havia abans.',
+      'This change does not say what was there before.',
     );
   }
 

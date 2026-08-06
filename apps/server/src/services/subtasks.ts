@@ -52,7 +52,7 @@ async function scopeOfTask(db: MigrationDb, taskId: string): Promise<string> {
     SELECT scope_id FROM tasks WHERE id = ${taskId} AND deleted_at IS NULL
   `.execute(db);
   const row = found.rows[0];
-  if (row === undefined) throw notFound('tasca', taskId);
+  if (row === undefined) throw notFound('task', taskId);
   return row.scope_id;
 }
 
@@ -65,7 +65,7 @@ async function taskOfSubtask(
     FROM subtasks WHERE id = ${subtaskId} AND deleted_at IS NULL
   `.execute(db);
   const row = found.rows[0];
-  if (row === undefined) throw notFound('subtasca', subtaskId);
+  if (row === undefined) throw notFound('subtask', subtaskId);
   return { row, scopeId: await scopeOfTask(db, row.task_id) };
 }
 
@@ -96,7 +96,7 @@ export async function createSubtask(
   await assertScopeAccess(ctx.tx, principal, scopeId);
 
   if (input.title === undefined || input.title.trim() === '') {
-    throw new PolicyError('title-required', 'Title required', 422, 'La subtasca necessita títol.');
+    throw new PolicyError('title-required', 'Title required', 422, 'The subtask needs a title.');
   }
 
   const id = input.id ?? uuidv7();
@@ -139,7 +139,7 @@ export async function updateSubtask(
   await assertScopeAccess(ctx.tx, principal, scopeId);
 
   if (input.title !== undefined && input.title.trim() === '') {
-    throw new PolicyError('title-required', 'Title required', 422, 'El títol no pot quedar buit.');
+    throw new PolicyError('title-required', 'Title required', 422, 'The title cannot be left empty.');
   }
 
   const done = input.done ?? isTrue(row.done);

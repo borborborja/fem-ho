@@ -61,7 +61,7 @@ export async function getProfile(db: MigrationDb, userId: string): Promise<UserP
     SELECT ${PROFILE_COLUMNS} FROM users WHERE id = ${userId} AND deleted_at IS NULL
   `.execute(db);
   const row = found.rows[0];
-  if (row === undefined) throw notFound('usuari', userId);
+  if (row === undefined) throw notFound('user', userId);
   return row;
 }
 
@@ -113,7 +113,8 @@ export async function updateProfile(
       'invalid-timezone',
       'Invalid timezone',
       422,
-      `"${timezone}" no és cap fus horari. Fes servir un nom de la base IANA, com Europe/Madrid.`,
+      `"${timezone}" is not a time zone. Use an IANA name, such as Europe/Madrid.`,
+    { value: timezone },
     );
   }
 
@@ -162,7 +163,8 @@ function pickEnum<T extends string>(
     'invalid-value',
     'Invalid value',
     422,
-    `"${value}" no és un valor de ${field}. Els vàlids són: ${allowed.join(', ')}.`,
+    `"${value}" is not a ${field} value. The valid ones are: ${allowed.join(', ')}.`,
+    { value: String(value), field, allowed: allowed.join(', ') },
   );
 }
 
@@ -194,14 +196,14 @@ export async function changePassword(
     SELECT password_hash FROM users WHERE id = ${principal.userId} AND deleted_at IS NULL
   `.execute(ctx.tx);
   const row = found.rows[0];
-  if (row === undefined) throw notFound('usuari', principal.userId);
+  if (row === undefined) throw notFound('user', principal.userId);
 
   if (input.next === undefined || input.next.length < 10) {
     throw new PolicyError(
       'password-too-short',
       'Password too short',
       422,
-      'La contrasenya ha de tenir com a mínim 10 caràcters.',
+      'The password has to be at least 10 characters.',
     );
   }
 
@@ -211,7 +213,7 @@ export async function changePassword(
       'wrong-password',
       'Wrong password',
       403,
-      'La contrasenya actual no és correcta.',
+      'The current password is not correct.',
     );
   }
 

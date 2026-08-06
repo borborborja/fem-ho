@@ -148,14 +148,14 @@ describe('com es guarda', () => {
 describe('què es pot compartir', () => {
   it('una tasca o una llista, mai les dues ni cap', async () => {
     await expect(write(async (ctx) => createShare(ctx, principal, {}, PEPPER))).rejects.toThrow(
-      /una tasca/u,
+      /for a task/u,
     );
 
     await expect(
       write(async (ctx) =>
         createShare(ctx, principal, { task_id: taskId, checklist_id: 'x' }, PEPPER),
       ),
-    ).rejects.toThrow(/una tasca/u);
+    ).rejects.toThrow(/for a task/u);
   });
 
   it("no existeix el permís d'edició", async () => {
@@ -164,7 +164,7 @@ describe('què es pot compartir', () => {
       write(async (ctx) =>
         createShare(ctx, principal, { task_id: taskId, permission: 'edit' as never }, PEPPER),
       ),
-    ).rejects.toThrow(/edició/u);
+    ).rejects.toThrow(/no edit permission/u);
   });
 });
 
@@ -225,7 +225,7 @@ describe('la contrasenya', () => {
   it('té un mínim propi, més baix que el dels comptes', async () => {
     // El que protegeix aquí és el bloqueig a cinc intents, no la llargada.
     expect(MIN_SHARE_PASSWORD_LENGTH).toBeLessThan(10);
-    await expect(nouEnllac({ password: 'curt' })).rejects.toThrow(/caràcters/u);
+    await expect(nouEnllac({ password: 'curt' })).rejects.toThrow(/characters/u);
   });
 
   it('una de sis caràcters val i es verifica bé', async () => {

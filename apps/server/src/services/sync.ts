@@ -362,7 +362,8 @@ export async function softDelete(
       'unknown-entity',
       'Unknown entity',
       422,
-      `"${entityType}" no és una entitat que se sincronitzi.`,
+      `"${entityType}" is not an entity that syncs.`,
+        { entity: entityType },
     );
   }
 

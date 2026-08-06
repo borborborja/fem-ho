@@ -145,7 +145,7 @@ describe('crear esdeveniments', () => {
       starts_at: '2026-08-10T19:00:00Z',
     });
     expect(res.statusCode).toBe(403);
-    expect(res.json<{ detail: string }>().detail).toContain('tasques');
+    expect(res.json<{ detail: string }>().detail).toContain('for tasks');
   });
 
   it('crear incrementa el sync_seq de la col·lecció', async () => {
@@ -180,7 +180,7 @@ describe('GET /events', () => {
     // "Sense finestra no es poden expandir repeticions" (docs/05 §4).
     const res = await api('GET', '/api/v1/events');
     expect(res.statusCode).toBe(422);
-    expect(res.json<{ detail: string }>().detail).toContain('finestra');
+    expect(res.json<{ detail: string }>().detail).toContain('window');
   });
 
   it('rebutja una finestra que no són dates', async () => {
