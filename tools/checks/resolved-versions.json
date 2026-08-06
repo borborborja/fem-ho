@@ -119,6 +119,11 @@
       "version": "19.2.8",
       "checkedAt": "2026-08-05"
     },
+    "saxes": {
+      "version": "6.0.0",
+      "checkedAt": "2026-08-06",
+      "note": "XML namespace-aware del camí DAV (docs/07 §1). fast-xml-parser i xml2js queden prohibits aquí perquè no ho són."
+    },
     "tsx": {
       "version": "4.23.8",
       "checkedAt": "2026-08-05"
