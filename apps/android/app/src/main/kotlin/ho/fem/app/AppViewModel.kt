@@ -3,6 +3,7 @@ package ho.fem.app
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import ho.fem.data.Container
+import ho.fem.model.Agent
 import ho.fem.model.AiMode
 import ho.fem.model.Checklist
 import ho.fem.model.EventOccurrence
@@ -160,6 +161,7 @@ class AppViewModel(private val container: Container) : ViewModel() {
 
     fun refresh() {
         val base = serverUrl ?: return
+        loadAgents()
         viewModelScope.launch {
             val active = container.settings.activeScopes.first()
             runCatching { container.repository(base).refresh(active, null) }
@@ -260,6 +262,36 @@ class AppViewModel(private val container: Container) : ViewModel() {
                 .maxByOrNull { it.position }?.position
             repository.moveTask(task, status, last to null)
             repository.flush()
+        }
+    }
+
+    // -------------------------------------------------------- el tauler de la IA
+
+    private val _aiEnabled = MutableStateFlow(false)
+    val aiEnabled: StateFlow<Boolean> = _aiEnabled.asStateFlow()
+
+    private val _aiBoard = MutableStateFlow(false)
+    val aiBoard: StateFlow<Boolean> = _aiBoard.asStateFlow()
+
+    /**
+     * **No és una altra pantalla: és el mateix tauler girat.**
+     *
+     * Les columnes són les mateixes i el que canvia és quines targetes hi surten. La
+     * bústia és l'excepció i surt sencera als dos, perquè és on tot arriba abans de
+     * decidir-ho.
+     */
+    fun toggleAiBoard() {
+        _aiBoard.value = !_aiBoard.value
+    }
+
+    private fun loadAgents() {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            val agents: List<Agent> = runCatching { container.api(base).agents() }
+                .getOrDefault(emptyList())
+            _aiEnabled.value = agents.any { it.enabled }
+            // Sense cap agent actiu no hi ha tauler de la IA on ser.
+            if (!_aiEnabled.value) _aiBoard.value = false
         }
     }
 

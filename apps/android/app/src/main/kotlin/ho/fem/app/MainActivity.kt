@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material3.Text
@@ -24,8 +26,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -280,6 +286,9 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: (
     val openCards by model.openCards.collectAsStateWithLifecycle()
     val cardLists by model.cardLists.collectAsStateWithLifecycle()
     val cardDrafts by model.cardDrafts.collectAsStateWithLifecycle()
+    val aiEnabled by model.aiEnabled.collectAsStateWithLifecycle()
+    val aiBoard by model.aiBoard.collectAsStateWithLifecycle()
+    val aiBoardLabel = stringResource(R.string.board_ia_toggle)
     var active by remember { mutableStateOf<Set<String>>(emptySet()) }
 
     // Els textos es resolen aquí i no dins dels callbacks: `stringResource` és
@@ -325,6 +334,10 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: (
             },
             onSettings = onSettings,
             onView = { if (it == Screen.CALENDAR) onCalendar() },
+            aiEnabled = aiEnabled,
+            aiBoardActive = aiBoard,
+            onToggleAiBoard = model::toggleAiBoard,
+            aiBoardLabel = aiBoardLabel,
         )
 
         BoardScreen(
@@ -396,6 +409,7 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: (
              * **Un sol commutador per a totes dues**, i el número que hi surt compta
              * blocs i no ítems: les subtasques, totes juntes, en són un.
              */
+            aiBoard = aiBoard,
             extras = { task ->
                 val blocs = task.progress?.lists ?: 0
                 val expanded = task.id in expandedCards
@@ -639,6 +653,11 @@ private fun TopBar(
     onToggle: (String) -> Unit,
     onSettings: () -> Unit,
     onView: (Screen) -> Unit,
+    /** El commutador del tauler de la IA. Només surt si hi ha algun agent actiu. */
+    aiEnabled: Boolean = false,
+    aiBoardActive: Boolean = false,
+    onToggleAiBoard: () -> Unit = {},
+    aiBoardLabel: String = "",
 ) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
         Row(
@@ -662,6 +681,35 @@ private fun TopBar(
                             .padding(horizontal = 8.dp, vertical = 12.dp)
                             .testTag("view-${'$'}{target.name.lowercase()}")
                             .androidClickable { onView(target) },
+                    )
+                }
+
+                if (aiEnabled && view == Screen.BOARD) {
+                    Text(
+                        // El robot del disseny validat, en text: Compose no porta el joc
+                        // d'icones de Plou i un SVG a mà aquí seria un dibuix repetit.
+                        text = "◍",
+                        color = if (aiBoardActive) Femho.onBrand else Femho.colors.inkSoft,
+                        fontSize = FemhoText.body,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .padding(horizontal = 6.dp)
+                            .size(34.dp)
+                            .clip(CircleShape)
+                            // Un `if` amb una banda `Brush` i l'altra `Color` no resol cap
+                            // sobrecàrrega de `background`: es tria el modificador sencer.
+                            .then(
+                                if (aiBoardActive) {
+                                    Modifier.background(Femho.brandGradient2)
+                                } else {
+                                    Modifier.background(Femho.colors.tagBg)
+                                },
+                            )
+                            .androidClickable { onToggleAiBoard() }
+                            .padding(top = 8.dp)
+                            .testTag("ai-board-toggle")
+                            .semantics { contentDescription = aiBoardLabel },
                     )
                 }
 

@@ -1,5 +1,6 @@
 package ho.fem.network
 
+import ho.fem.model.Agent
 import ho.fem.model.AuthTokens
 import ho.fem.model.Board
 import ho.fem.model.Checklist
@@ -249,6 +250,10 @@ class FemhoApi(
 
     suspend fun setChecklistItem(itemId: String, done: Boolean): String =
         raw("PATCH", "/api/v1/checklist-items/$itemId", """{"done":$done}""", authenticated = true)
+
+    /** Els agents. Buit si la instància no en té o si aquest principal no els pot veure. */
+    suspend fun agents(): List<Agent> =
+        runCatching { get<List<Agent>>("/api/v1/ai/agents") }.getOrDefault(emptyList())
 
     suspend fun subtasks(taskId: String): List<Subtask> = get("/api/v1/tasks/$taskId/subtasks")
 

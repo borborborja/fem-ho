@@ -86,6 +86,20 @@ data class Task(
 @Serializable
 data class TaskProgress(val done: Int = 0, val total: Int = 0, val lists: Int = 0)
 
+/**
+ * Un agent d'IA. **Només se'n mira si n'hi ha cap d'actiu**: és el que decideix si el
+ * commutador del tauler de la IA surt.
+ *
+ * No és una preferència a part: un commutador que es pogués encendre sense cap agent
+ * giraria el tauler cap a un tauler que no pot rebre res.
+ */
+@Serializable
+data class Agent(
+    val id: String,
+    val name: String = "",
+    val enabled: Boolean = false,
+)
+
 @Serializable
 data class Subtask(
     val id: String,

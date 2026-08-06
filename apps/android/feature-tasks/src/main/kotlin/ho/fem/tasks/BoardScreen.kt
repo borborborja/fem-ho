@@ -20,6 +20,7 @@ import ho.fem.designsystem.EmptyState
 import ho.fem.designsystem.FemhoSize
 import ho.fem.designsystem.KanbanColumn
 import ho.fem.designsystem.TaskCard
+import ho.fem.model.AiMode
 import ho.fem.model.Task
 import ho.fem.model.TaskStatus
 
@@ -90,6 +91,12 @@ fun BoardScreen(
     footer: @Composable (TaskStatus) -> Unit = {},
     /** Subtasques, llistes i el formulari d'afegir. `null` vol dir una targeta pelada. */
     extras: (Task) -> CardExtras? = { null },
+    /**
+     * El tauler de la IA. **No és una altra pantalla**: són les mateixes columnes amb
+     * altres targetes —les que tenen mode d'IA— i la bústia sencera, que és on tot
+     * arriba abans de decidir-ho.
+     */
+    aiBoard: Boolean = false,
 ) {
     val pager = rememberPagerState(pageCount = { ORDER.size })
 
@@ -102,7 +109,16 @@ fun BoardScreen(
         pageSpacing = FemhoSize.columnGap,
     ) { page ->
         val status = ORDER[page]
-        val ofColumn = tasks.filter { it.status == status }
+        val ofColumn = tasks
+            .filter { it.status == status }
+            .filter {
+                if (status == TaskStatus.INBOX) {
+                    true
+                } else {
+                    val delegada = it.aiMode != AiMode.MANUAL
+                    if (aiBoard) delegada else !delegada
+                }
+            }
 
         KanbanColumn(
             label = labels.columns[status].orEmpty(),
