@@ -196,3 +196,54 @@ async function accessToken(page: import('@playwright/test').Page): Promise<strin
     return raw === null ? '' : (JSON.parse(raw) as { access_token: string }).access_token;
   });
 }
+
+test('la repetició es tria al modal i genera la següent instància', async ({ page }) => {
+  await enter(page);
+
+  const scope = await page.locator('[data-testid="scope-chips"] button').first().innerText();
+  const field = page.locator('input[role="combobox"]').first();
+  await field.fill(`#${scope} Treure les escombraries`);
+  await field.press('Escape');
+  await field.press('Enter');
+
+  await expect(page.locator('[data-testid="inbox-rail"]')).toContainText('Treure les escombraries', {
+    timeout: 10_000,
+  });
+  await page.locator('[data-testid="inbox-rail"]').getByText('Treure les escombraries').first().click();
+
+  const modal = page.locator('[data-testid="task-modal"]');
+  await expect(modal).toBeVisible();
+
+  await modal.locator('[data-testid="task-due-date"]').fill('2026-08-04');
+  await modal.locator('[data-testid="task-recurrence-weekly"]').click();
+
+  // El commutador de "comptar des que es completa" només surt quan es repeteix: sense
+  // repetició no vol dir res.
+  await expect(modal.locator('[data-testid="task-recurrence-completion"]')).toBeVisible();
+
+  await modal.locator('[data-testid="task-save"]').click();
+  await expect(modal).toBeHidden();
+
+  // En completar-la, n'apareix una de nova amb el venciment de la setmana següent.
+  const token = await accessToken(page);
+  const llista = await page.request.get('/api/v1/tasks?limit=200', {
+    headers: { authorization: `Bearer ${token}` },
+  });
+  const tasca = ((await llista.json()) as { data: { id: string; title: string }[] }).data.find(
+    (t) => t.title === 'Treure les escombraries',
+  );
+
+  await page.request.post(`/api/v1/tasks/${tasca!.id}/complete`, {
+    headers: { authorization: `Bearer ${token}` },
+  });
+
+  const després = await page.request.get('/api/v1/tasks?limit=200', {
+    headers: { authorization: `Bearer ${token}` },
+  });
+  const totes = ((await després.json()) as { data: { title: string; due_date: string | null }[] })
+    .data.filter((t) => t.title === 'Treure les escombraries');
+
+  expect(totes.length).toBe(2);
+  // Cada dimarts és cada dimarts: la següent surt del venciment, no d'avui.
+  expect(totes.map((t) => t.due_date)).toContain('2026-08-11');
+});

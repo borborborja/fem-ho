@@ -57,9 +57,27 @@ type Draft = {
   due_date: string;
   due_time: string;
   deadline: string;
+  rrule: string;
+  recurrence_mode: 'schedule' | 'completion';
   ai_mode: Task['ai_mode'];
   ai_instructions: string;
 };
+
+/**
+ * Les repeticions que una tasca domèstica fa servir.
+ *
+ * No hi ha constructor de regles arbitràries: una interfície per compondre `BYDAY`,
+ * `BYSETPOS` i `WKST` és molta pantalla per a un cas que gairebé ningú té, i la que la
+ * gent vol —"cada setmana", "cada mes"— cap en quatre botons. Una regla més complicada
+ * que arribi per CalDAV es conserva i **no es toca**: es veu com a personalitzada.
+ */
+const RECURRENCES = [
+  { rrule: '', key: 'none' },
+  { rrule: 'FREQ=DAILY', key: 'daily' },
+  { rrule: 'FREQ=WEEKLY', key: 'weekly' },
+  { rrule: 'FREQ=MONTHLY', key: 'monthly' },
+  { rrule: 'FREQ=YEARLY', key: 'yearly' },
+] as const;
 
 export function TaskModal({ taskId, onClose, onChanged, onShare, onOpenList }: TaskModalProps) {
   const { scopes, projects, people } = useSessionData();
@@ -85,6 +103,8 @@ export function TaskModal({ taskId, onClose, onChanged, onShare, onOpenList }: T
       due_date: task.data.due_date ?? '',
       due_time: task.data.due_time ?? '',
       deadline: (task.data.deadline ?? '').slice(0, 10),
+      rrule: task.data.rrule ?? '',
+      recurrence_mode: task.data.recurrence_mode === 'completion' ? 'completion' : 'schedule',
       ai_mode: task.data.ai_mode,
       ai_instructions: '',
     });
@@ -99,6 +119,8 @@ export function TaskModal({ taskId, onClose, onChanged, onShare, onOpenList }: T
       due_time: draft.due_time === '' ? null : draft.due_time,
       // Una data límit sense hora és tot el dia: es tanca al final, no al principi.
       deadline: draft.deadline === '' ? null : `${draft.deadline}T23:59:59.000Z`,
+      rrule: draft.rrule === '' ? null : draft.rrule,
+      recurrence_mode: draft.recurrence_mode,
       ai_mode: draft.ai_mode,
       ai_instructions: draft.ai_instructions === '' ? null : draft.ai_instructions,
     });
@@ -284,6 +306,70 @@ export function TaskModal({ taskId, onClose, onChanged, onShare, onOpenList }: T
                 onChange={(event) => patch({ deadline: event.target.value })}
               />
             </label>
+
+            <div style={{ display: 'grid', gap: 5 }}>
+              {label(t('task.recurrence'))}
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {RECURRENCES.map((option) => (
+                  <button
+                    key={option.key}
+                    type="button"
+                    data-testid={`task-recurrence-${option.key}`}
+                    aria-pressed={draft.rrule === option.rrule}
+                    onClick={() => patch({ rrule: option.rrule })}
+                    style={{
+                      padding: '6px 12px',
+                      borderRadius: 100,
+                      cursor: 'pointer',
+                      font: 'inherit',
+                      fontSize: 12,
+                      fontWeight: draft.rrule === option.rrule ? 700 : 500,
+                      border: '1px solid var(--card-border)',
+                      background: draft.rrule === option.rrule ? 'var(--ghost-bg)' : 'transparent',
+                      color: 'var(--ink)',
+                    }}
+                  >
+                    {t(`task.recurrence.${option.key}`)}
+                  </button>
+                ))}
+                {/*
+                  Una regla que no és cap de les quatre —normalment vinguda per CalDAV—
+                  es conserva i s'ensenya tal com és. Sobreescriure-la seria perdre el
+                  que algú va escriure en una altra app.
+                */}
+                {draft.rrule !== '' && !RECURRENCES.some((o) => o.rrule === draft.rrule) ? (
+                  <span
+                    data-testid="task-recurrence-custom"
+                    style={{
+                      padding: '6px 12px',
+                      borderRadius: 100,
+                      fontSize: 12,
+                      fontFamily: 'var(--font-mono, monospace)',
+                      background: 'var(--tag-bg)',
+                      color: 'var(--tag-text)',
+                    }}
+                  >
+                    {draft.rrule}
+                  </span>
+                ) : null}
+              </div>
+
+              {draft.rrule === '' ? null : (
+                <label style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 12.5 }}>
+                  <input
+                    type="checkbox"
+                    data-testid="task-recurrence-completion"
+                    checked={draft.recurrence_mode === 'completion'}
+                    onChange={(event) =>
+                      patch({ recurrence_mode: event.target.checked ? 'completion' : 'schedule' })
+                    }
+                  />
+                  <span style={{ color: 'var(--ink-soft)' }}>
+                    {t('task.recurrence.fromCompletion')}
+                  </span>
+                </label>
+              )}
+            </div>
 
             <div style={{ display: 'grid', gap: 5 }}>
               {label(t('task.aiMode'))}

@@ -42,7 +42,7 @@
     "deleteProject": "apps/server/src/http/api-surface.test.ts · \"AQUESTA importa: esborrar-lo NO s'endú les tasques\"",
     "createLabel": "apps/server/src/http/api-surface.test.ts · \"es pot crear una etiqueta i queda registrada\"",
     "deleteLabel": "apps/server/src/http/api-surface.test.ts · \"s'esborra i deixa rastre\"",
-    "updateTask": "apps/server/src/http/api-surface.test.ts · \"es pot editar, i el canvi queda amb el valor anterior i el nou\"",
+    "updateTask": "apps/server/src/http/api-surface.test.ts · \"es pot editar, i el canvi queda amb el valor anterior i el nou\"; la repetició, a \"amb `schedule`, la següent surt del VENCIMENT anterior\"",
     "deleteTask": "apps/server/src/http/api-surface.test.ts · \"esborrar-la s'endú subtasques i llistes\"",
     "addAssignee": "apps/server/src/http/api-surface.test.ts · \"i qui sí, sí, amb rastre\"",
     "removeAssignee": "apps/server/src/http/api-surface.test.ts · \"i qui sí, sí, amb rastre\"",

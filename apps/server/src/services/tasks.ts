@@ -34,6 +34,11 @@ export interface TaskRow {
   view_mode: 'card' | 'simple';
   ai_mode: 'manual' | 'assisted' | 'delegated';
   delegate_agent_id: string | null;
+  /** RFC 5545, o `null` si no es repeteix. */
+  rrule: string | null;
+  /** `schedule` compta des del venciment; `completion`, des que es fa (docs/01 §4). */
+  recurrence_mode: 'schedule' | 'completion' | null;
+  recurrence_parent_id: string | null;
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -46,7 +51,8 @@ export interface Task extends TaskRow {
 
 const TASK_COLUMNS = sql`
   id, scope_id, project_id, title, description, status, position, due_date, due_time,
-  deadline, completed_at, view_mode, ai_mode, delegate_agent_id, created_by,
+  deadline, completed_at, view_mode, ai_mode, delegate_agent_id,
+  rrule, recurrence_mode, recurrence_parent_id, created_by,
   created_at, updated_at, version
 `;
 
@@ -444,6 +450,12 @@ export async function moveTask(
   return task;
 }
 
+export interface CompleteResult {
+  task: Task;
+  /** La instància següent, si la tasca es repeteix. `null` si no. */
+  next: Task | null;
+}
+
 export async function completeTask(
   ctx: AuditContext,
   principal: Principal,
@@ -480,12 +492,140 @@ export async function completeTask(
     changes: { status: { from: current.status, to: 'done' } },
   });
 
+  await createNextOccurrence(ctx, principal, id, current);
+
   const updated = await sql<TaskRow>`
     SELECT ${TASK_COLUMNS} FROM tasks WHERE id = ${id}
   `.execute(ctx.tx);
   const [task] = await withAssignees(ctx.tx, updated.rows);
   if (task === undefined) throw notFound('tasca', id);
   return task;
+}
+
+/**
+ * La instància següent d'una tasca que es repeteix. docs/01 §4, docs/13 M4.
+ *
+ * **`schedule` i `completion` són dues coses diferents**, i és la distinció que Todoist
+ * escriu com a `every` contra `every!`: repetir-se cada dimarts contra repetir-se una
+ * setmana **després d'haver-la fet**. Per a tasques domèstiques la segona és la que la
+ * gent vol, i RRULE no la sap expressar — per això `recurrence_mode` és una columna i
+ * no un tros de la regla.
+ *
+ *   - `schedule`   — la següent surt de la regla comptant des del venciment anterior.
+ *   - `completion` — surt de la regla comptant des d'AVUI, que és quan s'ha fet.
+ *
+ * La nova neix a `todo` i no a `inbox`: ja se sap què és i quan toca, i passar per la
+ * bústia obligaria a tornar-la a classificar cada vegada.
+ */
+async function createNextOccurrence(
+  ctx: AuditContext,
+  principal: Principal,
+  id: string,
+  current: TaskRow,
+): Promise<void> {
+  const rrule = current.rrule;
+  if (rrule === null || rrule === '') return;
+
+  const mode = current.recurrence_mode === 'completion' ? 'completion' : 'schedule';
+  const from = mode === 'completion' ? ctx.now.slice(0, 10) : (current.due_date ?? ctx.now.slice(0, 10));
+
+  const nextDate = nextDueDate(rrule, from);
+  if (nextDate === null) return;
+
+  const nextId = uuidv7();
+  const last = await sql<{ position: string }>`
+    SELECT position FROM tasks
+    WHERE scope_id = ${current.scope_id} AND status = 'todo' AND deleted_at IS NULL
+    ORDER BY position DESC, id DESC LIMIT 1
+  `.execute(ctx.tx);
+
+  await sql`
+    INSERT INTO tasks (id, scope_id, project_id, title, description, status, position,
+                       due_date, due_time, view_mode, ai_mode, origin, search_text,
+                       rrule, recurrence_mode, recurrence_parent_id,
+                       created_by, created_at, updated_at, version)
+    VALUES (${nextId}, ${current.scope_id}, ${current.project_id}, ${current.title},
+            ${current.description}, 'todo',
+            ${generatePosition(last.rows[0]?.position ?? null, null)},
+            ${nextDate}, ${current.due_time}, ${current.view_mode}, ${current.ai_mode},
+            'native', ${normalizeForSearch(current.title, current.description)},
+            ${rrule}, ${mode}, ${id},
+            ${principal.userId}, ${ctx.now}, ${ctx.now}, 1)
+  `.execute(ctx.tx);
+
+  // Els assignats van amb ella: qui treia les escombraries la setmana passada les
+  // segueix traient.
+  const assignees = await sql<{ user_id: string }>`
+    SELECT user_id FROM task_assignees WHERE task_id = ${id}
+  `.execute(ctx.tx);
+  for (const row of assignees.rows) {
+    await sql`
+      INSERT INTO task_assignees (task_id, user_id, assigned_at)
+      VALUES (${nextId}, ${row.user_id}, ${ctx.now})
+    `.execute(ctx.tx);
+  }
+
+  ctx.record({
+    entityType: 'task',
+    entityId: nextId,
+    scopeId: current.scope_id,
+    verb: 'created',
+    changes: { recurrence_parent_id: { from: null, to: id } },
+  });
+}
+
+/**
+ * La data següent d'una RRULE, a partir d'una data.
+ *
+ * S'implementa aquí i no amb `expandOccurrences` perquè aquella treballa amb instants i
+ * fusos —és per a esdeveniments— i una tasca té una **data sense hora**: passar-la per
+ * un instant obligaria a inventar-se una hora i el dia de canvi d'hora sortiria mogut.
+ *
+ * Se'n suporten les freqüències que una tasca domèstica fa servir. Una regla més
+ * complicada torna `null` i **no genera res**, que és millor que generar-la al dia
+ * equivocat: una tasca que no apareix es nota; una que apareix el dia que no toca,
+ * durant setmanes, no.
+ */
+export function nextDueDate(rrule: string, from: string): string | null {
+  const parts = Object.fromEntries(
+    rrule
+      .replace(/^RRULE:/u, '')
+      .split(';')
+      .map((part) => part.split('=') as [string, string]),
+  );
+
+  const interval = Number(parts.INTERVAL ?? '1');
+  if (!Number.isFinite(interval) || interval < 1) return null;
+
+  const [year, month, day] = from.split('-').map(Number) as [number, number, number];
+  // Migdia UTC per no caure a l'altre dia amb cap desplaçament de fus.
+  const base = new Date(Date.UTC(year, month - 1, day, 12));
+
+  switch (parts.FREQ) {
+    case 'DAILY':
+      base.setUTCDate(base.getUTCDate() + interval);
+      break;
+    case 'WEEKLY':
+      base.setUTCDate(base.getUTCDate() + 7 * interval);
+      break;
+    case 'MONTHLY':
+      base.setUTCMonth(base.getUTCMonth() + interval);
+      break;
+    case 'YEARLY':
+      base.setUTCFullYear(base.getUTCFullYear() + interval);
+      break;
+    default:
+      return null;
+  }
+
+  // `UNTIL` acaba la sèrie: passat el límit no se'n genera cap més.
+  const until = parts.UNTIL;
+  const next = base.toISOString().slice(0, 10);
+  if (until !== undefined && next > until.slice(0, 10).replace(/(\d{4})(\d{2})(\d{2})/u, '$1-$2-$3')) {
+    return null;
+  }
+
+  return next;
 }
 
 export interface BoardGroup {
@@ -558,6 +698,10 @@ export interface UpdateTaskInput {
   deadline?: string | null | undefined;
   /** `null` la treu del projecte i la torna a l'espai general de l'àmbit. */
   project_id?: string | null | undefined;
+  /** RFC 5545. `null` deixa de repetir-se. */
+  rrule?: string | null | undefined;
+  /** `schedule` compta des del venciment; `completion`, des que es fa (docs/01 §4). */
+  recurrence_mode?: 'schedule' | 'completion' | undefined;
   ai_mode?: 'manual' | 'assisted' | 'delegated' | undefined;
   ai_instructions?: string | null | undefined;
 }
@@ -602,6 +746,8 @@ export async function updateTask(
     'due_date',
     'due_time',
     'deadline',
+    'rrule',
+    'recurrence_mode',
     'ai_mode',
     'ai_instructions',
   ] as const) {

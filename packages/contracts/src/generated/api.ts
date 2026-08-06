@@ -1520,6 +1520,16 @@ export interface components {
              *     àmbits individuals. Un projecte d'un altre àmbit es rebutja amb `422`.
              */
             project_id?: string | null;
+            /** @description RFC 5545. `null` deixa de repetir-se. */
+            rrule?: string | null;
+            /**
+             * @description La distinció que Todoist escriu com a `every` contra `every!`: repetir-se
+             *     cada dimarts contra repetir-se una setmana **després d'haver-la fet**. RRULE
+             *     no sap expressar la segona, i per a tasques domèstiques és la que la gent
+             *     vol; per això és un camp propi (docs/01 §4).
+             * @enum {string}
+             */
+            recurrence_mode?: "schedule" | "completion";
             /** @enum {string} */
             ai_mode?: "manual" | "assisted" | "delegated";
             ai_instructions?: string | null;
@@ -2081,6 +2091,17 @@ export interface components {
              */
             ai_mode: "manual" | "assisted" | "delegated";
             delegate_agent_id?: string | null;
+            /** @description RFC 5545, o `null` si no es repeteix. */
+            rrule?: string | null;
+            /**
+             * @description `schedule` compta des del venciment; `completion`, des que es fa. És la
+             *     distinció que Todoist escriu com a `every` contra `every!` i que RRULE no sap
+             *     expressar (docs/01 §4).
+             * @enum {string|null}
+             */
+            recurrence_mode?: "schedule" | "completion" | null;
+            /** @description La instància de la qual ve, si n'és una repetició. */
+            recurrence_parent_id?: string | null;
             /** @description Persones. El brief demana "persona o persones". */
             assignee_ids?: string[];
             created_by?: string;

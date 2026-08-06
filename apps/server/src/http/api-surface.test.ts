@@ -1012,6 +1012,86 @@ describe('data límit i projecte', () => {
   });
 });
 
+/**
+ * La generació de la següent instància. docs/13 M4.
+ *
+ * "`POST /tasks/{id}/complete` amb cascada i generació de la següent instància si es
+ * repeteix, distingint `recurrence_mode` `schedule` de `completion`."
+ */
+describe('tasques que es repeteixen', () => {
+  it("amb `schedule`, la següent surt del VENCIMENT anterior", async () => {
+    const taskId = await novaTasca('Treure les escombraries');
+    await api('PATCH', `/api/v1/tasks/${taskId}`, {
+      due_date: '2026-08-04',
+      rrule: 'FREQ=WEEKLY',
+      recurrence_mode: 'schedule',
+    });
+
+    await api('POST', `/api/v1/tasks/${taskId}/complete`);
+
+    const seguent = await sql<{ id: string; due_date: string; status: string }>`
+      SELECT id, due_date, status FROM tasks WHERE recurrence_parent_id = ${taskId}
+    `.execute(conn.db);
+
+    expect(seguent.rows).toHaveLength(1);
+    // Cada dimarts és cada dimarts, tant si la vas fer dimarts com dijous.
+    expect(seguent.rows[0]?.due_date).toBe('2026-08-11');
+    // Neix a `todo` i no a la bústia: ja se sap què és i quan toca.
+    expect(seguent.rows[0]?.status).toBe('todo');
+  });
+
+  it("amb `completion`, surt del dia que s'ha FET", async () => {
+    const taskId = await novaTasca('Regar les plantes');
+    await api('PATCH', `/api/v1/tasks/${taskId}`, {
+      // Un venciment vell a posta: amb `completion` no s'hi ha de mirar.
+      due_date: '2026-01-01',
+      rrule: 'FREQ=WEEKLY',
+      recurrence_mode: 'completion',
+    });
+
+    await api('POST', `/api/v1/tasks/${taskId}/complete`);
+
+    const seguent = await sql<{ due_date: string }>`
+      SELECT due_date FROM tasks WHERE recurrence_parent_id = ${taskId}
+    `.execute(conn.db);
+
+    // Una setmana des d'avui, no des del gener: és la diferència entre `every` i
+    // `every!`, i confondre-la fa que la tasca s'acumuli o desaparegui.
+    const esperat = new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10);
+    expect(seguent.rows[0]?.due_date).toBe(esperat);
+  });
+
+  it("els assignats van amb la instància nova", async () => {
+    const taskId = await novaTasca('Amb responsable');
+    await api('PATCH', `/api/v1/tasks/${taskId}`, {
+      due_date: '2026-08-04',
+      rrule: 'FREQ=DAILY',
+    });
+
+    await api('POST', `/api/v1/tasks/${taskId}/complete`);
+
+    const seguent = await sql<{ id: string }>`
+      SELECT id FROM tasks WHERE recurrence_parent_id = ${taskId}
+    `.execute(conn.db);
+    const assignats = await sql<{ n: number }>`
+      SELECT COUNT(*) AS n FROM task_assignees WHERE task_id = ${seguent.rows[0]!.id}
+    `.execute(conn.db);
+
+    // Qui treia les escombraries la setmana passada les segueix traient.
+    expect(Number(assignats.rows[0]?.n)).toBeGreaterThan(0);
+  });
+
+  it('una tasca que NO es repeteix no genera res', async () => {
+    const taskId = await novaTasca('Una sola vegada');
+    await api('POST', `/api/v1/tasks/${taskId}/complete`);
+
+    const seguent = await sql<{ n: number }>`
+      SELECT COUNT(*) AS n FROM tasks WHERE recurrence_parent_id = ${taskId}
+    `.execute(conn.db);
+    expect(Number(seguent.rows[0]?.n)).toBe(0);
+  });
+});
+
 describe('netejar la instància', () => {
   it('sense el nom exacte no fa res', async () => {
     const res = await api('POST', '/api/v1/admin/wipe', { confirmation: 'casa nostra' });

@@ -131,6 +131,11 @@ export function registerTaskRoutes(app: FastifyInstance): void {
           due_time: nullable(input, 'due_time'),
           deadline: nullable(input, 'deadline'),
           project_id: nullable(input, 'project_id'),
+          rrule: nullable(input, 'rrule'),
+          recurrence_mode:
+            input.recurrence_mode === 'schedule' || input.recurrence_mode === 'completion'
+              ? input.recurrence_mode
+              : undefined,
           ai_mode:
             input.ai_mode === 'manual' || input.ai_mode === 'assisted' || input.ai_mode === 'delegated'
               ? input.ai_mode

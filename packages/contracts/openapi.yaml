@@ -2400,6 +2400,17 @@ components:
             `null` la torna a l'espai general de l'àmbit. **L'àmbit no es pot canviar
             editant**: altres membres, altres etiquetes i l'assignació automàtica dels
             àmbits individuals. Un projecte d'un altre àmbit es rebutja amb `422`.
+        rrule:
+          type: [string, 'null']
+          description: 'RFC 5545. `null` deixa de repetir-se.'
+        recurrence_mode:
+          type: string
+          enum: [schedule, completion]
+          description: |
+            La distinció que Todoist escriu com a `every` contra `every!`: repetir-se
+            cada dimarts contra repetir-se una setmana **després d'haver-la fet**. RRULE
+            no sap expressar la segona, i per a tasques domèstiques és la que la gent
+            vol; per això és un camp propi (docs/01 §4).
         ai_mode: { type: string, enum: [manual, assisted, delegated] }
         ai_instructions: { type: [string, 'null'] }
 
@@ -3131,6 +3142,19 @@ components:
           enum: [manual, assisted, delegated]
           description: Delegar no és assignar (D5).
         delegate_agent_id: { type: [string, 'null'] }
+        rrule:
+          type: [string, 'null']
+          description: 'RFC 5545, o `null` si no es repeteix.'
+        recurrence_mode:
+          type: [string, 'null']
+          enum: [schedule, completion, null]
+          description: |
+            `schedule` compta des del venciment; `completion`, des que es fa. És la
+            distinció que Todoist escriu com a `every` contra `every!` i que RRULE no sap
+            expressar (docs/01 §4).
+        recurrence_parent_id:
+          type: [string, 'null']
+          description: La instància de la qual ve, si n'és una repetició.
         assignee_ids:
           type: array
           items: { type: string }

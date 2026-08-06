@@ -279,6 +279,14 @@
     <string name="task_newsubtask">+ Afegir subtasca…</string>
     <string name="task_noproject">Espai general</string>
     <string name="task_project">Projecte</string>
+    <string name="task_recurrence">Repetició</string>
+    <string name="task_recurrence_daily">Cada dia</string>
+    <string name="task_recurrence_explain">Amb això, la següent surt del dia que la facis i no del venciment.</string>
+    <string name="task_recurrence_fromcompletion">Comptar des que es completa</string>
+    <string name="task_recurrence_monthly">Cada mes</string>
+    <string name="task_recurrence_none">No es repeteix</string>
+    <string name="task_recurrence_weekly">Cada setmana</string>
+    <string name="task_recurrence_yearly">Cada any</string>
     <string name="task_scope">Àmbit</string>
     <string name="task_send">Envia</string>
     <string name="task_share">Compartir</string>
