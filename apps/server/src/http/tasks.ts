@@ -151,20 +151,25 @@ export function registerTaskRoutes(app: FastifyInstance): void {
     handle(app, request, reply, async (principal) => {
       const body = (request.body ?? {}) as Record<string, unknown>;
       const result = await auditedTransaction(app.connection!.db, principal, (ctx) =>
-        createTask(ctx, principal, {
-          id: typeof body.id === 'string' ? body.id : undefined,
-          scope_id: typeof body.scope_id === 'string' ? body.scope_id : undefined,
-          project_id: typeof body.project_id === 'string' ? body.project_id : undefined,
-          title: typeof body.title === 'string' ? body.title : undefined,
-          description: typeof body.description === 'string' ? body.description : undefined,
-          status: parseStatuses(body.status)?.[0],
-          position: typeof body.position === 'string' ? body.position : undefined,
-          due_date: typeof body.due_date === 'string' ? body.due_date : undefined,
-          due_time: typeof body.due_time === 'string' ? body.due_time : undefined,
-          assignee_ids: Array.isArray(body.assignee_ids)
-            ? body.assignee_ids.filter((v): v is string => typeof v === 'string')
-            : undefined,
-        }),
+        createTask(
+          ctx,
+          principal,
+          {
+            id: typeof body.id === 'string' ? body.id : undefined,
+            scope_id: typeof body.scope_id === 'string' ? body.scope_id : undefined,
+            project_id: typeof body.project_id === 'string' ? body.project_id : undefined,
+            title: typeof body.title === 'string' ? body.title : undefined,
+            description: typeof body.description === 'string' ? body.description : undefined,
+            status: parseStatuses(body.status)?.[0],
+            position: typeof body.position === 'string' ? body.position : undefined,
+            due_date: typeof body.due_date === 'string' ? body.due_date : undefined,
+            due_time: typeof body.due_time === 'string' ? body.due_time : undefined,
+            assignee_ids: Array.isArray(body.assignee_ids)
+              ? body.assignee_ids.filter((v): v is string => typeof v === 'string')
+              : undefined,
+          },
+          app.connection!.engine,
+        ),
       );
       void reply.code(result.created ? 201 : 200);
       return result.task;

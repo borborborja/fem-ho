@@ -138,7 +138,10 @@ private fun pickDigit(low: Int, high: Int, random: Random?): Int {
     if (span <= 0) throw InvalidPositionException("No hi ha cap dígit entre els dos veïns.")
     if (random == null || span == 1) return low + 1 + span / 2
 
-    val window = maxOf(1, span / JITTER_SPREAD)
+    // Amb intervals petits, el rang sencer i no el terç central: `span / 3` col·lapsa a
+    // 1 quan `span` és 2, i llavors `nextInt(1)` és sempre 0 i el jitter desapareix
+    // justament on més fa falta. Ha de coincidir amb el de TypeScript.
+    val window = if (span <= JITTER_SPREAD) span else span / JITTER_SPREAD
     val start = low + 1 + (span - window) / 2
     return start + random.nextInt(window)
 }
@@ -177,15 +180,19 @@ private fun fractionBetween(a: String, b: String?, random: Random?): String {
     val digitB = if (b == null || b.isEmpty()) BASE else digit(b[0])
     val span = digitB - digitA - 1
 
-    if (span >= 2 || (span == 1 && random == null)) {
+    /**
+     * Un interval estret no dona prou entropia i cal baixar un nivell: amb un o dos
+     * dígits disponibles, dos clients que insereixin al mateix buit xoquen sempre o la
+     * meitat de les vegades. Ha de coincidir amb el de TypeScript.
+     */
+    if (span >= JITTER_SPREAD || (span >= 1 && random == null)) {
         return ALPHABET[pickDigit(digitA, digitB, random)].toString()
     }
 
-    if (span == 1) {
-        // Només hi cap un dígit: triar-lo és determinista i dos clients xocarien. S'agafa
-        // aquell dígit i s'hi penja un d'aleatori a sota, mai el més baix.
-        val only = ALPHABET[digitA + 1]
-        return only.toString() + ALPHABET[1 + random!!.nextInt(BASE - 1)]
+    if (span >= 1) {
+        val first = ALPHABET[digitA + 1]
+        // Mai el dígit més baix a sota: cap fracció pot acabar-hi.
+        return first.toString() + ALPHABET[1 + random!!.nextInt(BASE - 1)]
     }
 
     if (b != null && b.length > 1 && random == null) {

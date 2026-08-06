@@ -190,7 +190,19 @@ function pickDigit(low: number, high: number, random: RandomSource | null): numb
   if (span <= 0) throw new InvalidPositionError('No hi ha cap dígit entre els dos veïns.');
   if (random === null || span === 1) return low + 1 + Math.floor(span / 2);
 
-  const window = Math.max(1, Math.floor(span / JITTER_SPREAD));
+  /**
+   * **Amb intervals petits es fa servir el rang sencer, no el terç central.**
+   *
+   * `Math.floor(span / 3)` col·lapsa a 1 quan `span` és 2, i llavors
+   * `Math.floor(random() * 1)` és sempre 0: el jitter desapareix del tot. I desapareix
+   * justament on més fa falta — l'interval petit és el cas de dos clients inserint al
+   * mateix buit estret, que és per a què el jitter existeix (D3).
+   *
+   * Concentrar-se al terç central és una optimització per a intervals amples, on triar
+   * dels extrems faria créixer la clau següent. Amb tres dígits o menys no hi ha extrems
+   * a evitar.
+   */
+  const window = span <= JITTER_SPREAD ? span : Math.floor(span / JITTER_SPREAD);
   const start = low + 1 + Math.floor((span - window) / 2);
   return start + Math.floor(random() * window);
 }
@@ -223,15 +235,26 @@ function fractionBetween(a: string, b: string | null, random: RandomSource | nul
   const digitB = b === null || b.length === 0 ? BASE : digit(b[0]!);
   const span = digitB - digitA - 1;
 
-  if (span >= 2 || (span === 1 && random === null)) {
+  /**
+   * **Un interval estret no dona prou entropia, i cal baixar un nivell.**
+   *
+   * Amb `span` d'un o dos dígits, triar-ne un dona una o dues possibilitats: dos clients
+   * que insereixin al mateix buit xoquen sempre o la meitat de les vegades, que és
+   * justament el que D3 vol evitar. S'agafa el primer dígit disponible i s'hi penja un
+   * d'aleatori a sota: seixanta-una possibilitats a canvi d'un caràcter.
+   *
+   * El llindar és `JITTER_SPREAD` perquè és el mateix que decideix si el jitter cap dins
+   * de l'interval: per sota, no hi cap.
+   */
+  if (span >= JITTER_SPREAD || (span >= 1 && random === null)) {
     return ALPHABET[pickDigit(digitA, digitB, random)]!;
   }
 
-  if (span === 1) {
-    // Només hi cap un dígit: triar-lo és deterministe i dos clients xocarien. S'agafa
-    // aquell dígit i s'hi penja un d'aleatori a sota, mai el més baix.
-    const only = ALPHABET[digitA + 1]!;
-    return only + ALPHABET[1 + Math.floor(random!() * (BASE - 1))]!;
+  if (span >= 1) {
+    const first = ALPHABET[digitA + 1]!;
+    // Mai el dígit més baix a sota: cap fracció pot acabar-hi, o no s'hi podria inserir
+    // res just abans.
+    return first + ALPHABET[1 + Math.floor(random!() * (BASE - 1))]!;
   }
 
   if (b !== null && b.length > 1 && random === null) {
@@ -308,7 +331,22 @@ function between(a: string | null, b: string | null, random: RandomSource | null
       // Capçalera esgotada: es refina cap amunt dins del mateix enter.
       return intA + fractionBetween(fracA, null, random);
     }
-    return bigger;
+
+    /**
+     * **L'enter incrementat, i prou, era determinista.** Dos clients que afegissin al
+     * peu de la mateixa columna alhora produïen EXACTAMENT la mateixa clau, que és
+     * justament el que el jitter existeix per evitar (D3): cada client resolia l'empat
+     * a la seva manera i acabaven veient ordres diferents, sense cap error enlloc.
+     *
+     * Amb SQLite no es veia mai perquè les transaccions es serialitzen i cada lectura
+     * ja veia la inserció anterior. A Postgres, vint creacions simultànies donaven sis
+     * posicions repetides.
+     *
+     * S'hi penja un dígit aleatori. **La clau no creix**: el proper que afegeixi
+     * incrementarà l'enter i tornarà a tenir tres caràcters.
+     */
+    if (random === null) return bigger;
+    return bigger + ALPHABET[1 + Math.floor(random() * (BASE - 1))]!;
   }
 
   // Entremig.
@@ -322,7 +360,28 @@ function between(a: string | null, b: string | null, random: RandomSource | null
   }
 
   const next = incrementInteger(intA);
-  if (next !== null && next < b) return next;
+  if (next !== null && next < b) {
+    /**
+     * **La segona via determinista.** Amb els enters consecutius, tornar l'enter
+     * incrementat i prou fa que dos clients que insereixin aquí coincideixin, igual que
+     * passava al camí d'afegir al peu.
+     *
+     * La va destapar la prova de jitter que ja hi havia: en arreglar l'altre camí,
+     * aquest va quedar al descobert. N'hi havia dues, no una.
+     */
+    if (random === null) return next;
+
+    if (next === intB) {
+      // `next < b` amb el mateix enter vol dir que `b` té fracció: hi ha lloc a dins.
+      return intB + fractionBetween('', fracB, random);
+    }
+
+    // L'enter de `b` és estrictament més gran: hi cap un dígit a sota de `next` sense
+    // arribar-hi. Si el dígit triat el passés —cas estret—, es torna l'enter pelat, que
+    // segueix sent correcte encara que sigui determinista.
+    const jittered = next + ALPHABET[1 + Math.floor(random() * (BASE - 1))]!;
+    return jittered < b ? jittered : next;
+  }
 
   // Els enters són consecutius: cal refinar la part fraccionària del petit.
   return intA + fractionBetween(fracA, null, random);

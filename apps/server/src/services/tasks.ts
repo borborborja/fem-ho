@@ -178,10 +178,20 @@ export interface CreateTaskInput {
   assignee_ids?: string[] | undefined;
 }
 
+/**
+ * L'identificador de la família de bloqueigs de posició.
+ *
+ * `pg_advisory_xact_lock` amb dos arguments fa servir el primer com a espai de noms:
+ * així els bloqueigs de posició no xoquen mai amb el del `change_log`, que en fa servir
+ * un de sol.
+ */
+const POSITION_LOCK_ID = 851_002_027;
+
 export async function createTask(
   ctx: AuditContext,
   principal: Principal,
   input: CreateTaskInput,
+  engine: 'sqlite' | 'postgres' = 'sqlite',
 ): Promise<{ task: Task; created: boolean }> {
   if (!hasCapability(principal, 'tasks:write')) throw missingCapability('tasks:write');
 
@@ -214,10 +224,27 @@ export async function createTask(
 
   const status = input.status ?? 'inbox';
 
-  // La posició la calcula el client (D3). Si no en dona —clients simples, o creació des
-  // del servidor— es posa al final de la columna.
+  /**
+   * La posició la calcula el client (D3). Si no en dona —clients simples, o creació des
+   * del servidor— es posa al final de la columna.
+   *
+   * **I llavors cal serialitzar la lectura.** Llegir l'última posició i escriure'n una
+   * de nova és un `read-then-write`: dues peticions simultànies llegeixen la mateixa
+   * última i generen claus que xoquen. El jitter ho fa improbable per a dues, però amb
+   * vint alhora l'aniversari mana i xoquen igual.
+   *
+   * Amb SQLite les transaccions ja es serialitzen i no cal fer res. A Postgres corren de
+   * debò, i s'agafa un bloqueig d'assessorament de la mateixa família que el del
+   * `change_log`: un per columna, dins de la transacció, i s'allibera sol en acabar.
+   */
   let position = input.position;
   if (position === undefined) {
+    if (engine === 'postgres') {
+      await sql`
+        SELECT pg_advisory_xact_lock(${POSITION_LOCK_ID}, hashtext(${`${input.scope_id}:${input.status ?? 'inbox'}`}))
+      `.execute(ctx.tx);
+    }
+
     const last = await sql<{ position: string }>`
       SELECT position FROM tasks
       WHERE scope_id = ${input.scope_id} AND status = ${status} AND deleted_at IS NULL
@@ -226,7 +253,7 @@ export async function createTask(
     position = generatePosition(last.rows[0]?.position ?? null, null);
   }
 
-  await sql`
+  const inserted = await sql`
     INSERT INTO tasks (id, scope_id, project_id, title, description, status, position,
                        due_date, due_time, view_mode, ai_mode, origin, search_text,
                        created_by, created_at, updated_at, version)
@@ -235,7 +262,32 @@ export async function createTask(
             ${input.due_time ?? null}, 'card', 'manual', 'native',
             ${normalizeForSearch(input.title, input.description)},
             ${principal.userId}, ${ctx.now}, ${ctx.now}, 1)
+    ON CONFLICT (id) DO NOTHING
   `.execute(ctx.tx);
+
+  /**
+   * **La comprovació de dalt no basta sota concurrència.**
+   *
+   * Dues peticions amb el mateix identificador de client poden llegir totes dues que no
+   * existeix i intentar inserir-lo. Amb SQLite no es veia perquè les transaccions es
+   * serialitzen; a Postgres, una de les dues rebia una violació de clau i el client
+   * s'enduia un error d'una operació que docs/05 §3 promet idempotent.
+   *
+   * `ON CONFLICT DO NOTHING` i no un `try`/`catch`: a Postgres, un error dins d'una
+   * transacció l'avorta sencera i ja no s'hi pot tornar a consultar res. Aquesta forma
+   * funciona igual als dos motors.
+   */
+  if (Number(inserted.numAffectedRows ?? 0n) === 0) {
+    const race = await sql<TaskRow>`
+      SELECT ${TASK_COLUMNS} FROM tasks WHERE id = ${id}
+    `.execute(ctx.tx);
+    const winner = race.rows[0];
+    if (winner !== undefined) {
+      ctx.noChange();
+      const [task] = await withAssignees(ctx.tx, [winner]);
+      return { task: task!, created: false };
+    }
+  }
 
   /**
    * "A un àmbit `individual` totes les tasques s'assignen automàticament al propietari.

@@ -206,7 +206,7 @@ function buildHandlers(
     },
 
     create_task: async (args) =>
-      ok(await write(async (ctx) => createTask(ctx, principal, args as never))),
+      ok(await write(async (ctx) => createTask(ctx, principal, args as never, engine))),
 
     update_task: async (args) =>
       ok(
