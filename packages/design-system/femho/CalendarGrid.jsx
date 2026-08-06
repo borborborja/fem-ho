@@ -103,7 +103,13 @@ export function MonthView({
         >
           ‹
         </button>
-        <div style={{ fontSize: 16, fontWeight: 700 }}>{monthLabel}</div>
+        {/*
+          El mes **i l'any** (docs/02 §5). Sense l'any, navegar tres mesos enrere et deixa
+          mirant "desembre" sense saber de quin any, que és justament quan importa.
+        */}
+        <div style={{ fontSize: 16, fontWeight: 700 }}>
+          {monthLabel} {year}
+        </div>
         <button
           type="button"
           onClick={onNext}
