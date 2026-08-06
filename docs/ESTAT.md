@@ -15,7 +15,7 @@ npm run typecheck        # 0 errors
 npm run lint             # 0 errors
 npm test                 # unitàries, SQLite
 npm run test:postgres    # unitàries, Postgres (cal FEMHO_TEST_POSTGRES_URL)
-npm run check            # les 9 comprovacions permanents
+npm run check            # les 10 comprovacions permanents
 npm run e2e              # navegador, contra un servidor real
 npm run test:android     # Kotlin pur, sense emulador
 npm run android:build    # APK de depuració
@@ -27,16 +27,46 @@ npm run test:proxy-matrix    # CalDAV i SSE darrere de nginx i Caddy
 | --- | --- |
 | Construcció des de zero | contracts → server → web |
 | Tipus · estil | 0 · 0 |
-| Proves unitàries · SQLite | 631 |
-| Proves unitàries · Postgres | 645 |
-| Comprovacions permanents | 9 de 9 |
-| Proves de navegador | 68, de les quals 24 contra el servidor real |
-| Proves de Kotlin | 30 |
+| Proves unitàries · SQLite | 640 |
+| Proves unitàries · Postgres | 661 |
+| Comprovacions permanents | 10 de 10 |
+| Proves de navegador | 78, de les quals 32 contra el servidor real |
+| Proves de Kotlin | 40 |
 | APK de depuració | es construeix |
 | Primer arrencament amb Compose | 13 comprovacions |
 | Matriu de proxies | 24 comprovacions, nginx i Caddy |
 | Referències CalDAV | 6, contra Radicale i Xandikos |
 | Restauració de còpia | 501 files, `integrity_check = ok` |
+
+---
+
+## El disseny validat
+
+El projecte s'ha ajustat al disseny validat (`design/prototip/`, comparat el 2026-08-06
+amb la versió del llenç). El que en va sortir:
+
+| Canvi | On |
+| --- | --- |
+| Afegida ràpida **al peu de cada columna**, amb el botó rodó d'edició completa | web i Android |
+| El commutador del **tauler de la IA** a la barra, amb el gir | web i Android |
+| Subtasques i llistes **a la targeta**, sota "▸ Llistes (2)", amb formulari per afegir-n'hi | web i Android |
+| Botó d'edició completa al tauler general | web |
+| Persones **només a la bústia d'un àmbit col·lectiu** | web |
+| Les tasques d'altres, darrere el commutador de l'epígraf i atenuades | web |
+| El tauler omple la pantalla i cada columna es desplaça per dins | web |
+
+**On no s'ha seguit el disseny, i per què:**
+
+- **El llapis d'edició a la targeta.** El disseny hi posa un botó de 20px; `docs/02` §4
+  diu que **clicar la targeta obre el modal**, que ja hi és i està provat. Amb les dues
+  coses, el llapis és un segon camí cap al mateix lloc.
+- **La pastilla `3/7`.** El disseny la treu i deixa només el commutador de llistes;
+  `docs/02` §4 la demana explícitament ("una pastilla amb `3/7`"), i és l'únic que diu
+  quant en falta amb la targeta plegada. Hi són les dues: la pastilla informa, el
+  commutador desplega.
+- **El camp de persones en crear una tasca.** El disseny l'ensenya; aquí l'assignació és
+  una crida a part sobre una tasca que ja existeix, o sigui que surt en obrir-la. Abans
+  d'aquest canvi, en crear, escrivia a `/tasks/undefined/assignees`.
 
 ---
 
@@ -110,6 +140,8 @@ Els vuit mòduls de `docs/03` §11 existeixen i l'APK es construeix.
 | Afegida ràpida amb xips reversibles | fet, amb el parser compartit |
 | UnifiedPush, amb consulta periòdica com a alternativa | fet, **sense provar amb un distribuïdor real** |
 | Vista setmanal | fet |
+| Subtasques i llistes a la targeta | fet, amb el formulari d'afegir |
+| Tauler de la IA | fet, amb el commutador a la barra |
 
 El detall té menys camps que el modal de la web, i és deliberat (`docs/03` §6): al mòbil
 s'edita el que es toca sovint —títol, estat, mode d'IA i les llistes— i la resta es fa
@@ -128,6 +160,8 @@ No es pot verificar en aquesta màquina i **no s'ha verificat**:
   La consulta periòdica, que és el que tindrà la majoria de gent, sí que és independent
   del distribuïdor.
 - La comparació de captures entre la web mòbil i l'app — el mateix.
+- **L'app d'Android en execució.** Compila, empaqueta i les proves de Kotlin passen, però
+  aquí no hi ha ni emulador ni telèfon: el que s'ha vist funcionar de veritat és la web.
 - Les proves amb clients CalDAV reals: DAVx⁵, Apple Recordatoris, Thunderbird,
   Evolution, Nextcloud Tasks. Veure [`CALDAV-CLIENTS.md`](CALDAV-CLIENTS.md).
 - La preservació de les propietats `X-FEMHO-*` en servidors de tercers. `docs/07` §7
@@ -139,6 +173,10 @@ No es pot verificar en aquesta màquina i **no s'ha verificat**:
   1,88–2,61:1 en tres dels quatre accents, i `docs/04` §8 en demana 4,5:1. `docs/04` §1
   diu que Plou no es reescriu, o sigui que està registrat a `contrast-baseline.json`
   per bloquejar violacions noves sense tocar les heretades. **És una decisió teva.**
+- **El formulari de tasca nova a Android.** El disseny mòbil posa un botó rodó al costat
+  de cada afegida ràpida que obre l'edició completa. A Android el detall de tasca només
+  edita una que ja existeix, i el botó necessitaria un formulari de creació que ara no hi
+  és; s'ha deixat fora en comptes de posar un botó que no porta enlloc.
 - **La contrasenya dels enllaços compartits** té un mínim de 6 caràcters i no de 10 com
   els comptes, justificat pel bloqueig als 5 intents. Una línia a `services/shares.ts`
   si no hi estàs d'acord.

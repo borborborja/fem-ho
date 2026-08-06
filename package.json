@@ -40,7 +40,7 @@
     "i18n:android": "node tools/i18n/strings-xml.mjs",
     "lint": "eslint .",
     "test": "vitest run",
-    "test:android": "cd apps/android && ANDROID_HOME=\"${ANDROID_HOME:-$HOME/Android/Sdk}\" ./gradlew :core-model:test --console=plain",
+    "test:android": "cd apps/android && ANDROID_HOME=\"${ANDROID_HOME:-$HOME/Android/Sdk}\" ./gradlew :core-model:test :core-data:testDebugUnitTest --console=plain",
     "test:fresh-install": "./tools/fresh-install/run.sh",
     "test:postgres": "FEMHO_TEST_POSTGRES_URL=\"${FEMHO_TEST_POSTGRES_URL:-postgres://postgres:femho@localhost:55432/femho_test}\" vitest run",
     "test:proxy-matrix": "./tools/proxy-matrix/run.sh",
