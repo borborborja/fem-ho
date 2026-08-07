@@ -7,6 +7,7 @@
  */
 
 import { sql } from 'kysely';
+import type { Mailbox } from '../policy/mailbox.js';
 import type { AuditContext } from '../audit/audited-transaction.js';
 import { hashPassword, verifyPassword } from '../auth/password.js';
 import { dbBool, isTrue } from '../db/bool.js';
@@ -40,6 +41,8 @@ export interface UserSettings {
   done_cleared_at: string | null;
   inbox_position: InboxPosition;
   inbox_show_overdue: boolean;
+  /** De quin calaix es veu la bústia: el propi, el compartit, o tot. */
+  inbox_origin: Mailbox;
   collapsed_groups: string[];
   /** Fonts que aquest usuari no vol veure al calendari. Veure la migració 006. */
   hidden_calendar_ids: string[];
@@ -239,6 +242,7 @@ const DEFAULT_SETTINGS: UserSettings = {
   done_cleared_at: null,
   inbox_position: 'right',
   inbox_show_overdue: true,
+  inbox_origin: 'all',
   collapsed_groups: [],
   hidden_calendar_ids: [],
   week_start: 'auto',
@@ -260,6 +264,7 @@ export async function getSettings(db: MigrationDb, userId: string): Promise<User
     done_cleared_at: string | null;
     inbox_position: InboxPosition;
     inbox_show_overdue: unknown;
+    inbox_origin: Mailbox;
     collapsed_groups: string | null;
     hidden_calendar_ids: string | null;
     week_start: WeekStartChoice;
@@ -268,7 +273,7 @@ export async function getSettings(db: MigrationDb, userId: string): Promise<User
     quiet_hours_start: string | null;
     quiet_hours_end: string | null;
     daily_digest_at: string | null;
-  }>`SELECT done_cleared_at, inbox_position, inbox_show_overdue, collapsed_groups,
+  }>`SELECT done_cleared_at, inbox_position, inbox_show_overdue, inbox_origin, collapsed_groups,
             hidden_calendar_ids, week_start,
             show_calendar_widget, show_overdue_section, quiet_hours_start, quiet_hours_end,
             daily_digest_at
@@ -281,6 +286,7 @@ export async function getSettings(db: MigrationDb, userId: string): Promise<User
     done_cleared_at: row.done_cleared_at,
     inbox_position: row.inbox_position,
     inbox_show_overdue: isTrue(row.inbox_show_overdue),
+    inbox_origin: row.inbox_origin ?? 'all',
     collapsed_groups: parseGroups(row.collapsed_groups),
     hidden_calendar_ids: parseGroups(row.hidden_calendar_ids),
     week_start: row.week_start ?? 'auto',
@@ -307,6 +313,7 @@ export interface UpdateSettingsInput {
   done_cleared_at?: string | null | undefined;
   inbox_position?: string | undefined;
   inbox_show_overdue?: boolean | undefined;
+  inbox_origin?: Mailbox | undefined;
   collapsed_groups?: string[] | undefined;
   hidden_calendar_ids?: string[] | undefined;
   week_start?: string | undefined;
@@ -334,6 +341,7 @@ export async function updateSettings(
       before.inbox_position,
     ),
     inbox_show_overdue: input.inbox_show_overdue ?? before.inbox_show_overdue,
+    inbox_origin: input.inbox_origin ?? before.inbox_origin,
     collapsed_groups: input.collapsed_groups ?? before.collapsed_groups,
     hidden_calendar_ids: input.hidden_calendar_ids ?? before.hidden_calendar_ids,
     week_start: pickEnum('week_start', input.week_start, WEEK_START_CHOICES, before.week_start),
@@ -356,12 +364,13 @@ export async function updateSettings(
   // que canviessin preferències alhora es trepitjarien amb una violació de clau primària.
   await sql`
     INSERT INTO user_settings (user_id, done_cleared_at, inbox_position, inbox_show_overdue,
-                               collapsed_groups, hidden_calendar_ids, week_start,
+                               inbox_origin, collapsed_groups, hidden_calendar_ids, week_start,
                                show_calendar_widget, show_overdue_section,
                                quiet_hours_start, quiet_hours_end, daily_digest_at,
                                notify_prefs, updated_at)
     VALUES (${principal.userId}, ${next.done_cleared_at}, ${next.inbox_position},
-            ${dbBool(next.inbox_show_overdue)}, ${JSON.stringify(next.collapsed_groups)},
+            ${dbBool(next.inbox_show_overdue)}, ${next.inbox_origin},
+            ${JSON.stringify(next.collapsed_groups)},
             ${JSON.stringify(next.hidden_calendar_ids)}, ${next.week_start},
             ${dbBool(next.show_calendar_widget)}, ${dbBool(next.show_overdue_section)},
             ${next.quiet_hours_start}, ${next.quiet_hours_end}, ${next.daily_digest_at},
@@ -370,6 +379,7 @@ export async function updateSettings(
       done_cleared_at = excluded.done_cleared_at,
       inbox_position = excluded.inbox_position,
       inbox_show_overdue = excluded.inbox_show_overdue,
+      inbox_origin = excluded.inbox_origin,
       collapsed_groups = excluded.collapsed_groups,
       hidden_calendar_ids = excluded.hidden_calendar_ids,
       week_start = excluded.week_start,

@@ -17,7 +17,8 @@ import type { MigrationDb } from '../db/migration-db.js';
 import { expandOccurrences, splitSeries } from '../events/recurrence.js';
 import { PolicyError, missingCapability, notFound } from '../policy/errors.js';
 import { hasCapability, type Principal } from '../policy/principal.js';
-import { assertScopeAccess, listScopes } from './scopes.js';
+import { visibleCalendarIds } from '../policy/calendar-visibility.js';
+import { assertScopeAccess, assertScopeRole, listScopes } from './scopes.js';
 
 export interface CalendarRow {
   id: string;
@@ -40,6 +41,10 @@ export interface CalendarRow {
   last_refreshed_at: string | null;
   /** Per què va fallar l'últim refresc. Una font caiguda es veu igual que una buida. */
   last_error: string | null;
+  /** Si els membres de l'àmbit el veuen. Defecte `false`: el silenci no comparteix. */
+  shared_with_scope: boolean;
+  /** Que la font porta credencials guardades. **Quines, no surt mai del servei.** */
+  has_credentials: boolean;
   last_error_at: string | null;
 }
 
@@ -76,7 +81,11 @@ export function assertWritable(calendar: CalendarRow): void {
 
 const CALENDAR_COLUMNS = sql`
   id, scope_id, project_id, name, color, kind, origin, source_kind, source_url,
-  source_username, writable, refresh_interval, last_refreshed_at, last_error, last_error_at
+  source_username, writable, refresh_interval, last_refreshed_at, last_error, last_error_at,
+  shared_with_scope,
+  -- Que n'hi ha, no quin és. **El secret no surt mai del servei**, i la interfície
+  -- necessita saber-ho per avisar abans de compartir el calendari.
+  (source_secret_enc IS NOT NULL) AS has_credentials
 `;
 
 export interface EventRow {
@@ -112,7 +121,12 @@ export async function listCalendars(db: MigrationDb, principal: Principal): Prom
     ORDER BY name
   `.execute(db);
 
-  return rows.rows;
+  /**
+   * **I es tallen els que no s'han compartit.** L'àmbit compartit arriba sencer, però un
+   * calendari amb credencials d'un tercer no ha de sortir si el propietari no ho ha dit.
+   */
+  const visible = await visibleCalendarIds(db, principal.userId);
+  return rows.rows.filter((row) => visible.has(row.id));
 }
 
 export interface ListEventsOptions {
@@ -187,8 +201,13 @@ export async function listEventOccurrences(
       AND c.scope_id IN (${sql.join(allowed)})
   `.execute(db);
 
-  const masters = rows.rows.filter((row) => row.recurrence_id === null);
-  const overrides = rows.rows.filter((row) => row.recurrence_id !== null);
+  // El mateix tall que a `listCalendars`: l'àmbit no basta, cal que el calendari s'hagi
+  // compartit. Els esdeveniments no tenen `scope_id` propi i el treuen del calendari.
+  const visible = await visibleCalendarIds(db, principal.userId);
+  const rowsVisibles = rows.rows.filter((row) => visible.has(row.calendar_id));
+
+  const masters = rowsVisibles.filter((row) => row.recurrence_id === null);
+  const overrides = rowsVisibles.filter((row) => row.recurrence_id !== null);
 
   // Les excepcions s'indexen per (uid, recurrence_id): és el que les lliga a
   // l'ocurrència que substitueixen (D8).
@@ -750,12 +769,25 @@ export async function updateCalendar(
     writable?: boolean | undefined;
     refresh_interval?: number | null | undefined;
     strip_alarms?: boolean | undefined;
+    /** Si els membres de l'àmbit el veuen. **Només el propietari ho decideix.** */
+    shared_with_scope?: boolean | undefined;
   },
 ): Promise<CalendarRow> {
   if (!hasCapability(principal, 'events:write')) throw missingCapability('events:write');
 
   const calendar = await loadCalendar(ctx.tx, id);
   await assertScopeAccess(ctx.tx, principal, calendar.scope_id);
+
+  /**
+   * Compartir un calendari és una decisió de l'àmbit, no del contingut.
+   *
+   * Un col·laborador pot escriure esdeveniments; el que no pot és decidir què veuen els
+   * altres. Es demana per separat i només quan es toca, perquè la resta del `PATCH`
+   * —nom, color, interval— sí que és contingut.
+   */
+  if (input.shared_with_scope !== undefined) {
+    await assertScopeRole(ctx.tx, principal, calendar.scope_id, 'settings');
+  }
 
   if (input.name !== undefined && input.name.trim() === '') {
     throw new PolicyError('name-required', 'Name required', 422, 'El calendari necessita un nom.');
@@ -779,6 +811,7 @@ export async function updateCalendar(
       ${input.source_url === undefined ? sql`source_url = source_url` : sql`source_url = ${input.source_url}`},
       ${input.source_username === undefined ? sql`source_username = source_username` : sql`source_username = ${input.source_username}`},
       ${input.source_secret_enc === undefined ? sql`source_secret_enc = source_secret_enc` : sql`source_secret_enc = ${input.source_secret_enc}`},
+      ${input.shared_with_scope === undefined ? sql`shared_with_scope = shared_with_scope` : sql`shared_with_scope = ${dbBool(input.shared_with_scope)}`},
       ${writable === undefined ? sql`writable = writable` : sql`writable = ${dbBool(writable)}`},
       ${input.refresh_interval === undefined ? sql`refresh_interval = refresh_interval` : sql`refresh_interval = ${input.refresh_interval}`},
       ${input.strip_alarms === undefined ? sql`strip_alarms = strip_alarms` : sql`strip_alarms = ${dbBool(input.strip_alarms)}`},

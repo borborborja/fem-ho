@@ -16,6 +16,7 @@ import { dateTime, getLocale, t, type TaskStatus } from '@fem-ho/contracts';
 import { v7 as uuidv7 } from 'uuid';
 import { ActivityTimeline, ChecklistRow, EmptyState } from '@fem-ho/design-system/femho';
 import { api } from '../app/api.js';
+import { Attachments } from '../app/Attachments.js';
 import { useSessionData } from '../app/session.js';
 import { useApi, useMutation } from '../app/useApi.js';
 import type { ActivityEntry, Checklist, Comment, Label, Subtask, Task } from '../app/types.js';
@@ -655,6 +656,11 @@ export function TaskModal({
                 {t('task.newChecklist')}
               </button>
             </section>
+
+            {/* Una tasca que encara no existeix no té on penjar res. */}
+            {!creating && taskId !== undefined && (
+              <Attachments parent="tasks" parentId={taskId} label={label} />
+            )}
 
             <section style={{ display: 'grid', gap: 6 }}>
               {label(t('task.comments'))}

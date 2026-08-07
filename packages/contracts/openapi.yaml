@@ -1497,6 +1497,122 @@ paths:
           content:
             { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
 
+  /scopes/{id}/invites:
+    get:
+      operationId: listScopeInvites
+      summary: Els convits oberts d'un àmbit
+      tags: [Àmbits]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Convits
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ScopeInvite' }
+    post:
+      operationId: createScopeInvite
+      summary: Convidar algú a un àmbit
+      description: >-
+        Demana la capacitat `scopes:share`, separada de `scopes:write`: regalar un àmbit
+        a un desconegut no és el mateix poder que reanomenar-lo. **El token sencer surt
+        una sola vegada** i no es pot recuperar del hash.
+      tags: [Àmbits]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                role: { type: string, enum: [collaborator, viewer] }
+                max_uses: { type: integer, minimum: 1 }
+      responses:
+        '201':
+          description: Convit emès
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ScopeInviteCreated' }
+
+  /scopes/{id}/invites/{grantId}:
+    delete:
+      operationId: revokeScopeInvite
+      summary: Revocar un convit
+      tags: [Àmbits]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: grantId, in: path, required: true, schema: { type: string } }
+      responses:
+        '204': { description: Revocat }
+
+  /join/{token}:
+    get:
+      operationId: peekScopeInvite
+      summary: Mirar un convit sense acceptar-lo
+      description: >-
+        Perquè la pantalla pugui dir de qui és i a quin àmbit convida abans d'acceptar.
+        Un token inventat, un de caducat i un de revocat responen **igual** (docs/10 §4).
+      tags: [Àmbits]
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: El convit
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ScopeInvitePreview' }
+        '404':
+          description: No és vàlid
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+    post:
+      operationId: redeemScopeInvite
+      summary: Acceptar un convit
+      description: >-
+        Demana sessió: un convit d'àmbit no és un enllaç anònim —això són els `shares`—
+        sinó una relació entre dues persones amb compte. És idempotent per a qui ja hi és.
+      tags: [Àmbits]
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Dins
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [scope_id, scope_name, role]
+                properties:
+                  scope_id: { type: string }
+                  scope_name: { type: string }
+                  role: { type: string }
+
+  /scopes/{id}/members/me:
+    delete:
+      operationId: leaveScope
+      summary: Sortir d'un àmbit un mateix
+      description: >-
+        Un membre es pot treure a si mateix. El propietari no: deixaria l'àmbit orfe i
+        ha d'esborrar-lo o traspassar-lo. El que ha creat es conserva; les seves
+        assignacions marxen.
+      tags: [Àmbits]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '204': { description: Fora }
+        '403':
+          description: El propietari no pot sortir del seu propi àmbit
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
   /scopes/{id}/members/{memberId}:
     patch:
       tags: [scopes]
@@ -1513,7 +1629,7 @@ paths:
               type: object
               required: [role]
               properties:
-                role: { type: string, enum: [owner, admin, member, viewer] }
+                role: { type: string, enum: [owner, collaborator, viewer] }
       responses:
         '200':
           description: Canviat.
@@ -1850,6 +1966,21 @@ paths:
         - { name: date, in: query, required: false, schema: { type: string, format: date } }
         - { name: include_overdue, in: query, required: false, schema: { type: boolean } }
         - { name: scope_ids, in: query, required: false, schema: { type: string } }
+        - name: mailbox
+          in: query
+          required: false
+          schema: { type: string, enum: [own, shared, all] }
+          description: |
+            De quin calaix. **Es composa amb `scope_ids`, no el substitueix**: és un
+            commutador de calaix, no un filtre, i els xips d'àmbit de dalt segueixen
+            valent.
+
+            «Propi» són els àmbits individuals i «compartit» els col·lectius. Surt del
+            tipus de l'àmbit i no de qui té la tasca assignada: a un àmbit individual tot
+            està assignat al propietari per la regla d'autoassignació, i a un de compartit
+            una tasca sense assignar no cauria a cap dels dos calaixos.
+
+            Sense el paràmetre mana `user_settings.inbox_origin`.
       responses:
         '200':
           description: L'Inbox.
@@ -2341,13 +2472,332 @@ paths:
           content: { application/json: { schema: { type: object, additionalProperties: true } } }
         '401': { $ref: '#/components/responses/Unauthenticated' }
 
+  /tasks/{id}/attachments:
+    get:
+      tags: [Tasques]
+      operationId: listTaskAttachments
+      summary: Els adjunts d'una tasca
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Les metadades. El contingut es demana a part.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/Attachment' } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Tasques]
+      operationId: uploadTaskAttachment
+      summary: Adjuntar un fitxer a una tasca
+      description: >-
+        **El cos va cru**, no en multipart: el nom a la consulta i els bytes al cos. Així
+        el navegador pot enviar un `File` tal qual, i s'estalvia una dependència per
+        analitzar un format que aquí no aporta res —només hi ha un fitxer per petició.
+        El tipus s'infereix **del contingut** i no de l'extensió (docs/10 §8).
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: filename, in: query, required: true, schema: { type: string } }
+        - { name: ai_context, in: query, schema: { type: string, enum: ['true', 'false'] } }
+      requestBody:
+        required: true
+        content:
+          application/octet-stream: { schema: { type: string, format: binary } }
+      responses:
+        '201':
+          description: Adjuntat.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Attachment' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '413':
+          description: Per damunt de `FEMHO_MAX_UPLOAD_MB`.
+          content:
+            { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+
+  /events/{id}/attachments:
+    get:
+      tags: [Calendari]
+      operationId: listEventAttachments
+      summary: Els adjunts d'un esdeveniment
+      description: >-
+        Un esdeveniment no té àmbit propi: el treu del calendari. Si el calendari **no
+        s'ha compartit**, respon 404 encara que l'àmbit sí que ho estigui — i el mateix
+        val per al nom del fitxer, que ja diu massa.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Les metadades.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/Attachment' } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404':
+          description: No existeix, o el calendari no s'ha compartit.
+          content:
+            { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+    post:
+      tags: [Calendari]
+      operationId: uploadEventAttachment
+      summary: Adjuntar un fitxer a un esdeveniment
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: filename, in: query, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/octet-stream: { schema: { type: string, format: binary } }
+      responses:
+        '201':
+          description: Adjuntat.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Attachment' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '413':
+          description: Per damunt de `FEMHO_MAX_UPLOAD_MB`.
+          content:
+            { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+
+  /attachments/{id}/content:
+    get:
+      tags: [Tasques]
+      operationId: downloadAttachment
+      summary: Baixar el contingut d'un adjunt
+      description: >-
+        `docs/10` §8: el fitxer viu **fora de l'arrel web** i només surt d'aquest handler,
+        que comprova permisos; no hi ha cap ruta endevinable. Sempre amb
+        `Content-Disposition: attachment`, `X-Content-Type-Options: nosniff` i
+        `Cache-Control: private, no-store`.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Els bytes.
+          content: { application/octet-stream: { schema: { type: string, format: binary } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404':
+          description: No existeix, s'ha esborrat, o el calendari no s'ha compartit.
+          content:
+            { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+
+  /attachments/{id}:
+    delete:
+      tags: [Tasques]
+      operationId: deleteAttachment
+      summary: Esborrar un adjunt
+      description: >-
+        Esborrat **en suau**: la fila es marca i el fitxer es queda al disc, perquè la
+        tombstone encara ha de viatjar pel sync fins als clients.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '204': { description: Esborrat. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /federation/redeem:
+    post:
+      tags: [instance]
+      operationId: redeemFederationGrant
+      summary: Bescanviar un convit federat
+      description: >-
+        **No demana sessió, i és l'única ruta d'escriptura que no en demana**: qui la
+        crida és un servidor, no una persona, i no té compte aquí. El que la protegeix és
+        el token opac —amb el mateix silenci per a un d'inventat, un de caducat i un de
+        revocat (`docs/10` §4)— i que el que en surt només val per a un àmbit i per a les
+        capacitats de contingut.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token: { type: string }
+                instance_name: { type: [string, 'null'] }
+                user_name: { type: [string, 'null'] }
+      responses:
+        '200':
+          description: La credencial amb què l'altra instància ens parlarà.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [token, scope_id, scope_name, role]
+                properties:
+                  token:
+                    type: string
+                    description: Es dona **una sola vegada** i no es pot recuperar.
+                  scope_id: { type: string }
+                  scope_name: { type: string }
+                  role: { type: string }
+        '404':
+          description: El convit no val. La resposta és idèntica sigui quin sigui el motiu.
+          content:
+            { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+
+  /federation/links:
+    get:
+      tags: [instance]
+      operationId: listInstanceLinks
+      summary: Els enllaços amb altres instàncies
+      responses:
+        '200':
+          description: Els enllaços. `token_enc` no hi surt mai.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/InstanceLink' } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+    post:
+      tags: [instance]
+      operationId: createInstanceLink
+      summary: Enllaçar-se amb un àmbit d'una altra instància
+      description: >-
+        Demana `scopes:share`. **Només HTTPS pública**: `http:` es rebutja aquí perquè el
+        token viatjaria en clar, i `safeFetch` segueix blocant els rangs privats, o sigui
+        que dues cases de la mateixa xarxa local no es poden federar sense exposar-ne una.
+        Crea un àmbit espill local on viurà el que arribi.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [base_url, token]
+              properties:
+                base_url: { type: string, format: uri }
+                token: { type: string }
+                name: { type: string }
+      responses:
+        '201':
+          description: Enllaçat.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [link, scope_id]
+                properties:
+                  link: { $ref: '#/components/schemas/InstanceLink' }
+                  scope_id: { type: string }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422':
+          description: L'adreça no val, no és HTTPS, o l'altra banda no és Fem-ho.
+          content:
+            { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+
+  /federation/links/{id}:
+    delete:
+      tags: [instance]
+      operationId: deleteInstanceLink
+      summary: Desenllaçar-se d'una altra instància
+      description: >-
+        **L'àmbit espill es queda**, com un àmbit local qualsevol: esborrar-lo s'enduria
+        tot el que hi hagi passat sense avisar. El que es perd és el token remot, que és
+        el que sí que ha de passar.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '204': { description: Desenllaçat. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
 components:
   schemas:
+    InstanceLink:
+      type: object
+      description: >-
+        Un enllaç amb una altra instància. **`token_enc` no hi és**: és un secret xifrat
+        amb clau derivada del secret d'aquesta instància i no surt de la base.
+      required: [id, scope_id, base_url, created_at, updated_at]
+      properties:
+        id: { type: string }
+        scope_id:
+          type: string
+          description: L'àmbit espill local on viu el que arriba de fora.
+        base_url: { type: string, format: uri }
+        name: { type: [string, 'null'] }
+        cursor:
+          type: [string, 'null']
+          description: >-
+            El cursor del sync remot. És opac: ve de l'altre servidor i no s'interpreta.
+        last_sync_at: { type: [string, 'null'], format: date-time }
+        last_error: { type: [string, 'null'] }
+        last_error_at: { type: [string, 'null'], format: date-time }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    Attachment:
+      type: object
+      description: >-
+        Les metadades d'un adjunt. **`storage_path` no hi és**: és una ruta interna i el
+        client demana el contingut per identificador.
+      required: [id, filename, mime_type, size_bytes, source, created_at, updated_at, version]
+      properties:
+        id: { type: string }
+        task_id: { type: [string, 'null'] }
+        event_id: { type: [string, 'null'] }
+        scope_id: { type: [string, 'null'] }
+        filename: { type: string }
+        mime_type:
+          type: string
+          description: Inferit del contingut, no de l'extensió. Mai `text/html`.
+        size_bytes: { type: integer }
+        source: { type: string, enum: [upload, ical_attach] }
+        external_url:
+          type: [string, 'null']
+          description: >-
+            Per a un `ATTACH` d'iCal que és un enllaç i no bytes: no es baixa mai per
+            iniciativa pròpia, que seria seguir una URL de tercers des del servidor.
+        is_ai_context: { type: boolean }
+        uploaded_by: { type: [string, 'null'] }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        version: { type: integer }
+
+    ScopeInvite:
+      type: object
+      required: [id, role, max_uses, use_count, expires_at, created_at]
+      properties:
+        id: { type: string }
+        role: { type: [string, 'null'] }
+        max_uses: { type: integer }
+        use_count: { type: integer }
+        expires_at: { type: [string, 'null'], format: date-time }
+        created_at: { type: string, format: date-time }
+
+    ScopeInviteCreated:
+      type: object
+      required: [id, role, expires_at, invite_url]
+      properties:
+        id: { type: string }
+        role: { type: [string, 'null'] }
+        expires_at: { type: [string, 'null'], format: date-time }
+        invite_url:
+          type: string
+          description: |
+            **Surt una sola vegada.** No es pot recuperar del hash; si es perd, cal
+            emetre'n un de nou. Cal dir-ho a qui el crea (docs/10 §6).
+
+    ScopeInvitePreview:
+      type: object
+      required: [kind, scope_name, role, invited_by]
+      properties:
+        kind: { type: string }
+        scope_name: { type: string }
+        role: { type: string }
+        invited_by: { type: string }
+
     ScopePatch:
       type: object
       description: |
-        Només els camps donats. `kind` no hi és a posta: no es pot canviar.
+        Només els camps donats. `kind` sí que hi és: cap a col·lectiu sempre, i cap a
+        individual només si no queda cap altre membre (409 amb qui queda).
       properties:
+        kind: { type: string, enum: [individual, collective] }
         name: { type: string }
         color: { type: string }
         icon: { type: [string, 'null'] }
@@ -2365,7 +2815,7 @@ components:
           type: [string, 'null']
           description: P3 · o això o `external_calendar_id`, mai totes dues coses.
         external_calendar_id: { type: [string, 'null'] }
-        role: { type: string, enum: [owner, admin, member, viewer] }
+        role: { type: string, enum: [owner, collaborator, viewer] }
         created_at: { type: string, format: date-time }
         name: { type: [string, 'null'] }
         email: { type: [string, 'null'] }
@@ -2376,7 +2826,7 @@ components:
       properties:
         user_id: { type: string }
         external_calendar_id: { type: string }
-        role: { type: string, enum: [owner, admin, member, viewer] }
+        role: { type: string, enum: [owner, collaborator, viewer] }
 
     ProjectPatch:
       type: object
@@ -2633,6 +3083,10 @@ components:
           description: El botó de netejar la columna Fet. No esborra res (P2).
         inbox_position: { type: string, enum: [left, right, below] }
         inbox_show_overdue: { type: boolean }
+        inbox_origin:
+          type: string
+          enum: [own, shared, all]
+          description: El calaix de la bústia. Per usuari, com la resta de preferències.
         collapsed_groups:
           type: array
           items: { type: string }
@@ -2886,12 +3340,22 @@ components:
     SyncResponse:
       type: object
       additionalProperties: false
-      required: [changes, next_cursor, has_more, server_time]
+      required: [changes, dropped_scopes, next_cursor, has_more, server_time]
       properties:
         changes:
           type: array
           items:
             $ref: '#/components/schemas/SyncChange'
+        dropped_scopes:
+          type: array
+          items: { type: string }
+          description: |
+            Àmbits que aquest usuari ha deixat de veure des del seu cursor. El client hi
+            ha d'esborrar tot el que en porti l'identificador.
+
+            **No arriba per `changes`**: perdre accés a un àmbit no genera cap fila de
+            canvi, i sense això les dades d'un àmbit del qual has sortit et queden al
+            dispositiu per sempre.
         next_cursor: { type: string }
         has_more: { type: boolean }
         server_time:
@@ -3084,6 +3548,22 @@ components:
             Per què va fallar l'últim refresc. Sense això, una font caiguda es veu
             exactament igual que una que no té esdeveniments.
         last_error_at: { type: [string, 'null'], format: date-time }
+        shared_with_scope:
+          type: boolean
+          default: false
+          description: |
+            Si els membres de l'àmbit el veuen.
+
+            **El defecte és `false`, i la polaritat és l'oposada a `hidden_calendar_ids`.**
+            Allà es desa el que s'amaga perquè una font nova ha de sortir sola; aquí un
+            calendari creat DESPRÉS de compartir l'àmbit no pot filtrar-se tot sol. El
+            fracàs de l'un és una molèstia; el de l'altre és una divulgació.
+        has_credentials:
+          type: boolean
+          description: |
+            Si la font porta usuari i contrasenya guardats. **El secret no surt mai** del
+            servei; això només diu que n'hi ha, perquè la interfície pugui avisar abans
+            de compartir el calendari.
 
     Event:
       type: object
@@ -3166,13 +3646,18 @@ components:
     Scope:
       type: object
       additionalProperties: false
-      required: [id, name, kind, color, position, created_at, updated_at, version]
+      required: [id, name, kind, color, owner_id, position, created_at, updated_at, version]
       properties:
         id: { type: string }
         name: { type: string }
         kind:
           type: string
           enum: [individual, collective]
+        owner_id:
+          type: string
+          description: |
+            Qui el va crear. Mana sempre, sigui quin sigui el `kind` i hi hagi fila de
+            membre o no. La interfície el necessita per saber si pot convidar i expulsar.
         color:
           type: string
           description: Token CSS o hex. Els tres inicials fan servir la tríada de Plou.

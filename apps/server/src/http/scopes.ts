@@ -9,6 +9,8 @@
 
 import type { FastifyInstance } from 'fastify';
 import { auditedTransaction } from '../audit/audited-transaction.js';
+import { SCOPE_ROLES } from '../policy/scope-roles.js';
+import { issueGrant, listGrants, peekGrant, redeemGrant, revokeGrant } from '../services/grants.js';
 import { createLabel, deleteLabel, listLabels } from '../services/labels.js';
 import {
   addMember,
@@ -18,6 +20,7 @@ import {
   deleteScope,
   getProject,
   getScope,
+  leaveScope,
   listMembers,
   listProjects,
   listScopes,
@@ -29,7 +32,7 @@ import {
 } from '../services/scopes.js';
 import { body, handle, nullable, query, str } from './handle.js';
 
-const ROLES: MemberRow['role'][] = ['owner', 'admin', 'member', 'viewer'];
+const ROLES: MemberRow['role'][] = [...SCOPE_ROLES];
 
 function parseRole(value: unknown): MemberRow['role'] | undefined {
   return typeof value === 'string' && (ROLES as string[]).includes(value)
@@ -37,7 +40,7 @@ function parseRole(value: unknown): MemberRow['role'] | undefined {
     : undefined;
 }
 
-export function registerScopeRoutes(app: FastifyInstance): void {
+export function registerScopeRoutes(app: FastifyInstance, instanceSecret: () => string): void {
   const db = (): NonNullable<FastifyInstance['connection']> => app.connection!;
 
   app.get('/api/v1/scopes', async (request, reply) =>
@@ -82,6 +85,9 @@ export function registerScopeRoutes(app: FastifyInstance): void {
           ai_instructions: nullable(input, 'ai_instructions'),
           ai_description: nullable(input, 'ai_description'),
           position: str(input.position),
+          // Qualsevol altre valor cau a `undefined` i el servei el deixa com està: un
+          // `kind` inventat no ha de canviar res en silenci.
+          kind: input.kind === 'individual' || input.kind === 'collective' ? input.kind : undefined,
         }),
       );
     }),
@@ -153,6 +159,97 @@ export function registerScopeRoutes(app: FastifyInstance): void {
         void reply.code(204).send();
         return undefined;
       }),
+  );
+
+  /**
+   * Sortir d'un àmbit un mateix.
+   *
+   * `/members/me` i no `/members/:memberId` amb detecció: el permís és un altre, i una
+   * ruta que vol dir dues coses és on la comprovació s'acaba confonent.
+   *
+   * L'encaminador de Fastify prefereix un segment literal per damunt d'un paràmetre
+   * sigui quin sigui l'ordre de registre, o sigui que `me` no cau mai a `:memberId`.
+   * Hi ha una prova que ho fixa, perquè és el tipus de cosa que es dona per sabuda.
+   */
+  app.delete<{ Params: { id: string } }>('/api/v1/scopes/:id/members/me', async (request, reply) =>
+    handle(app, request, reply, async (principal) => {
+      await auditedTransaction(db().db, principal, (ctx) =>
+        leaveScope(ctx, principal, request.params.id),
+      );
+      void reply.code(204).send();
+      return undefined;
+    }),
+  );
+
+  // ------------------------------------------------------------- concessions
+
+  app.get<{ Params: { id: string } }>('/api/v1/scopes/:id/invites', async (request, reply) =>
+    handle(app, request, reply, async (principal) =>
+      listGrants(db().db, principal, request.params.id),
+    ),
+  );
+
+  app.post<{ Params: { id: string } }>('/api/v1/scopes/:id/invites', async (request, reply) =>
+    handle(app, request, reply, async (principal) => {
+      const input = body(request);
+      const issued = await auditedTransaction(db().db, principal, (ctx) =>
+        issueGrant(
+          ctx,
+          principal,
+          {
+            kind: 'scope_invite',
+            scopeId: request.params.id,
+            role: parseRole(input.role) === 'viewer' ? 'viewer' : 'collaborator',
+            maxUses: typeof input.max_uses === 'number' ? input.max_uses : undefined,
+          },
+          instanceSecret(),
+        ),
+      );
+      void reply.code(201);
+      /**
+       * **El token sencer va aquí i enlloc més.** No es pot recuperar del hash, i s'ha
+       * de dir a qui el crea, com fa `docs/10` §6 amb els enllaços compartits.
+       */
+      return {
+        id: issued.grant.id,
+        role: issued.grant.role,
+        expires_at: issued.grant.expires_at,
+        invite_url: `${app.config.baseUrl}/join/${issued.token}`,
+      };
+    }),
+  );
+
+  app.delete<{ Params: { id: string; grantId: string } }>(
+    '/api/v1/scopes/:id/invites/:grantId',
+    async (request, reply) =>
+      handle(app, request, reply, async (principal) => {
+        await auditedTransaction(db().db, principal, (ctx) =>
+          revokeGrant(ctx, principal, request.params.grantId),
+        );
+        void reply.code(204).send();
+        return undefined;
+      }),
+  );
+
+  /**
+   * Mirar un convit sense consumir-lo, i acceptar-lo.
+   *
+   * Les dues demanen sessió: un convit d'àmbit **no és un enllaç anònim** —això són els
+   * `shares`— sinó una relació entre dues persones amb compte. Qui no en tingui, primer
+   * es fa un compte i després l'accepta.
+   */
+  app.get<{ Params: { token: string } }>('/api/v1/join/:token', async (request, reply) =>
+    handle(app, request, reply, async () =>
+      peekGrant(db().db, request.params.token, instanceSecret(), new Date().toISOString()),
+    ),
+  );
+
+  app.post<{ Params: { token: string } }>('/api/v1/join/:token', async (request, reply) =>
+    handle(app, request, reply, async (principal) =>
+      auditedTransaction(db().db, principal, (ctx) =>
+        redeemGrant(ctx, principal, request.params.token, instanceSecret()),
+      ),
+    ),
   );
 
   // ---------------------------------------------------------------- projectes

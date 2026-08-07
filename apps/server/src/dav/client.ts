@@ -19,6 +19,7 @@ import type { Principal } from '../policy/principal.js';
 import { safeFetch, type SafeFetchOptions } from './fetch-safe.js';
 import { etagOf } from './objects.js';
 import { extractFeedEvents } from './rss.js';
+import { safeFilename, sniffMime, storeAttachment } from '../services/attachments.js';
 
 /**
  * L'interval mínim entre refrescos.
@@ -109,6 +110,76 @@ export interface FetchedComponent {
   timezone: string | null;
   raw: string;
   etag: string;
+  attachments: FetchedAttachment[];
+}
+
+/**
+ * Un `ATTACH` d'un VEVENT (RFC 5545 §3.8.1.1).
+ *
+ * En té dues formes i **es tracten diferent a posta**:
+ *
+ * - **`VALUE=BINARY;ENCODING=BASE64`**: els bytes ja són al `.ics` que s'ha baixat. Es
+ *   guarden com un adjunt normal.
+ * - **Una URI**: només se'n desa l'enllaç a `external_url` i **no es baixa mai per
+ *   iniciativa pròpia**. Baixar-la seria fer que el servidor segueixi una URL escollida
+ *   per un tercer cada cop que refresca —el mateix forat que `safeFetch` tanca a la font
+ *   del calendari— i a més un `.ics` podria fer créixer el volum sense límit.
+ */
+export interface FetchedAttachment {
+  filename: string;
+  mimeType: string | null;
+  /** Els bytes, si venien en base64 dins del propi `.ics`. */
+  data: Buffer | null;
+  /** L'enllaç, si l'`ATTACH` era una URI. */
+  url: string | null;
+}
+
+/** Els `ATTACH` d'un component, sense baixar-ne cap. */
+export function extractAttachments(event: ICAL.Component): FetchedAttachment[] {
+  const found: FetchedAttachment[] = [];
+
+  for (const property of event.getAllProperties('attach')) {
+    /**
+     * **Un `ATTACH` binari no torna una cadena.** `ical.js` el desa com un `ICAL.Binary`
+     * i `getFirstValue()` en dona l'objecte; el base64 és a `.value`. Llegir-lo com si
+     * fos text donava una llista buida i cap error enlloc.
+     */
+    const raw: unknown = property.getFirstValue();
+    const value =
+      typeof raw === 'string'
+        ? raw
+        : typeof (raw as { value?: unknown }).value === 'string'
+          ? String((raw as { value: string }).value)
+          : '';
+    if (value === '') continue;
+
+    const mimeType = (property.getParameter('fmttype') as string | undefined) ?? null;
+    // `FILENAME` no és estàndard, però és el que fan servir Google i Nextcloud.
+    const declared =
+      (property.getParameter('filename') as string | undefined) ??
+      (property.getParameter('x-filename') as string | undefined);
+
+    const encoding = (property.getParameter('encoding') as string | undefined) ?? '';
+    if (encoding.toUpperCase() === 'BASE64') {
+      found.push({
+        filename: declared ?? 'adjunt',
+        mimeType,
+        data: Buffer.from(value, 'base64'),
+        url: null,
+      });
+      continue;
+    }
+
+    // Una URI: se'n desa el nom que se n'endevini, i prou.
+    found.push({
+      filename: declared ?? decodeURIComponent(value.split('/').pop() ?? 'adjunt'),
+      mimeType,
+      data: null,
+      url: value,
+    });
+  }
+
+  return found;
 }
 
 /** Extreu els VEVENT d'un `.ics` sencer, amb les alarmes tretes si toca. */
@@ -144,6 +215,7 @@ export function extractEvents(
       timezone: (dtstart?.getParameter('tzid') as string | undefined) ?? null,
       raw,
       etag: etagOf(raw),
+      attachments: extractAttachments(event),
     };
   });
 }
@@ -169,7 +241,17 @@ export async function refreshSubscription(
     masterSecret,
     engine,
     fetchOptions = {},
-  }: { masterSecret: string; engine?: 'sqlite' | 'postgres'; fetchOptions?: SafeFetchOptions },
+    dataDir,
+  }: {
+    masterSecret: string;
+    engine?: 'sqlite' | 'postgres';
+    fetchOptions?: SafeFetchOptions;
+    /**
+     * On van els bytes dels `ATTACH` en base64. Sense `dataDir` no se'n desa cap: els
+     * enllaços sí, que no ocupen res, però els bytes necessiten saber on.
+     */
+    dataDir?: string | undefined;
+  },
 ): Promise<RefreshResult> {
   const headers: Record<string, string> = {};
   if (subscription.source_username !== null && subscription.source_secret_enc !== null) {
@@ -202,9 +284,67 @@ export async function refreshSubscription(
   return auditedTransaction(
     db,
     principal,
-    async (ctx) => applyFetched(ctx, subscription, components, response.body),
+    async (ctx) => applyFetched(ctx, subscription, components, response.body, dataDir),
     { ...(engine === undefined ? {} : { engine }) },
   );
+}
+
+/**
+ * Els `ATTACH` d'un esdeveniment que ve d'un origen.
+ *
+ * **És un reemplaçament, no una fusió.** L'origen mana: si allà s'ha tret un adjunt, aquí
+ * ha de desaparèixer, i comparar-los un per un demanaria una identitat que l'iCal no dona
+ * —dos `ATTACH` poden tenir el mateix nom—. Es tornen a escriure només quan l'esdeveniment
+ * ha canviat d'etag, que és el que evita reescriure-ho tot a cada refresc.
+ *
+ * L'esborrat és **suau**, com sempre: la tombstone encara ha de viatjar als clients.
+ */
+async function applyAttachments(
+  ctx: AuditContext,
+  subscription: SubscriptionRow,
+  eventId: string,
+  attachments: FetchedAttachment[],
+  dataDir: string | undefined,
+): Promise<void> {
+  const previous = await sql<{ id: string }>`
+    SELECT id FROM attachments WHERE event_id = ${eventId} AND deleted_at IS NULL
+  `.execute(ctx.tx);
+  if (previous.rows.length === 0 && attachments.length === 0) return;
+
+  for (const old of previous.rows) {
+    await sql`
+      UPDATE attachments SET deleted_at = ${ctx.now}, updated_at = ${ctx.now}, version = version + 1
+      WHERE id = ${old.id}
+    `.execute(ctx.tx);
+  }
+
+  for (const attachment of attachments) {
+    const id = uuidv7();
+    let storagePath: string | null = null;
+    let size = 0;
+    let mime = attachment.mimeType;
+
+    if (attachment.data !== null && dataDir !== undefined) {
+      const stored = await storeAttachment(id, attachment.data, ctx.now, dataDir);
+      storagePath = stored.path;
+      size = attachment.data.length;
+      // El tipus surt del contingut encara que l'origen n'hagi declarat un: `FMTTYPE` el
+      // posa qui publica el calendari, i és exactament de qui no ens en refiem.
+      mime = sniffMime(attachment.data);
+    } else if (attachment.data !== null) {
+      // Sense on desar-los, els bytes es descarten i no es desa una fila que menteixi.
+      continue;
+    }
+
+    await sql`
+      INSERT INTO attachments (id, event_id, scope_id, filename, mime_type, size_bytes,
+                               storage_path, external_url, source, is_ai_context,
+                               created_at, updated_at)
+      VALUES (${id}, ${eventId}, ${subscription.scope_id}, ${safeFilename(attachment.filename)},
+              ${mime ?? 'application/octet-stream'}, ${size}, ${storagePath},
+              ${attachment.url}, 'ical_attach', ${dbBool(false)}, ${ctx.now}, ${ctx.now})
+    `.execute(ctx.tx);
+  }
 }
 
 async function applyFetched(
@@ -212,6 +352,7 @@ async function applyFetched(
   subscription: SubscriptionRow,
   components: FetchedComponent[],
   body: string,
+  dataDir: string | undefined,
 ): Promise<RefreshResult> {
   const existing = await sql<{ id: string; uid: string; etag: string | null }>`
     SELECT id, uid, etag FROM events
@@ -234,13 +375,15 @@ async function applyFetched(
     if (row !== undefined && row.etag === component.etag) continue;
 
     if (row === undefined) {
+      const eventId = uuidv7();
       await sql`
         INSERT INTO events (id, calendar_id, uid, summary, starts_at, ends_at, all_day,
                             timezone, etag, raw_ical, created_at, updated_at)
-        VALUES (${uuidv7()}, ${subscription.id}, ${component.uid}, ${component.summary},
+        VALUES (${eventId}, ${subscription.id}, ${component.uid}, ${component.summary},
                 ${component.startsAt}, ${component.endsAt}, ${dbBool(component.allDay)},
                 ${component.timezone}, ${component.etag}, ${component.raw}, ${ctx.now}, ${ctx.now})
       `.execute(ctx.tx);
+      await applyAttachments(ctx, subscription, eventId, component.attachments, dataDir);
       result.created += 1;
     } else {
       await sql`
@@ -251,6 +394,7 @@ async function applyFetched(
                           version = version + 1
         WHERE id = ${row.id}
       `.execute(ctx.tx);
+      await applyAttachments(ctx, subscription, row.id, component.attachments, dataDir);
       result.updated += 1;
     }
   }

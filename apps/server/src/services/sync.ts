@@ -16,6 +16,7 @@ import type { AuditContext } from '../audit/audited-transaction.js';
 import type { MigrationDb } from '../db/migration-db.js';
 import { PolicyError, missingCapability } from '../policy/errors.js';
 import { hasCapability, type Principal } from '../policy/principal.js';
+import { visibleCalendarIds } from '../policy/calendar-visibility.js';
 import { listScopes } from './scopes.js';
 import { clampInt } from '../util/clamp.js';
 
@@ -32,6 +33,14 @@ export interface SyncChange {
 
 export interface SyncResponse {
   changes: SyncChange[];
+  /**
+   * Àmbits que aquest usuari ha deixat de veure des del seu cursor.
+   *
+   * El client hi ha d'esborrar **tot el que en porti l'identificador**. No arriba per
+   * `changes`: perdre accés no genera cap fila de canvi, i sense això les tasques d'un
+   * àmbit del qual has sortit et queden al dispositiu per sempre.
+   */
+  dropped_scopes: string[];
   next_cursor: string;
   has_more: boolean;
   server_time: string;
@@ -94,12 +103,24 @@ export async function pull(
   const limit = clampInt(options.limit, { min: 1, max: 1000, fallback: 500 });
 
   let from = 0;
+  /**
+   * La data del cursor, per a les revocacions.
+   *
+   * Una revocació **no escriu cap fila a `change_log`** —treure un membre no canvia cap
+   * entitat sincronitzable—, o sigui que no té `seq` i no es pot comparar amb el cursor.
+   * El que sí que es pot comparar és el moment: la fila del cursor en porta un.
+   */
+  let cursorTime: string | undefined;
   if (options.cursor !== undefined && options.cursor !== '') {
     const decoded = decodeCursor(options.cursor);
     if (decoded === null) throw new ResyncRequired();
     from = decoded;
 
     await assertCursorFresh(db, from, now);
+    const at = await sql<{ created_at: string }>`
+      SELECT created_at FROM change_log WHERE seq = ${from}
+    `.execute(db);
+    cursorTime = at.rows[0]?.created_at;
   }
 
   const scopes = await listScopes(db, principal);
@@ -109,9 +130,14 @@ export async function pull(
    * El delta va **filtrat pel principal**: només arriba el dels àmbits que el token pot
    * veure. Les files sense àmbit —preferències, sessions— no viatgen pel sync.
    *
-   * Si un token perd accés a un àmbit, el client rep tombstones d'aquelles entitats
-   * (docs/06 §3). Això ho aconsegueix la consulta sola: les files d'aquell àmbit deixen
-   * de sortir i el client, en resincronitzar, no les torna a veure.
+   * **Perdre accés a un àmbit NO arriba per aquesta consulta.** Aquí hi deia el
+   * contrari —"les files d'aquell àmbit deixen de sortir i el client no les torna a
+   * veure"— i és fals: deixar de sortir no és el mateix que arribar com a esborrat. El
+   * client no rep res, i es queda les tasques al seu SQLite per sempre.
+   *
+   * El que ho resol és `dropped_scopes`, aquí sota: els àmbits dels quals aquest usuari
+   * ha perdut l'accés des del seu cursor. Els dos clients hi esborren tot el que en
+   * porti l'identificador.
    */
   const rows =
     allowed.length === 0
@@ -127,8 +153,31 @@ export async function pull(
   const hasMore = rows.rows.length > limit;
   const page = hasMore ? rows.rows.slice(0, limit) : rows.rows;
 
+  /**
+   * **El `seq` de l'última fila es pren de la pàgina SENSE filtrar.**
+   *
+   * Si es prengués del que queda després del post-filtre i una pàgina sencera quedés
+   * buida, `next_cursor` no avançaria i el client entraria en un bucle infinit demanant
+   * el mateix tros. Es calcula abans i no es toca.
+   */
+  const lastSeqOfPage = page[page.length - 1]?.seq ?? from;
+
+  /**
+   * Un esdeveniment d'un calendari NO compartit porta l'`scope_id` de l'àmbit, o sigui
+   * que el filtre per àmbit sol el deixaria passar. El tall va aquí.
+   */
+  const visibleCalendars = await visibleCalendarIds(db, principal.userId);
+
   const changes: SyncChange[] = [];
   for (const row of page) {
+    if (
+      row.entity_type === 'event' ||
+      row.entity_type === 'calendar' ||
+      row.entity_type === 'attachment'
+    ) {
+      const belongs = await calendarOf(db, row.entity_type, row.entity_id);
+      if (belongs !== null && !visibleCalendars.has(belongs)) continue;
+    }
     if (row.operation === 'delete') {
       // Un `delete` només porta l'identificador (docs/06 §3).
       changes.push({ entity: row.entity_type, id: row.entity_id, op: 'delete', seq: row.seq });
@@ -145,10 +194,27 @@ export async function pull(
     });
   }
 
-  const lastSeq = page[page.length - 1]?.seq ?? from;
+  const lastSeq = lastSeqOfPage;
+
+  /**
+   * Els àmbits que aquest usuari ha deixat de veure.
+   *
+   * Es filtra per data i no per cursor perquè el cursor és un `seq` de `change_log` i una
+   * revocació no hi escriu cap fila: treure un membre no canvia cap entitat sincronitzable.
+   * Amb `cursor` buit —una sincronització completa— no cal enviar-ne cap: el client no té
+   * res per esborrar.
+   */
+  const dropped =
+    cursorTime === undefined
+      ? { rows: [] as { scope_id: string }[] }
+      : await sql<{ scope_id: string }>`
+          SELECT DISTINCT scope_id FROM scope_access_revocations
+          WHERE user_id = ${principal.userId} AND revoked_at > ${cursorTime}
+        `.execute(db);
 
   return {
     changes,
+    dropped_scopes: dropped.rows.map((r) => r.scope_id),
     next_cursor: encodeCursor(lastSeq),
     has_more: hasMore,
     // Cada resposta el porta perquè el client pugui detectar desviació de rellotge: un
@@ -163,6 +229,38 @@ export async function pull(
  * Es mira la data de la fila del cursor, no la seva posició: amb poques escriptures, un
  * `seq` baix pot ser d'ahir, i obligar a resincronitzar seria gratuït.
  */
+/**
+ * A quin calendari pertany una fila del registre de canvis.
+ *
+ * `null` vol dir que ja no hi és: llavors mana el filtre d'àmbit i la fila viatja com a
+ * tombstone, que és el que ha de passar quan una cosa s'esborra.
+ */
+async function calendarOf(
+  db: MigrationDb,
+  entityType: string,
+  entityId: string,
+): Promise<string | null> {
+  if (entityType === 'calendar') return entityId;
+
+  /**
+   * Un adjunt de tasca no penja de cap calendari i no s'ha de tallar; un d'esdeveniment
+   * hereta el calendari del seu, i el `LEFT JOIN` deixa el primer cas en `null`.
+   */
+  if (entityType === 'attachment') {
+    const seu = await sql<{ calendar_id: string | null }>`
+      SELECT e.calendar_id FROM attachments a
+      LEFT JOIN events e ON e.id = a.event_id
+      WHERE a.id = ${entityId}
+    `.execute(db);
+    return seu.rows[0]?.calendar_id ?? null;
+  }
+
+  const found = await sql<{ calendar_id: string }>`
+    SELECT calendar_id FROM events WHERE id = ${entityId}
+  `.execute(db);
+  return found.rows[0]?.calendar_id ?? null;
+}
+
 async function assertCursorFresh(db: MigrationDb, seq: number, now: string): Promise<void> {
   if (seq === 0) return;
 
@@ -195,7 +293,10 @@ async function loadEntity(
   const table = TABLE_BY_ENTITY[entityType];
   if (table === undefined) return null;
 
-  const found = await sql`SELECT * FROM ${sql.raw(table)} WHERE id = ${id}`.execute(db);
+  const columns = COLUMNS_BY_ENTITY[entityType] ?? '*';
+  const found = await sql`
+    SELECT ${sql.raw(columns)} FROM ${sql.raw(table)} WHERE id = ${id}
+  `.execute(db);
   const row = found.rows[0] as Record<string, unknown> | undefined;
   if (row === undefined) return null;
   // Una fila amb `deleted_at` és una tombstone: no viatja com a dada.
@@ -206,8 +307,10 @@ async function loadEntity(
 /**
  * Les entitats que viatgen pel sync i la seva taula.
  *
- * NO hi són `activity_log` —es consulta a demanda quan s'obre l'historial— ni els
- * adjunts, dels quals només viatgen les metadades (docs/06 §9).
+ * NO hi és `activity_log`: es consulta a demanda quan s'obre l'historial. Dels adjunts
+ * **només hi viatgen les metadades** (`docs/06` §9); els bytes es demanen a
+ * `/attachments/{id}/content` quan calen, que és el que fa que un àlbum de fotos adjuntes
+ * no s'hagi de baixar sencer al mòbil.
  */
 const TABLE_BY_ENTITY: Record<string, string> = {
   task: 'tasks',
@@ -218,6 +321,22 @@ const TABLE_BY_ENTITY: Record<string, string> = {
   project: 'projects',
   event: 'events',
   comment: 'comments',
+  attachment: 'attachments',
+};
+
+/**
+ * Quines columnes en surten, quan no hi han de sortir totes.
+ *
+ * **Això no és neteja: és una fuita esperant.** `loadEntity` feia `SELECT *`, o sigui que
+ * qualsevol taula que entri al sync hi envia les seves columnes senceres, secrets inclosos
+ * —el dia que hi entrin els calendaris, `source_secret_enc` aniria a tots els membres de
+ * l'àmbit—. Als adjunts el que no ha de sortir és `storage_path`: és una ruta interna, i
+ * el client demana el contingut per identificador i no per camí.
+ */
+const COLUMNS_BY_ENTITY: Record<string, string> = {
+  attachment: `id, task_id, event_id, scope_id, filename, mime_type, size_bytes, source,
+               external_url, is_ai_context, uploaded_by, created_at, updated_at, deleted_at,
+               version`,
 };
 
 export type BatchOperation = {
@@ -326,12 +445,17 @@ export function resolveConflict(options: ResolveOptions): Resolution {
  * `op_id` és la clau d'idempotència: reenviar un lot després d'una caiguda no duplica
  * res (docs/06 §4).
  *
- * Es guarda en memòria per procés i amb un sostre. Per a una casa és suficient: el que
- * ha d'evitar és el reenviament immediat d'un lot que ja s'havia aplicat, no un
- * reenviament d'una setmana després — aquell el resol la comprovació de `version`.
+ * **Va a taula i no a un Map en memòria.** Ho era, amb un sostre de deu mil i el
+ * raonament que "per a una casa és suficient: el que ha d'evitar és el reenviament
+ * immediat". Amb la federació deixa de ser cert: la rèplica torna a intentar el que no ha
+ * confirmat, i un reinici del servidor entremig —una actualització, un tall de llum— li
+ * esborrava la memòria i li feia aplicar dues vegades el mateix lot. La taula
+ * `sync_op_ids` hi era des de la 008 esperant precisament això.
+ *
+ * Es conserven **set dies**: prou per cobrir un dispositiu que ha estat una setmana
+ * apagat, i el que arribi més tard el resol igualment la comprovació de `version`.
  */
-const appliedOps = new Map<string, BatchResult>();
-const MAX_REMEMBERED_OPS = 10_000;
+export const OP_RETENTION_DAYS = 7;
 
 /**
  * La clau porta **qui pregunta**, no només l'`op_id`.
@@ -339,28 +463,59 @@ const MAX_REMEMBERED_OPS = 10_000;
  * Amb l'`op_id` sol, un client que n'encertés un d'un altre rebia el seu `BatchResult`
  * —que porta l'entitat sencera— sense passar per cap comprovació d'àmbit. L'`op_id` el
  * genera el client i no és cap secret: viatja al cos de cada lot.
- *
- * La idempotència que això ha de donar és "el MEU lot reenviat no es duplica", i per a
- * això la clau correcta inclou el principal.
  */
-function opKey(principal: Principal, opId: string): string {
-  return `${principal.kind}:${principal.userId}:${opId}`;
+function opKey(principal: Principal): string {
+  return `${principal.kind}:${principal.userId}`;
 }
 
-export function rememberOp(principal: Principal, opId: string, result: BatchResult): void {
-  if (appliedOps.size >= MAX_REMEMBERED_OPS) {
-    const oldest = appliedOps.keys().next().value;
-    if (oldest !== undefined) appliedOps.delete(oldest);
+export async function rememberOp(
+  db: MigrationDb,
+  principal: Principal,
+  opId: string,
+  result: BatchResult,
+  now: string,
+): Promise<void> {
+  const key = opKey(principal);
+  // Reenviar el mateix lot no ha de petar amb una violació de clau primària: el que hi
+  // havia ja era la resposta bona.
+  const existing = await sql<{ op_id: string }>`
+    SELECT op_id FROM sync_op_ids WHERE op_id = ${opId} AND principal_key = ${key}
+  `.execute(db);
+  if (existing.rows.length > 0) return;
+
+  await sql`
+    INSERT INTO sync_op_ids (op_id, principal_key, result, created_at)
+    VALUES (${opId}, ${key}, ${JSON.stringify(result)}, ${now})
+  `.execute(db);
+}
+
+export async function recallOp(
+  db: MigrationDb,
+  principal: Principal,
+  opId: string,
+): Promise<BatchResult | undefined> {
+  const found = await sql<{ result: string }>`
+    SELECT result FROM sync_op_ids WHERE op_id = ${opId} AND principal_key = ${opKey(principal)}
+  `.execute(db);
+  const row = found.rows[0];
+  if (row === undefined) return undefined;
+  try {
+    return JSON.parse(row.result) as BatchResult;
+  } catch {
+    // Una fila malmesa no ha de tombar el lot: es tracta com si no hi fos i s'aplica.
+    return undefined;
   }
-  appliedOps.set(opKey(principal, opId), result);
 }
 
-export function recallOp(principal: Principal, opId: string): BatchResult | undefined {
-  return appliedOps.get(opKey(principal, opId));
+/** Poda les operacions velles. La crida el planificador amb la resta de neteges. */
+export async function pruneOps(db: MigrationDb, now: string): Promise<void> {
+  const limit = new Date(Date.parse(now) - OP_RETENTION_DAYS * 86_400_000).toISOString();
+  await sql`DELETE FROM sync_op_ids WHERE created_at < ${limit}`.execute(db);
 }
 
-export function forgetAllOps(): void {
-  appliedOps.clear();
+/** Buida la memòria d'operacions. Només les proves, que comparteixen base entre casos. */
+export async function forgetAllOps(db: MigrationDb): Promise<void> {
+  await sql`DELETE FROM sync_op_ids`.execute(db);
 }
 
 /** Escriu una tombstone. Cap `DELETE` real en entitats sincronitzables (docs/01 §12). */

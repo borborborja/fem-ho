@@ -213,6 +213,38 @@ No és una decisió d'arquitectura, és de UI, i la resposta correcta és la tri
 
 És el consens del sector: de vuit apps que fusionen tasques i calendari, cinc posen el dipòsit de tasques sense hora en un rail a l'esquerra del calendari. El que és nou a Fem-ho és fer-lo alhora la primera columna del kanban.
 
+### P5 · Compartir un àmbit sencer
+
+**La resolució: hi ha dues vies de compartir, i comparteixen coses diferents.**
+
+`docs/10` §1 diu que "no es comparteixen projectes ni àmbits sencers", i és cert **de la
+via que aquell document descriu**: un enllaç públic, que un convidat anònim obre amb un
+token a la URL. Allò segueix sent per a una cosa concreta i acotada —una tasca amb les
+seves llistes— i obrir-hi un àmbit sencer seria regalar-lo a qui tingui l'enllaç.
+
+La via nova és una altra: **persones amb compte i identitat**. Qui entra a un àmbit
+compartit hi entra com a membre —`scope_members`, amb rol—, no com a visitant. La
+diferència que ho justifica no és de mida, és de qui hi ha a l'altra banda: un membre és
+expulsable, queda a l'historial amb nom, i el que hi escriu és seu.
+
+| Via | Què es comparteix | Amb qui | Es pot retirar |
+| --- | --- | --- | --- |
+| Enllaç públic (`shares`) | Una tasca amb les seves llistes, o una llista | Qualsevol amb l'enllaç | Revocant l'enllaç |
+| Membres (`scope_members`) | El kanban de l'àmbit, i els calendaris que es triïn un per un | Persones amb compte, d'aquesta instància o d'una altra | Expulsant, i el client ho esborra |
+
+Tres coses que se'n deriven i que no són òbvies:
+
+- **Els calendaris es trien un per un.** L'àmbit *és* el kanban, o sigui que compartir
+  l'àmbit el comparteix sencer; però una font externa pot portar credencials que el
+  propietari no vol cedir, i les credencials no viatgen mai —estan lligades al secret
+  d'aquesta instància.
+- **Descompartir ha d'esborrar de debò.** Deixar de sortir al sync no és el mateix que
+  arribar com a esborrat: sense `scope_access_revocations` i `dropped_scopes`, qui surt
+  d'un àmbit es queda les tasques al mòbil per sempre.
+- **Una altra instància no és una mena nova de principal**, és un client d'API amb un
+  usuari ombra i un token limitat a l'àmbit. Obrir un segon camí d'autorització per al que
+  ve de fora seria trair la regla 8 al pitjor lloc possible.
+
 ---
 
 ## Part 3 — Fets sospitosos de `research/`

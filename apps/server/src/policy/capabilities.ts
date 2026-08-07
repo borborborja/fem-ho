@@ -27,6 +27,9 @@ export const CAPABILITIES = [
   'projects:write',
   'scopes:read',
   'scopes:write',
+  // Emetre un convit no és el mateix poder que reanomenar un àmbit: un token
+  // d'automatització que pot editar no ha de poder regalar-lo a un desconegut.
+  'scopes:share',
   'shares:read',
   'shares:write',
   'tokens:manage',

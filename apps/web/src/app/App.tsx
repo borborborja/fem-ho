@@ -20,6 +20,7 @@ import { useApi } from './useApi.js';
 import { BoardScreen } from '../screens/BoardScreen.js';
 import { CalendarScreen } from '../screens/CalendarScreen.js';
 import { DashboardScreen } from '../screens/DashboardScreen.js';
+import { JoinScopeScreen } from '../screens/JoinScopeScreen.js';
 import { InviteScreen, SetupScreen } from '../screens/GateScreens.js';
 import { ListScreen } from '../screens/ListScreen.js';
 import { LoginScreen } from '../screens/LoginScreen.js';
@@ -50,6 +51,18 @@ export function App() {
 
   const invite = match('/invite/:token', route.path);
   if (invite !== null) return <InviteScreen token={invite.token!} />;
+
+  /**
+   * `/join/:token` és un convit **a un àmbit**, i `/invite/:token` un convit **a la
+   * instància**. Es distingeixen a la URL perquè el que passa és molt diferent: el primer
+   * demana que ja tinguis compte; el segon te'n crea un.
+   */
+  const join = match('/join/:token', route.path);
+  if (join !== null) {
+    if (state.status === 'anonymous') return <LoginScreen />;
+    if (state.status === 'loading') return null;
+    return <JoinScopeScreen token={join.token!} />;
+  }
 
   if (route.path === '/setup') {
     return <SetupScreen onDone={() => window.location.assign('/')} />;

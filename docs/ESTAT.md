@@ -113,21 +113,29 @@ Les dotze seccions de `docs/02`:
 | §4 Kanban | fet, amb arrossegament de ratolí i de teclat |
 | §5 Calendari | fet: mes, setmana, dia i rail configurable |
 | §6 Vista de llista senzilla | fet |
-| §7 Modal d'edició completa | fet menys els adjunts |
+| §7 Modal d'edició completa | fet, adjunts inclosos |
 | §8 Tauler general | fet |
 | §9 Ajustos | fet, les vuit pestanyes |
 | §10 Responsive | fet; el kanban del mòbil es va **arreglar** en ajustar-se al disseny |
 | §11 Dreceres de teclat | fet, amb la paleta d'ordres |
 | §12 Estats buits, càrrega i error | fet |
 
-### L'única cosa que falta al modal (§7)
+### Els adjunts (§7), que abans hi faltaven
 
-**Els adjunts**, amb el commutador de context per a la IA. No és una omissió per manca
-de temps: `docs/12` no diu on es guarden els fitxers —volum, mida màxima, servei— i
-inventar-ho voldria dir triar per l'operador coses que després no es poden desfer sense
-migrar dades. El camp `attachments` és a `docs/05` §4 i l'endpoint no existeix.
+Van quedar fora molt de temps perquè `docs/12` no deia on es guarden els fitxers, i
+inventar-ho voldria dir triar per l'operador coses que després no es desfan sense migrar
+dades. Amb els àmbits compartits ja no eren ajornables —el receptor ha de veure els
+adjunts dels esdeveniments compartits— i es va decidir així:
 
-La repetició, la data límit i el canvi de projecte **sí que hi són**.
+- **Al volum**, a `<FEMHO_DATA_DIR>/attachments/<aaaa>/<mm>/<uuid>`, sense extensió al
+  disc i amb `storage_path` **relatiu**. Una còpia del volum segueix sent una còpia de
+  seguretat completa, que és el que `docs/12` §3 promet.
+- **`FEMHO_MAX_UPLOAD_MB`**, 25 per defecte, comprovat a la capa d'HTTP i al servei.
+- **El tipus surt del contingut** i no de l'extensió, i mai és `text/html`.
+- **Els `ATTACH` d'un calendari subscrit** entren: els que porten bytes en base64 es
+  desen; els que són una URI **no es baixen mai**, només se'n guarda l'enllaç.
+
+La repetició, la data límit i el canvi de projecte **també hi són**.
 
 ### Sobre el constructor de repetició
 

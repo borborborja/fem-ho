@@ -106,6 +106,7 @@ async function main(): Promise<void> {
     connection,
     secret,
     baseUrl: config.baseUrl,
+    dataDir: config.dataDir,
     log: (message, error) => {
       if (error === undefined) app.log.info(message);
       else app.log.warn({ err: error }, message);

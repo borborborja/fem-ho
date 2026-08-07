@@ -14,6 +14,7 @@
 import { sql } from 'kysely';
 import type { Source } from '@fem-ho/contracts';
 import type { MigrationDb } from '../db/migration-db.js';
+import { visibleScopeIds } from './scope-visibility.js';
 import { hashToken, isApiToken } from '../auth/tokens.js';
 import { capabilitiesForRole, isCapability, type Capability } from './capabilities.js';
 import { unauthenticated } from './errors.js';
@@ -22,7 +23,7 @@ import type { Principal } from './principal.js';
 interface UserRow {
   id: string;
   role: 'admin' | 'member';
-  kind: 'human' | 'ai' | 'caldav_only';
+  kind: 'human' | 'ai' | 'caldav_only' | 'remote';
   name: string;
   deleted_at: string | null;
 }
@@ -37,16 +38,14 @@ interface TokenRow {
   revoked_at: string | null;
 }
 
-/** Els àmbits que un usuari pot veure: els que té i els col·lectius on és membre. */
+/**
+ * Els àmbits que un usuari pot veure.
+ *
+ * Delega al predicat únic. Abans era la quarta còpia del mateix SQL, i és **la còpia que
+ * fa mal si divergeix**: el que no surti d'aquí, `intersectScopes` l'esborra en silenci.
+ */
 export async function scopeIdsOwnedBy(tx: MigrationDb, userId: string): Promise<Set<string>> {
-  const result = await sql<{ id: string }>`
-    SELECT s.id FROM scopes s
-    WHERE s.deleted_at IS NULL
-      AND (s.owner_id = ${userId}
-           OR EXISTS (SELECT 1 FROM scope_members m
-                      WHERE m.scope_id = s.id AND m.user_id = ${userId}))
-  `.execute(tx);
-  return new Set(result.rows.map((r) => r.id));
+  return visibleScopeIds(tx, userId);
 }
 
 export interface ResolveInput {
@@ -155,9 +154,20 @@ async function loadUser(tx: MigrationDb, userId: string): Promise<UserRow | null
   `.execute(tx);
   const row = found.rows[0];
   if (row === undefined || row.deleted_at !== null) return null;
-  // Un usuari 'ai' o 'caldav_only' no entra per aquí: el primer no té credencials i el
-  // segon només té una app password de CalDAV (docs/01 §2).
-  if (row.kind !== 'human') return null;
+  /**
+   * Qui pot ser el propietari d'un token d'API.
+   *
+   * Un usuari `ai` no té credencials i un `caldav_only` només té una app password de
+   * CalDAV (`docs/01` §2): cap dels dos entra per aquí.
+   *
+   * **Un `remote` sí**, i és tot el que la federació necessita d'aquesta capa. És
+   * l'usuari ombra d'una altra instància, i la seva única credencial és exactament un
+   * `api_token` —no té correu ni contrasenya, o sigui que no pot entrar per la porta de
+   * davant ni per la de CalDAV—. Deixar-lo passar aquí és el que fa que un servidor remot
+   * sigui un client d'API més i que no calgui un segon camí d'autorització, que és el que
+   * la regla 8 prohibeix.
+   */
+  if (row.kind !== 'human' && row.kind !== 'remote') return null;
   return row;
 }
 

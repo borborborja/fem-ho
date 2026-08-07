@@ -20,7 +20,9 @@ import { registerPushRoutes } from './http/push.js';
 import { registerAdminRoutes } from './http/admin.js';
 import { registerAgentRoutes } from './http/agents.js';
 import { registerMeRoutes } from './http/me.js';
+import { registerAttachmentRoutes } from './http/attachments.js';
 import { registerScopeRoutes } from './http/scopes.js';
+import { registerFederationRoutes } from './http/federation.js';
 import { registerSpaRoutes } from './http/spa.js';
 import { registerSetupRoutes } from './http/setup.js';
 import { registerShareRoutes } from './http/shares.js';
@@ -48,6 +50,14 @@ export function buildApp(config: Config, options: BuildOptions = {}): FastifyIns
     // Darrere d'un proxy invers casolà; els rangs de confiança es fixaran amb
     // FEMHO_TRUSTED_PROXIES quan hi hagi límits de ritme i sessions (M3).
     trustProxy: false,
+    /**
+     * El sostre del cos, per als adjunts.
+     *
+     * El defecte de Fastify és un megabyte, que rebutjaria qualsevol fitxer real. Es posa
+     * una mica per damunt del límit de l'adjunt perquè qui l'excedeixi rebi el **413 amb
+     * el motiu** del servei en comptes d'un tall sec de la capa d'HTTP.
+     */
+    bodyLimit: config.maxUploadBytes + 1_048_576,
   });
 
   app.decorate('config', config);
@@ -75,7 +85,6 @@ export function buildApp(config: Config, options: BuildOptions = {}): FastifyIns
   registerInstanceRoutes(app);
   registerAuthRoutes(app);
   registerMeRoutes(app);
-  registerScopeRoutes(app);
   registerAgentRoutes(app);
   /**
    * El secret es resol **quan es necessita**, no en construir l'app: `buildApp` no ha de
@@ -88,7 +97,10 @@ export function buildApp(config: Config, options: BuildOptions = {}): FastifyIns
     return secret;
   };
 
+  registerScopeRoutes(app, instanceSecret);
   registerTaskRoutes(app);
+  registerAttachmentRoutes(app);
+  registerFederationRoutes(app, instanceSecret);
   registerEventRoutes(app, instanceSecret);
   registerChecklistRoutes(app);
   registerSyncRoutes(app);

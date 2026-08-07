@@ -8,6 +8,7 @@
 
 import type { FastifyInstance } from 'fastify';
 import { auditedTransaction } from '../audit/audited-transaction.js';
+import { isMailbox } from '../policy/mailbox.js';
 import {
   changePassword,
   getProfile,
@@ -72,6 +73,7 @@ export function registerMeRoutes(app: FastifyInstance): void {
           inbox_position: str(input.inbox_position),
           inbox_show_overdue:
             typeof input.inbox_show_overdue === 'boolean' ? input.inbox_show_overdue : undefined,
+          inbox_origin: isMailbox(input.inbox_origin) ? input.inbox_origin : undefined,
           collapsed_groups: Array.isArray(input.collapsed_groups)
             ? input.collapsed_groups.filter((v): v is string => typeof v === 'string')
             : undefined,

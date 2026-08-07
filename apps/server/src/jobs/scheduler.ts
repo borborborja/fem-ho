@@ -21,6 +21,8 @@ import type { Connection } from '../db/connection.js';
 import type { MigrationDb } from '../db/migration-db.js';
 import { FALLBACK, catalogOf, isLocale, type Locale } from '@fem-ho/contracts';
 import { isDue, refreshSubscription, type SubscriptionRow } from '../dav/client.js';
+import { pullFromLink, type InstanceLinkRow } from '../services/federation.js';
+import { pruneOps } from '../services/sync.js';
 import type { Principal } from '../policy/principal.js';
 import {
   ensureVapidKeys,
@@ -37,6 +39,8 @@ export interface SchedulerOptions {
   connection: Connection;
   secret: string;
   baseUrl: string | undefined;
+  /** On van els bytes dels `ATTACH` en base64 dels orígens subscrits. */
+  dataDir?: string | undefined;
   /** Injectables per a les proves: així no cal esperar mig minut ni piconar cap servei. */
   now?: () => string;
   send?: PushSender;
@@ -47,6 +51,8 @@ export interface SchedulerOptions {
 export interface TickResult {
   reminders: number;
   refreshed: number;
+  /** Enllaços amb una altra instància que s'han replicat en aquest tic. */
+  federated: number;
   errors: number;
 }
 
@@ -77,7 +83,7 @@ export async function tick(options: SchedulerOptions): Promise<TickResult> {
   const now = (options.now ?? (() => new Date().toISOString()))();
   const log = options.log ?? (() => undefined);
   const principal = systemPrincipal();
-  const result: TickResult = { reminders: 0, refreshed: 0, errors: 0 };
+  const result: TickResult = { reminders: 0, refreshed: 0, federated: 0, errors: 0 };
 
   try {
     result.reminders = await runReminders(options, principal, now);
@@ -88,6 +94,16 @@ export async function tick(options: SchedulerOptions): Promise<TickResult> {
 
   try {
     result.refreshed = await runRefreshes(options, principal, now);
+    result.federated = await runFederationPulls(options, now);
+
+    /**
+     * La poda de les operacions ja aplicades.
+     *
+     * És barata i va aquí perquè `sync_op_ids` només creix: cada lot de cada dispositiu
+     * hi deixa una fila, i sense ningú que les tregui la taula acaba sent la més gran de
+     * la base per a res.
+     */
+    await pruneOps(options.connection.db, now);
   } catch (error) {
     result.errors += 1;
     log("El refresc d'orígens externs ha fallat", error);
@@ -210,6 +226,7 @@ async function runRefreshes(
       await refreshSubscription(db, principal, subscription, {
         masterSecret: options.secret,
         engine: options.connection.engine,
+        dataDir: options.dataDir,
       });
       refreshed += 1;
       await sql`
@@ -237,6 +254,60 @@ async function runRefreshes(
   return refreshed;
 }
 
+/**
+ * La rèplica dels enllaços federats.
+ *
+ * Va al mateix tic que els refrescos i amb el mateix criteri: **un error d'un enllaç es
+ * queda a la seva fila**, no atura els altres ni tomba el tic. Una casa que no arriba a
+ * l'altra instància —perquè està apagada, perquè ha canviat de domini— ha de poder
+ * seguir fent servir la seva sense saber res d'això, i ha de poder llegir el motiu a la
+ * pantalla en comptes d'endevinar-lo d'un registre que no llegirà mai ningú.
+ */
+async function runFederationPulls(options: SchedulerOptions, now: string): Promise<number> {
+  const { db } = options.connection;
+  const log = options.log ?? (() => undefined);
+
+  const found = await sql<InstanceLinkRow & { token_enc: string }>`
+    SELECT id, scope_id, base_url, name, token_enc, cursor, last_sync_at, last_error,
+           last_error_at, created_at, updated_at
+    FROM instance_links
+  `.execute(db);
+
+  let pulled = 0;
+  for (const link of found.rows) {
+    if (!federationDue(link, Date.parse(now))) continue;
+
+    try {
+      await pullFromLink(db, link, options.secret, now);
+      pulled += 1;
+    } catch (error) {
+      log(`No s'ha pogut replicar "${link.name ?? link.base_url}"`, error);
+      await sql`
+        UPDATE instance_links
+        SET last_error = ${error instanceof Error ? error.message : String(error)},
+            last_error_at = ${now}, updated_at = ${now}
+        WHERE id = ${link.id}
+      `.execute(db);
+    }
+  }
+
+  return pulled;
+}
+
+/**
+ * Cada quant es replica un enllaç.
+ *
+ * **Cinc minuts, i no el tic de trenta segons.** L'altra instància és el servidor de
+ * casa d'algú altre: piconar-lo cada mig minut per un tauler que canvia un cop al dia
+ * seria el mateix que `MIN_REFRESH_SECONDS` evita amb els calendaris externs.
+ */
+export const FEDERATION_INTERVAL_MS = 5 * 60 * 1000;
+
+function federationDue(link: { last_sync_at: string | null }, now: number): boolean {
+  if (link.last_sync_at === null) return true;
+  return now - Date.parse(link.last_sync_at) >= FEDERATION_INTERVAL_MS;
+}
+
 export interface Scheduler {
   stop: () => void;
 }
@@ -262,10 +333,11 @@ export function startScheduler(options: SchedulerOptions): Scheduler {
     running = true;
     try {
       const result = await tick(options);
-      if (result.reminders > 0 || result.refreshed > 0) {
+      if (result.reminders > 0 || result.refreshed > 0 || result.federated > 0) {
         log(
           `planificador · ${String(result.reminders)} recordatoris, ` +
-            `${String(result.refreshed)} orígens refrescats`,
+            `${String(result.refreshed)} orígens refrescats, ` +
+            `${String(result.federated)} enllaços replicats`,
         );
       }
     } catch (error) {

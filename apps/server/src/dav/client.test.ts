@@ -391,3 +391,111 @@ describe('evitar bucles', () => {
     }
   });
 });
+
+/**
+ * Els `ATTACH` d'un origen (RFC 5545 §3.8.1.1).
+ *
+ * **Els bytes en base64 es desen; una URI no es baixa mai.** La segona meitat és la que
+ * importa: seguir una URL escollida per qui publica el calendari, cada cop que es
+ * refresca, és el mateix forat que `safeFetch` tanca a la font — i un `.ics` podria fer
+ * créixer el volum sense límit sense que ningú ho demanés.
+ */
+describe("els adjunts d'un origen", () => {
+  const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x01]);
+
+  it('els bytes en base64 es desen, amb el tipus tret del contingut', async () => {
+    served = ics([
+      {
+        uid: 'amb-adjunt',
+        summary: 'Analítica',
+        extra:
+          'ATTACH;FMTTYPE=application/pdf;ENCODING=BASE64;VALUE=BINARY;' +
+          `FILENAME=resultats.png:${PNG.toString('base64')}`,
+      },
+    ]);
+
+    await refreshSubscription(conn.db, principal, await subscription(), {
+      masterSecret: MASTER,
+      fetchOptions: permetLoopback,
+      dataDir: tmp,
+    });
+
+    const rows = await sql<{ filename: string; mime_type: string; size_bytes: number }>`
+      SELECT a.filename, a.mime_type, a.size_bytes FROM attachments a
+      JOIN events e ON e.id = a.event_id
+      WHERE e.calendar_id = ${calendarId} AND a.deleted_at IS NULL
+    `.execute(conn.db);
+
+    expect(rows.rows).toHaveLength(1);
+    // L'origen deia PDF; els bytes diuen PNG. Mana el contingut.
+    expect(rows.rows[0]).toMatchObject({
+      filename: 'resultats.png',
+      mime_type: 'image/png',
+      size_bytes: PNG.length,
+    });
+  });
+
+  it('una URI es desa com a enllaç i no es baixa: no hi ha ni fitxer ni mida', async () => {
+    served = ics([
+      {
+        uid: 'amb-enllac',
+        summary: 'Entrades',
+        extra: 'ATTACH;FMTTYPE=application/pdf:https://exemple.org/entrades.pdf',
+      },
+    ]);
+
+    await refreshSubscription(conn.db, principal, await subscription(), {
+      masterSecret: MASTER,
+      fetchOptions: permetLoopback,
+      dataDir: tmp,
+    });
+
+    const rows = await sql<{
+      external_url: string | null;
+      storage_path: string | null;
+      size_bytes: number;
+      source: string;
+    }>`
+      SELECT a.external_url, a.storage_path, a.size_bytes, a.source FROM attachments a
+      JOIN events e ON e.id = a.event_id
+      WHERE e.uid = 'amb-enllac' AND a.deleted_at IS NULL
+    `.execute(conn.db);
+
+    expect(rows.rows[0]).toMatchObject({
+      external_url: 'https://exemple.org/entrades.pdf',
+      storage_path: null,
+      size_bytes: 0,
+      source: 'ical_attach',
+    });
+  });
+
+  it("i el que l'origen ha tret, desapareix", async () => {
+    served = ics([
+      {
+        uid: 'canviant',
+        summary: 'Cita',
+        extra: `ATTACH;ENCODING=BASE64;VALUE=BINARY;FILENAME=a.png:${PNG.toString('base64')}`,
+      },
+    ]);
+    await refreshSubscription(conn.db, principal, await subscription(), {
+      masterSecret: MASTER,
+      fetchOptions: permetLoopback,
+      dataDir: tmp,
+    });
+
+    // El mateix esdeveniment, ara sense l'adjunt. L'etag canvia, o sigui que es reescriu.
+    served = ics([{ uid: 'canviant', summary: 'Cita, sense res' }]);
+    await refreshSubscription(conn.db, principal, await subscription(), {
+      masterSecret: MASTER,
+      fetchOptions: permetLoopback,
+      dataDir: tmp,
+    });
+
+    const vius = await sql<{ n: number }>`
+      SELECT COUNT(*) AS n FROM attachments a
+      JOIN events e ON e.id = a.event_id
+      WHERE e.uid = 'canviant' AND a.deleted_at IS NULL
+    `.execute(conn.db);
+    expect(Number(vius.rows[0]?.n)).toBe(0);
+  });
+});

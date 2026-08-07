@@ -13,7 +13,8 @@ import { useState } from 'react';
 import { dateTime, getLocale, resolveWeekStart, t, weekdayNames } from '@fem-ho/contracts';
 import { v7 as uuidv7 } from 'uuid';
 import { EmptyState } from '@fem-ho/design-system/femho';
-import { api } from '../app/api.js';
+import { api, ApiError } from '../app/api.js';
+import { Chips } from '../app/Chips.js';
 import { useRouter } from '../app/router.js';
 import { useSession, useSessionData } from '../app/session.js';
 import { useApi, useMutation } from '../app/useApi.js';
@@ -162,45 +163,6 @@ function Group({ title, children }: { title: string; children: React.ReactNode }
       <h2 style={{ margin: 0, fontSize: 14, fontWeight: 800, color: 'var(--ink)' }}>{title}</h2>
       {children}
     </section>
-  );
-}
-
-function Chips<T extends string>({
-  value,
-  options,
-  onChange,
-  testId,
-}: {
-  value: T;
-  options: { key: T; label: string }[];
-  onChange: (next: T) => void;
-  testId: string;
-}) {
-  return (
-    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }} data-testid={testId}>
-      {options.map((option) => (
-        <button
-          key={option.key}
-          type="button"
-          data-testid={`${testId}-${option.key}`}
-          aria-pressed={value === option.key}
-          onClick={() => onChange(option.key)}
-          style={{
-            padding: '7px 14px',
-            borderRadius: 100,
-            cursor: 'pointer',
-            font: 'inherit',
-            fontSize: 12,
-            fontWeight: value === option.key ? 700 : 500,
-            border: '1px solid var(--card-border)',
-            background: value === option.key ? 'var(--ghost-bg)' : 'transparent',
-            color: 'var(--ink)',
-          }}
-        >
-          {option.label}
-        </button>
-      ))}
-    </div>
   );
 }
 
@@ -369,22 +331,250 @@ function GeneralTab() {
   );
 }
 
+/**
+ * Els vuit colors d'àmbit de la paleta ampliada.
+ *
+ * `docs/00` reserva la tríada de Plou per als tres àmbits inicials i dona als que crea
+ * l'usuari una paleta pròpia. Els vuit tokens existien a `femho/tokens.css` des del
+ * primer dia i **no els feia servir ningú**: tots els àmbits creats des d'aquí sortien
+ * blaus perquè el color anava cablejat.
+ */
+const SCOPE_COLORS = [
+  '--femho-scope-1',
+  '--femho-scope-2',
+  '--femho-scope-3',
+  '--femho-scope-4',
+  '--femho-scope-5',
+  '--femho-scope-6',
+  '--femho-scope-7',
+  '--femho-scope-8',
+] as const;
+
+function ColorPicker({
+  value,
+  onChange,
+  testId,
+}: {
+  value: string;
+  onChange: (color: string) => void;
+  testId: string;
+}) {
+  return (
+    <div
+      role="radiogroup"
+      aria-label={t('settings.scopeColor')}
+      data-testid={testId}
+      style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}
+    >
+      {SCOPE_COLORS.map((color) => (
+        <button
+          key={color}
+          type="button"
+          role="radio"
+          aria-checked={value === color}
+          aria-label={color}
+          data-testid={`${testId}-${color}`}
+          onClick={() => onChange(color)}
+          style={{
+            width: 24,
+            height: 24,
+            borderRadius: '50%',
+            background: `var(${color})`,
+            cursor: 'pointer',
+            // La selecció es marca amb un anell separat i no amb una vora, que taparia
+            // el color just al color que s'està triant.
+            border: '2px solid var(--panel-bg)',
+            boxShadow: value === color ? '0 0 0 2px var(--ink)' : 'none',
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function ScopeRow({ scope, onDone }: { scope: Scope; onDone: () => Promise<void> }) {
+  const { profile } = useSessionData();
+  // Qui mana a l'àmbit. `owner_id` mana sempre, hi hagi fila de membre o no.
+  const isOwner = scope.owner_id === profile.id;
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(scope.name);
+  const [color, setColor] = useState(scope.color);
+  const [kind, setKind] = useState<'individual' | 'collective'>(scope.kind);
+  const [openMembers, setOpenMembers] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const save = useMutation(async () => {
+    setError(null);
+    try {
+      await api.patch(`/api/v1/scopes/${scope.id}`, { name: name.trim(), color, kind });
+      setEditing(false);
+      await onDone();
+    } catch (problem) {
+      // El servidor diu QUI bloqueja el canvi de tipus i QUANTES coses queden a dins,
+      // i `ApiError` ja en porta el text traduït. Ensenyar "no s'ha pogut" seria
+      // fer-li endevinar què li falta.
+      setError(problem instanceof ApiError ? problem.message : t('error.generic'));
+    }
+  });
+
+  const remove = useMutation(async () => {
+    setError(null);
+    try {
+      await api.delete(`/api/v1/scopes/${scope.id}`);
+      await onDone();
+    } catch (problem) {
+      setError(problem instanceof ApiError ? problem.message : t('error.generic'));
+    }
+  });
+
+  return (
+    <div style={{ display: 'grid', gap: 8 }} data-testid={`scope-row-${scope.id}`}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+        <span
+          aria-hidden="true"
+          style={{ width: 9, height: 9, borderRadius: '50%', background: `var(${scope.color})` }}
+        />
+        <span style={{ fontSize: 13, fontWeight: 600 }}>{scope.name}</span>
+        <span style={{ fontSize: 11.5, color: 'var(--ink-faint)' }}>
+          {t(`settings.scopeKind.${scope.kind}`)}
+        </span>
+        <button
+          type="button"
+          data-testid={`scope-edit-${scope.id}`}
+          onClick={() => setEditing(!editing)}
+          style={LINK_BUTTON}
+        >
+          {t('settings.scopeEdit')}
+        </button>
+        {scope.kind === 'collective' ? (
+          <button
+            type="button"
+            data-testid={`scope-members-${scope.id}`}
+            onClick={() => setOpenMembers(!openMembers)}
+            style={LINK_BUTTON}
+          >
+            {t('settings.members')}
+          </button>
+        ) : null}
+      </div>
+
+      {editing ? (
+        <div style={{ display: 'grid', gap: 8, paddingLeft: 18 }}>
+          <input
+            className="plou-input"
+            data-testid={`scope-name-${scope.id}`}
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+          />
+          <ColorPicker value={color} onChange={setColor} testId={`scope-color-${scope.id}`} />
+          <Chips
+            testId={`scope-kind-${scope.id}`}
+            value={kind}
+            options={[
+              { key: 'individual' as const, label: t('settings.scopeKind.individual') },
+              { key: 'collective' as const, label: t('settings.scopeKind.collective') },
+            ]}
+            onChange={setKind}
+          />
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              type="button"
+              className="plou-btn plou-btn-primary"
+              data-testid={`scope-save-${scope.id}`}
+              disabled={save.busy}
+              onClick={() => void save.run()}
+            >
+              {t('settings.scopeSave')}
+            </button>
+            <button
+              type="button"
+              className="plou-btn"
+              data-testid={`scope-delete-${scope.id}`}
+              disabled={remove.busy}
+              onClick={() => {
+                if (window.confirm(t('settings.scopeDeleteConfirm', { name: scope.name }))) {
+                  void remove.run();
+                }
+              }}
+            >
+              {t('settings.scopeDelete')}
+            </button>
+          </div>
+          {error === null ? null : (
+            <p
+              data-testid={`scope-error-${scope.id}`}
+              style={{ fontSize: 12, color: 'var(--danger-text)', margin: 0 }}
+            >
+              {error}
+            </p>
+          )}
+        </div>
+      ) : null}
+
+      {openMembers ? <MembersList scopeId={scope.id} canManage={isOwner} /> : null}
+    </div>
+  );
+}
+
+/** L'explicació petita sota d'un camp: el mateix pes a totes les pantalles. */
+const HINT = { fontSize: 12, color: 'var(--ink-soft)', margin: 0 } as const;
+
+const LINK_BUTTON = {
+  border: 'none',
+  background: 'transparent',
+  font: 'inherit',
+  fontSize: 12,
+  cursor: 'pointer',
+  color: 'var(--ink-soft)',
+} as const;
+
+/**
+ * D'on surt un àmbit nou.
+ *
+ * Les tres portes que es van demanar, i **una sola pantalla**: crear-lo de nou, o
+ * sincronitzar-lo amb un que ja existeix —d'aquest servidor, enganxant el token; o d'un
+ * altre, enganxant també l'adreça—. Que siguin un commutador i no tres llocs diferents és
+ * el que fa que no calgui saber abans quina de les tres es vol.
+ */
+type ScopeSource = 'new' | 'here' | 'remote';
+
 function ScopesTab() {
   const { scopes } = useSessionData();
   const { reload } = useSession();
+  const [source, setSource] = useState<ScopeSource>('new');
   const [name, setName] = useState('');
   const [kind, setKind] = useState<'individual' | 'collective'>('individual');
-  const [openScope, setOpenScope] = useState<string | null>(null);
+  const [color, setColor] = useState<string>(SCOPE_COLORS[0]);
+  const [token, setToken] = useState('');
+  const [serverUrl, setServerUrl] = useState('');
+  const [error, setError] = useState<string | null>(null);
 
   const create = useMutation(async () => {
-    if (name.trim() === '') return;
-    await api.post('/api/v1/scopes', {
-      id: uuidv7(),
-      name: name.trim(),
-      kind,
-      color: '--plou-blue',
-    });
+    setError(null);
+    try {
+      if (source === 'here') {
+        // El mateix camí que la pantalla del convit: un token d'aquesta casa es bescanvia
+        // i prou, i qui l'accepta ja és membre de l'àmbit que ja hi era.
+        if (token.trim() === '') return;
+        await api.post(`/api/v1/join/${encodeURIComponent(token.trim())}`);
+      } else if (source === 'remote') {
+        if (token.trim() === '' || serverUrl.trim() === '') return;
+        await api.post('/api/v1/federation/links', {
+          base_url: serverUrl.trim(),
+          token: token.trim(),
+          ...(name.trim() === '' ? {} : { name: name.trim() }),
+        });
+      } else {
+        if (name.trim() === '') return;
+        await api.post('/api/v1/scopes', { id: uuidv7(), name: name.trim(), kind, color });
+      }
+    } catch (problem: unknown) {
+      setError(problem instanceof ApiError ? problem.message : String(problem));
+      return;
+    }
     setName('');
+    setToken('');
+    setServerUrl('');
     await reload();
   });
 
@@ -392,61 +582,70 @@ function ScopesTab() {
     <>
       <Group title={t('settings.tab.scopes')}>
         {scopes.map((scope) => (
-          <div key={scope.id} style={{ display: 'grid', gap: 8 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-              <span
-                aria-hidden="true"
-                style={{
-                  width: 9,
-                  height: 9,
-                  borderRadius: '50%',
-                  background: `var(${scope.color})`,
-                }}
-              />
-              <span style={{ fontSize: 13, fontWeight: 600 }}>{scope.name}</span>
-              <span style={{ fontSize: 11.5, color: 'var(--ink-faint)' }}>
-                {t(`settings.scopeKind.${scope.kind}`)}
-              </span>
-              {scope.kind === 'collective' ? (
-                <button
-                  type="button"
-                  data-testid={`scope-members-${scope.id}`}
-                  onClick={() => setOpenScope(openScope === scope.id ? null : scope.id)}
-                  style={{
-                    border: 'none',
-                    background: 'transparent',
-                    font: 'inherit',
-                    fontSize: 12,
-                    cursor: 'pointer',
-                    color: 'var(--ink-soft)',
-                  }}
-                >
-                  {t('settings.members')}
-                </button>
-              ) : null}
-            </div>
-            {openScope === scope.id ? <MembersList scopeId={scope.id} /> : null}
-          </div>
+          <ScopeRow key={scope.id} scope={scope} onDone={reload} />
         ))}
       </Group>
 
       <Group title={t('settings.newScope')}>
-        <input
-          className="plou-input"
-          data-testid="new-scope-name"
-          value={name}
-          placeholder={t('settings.scopeName')}
-          onChange={(event) => setName(event.target.value)}
-        />
         <Chips
-          testId="new-scope-kind"
-          value={kind}
+          testId="new-scope-source"
+          value={source}
           options={[
-            { key: 'individual' as const, label: t('settings.scopeKind.individual') },
-            { key: 'collective' as const, label: t('settings.scopeKind.collective') },
+            { key: 'new' as const, label: t('settings.scopeSource.new') },
+            { key: 'here' as const, label: t('settings.scopeSource.here') },
+            { key: 'remote' as const, label: t('settings.scopeSource.remote') },
           ]}
-          onChange={setKind}
+          onChange={setSource}
         />
+
+        {source === 'new' ? (
+          <>
+            <input
+              className="plou-input"
+              data-testid="new-scope-name"
+              value={name}
+              placeholder={t('settings.scopeName')}
+              onChange={(event) => setName(event.target.value)}
+            />
+            <ColorPicker value={color} onChange={setColor} testId="new-scope-color" />
+            <Chips
+              testId="new-scope-kind"
+              value={kind}
+              options={[
+                { key: 'individual' as const, label: t('settings.scopeKind.individual') },
+                { key: 'collective' as const, label: t('settings.scopeKind.collective') },
+              ]}
+              onChange={setKind}
+            />
+          </>
+        ) : (
+          <>
+            <p style={HINT}>{t('settings.scopeSourceHelp')}</p>
+            {source === 'remote' && (
+              <input
+                className="plou-input"
+                data-testid="new-scope-server"
+                value={serverUrl}
+                placeholder={t('settings.scopeServerUrl')}
+                onChange={(event) => setServerUrl(event.target.value)}
+              />
+            )}
+            <input
+              className="plou-input"
+              data-testid="new-scope-token"
+              value={token}
+              placeholder={t('settings.scopeToken')}
+              onChange={(event) => setToken(event.target.value)}
+            />
+          </>
+        )}
+
+        {error !== null && (
+          <p role="alert" style={{ ...HINT, color: 'var(--danger-text)' }}>
+            {error}
+          </p>
+        )}
+
         <button
           type="button"
           className="plou-btn plou-btn-primary"
@@ -454,22 +653,190 @@ function ScopesTab() {
           disabled={create.busy}
           onClick={() => void create.run()}
         >
-          {t('nav.create')}
+          {source === 'new' ? t('nav.create') : t('settings.scopeJoin')}
         </button>
       </Group>
     </>
   );
 }
 
-function MembersList({ scopeId }: { scopeId: string }) {
+interface ScopeInvite {
+  id: string;
+  role: string | null;
+  max_uses: number;
+  use_count: number;
+  expires_at: string | null;
+  created_at: string;
+}
+
+/**
+ * Els membres d'un àmbit, i com se n'hi posen.
+ *
+ * Fins avui això era **estrictament de lectura**: els endpoints de membres existien i no
+ * els cridava ningú, i per afegir algú calia saber-ne l'identificador d'usuari i fer-ho a
+ * mà. Ara hi ha el convit, que és el camí que fa que compartir sigui una cosa que es pugui
+ * fer sense mirar la base de dades.
+ */
+function MembersList({ scopeId, canManage }: { scopeId: string; canManage: boolean }) {
   const members = useApi<Member[]>(`/api/v1/scopes/${scopeId}/members`);
+  const invites = useApi<ScopeInvite[]>(canManage ? `/api/v1/scopes/${scopeId}/invites` : null);
+  const [role, setRole] = useState<'collaborator' | 'viewer'>('collaborator');
+  const [fresh, setFresh] = useState<string | null>(null);
+
+  const invite = useMutation(async () => {
+    const created = await api.post<{ invite_url: string }>(`/api/v1/scopes/${scopeId}/invites`, {
+      role,
+    });
+    // **Surt una sola vegada.** Del hash no es pot recuperar (docs/10 §6).
+    setFresh(created.invite_url);
+    invites.reload();
+  });
+
   return (
-    <div style={{ paddingLeft: 18, display: 'grid', gap: 5 }}>
-      {(members.data ?? []).map((member) => (
-        <div key={member.id} style={{ fontSize: 12.5, color: 'var(--ink-soft)' }}>
-          {member.name ?? member.user_id ?? ''} · {t(`settings.role.${member.role}`)}
-        </div>
-      ))}
+    <div style={{ paddingLeft: 18, display: 'grid', gap: 8 }}>
+      <div style={{ display: 'grid', gap: 5 }}>
+        {(members.data ?? []).map((member) => (
+          <div
+            key={member.id}
+            data-testid={`member-${member.id}`}
+            style={{ fontSize: 12.5, color: 'var(--ink-soft)', display: 'flex', gap: 8 }}
+          >
+            <span>
+              {member.name ?? member.user_id ?? ''} · {t(`settings.role.${member.role}`)}
+            </span>
+            {canManage && member.role !== 'owner' ? (
+              <button
+                type="button"
+                data-testid={`member-remove-${member.id}`}
+                style={LINK_BUTTON}
+                onClick={() => {
+                  void api
+                    .delete(`/api/v1/scopes/${scopeId}/members/${member.id}`)
+                    .then(() => members.reload());
+                }}
+              >
+                {t('settings.memberRemove')}
+              </button>
+            ) : null}
+          </div>
+        ))}
+      </div>
+
+      {canManage ? (
+        <>
+          <Chips
+            testId={`invite-role-${scopeId}`}
+            value={role}
+            options={[
+              { key: 'collaborator' as const, label: t('settings.role.collaborator') },
+              { key: 'viewer' as const, label: t('settings.role.viewer') },
+            ]}
+            onChange={setRole}
+          />
+          <button
+            type="button"
+            className="plou-btn"
+            data-testid={`invite-create-${scopeId}`}
+            disabled={invite.busy}
+            onClick={() => void invite.run()}
+          >
+            {t('settings.inviteCreate')}
+          </button>
+
+          {fresh === null ? null : (
+            <div style={{ display: 'grid', gap: 4 }}>
+              <code
+                data-testid={`invite-url-${scopeId}`}
+                style={{
+                  fontSize: 11.5,
+                  background: 'var(--code-bg)',
+                  padding: '6px 8px',
+                  borderRadius: 8,
+                  wordBreak: 'break-all',
+                }}
+              >
+                {fresh}
+              </code>
+              <span style={{ fontSize: 11.5, color: 'var(--ink-faint)' }}>
+                {t('settings.inviteOnce')}
+              </span>
+            </div>
+          )}
+
+          {(invites.data ?? []).length === 0 ? null : (
+            <div style={{ display: 'grid', gap: 4 }}>
+              {(invites.data ?? []).map((row) => (
+                <div key={row.id} style={{ fontSize: 11.5, color: 'var(--ink-soft)' }}>
+                  {t(`settings.role.${row.role ?? 'collaborator'}`)} · {row.use_count}/
+                  {row.max_uses}{' '}
+                  <button
+                    type="button"
+                    style={LINK_BUTTON}
+                    data-testid={`invite-revoke-${row.id}`}
+                    onClick={() => {
+                      void api
+                        .delete(`/api/v1/scopes/${scopeId}/invites/${row.id}`)
+                        .then(() => invites.reload());
+                    }}
+                  >
+                    {t('settings.inviteRevoke')}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Un calendari d'un àmbit, i si els membres el veuen.
+ *
+ * **L'avís de credencials no és decoratiu.** El secret d'una font externa està segellat
+ * amb una clau derivada del secret d'aquesta instància: no pot viatjar enlloc. El que sí
+ * que passa, i no és obvi, és que si la font és bidireccional el que escriguin els
+ * membres anirà al servei d'un tercer **amb les credencials del propietari**.
+ */
+function SharedCalendarRow({
+  calendar,
+  collective,
+  onDone,
+}: {
+  calendar: Calendar;
+  collective: boolean;
+  onDone: () => void;
+}) {
+  const shared = calendar.shared_with_scope === true;
+
+  const toggle = (): void => {
+    if (!shared && calendar.has_credentials === true) {
+      if (!window.confirm(t('settings.calendarCredWarning'))) return;
+    }
+    void api.patch(`/api/v1/calendars/${calendar.id}`, { shared_with_scope: !shared }).then(onDone);
+  };
+
+  return (
+    <div style={{ fontSize: 12.5, color: 'var(--ink-soft)', display: 'flex', gap: 8 }}>
+      <span>
+        {calendar.name} ·{' '}
+        {calendar.kind === 'todos' ? t('settings.caldavTodos') : t('settings.caldavEvents')}
+      </span>
+      {/*
+        Només té sentit a un àmbit col·lectiu: a un d'individual no hi ha ningú amb qui
+        compartir, i un commutador que no fa res convida a pensar que sí que en fa.
+      */}
+      {collective ? (
+        <button
+          type="button"
+          data-testid={`calendar-share-${calendar.id}`}
+          style={LINK_BUTTON}
+          onClick={toggle}
+        >
+          {shared ? t('settings.calendarShared') : t('settings.calendarPrivate')}
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -489,12 +856,12 @@ function CalendarsTab() {
               <EmptyState>{t('settings.empty.calendars')}</EmptyState>
             ) : (
               own.map((calendar) => (
-                <div key={calendar.id} style={{ fontSize: 12.5, color: 'var(--ink-soft)' }}>
-                  {calendar.name} ·{' '}
-                  {calendar.kind === 'todos'
-                    ? t('settings.caldavTodos')
-                    : t('settings.caldavEvents')}
-                </div>
+                <SharedCalendarRow
+                  key={calendar.id}
+                  calendar={calendar}
+                  collective={scope.kind === 'collective'}
+                  onDone={() => calendars.reload()}
+                />
               ))
             )}
 
