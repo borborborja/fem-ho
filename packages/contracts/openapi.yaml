@@ -1497,6 +1497,28 @@ paths:
           content:
             { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
 
+  /scopes/{id}/members/me:
+    delete:
+      operationId: leaveScope
+      summary: Sortir d'un àmbit un mateix
+      description: >-
+        Un membre es pot treure a si mateix. El propietari no: deixaria l'àmbit orfe i
+        ha d'esborrar-lo o traspassar-lo. El que ha creat es conserva; les seves
+        assignacions marxen.
+      tags: [Àmbits]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '204': { description: Fora }
+        '403':
+          description: El propietari no pot sortir del seu propi àmbit
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
   /scopes/{id}/members/{memberId}:
     patch:
       tags: [scopes]
@@ -2346,8 +2368,10 @@ components:
     ScopePatch:
       type: object
       description: |
-        Només els camps donats. `kind` no hi és a posta: no es pot canviar.
+        Només els camps donats. `kind` sí que hi és: cap a col·lectiu sempre, i cap a
+        individual només si no queda cap altre membre (409 amb qui queda).
       properties:
+        kind: { type: string, enum: [individual, collective] }
         name: { type: string }
         color: { type: string }
         icon: { type: [string, 'null'] }

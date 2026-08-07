@@ -129,12 +129,30 @@ describe('àmbits', () => {
     await api('PATCH', `/api/v1/scopes/${scopeIndividual}`, { name: 'Personal' });
   });
 
-  it('`kind` NO es pot canviar', async () => {
-    await api('PATCH', `/api/v1/scopes/${scopeIndividual}`, { kind: 'collective' });
-    const res = await api('GET', `/api/v1/scopes/${scopeIndividual}`);
-    // Passar d'individual a col·lectiu deixaria totes les tasques assignades al
-    // propietari per la regla d'assignació automàtica, sense que ningú ho hagi demanat.
-    expect(res.json<{ kind: string }>().kind).toBe('individual');
+  /**
+   * **`kind` sí que es pot canviar, i en un sol sentit.**
+   *
+   * Abans no es podia, amb l'argument que passar a col·lectiu deixaria les tasques
+   * assignades al propietari. Amb àmbits compartits això es gira: quan convides algú al
+   * teu àmbit, que les d'abans segueixin sent teves és exactament el que ha de passar.
+   * El que es nega és el sentit invers mentre quedi algú, que sí que trauria accés.
+   *
+   * Va en un àmbit propi i no en el compartit del fitxer: canviar-li el `kind` afectaria
+   * l'assignació automàtica de les proves de més avall, i el defecte es veuria a tres
+   * proves que no toquen àmbits.
+   */
+  it('`kind` es pot canviar cap a col·lectiu', async () => {
+    const propi = (
+      await api('POST', '/api/v1/scopes', { name: 'De prova', color: '--femho-scope-1' })
+    ).json<{ id: string }>().id;
+
+    const res = await api('PATCH', `/api/v1/scopes/${propi}`, { kind: 'collective' });
+    expect(res.statusCode, res.body).toBe(200);
+    expect(res.json<{ kind: string }>().kind).toBe('collective');
+
+    // I torna, perquè no hi ha ningú més.
+    const enrere = await api('PATCH', `/api/v1/scopes/${propi}`, { kind: 'individual' });
+    expect(enrere.json<{ kind: string }>().kind).toBe('individual');
   });
 
   it("un àmbit amb tasques NO s'esborra, i diu quantes en té", async () => {

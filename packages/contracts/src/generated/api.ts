@@ -816,6 +816,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/scopes/{id}/members/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Sortir d'un àmbit un mateix
+         * @description Un membre es pot treure a si mateix. El propietari no: deixaria l'àmbit orfe i ha d'esborrar-lo o traspassar-lo. El que ha creat es conserva; les seves assignacions marxen.
+         */
+        delete: operations["leaveScope"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/scopes/{id}/members/{memberId}": {
         parameters: {
             query?: never;
@@ -1448,8 +1468,13 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /** @description Només els camps donats. `kind` no hi és a posta: no es pot canviar. */
+        /**
+         * @description Només els camps donats. `kind` sí que hi és: cap a col·lectiu sempre, i cap a
+         *     individual només si no queda cap altre membre (409 amb qui queda).
+         */
         ScopePatch: {
+            /** @enum {string} */
+            kind?: "individual" | "collective";
             name?: string;
             color?: string;
             icon?: string | null;
@@ -4041,6 +4066,35 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             /** @description Forma de membre invàlida, o l'àmbit no és col·lectiu. */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    leaveScope: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Fora */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description El propietari no pot sortir del seu propi àmbit */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

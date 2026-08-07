@@ -338,3 +338,142 @@ describe('vocabulari canònic (regla 3)', () => {
     expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u);
   });
 });
+
+/**
+ * Els àmbits compartits.
+ *
+ * Fins avui `scope_members.role` es guardava i **no decidia res**: `viewer` i `member`
+ * tenien els mateixos permisos efectius i qualsevol membre podia expulsar-ne un altre.
+ * L'única comprovació de propietat de tot el servei era a `deleteScope`.
+ *
+ * La regla que ha de valdre és la que va demanar l'usuari: **col·labora, però no mana.**
+ */
+describe('àmbits compartits · col·labora però no mana', () => {
+  let altreId: string;
+  let altreAuth: Record<string, string>;
+
+  beforeAll(async () => {
+    altreId = uuidv7();
+    await sql`
+      INSERT INTO users (id, email, name, password_hash, kind, role, created_at, updated_at)
+      VALUES (${altreId}, 'alba@e.com', 'Alba', ${await hashPassword(PASSWORD)}, 'human', 'member',
+              ${NOW}, ${NOW})
+    `.execute(conn.db);
+    await sql`
+      INSERT INTO scope_members (id, scope_id, user_id, role, created_at)
+      VALUES (${uuidv7()}, ${collectiveId}, ${altreId}, 'collaborator', ${NOW})
+    `.execute(conn.db);
+
+    const login = await app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/login',
+      payload: { email: 'alba@e.com', password: PASSWORD },
+    });
+    altreAuth = {
+      authorization: `Bearer ${login.json<{ access_token: string }>().access_token}`,
+    };
+  });
+
+  it('el col·laborador SÍ que escriu contingut', async () => {
+    const res = await api(
+      'POST',
+      '/api/v1/tasks',
+      { scope_id: collectiveId, title: 'La compra' },
+      altreAuth,
+    );
+    expect(res.statusCode).toBe(201);
+  });
+
+  it('però NO pot convidar ni expulsar', async () => {
+    const convidar = await api(
+      'POST',
+      `/api/v1/scopes/${collectiveId}/members`,
+      { user_id: userId },
+      altreAuth,
+    );
+    expect(convidar.statusCode).toBe(403);
+  });
+
+  it('ni reanomenar ni canviar el color', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/scopes/${collectiveId}`,
+      headers: altreAuth,
+      payload: { name: 'Meu ara' },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it("ni esborrar l'àmbit", async () => {
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/scopes/${collectiveId}`,
+      headers: altreAuth,
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  /**
+   * `me` és un segment literal i l'encaminador el prefereix per damunt de `:memberId`
+   * sigui quin sigui l'ordre de registre. Es prova perquè és una cosa que es dona per
+   * sabuda i que, si canviés, faria que sortir d'un àmbit intentés expulsar el membre
+   * amb identificador "me" — un 404 en comptes d'un 204, i ningú sabria per què.
+   */
+  it("però SÍ que pot sortir de l'àmbit", async () => {
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/scopes/${collectiveId}/members/me`,
+      headers: altreAuth,
+    });
+    expect(res.statusCode).toBe(204);
+
+    // I ja no el veu.
+    const scopes = await api('GET', '/api/v1/scopes', undefined, altreAuth);
+    expect(scopes.json<{ id: string }[]>().map((s) => s.id)).not.toContain(collectiveId);
+  });
+
+  it('el propietari NO pot sortir del seu propi àmbit', async () => {
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/scopes/${collectiveId}/members/me`,
+      headers: auth,
+    });
+    expect(res.statusCode).toBe(403);
+  });
+});
+
+describe("el tipus d'un àmbit", () => {
+  it('cap a col·lectiu, sempre', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/scopes/${scopeId}`,
+      headers: auth,
+      payload: { kind: 'collective' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json<{ kind: string }>().kind).toBe('collective');
+  });
+
+  it('i cap a individual només si no queda ningú — i diu qui', async () => {
+    const tercerId = uuidv7();
+    await sql`
+      INSERT INTO users (id, email, name, password_hash, kind, role, created_at, updated_at)
+      VALUES (${tercerId}, 'pau@e.com', 'Pau', ${await hashPassword(PASSWORD)}, 'human', 'member',
+              ${NOW}, ${NOW})
+    `.execute(conn.db);
+    await sql`
+      INSERT INTO scope_members (id, scope_id, user_id, role, created_at)
+      VALUES (${uuidv7()}, ${scopeId}, ${tercerId}, 'collaborator', ${NOW})
+    `.execute(conn.db);
+
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/scopes/${scopeId}`,
+      headers: auth,
+      payload: { kind: 'individual' },
+    });
+    expect(res.statusCode).toBe(409);
+    // Un 409 mut obliga a endevinar qui el bloqueja.
+    expect(res.json<{ detail: string }>().detail).toContain('Pau');
+  });
+});

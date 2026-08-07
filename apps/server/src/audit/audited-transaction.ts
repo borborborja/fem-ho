@@ -42,6 +42,8 @@ export type AuditVerb =
   | 'delegated'
   | 'claimed'
   | 'released'
+  | 'left'
+  | 'joined'
   | 'logged_in'
   | 'logged_out'
   | 'token_created'

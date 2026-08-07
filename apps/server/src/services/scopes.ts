@@ -13,8 +13,8 @@ import type { AuditContext } from '../audit/audited-transaction.js';
 import type { MigrationDb } from '../db/migration-db.js';
 import { PolicyError, missingCapability, notFound, scopeForbidden } from '../policy/errors.js';
 import { canSeeScope, hasCapability, type Principal } from '../policy/principal.js';
-import { visibleScopesPredicate } from '../policy/scope-visibility.js';
-import type { ScopeRole } from '../policy/scope-roles.js';
+import { roleOf, visibleScopesPredicate } from '../policy/scope-visibility.js';
+import { roleCan, type ScopeAction, type ScopeRole } from '../policy/scope-roles.js';
 
 export interface ScopeRow {
   id: string;
@@ -94,6 +94,36 @@ export async function assertScopeAccess(
     throw scopeForbidden(visible, scope.name, entity);
   }
 
+  return scope;
+}
+
+/**
+ * Comprova que aquest principal pot fer aquesta acció **en aquest àmbit**.
+ *
+ * `assertScopeAccess` diu si hi pot arribar; això diu si hi pot manar. Són coses
+ * diferents i abans es confonien: qualsevol membre podia expulsar-ne un altre, perquè
+ * l'única comprovació de propietat de tot el servei era a `deleteScope`.
+ *
+ * Regla 8: viu a la capa de servei, mai al handler.
+ */
+export async function assertScopeRole(
+  db: MigrationDb,
+  principal: Principal,
+  scopeId: string,
+  action: ScopeAction,
+): Promise<ScopeRow> {
+  const scope = await assertScopeAccess(db, principal, scopeId);
+  const role = await roleOf(db, principal.userId, scopeId);
+
+  if (role === null || !roleCan(role, action)) {
+    throw new PolicyError(
+      'not-allowed-in-scope',
+      'Not allowed in this scope',
+      403,
+      `Only the owner of ${scope.name} can do this.`,
+      { name: scope.name, action },
+    );
+  }
   return scope;
 }
 
@@ -292,15 +322,54 @@ export interface UpdateScopeInput {
   ai_instructions?: string | null | undefined;
   ai_description?: string | null | undefined;
   position?: string | undefined;
+  kind?: 'individual' | 'collective' | undefined;
 }
 
 /**
- * **`kind` no es pot canviar.**
+ * Cap a col·lectiu, sempre. Cap a individual, **només si no queda ningú més**.
  *
- * Passar d'individual a col·lectiu deixaria totes les tasques assignades al propietari
- * per la regla d'assignació automàtica (docs/01 §4) sense que ningú ho hagi demanat; i
- * a l'inrevés, deixaria membres amb accés a un àmbit que ja no en té. Qui vulgui l'altre
- * tipus en crea un de nou i hi mou el que vulgui, que és explícit.
+ * L'error diu qui queda, com fa `scope-not-empty`: un 409 mut obliga a endevinar.
+ */
+async function assertKindChange(
+  db: MigrationDb,
+  scope: ScopeRow,
+  next: 'individual' | 'collective',
+): Promise<void> {
+  if (next === 'collective') return;
+
+  const others = await sql<{ name: string }>`
+    SELECT COALESCE(u.name, c.name) AS name
+    FROM scope_members m
+    LEFT JOIN users u ON u.id = m.user_id
+    LEFT JOIN calendars c ON c.id = m.external_calendar_id
+    WHERE m.scope_id = ${scope.id} AND (m.user_id IS NULL OR m.user_id != ${scope.owner_id})
+    ORDER BY name
+  `.execute(db);
+
+  if (others.rows.length === 0) return;
+
+  const names = others.rows.map((r) => r.name).join(', ');
+  throw new PolicyError(
+    'scope-has-members',
+    'Scope still has members',
+    409,
+    `The ${scope.name} scope cannot become individual: ${names} would lose access. Remove them first.`,
+    { name: scope.name, members: names },
+  );
+}
+
+/**
+ * **`kind` sí que es pot canviar, i no en tots dos sentits.**
+ *
+ * Fins avui no es podia, amb dos arguments que resulten ser asimètrics:
+ *
+ * - «Passar d'individual a col·lectiu deixaria totes les tasques assignades al
+ *   propietari» — **quan convides algú al teu àmbit, això és exactament el que ha de
+ *   passar.** Les tasques d'abans són teves. Sense aquest sentit, convidar algú a un
+ *   àmbit que ja existeix és impossible i la sortida seria "crea'n un de nou i mou-hi
+ *   tot", que són deu minuts per a qui només vol ensenyar la llista de la compra.
+ * - «I a l'inrevés, deixaria membres amb accés a un àmbit que ja no en té» — aquest sí
+ *   que val, i el resol negar-lo mentre quedi algú.
  */
 export async function updateScope(
   ctx: AuditContext,
@@ -309,7 +378,11 @@ export async function updateScope(
   input: UpdateScopeInput,
 ): Promise<ScopeRow> {
   if (!hasCapability(principal, 'scopes:write')) throw missingCapability('scopes:write');
-  const before = await assertScopeAccess(ctx.tx, principal, id);
+  const before = await assertScopeRole(ctx.tx, principal, id, 'settings');
+
+  if (input.kind !== undefined && input.kind !== before.kind) {
+    await assertKindChange(ctx.tx, before, input.kind);
+  }
 
   const fields = pickDefined(input, [
     'name',
@@ -318,6 +391,7 @@ export async function updateScope(
     'ai_instructions',
     'ai_description',
     'position',
+    'kind',
   ]);
   if (typeof fields.name === 'string' && fields.name.trim() === '') {
     throw new PolicyError('name-required', 'Name required', 422, "L'àmbit necessita un nom.");
@@ -361,17 +435,7 @@ export async function deleteScope(
   id: string,
 ): Promise<void> {
   if (!hasCapability(principal, 'scopes:write')) throw missingCapability('scopes:write');
-  const scope = await assertScopeAccess(ctx.tx, principal, id);
-
-  if (scope.owner_id !== principal.userId) {
-    throw new PolicyError(
-      'not-owner',
-      'Not the owner',
-      403,
-      `The ${scope.name} scope can only be deleted by whoever created it.`,
-      { name: scope.name },
-    );
-  }
+  const scope = await assertScopeRole(ctx.tx, principal, id, 'delete');
 
   const counts = await sql<{ tasques: number; projectes: number }>`
     SELECT
@@ -456,7 +520,7 @@ export async function addMember(
   input: AddMemberInput,
 ): Promise<MemberRow> {
   if (!hasCapability(principal, 'scopes:write')) throw missingCapability('scopes:write');
-  const scope = await assertScopeAccess(ctx.tx, principal, scopeId);
+  const scope = await assertScopeRole(ctx.tx, principal, scopeId, 'membership');
 
   if (scope.kind !== 'collective') {
     throw new PolicyError(
@@ -526,7 +590,7 @@ export async function updateMember(
   role: MemberRow['role'],
 ): Promise<MemberRow> {
   if (!hasCapability(principal, 'scopes:write')) throw missingCapability('scopes:write');
-  const scope = await assertScopeAccess(ctx.tx, principal, scopeId);
+  const scope = await assertScopeRole(ctx.tx, principal, scopeId, 'membership');
 
   const members = await listMembersInTx(ctx.tx, scopeId);
   const member = members.find((m) => m.id === memberId);
@@ -566,7 +630,7 @@ export async function removeMember(
   memberId: string,
 ): Promise<void> {
   if (!hasCapability(principal, 'scopes:write')) throw missingCapability('scopes:write');
-  const scope = await assertScopeAccess(ctx.tx, principal, scopeId);
+  const scope = await assertScopeRole(ctx.tx, principal, scopeId, 'membership');
 
   const members = await listMembersInTx(ctx.tx, scopeId);
   const member = members.find((m) => m.id === memberId);
@@ -583,6 +647,46 @@ export async function removeMember(
 
   await sql`DELETE FROM scope_members WHERE id = ${memberId}`.execute(ctx.tx);
   ctx.record({ entityType: 'scope_member', entityId: memberId, scopeId, verb: 'deleted' });
+}
+
+/**
+ * Sortir d'un àmbit un mateix.
+ *
+ * Ruta pròpia i no `removeMember` amb detecció de "sóc jo": el permís és genuïnament
+ * diferent —`leave` contra `membership`— i una funció que vol dir dues coses és on la
+ * comprovació s'acaba confonent.
+ *
+ * **El propietari no pot sortir**: deixaria l'àmbit orfe. Ha d'esborrar-lo o traspassar-lo.
+ *
+ * Sortir **no esborra el que has creat**. `docs/10` §9 ja ho decideix per a l'esborrat de
+ * comptes —"les tasques dels àmbits col·lectius es conserven"— i aquí val igual. El que
+ * sí que marxa són les teves assignacions: una tasca assignada a algú que ja no hi és
+ * seria una tasca sense amo que ningú veuria.
+ */
+export async function leaveScope(
+  ctx: AuditContext,
+  principal: Principal,
+  scopeId: string,
+): Promise<void> {
+  if (!hasCapability(principal, 'scopes:write')) throw missingCapability('scopes:write');
+  const scope = await assertScopeRole(ctx.tx, principal, scopeId, 'leave');
+
+  await sql`
+    DELETE FROM task_assignees WHERE user_id = ${principal.userId}
+      AND task_id IN (SELECT id FROM tasks WHERE scope_id = ${scopeId})
+  `.execute(ctx.tx);
+
+  await sql`
+    DELETE FROM scope_members WHERE scope_id = ${scopeId} AND user_id = ${principal.userId}
+  `.execute(ctx.tx);
+
+  ctx.record({
+    entityType: 'scope_member',
+    entityId: `${scopeId}:${principal.userId}`,
+    scopeId,
+    verb: 'left',
+  });
+  void scope;
 }
 
 // ------------------------------------------------------------------ projectes

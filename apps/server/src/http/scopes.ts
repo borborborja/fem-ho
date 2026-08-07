@@ -19,6 +19,7 @@ import {
   deleteScope,
   getProject,
   getScope,
+  leaveScope,
   listMembers,
   listProjects,
   listScopes,
@@ -83,6 +84,9 @@ export function registerScopeRoutes(app: FastifyInstance): void {
           ai_instructions: nullable(input, 'ai_instructions'),
           ai_description: nullable(input, 'ai_description'),
           position: str(input.position),
+          // Qualsevol altre valor cau a `undefined` i el servei el deixa com està: un
+          // `kind` inventat no ha de canviar res en silenci.
+          kind: input.kind === 'individual' || input.kind === 'collective' ? input.kind : undefined,
         }),
       );
     }),
@@ -154,6 +158,26 @@ export function registerScopeRoutes(app: FastifyInstance): void {
         void reply.code(204).send();
         return undefined;
       }),
+  );
+
+  /**
+   * Sortir d'un àmbit un mateix.
+   *
+   * `/members/me` i no `/members/:memberId` amb detecció: el permís és un altre, i una
+   * ruta que vol dir dues coses és on la comprovació s'acaba confonent.
+   *
+   * L'encaminador de Fastify prefereix un segment literal per damunt d'un paràmetre
+   * sigui quin sigui l'ordre de registre, o sigui que `me` no cau mai a `:memberId`.
+   * Hi ha una prova que ho fixa, perquè és el tipus de cosa que es dona per sabuda.
+   */
+  app.delete<{ Params: { id: string } }>('/api/v1/scopes/:id/members/me', async (request, reply) =>
+    handle(app, request, reply, async (principal) => {
+      await auditedTransaction(db().db, principal, (ctx) =>
+        leaveScope(ctx, principal, request.params.id),
+      );
+      void reply.code(204).send();
+      return undefined;
+    }),
   );
 
   // ---------------------------------------------------------------- projectes
