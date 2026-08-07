@@ -245,6 +245,42 @@ Tres coses que se'n deriven i que no són òbvies:
   usuari ombra i un token limitat a l'àmbit. Obrir un segon camí d'autorització per al que
   ve de fora seria trair la regla 8 al pitjor lloc possible.
 
+### P6 · Què vol dir esborrar
+
+**La resolució: esborrar és sempre suau, arrossega el que penja, i el que ve de fora no
+es pot esborrar aquí.**
+
+La pregunta que ho va obrir era concreta: *si esborres una tasca feta des d'un
+esdeveniment, què passa?* La resposta honesta és que **aquell cas no existeix**: no hi ha
+cap camí que faci una tasca a partir d'un esdeveniment, i la regla 7 diu que no són el
+mateix. El que sí que existeix i necessita regla és això:
+
+| Què esborres | Què se n'endú | Què NO se n'endú |
+| --- | --- | --- |
+| Una tasca | Les seves subtasques, llistes i ítems | Res del calendari |
+| Una tasca amb data | El mateix. Desapareix del calendari perquè **hi sortia com a tasca**, no perquè hi hagués una còpia | — |
+| Un esdeveniment local | L'ocurrència, la sèrie sencera o d'aquí endavant, segons el que es triï | Cap tasca |
+| Un esdeveniment d'una font subscrita | **Res: es nega amb un 403.** La font és de qui la publica | — |
+
+Tres coses que se'n deriven:
+
+- **Una tasca amb data no té cap bessona al calendari.** Es dibuixa allà perquè té data,
+  i prou. Per això esborrar-la no obre cap pregunta: no hi ha res a triar.
+- **Les dues portes han d'esborrar igual.** Esborrar una tasca des d'un client CalDAV feia
+  un `UPDATE tasks SET deleted_at` a pèl i deixava les subtasques i les llistes vives i
+  sense pare; ara delega al mateix servei que el botó de l'app. Dues portes a la mateixa
+  acció que fan coses diferents acaben sent algú que no entén per què li reapareixen coses.
+- **No hi ha desfer, i per això es pregunta.** A la base tot és esborrat suau i la
+  tombstone viatja, però `undo` només val per a un canvi autònom de la IA amb valors
+  anteriors: cap persona pot recuperar una tasca des de la interfície. Mentre sigui així,
+  el diàleg diu **què més se n'anirà** en comptes de preguntar "segur?".
+
+I si algun dia es vol *fer una tasca a partir d'un esdeveniment*, la regla ja està
+decidida aquí: **la tasca neix independent**. Esborrar-la no toca l'esdeveniment, i
+esborrar l'esdeveniment no toca la tasca. L'alternativa —un enllaç viu— vol dir que
+esborrar un esdeveniment d'un calendari compartit esborri en silenci la tasca que algú
+altre s'havia apuntat.
+
 ---
 
 ## Part 3 — Fets sospitosos de `research/`

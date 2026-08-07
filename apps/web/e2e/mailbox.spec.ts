@@ -11,55 +11,16 @@
  */
 
 import { expect, test, type Page } from '@playwright/test';
+import { enterAsNew, token } from './entrar.js';
 
 test.describe.configure({ mode: 'serial' });
 
-const ADMIN = {
-  name: 'Borja',
-  email: 'borja@example.com',
+/** El seu compte: aquest fitxer canvia `inbox_origin`, que és una preferència d'usuari. */
+const MEU = {
+  name: 'Bústia',
+  email: 'bustia@example.com',
   password: 'la-contrasenya-de-prova',
 };
-
-async function enter(page: Page): Promise<void> {
-  const gate = await page.request.get('/api/v1/setup');
-  const open = ((await gate.json()) as { open: boolean }).open;
-
-  await page.goto('/');
-  if ((await page.locator('[data-testid="topbar"]').count()) > 0) return;
-
-  if (open) {
-    await page.goto('/setup');
-    await page.locator('[data-testid="setup-name"]').fill(ADMIN.name);
-    await page.locator('[data-testid="setup-email"]').fill(ADMIN.email);
-    await page.locator('[data-testid="setup-password"]').fill(ADMIN.password);
-    await page.locator('[data-testid="setup-submit"]').click();
-  }
-
-  await expect
-    .poll(
-      async () => {
-        if ((await page.locator('[data-testid="login-email"]').count()) === 0) {
-          await page.goto('/');
-        }
-        return page.locator('[data-testid="login-email"]').count();
-      },
-      { timeout: 20_000, intervals: [200, 400, 800] },
-    )
-    .toBeGreaterThan(0);
-
-  await page.locator('[data-testid="login-email"]').fill(ADMIN.email);
-  await page.locator('[data-testid="login-password"]').fill(ADMIN.password);
-  await page.locator('[data-testid="login-submit"]').click();
-  await expect(page.locator('[data-testid="topbar"]')).toBeVisible({ timeout: 15_000 });
-}
-
-async function token(page: Page): Promise<string> {
-  return page.evaluate(
-    () =>
-      (JSON.parse(localStorage.getItem('femho.tokens') ?? '{}') as { access_token?: string })
-        .access_token ?? '',
-  );
-}
 
 /**
  * Un àmbit individual i un de col·lectiu, amb una tasca a cadascun.
@@ -97,7 +58,7 @@ async function escenari(page: Page): Promise<{ ids: string[]; individual: string
 }
 
 test('el commutador filtra de debò, i cada posició ensenya el que diu', async ({ page }) => {
-  await enter(page);
+  await enterAsNew(page, MEU);
   const { ids } = await escenari(page);
   await page.goto(`/board?scopes=${ids.join(',')}`);
 
@@ -129,7 +90,7 @@ test('el commutador filtra de debò, i cada posició ensenya el que diu', async 
  * recàrrega i valdre a tots els dispositius, com `inbox_show_overdue`.
  */
 test('i la posició triada sobreviu a una recàrrega', async ({ page }) => {
-  await enter(page);
+  await enterAsNew(page, MEU);
   const { ids } = await escenari(page);
   await page.goto(`/board?scopes=${ids.join(',')}`);
 
@@ -151,7 +112,7 @@ test('i la posició triada sobreviu a una recàrrega', async ({ page }) => {
  * adjectius sols, l'única manera de saber què fan és provar-los d'un en un.
  */
 test("cada botó diu quants n'hi ha, i què fa si t'hi atures", async ({ page }) => {
-  await enter(page);
+  await enterAsNew(page, MEU);
   const { ids } = await escenari(page);
   await page.goto(`/board?scopes=${ids.join(',')}`);
 
@@ -169,7 +130,7 @@ test("cada botó diu quants n'hi ha, i què fa si t'hi atures", async ({ page })
  * un botó que no fa res és el que ensenya a ignorar la capçalera sencera.
  */
 test('amb només àmbits individuals actius, el commutador no hi és', async ({ page }) => {
-  await enter(page);
+  await enterAsNew(page, MEU);
   const { individual } = await escenari(page);
   await page.goto(`/board?scopes=${individual}`);
 

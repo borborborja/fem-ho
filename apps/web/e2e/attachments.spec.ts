@@ -8,50 +8,9 @@
  */
 
 import { expect, test } from '@playwright/test';
+import { enter } from './entrar.js';
 
 test.describe.configure({ mode: 'serial' });
-
-const ADMIN = {
-  name: 'Borja',
-  email: 'borja@example.com',
-  password: 'la-contrasenya-de-prova',
-};
-
-async function enter(page: import('@playwright/test').Page): Promise<void> {
-  const gate = await page.request.get('/api/v1/setup');
-  const open = ((await gate.json()) as { open: boolean }).open;
-
-  await page.goto('/');
-  if ((await page.locator('[data-testid="topbar"]').count()) > 0) return;
-
-  /**
-   * **La instància la crea qui hi arribi primer, i aquí es tolera perdre.**
-   *
-   * La suite va `fullyParallel`: amb la base buida, aquest fitxer i `app.spec` veuen
-   * tots dos la porta oberta i tots dos van a `/setup`. El segon rep un 403 i es queda
-   * a la pantalla d'arrencada, o sigui que exigir la de login just després fallava una
-   * execució de cada dues. El que importa no és qui l'ha creat: és que hi hagi login.
-   */
-  if (open) {
-    await page.goto('/setup');
-    await page.locator('[data-testid="setup-name"]').fill(ADMIN.name);
-    await page.locator('[data-testid="setup-email"]').fill(ADMIN.email);
-    await page.locator('[data-testid="setup-password"]').fill(ADMIN.password);
-    await page.locator('[data-testid="setup-submit"]').click();
-  }
-
-  await expect
-    .poll(async () => page.locator('[data-testid="login-email"]').count(), { timeout: 20_000 })
-    .toBeGreaterThan(0)
-    .catch(async () => {
-      await page.goto('/');
-    });
-
-  await page.locator('[data-testid="login-email"]').fill(ADMIN.email);
-  await page.locator('[data-testid="login-password"]').fill(ADMIN.password);
-  await page.locator('[data-testid="login-submit"]').click();
-  await expect(page.locator('[data-testid="topbar"]')).toBeVisible();
-}
 
 /** El token de la sessió, per a les crides directes a l'API. */
 async function token(page: import('@playwright/test').Page): Promise<string> {

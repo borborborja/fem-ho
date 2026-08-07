@@ -439,6 +439,53 @@ describe('DELETE', () => {
   it('esborrar el que no existeix és 404', async () => {
     expect((await dav('DELETE', `${TODOS}/no-existeix.ics`)).status).toBe(404);
   });
+
+  /**
+   * **Les dues portes han d'esborrar el mateix.**
+   *
+   * Aquí hi havia un `UPDATE tasks SET deleted_at` a pèl, i per tant les subtasques i les
+   * llistes es quedaven vives i sense pare: esborrar una tasca des del Thunderbird no era
+   * el mateix que esborrar-la des del tauler. Dues portes a la mateixa acció que fan coses
+   * diferents és, tard o d'hora, algú que no entén per què li reapareixen coses.
+   */
+  it("arrossega les subtasques i les llistes, igual que des de l'app", async () => {
+    const uid = 'amb-fills';
+    await dav('PUT', `${TODOS}/${uid}.ics`, { body: vtodo(uid) });
+
+    const task = await sql<{ id: string; scope_id: string }>`
+      SELECT id, scope_id FROM tasks WHERE caldav_uid = ${uid}
+    `.execute(conn.db);
+    const taskId = task.rows[0]!.id;
+
+    const subtaskId = uuidv7();
+    const checklistId = uuidv7();
+    const itemId = uuidv7();
+    await sql`
+      INSERT INTO subtasks (id, task_id, title, position, created_at, updated_at)
+      VALUES (${subtaskId}, ${taskId}, 'Una subtasca', 'a1', ${NOW}, ${NOW})
+    `.execute(conn.db);
+    await sql`
+      INSERT INTO checklists (id, task_id, name, position, created_at, updated_at)
+      VALUES (${checklistId}, ${taskId}, 'Una llista', 'a1', ${NOW}, ${NOW})
+    `.execute(conn.db);
+    await sql`
+      INSERT INTO checklist_items (id, checklist_id, text, position, created_at, updated_at)
+      VALUES (${itemId}, ${checklistId}, 'Un ítem', 'a1', ${NOW}, ${NOW})
+    `.execute(conn.db);
+
+    expect((await dav('DELETE', `${TODOS}/${uid}.ics`)).status).toBe(204);
+
+    for (const [taula, id] of [
+      ['subtasks', subtaskId],
+      ['checklists', checklistId],
+      ['checklist_items', itemId],
+    ] as const) {
+      const row = await sql<{ deleted_at: string | null }>`
+        SELECT deleted_at FROM ${sql.raw(taula)} WHERE id = ${id}
+      `.execute(conn.db);
+      expect(row.rows[0]?.deleted_at, `${taula} hauria de quedar esborrada`).not.toBeNull();
+    }
+  });
 });
 
 describe('round-trip', () => {

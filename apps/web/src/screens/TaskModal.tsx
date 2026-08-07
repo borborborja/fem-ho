@@ -114,6 +114,22 @@ export function TaskModal({
   const [draft, setDraft] = useState<Draft | null>(null);
   const [dirty, setDirty] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  /**
+   * L'esborrat demana confirmació i **no és desfés-ho**.
+   *
+   * A la base tot és esborrat suau i la tombstone viatja als altres dispositius, però
+   * `undo` només val per a un canvi autònom de la IA amb valors anteriors: no hi ha cap
+   * camí perquè una persona recuperi una tasca des de la interfície. Mentre no n'hi hagi,
+   * el que toca és preguntar-ho abans i dir **què més se n'anirà**.
+   */
+  const [deleting, setDeleting] = useState(false);
+
+  const remove = useMutation(async () => {
+    if (taskId === undefined) return;
+    await api.delete(`/api/v1/tasks/${taskId}`);
+    onChanged();
+    onClose();
+  });
   const [newSubtask, setNewSubtask] = useState('');
   const [newComment, setNewComment] = useState('');
   const [activityFilter, setActivityFilter] = useState<'all' | 'ai' | 'human'>('all');
@@ -765,6 +781,18 @@ export function TaskModal({
                 {t('task.share')}
               </button>
               <span style={{ display: 'flex', gap: 9 }}>
+                {/* Una tasca que encara no existeix no es pot esborrar. */}
+                {!creating && taskId !== undefined ? (
+                  <button
+                    type="button"
+                    data-testid="task-delete"
+                    className="plou-btn plou-btn-ghost"
+                    style={{ color: 'var(--danger-text)' }}
+                    onClick={() => setDeleting(true)}
+                  >
+                    {t('nav.delete')}
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   data-testid="task-cancel"
@@ -786,6 +814,63 @@ export function TaskModal({
             </div>
           </>
         )}
+
+        {deleting ? (
+          <div
+            role="alertdialog"
+            data-testid="task-confirm-delete"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12,
+              padding: '10px 14px',
+              borderRadius: 12,
+              background: 'var(--danger-bg)',
+              color: 'var(--danger-text)',
+              fontSize: 12.5,
+            }}
+          >
+            {/*
+              **Es diu què més se n'anirà.** "Segur?" a seques obliga a recordar de memòria
+              què penja d'aquesta tasca, i el que penja —subtasques i llistes— no es veu
+              tot des d'aquí.
+            */}
+            <span>{t('task.deleteConfirm', { title: draft?.title ?? '' })}</span>
+            <span style={{ display: 'flex', gap: 10 }}>
+              <button
+                type="button"
+                data-testid="task-delete-confirm"
+                disabled={remove.busy}
+                onClick={() => void remove.run()}
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  font: 'inherit',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  color: 'inherit',
+                }}
+              >
+                {t('nav.delete')}
+              </button>
+              <button
+                type="button"
+                data-testid="task-delete-cancel"
+                onClick={() => setDeleting(false)}
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  font: 'inherit',
+                  cursor: 'pointer',
+                  color: 'inherit',
+                }}
+              >
+                {t('nav.cancel')}
+              </button>
+            </span>
+          </div>
+        ) : null}
 
         {confirming ? (
           <div

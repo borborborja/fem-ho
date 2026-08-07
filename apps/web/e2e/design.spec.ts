@@ -12,38 +12,9 @@
  */
 
 import { expect, test, type Page } from '@playwright/test';
+import { enter } from './entrar.js';
 
 test.describe.configure({ mode: 'serial' });
-
-const ADMIN = {
-  name: 'Borja',
-  email: 'borja@example.com',
-  password: 'la-contrasenya-de-prova',
-};
-
-async function enter(page: Page): Promise<void> {
-  // **Es pregunta al servidor si la porta és oberta**, no es dedueix del que es veu:
-  // amb la base buida també hi ha formulari de login.
-  const gate = await page.request.get('/api/v1/setup');
-  const open = ((await gate.json()) as { open: boolean }).open;
-
-  await page.goto('/');
-  if ((await page.locator('[data-testid="topbar"]').count()) > 0) return;
-
-  if (open) {
-    await page.goto('/setup');
-    await page.locator('[data-testid="setup-name"]').fill(ADMIN.name);
-    await page.locator('[data-testid="setup-email"]').fill(ADMIN.email);
-    await page.locator('[data-testid="setup-password"]').fill(ADMIN.password);
-    await page.locator('[data-testid="setup-submit"]').click();
-    await expect(page.locator('[data-testid="login"]')).toBeVisible({ timeout: 15_000 });
-  }
-
-  await page.locator('[data-testid="login-email"]').fill(ADMIN.email);
-  await page.locator('[data-testid="login-password"]').fill(ADMIN.password);
-  await page.locator('[data-testid="login-submit"]').click();
-  await expect(page.locator('[data-testid="topbar"]')).toBeVisible();
-}
 
 /** Escriu al peu d'una columna i prem Enter. Torna el títol perquè el pugui buscar. */
 async function quickAdd(page: Page, status: string, title: string): Promise<string> {
@@ -57,8 +28,20 @@ async function quickAdd(page: Page, status: string, title: string): Promise<stri
 }
 
 /** La targeta d'una tasca, buscada pel títol. */
+/**
+ * Una targeta del tauler.
+ *
+ * **Es busca dins d'una columna, i no a la pàgina sencera.** `[data-testid^="task-"]` casa
+ * també amb `task-modal`, `task-assignees` i `task-cancel`: quan el modal encara no s'ha
+ * acabat de tancar, el `.first()` agafava el modal —que conté el títol— i llavors la prova
+ * esperava trenta segons un botó de targeta dins d'un diàleg. Semblava una prova que falla
+ * per càrrega i era un selector que casa amb massa coses.
+ */
 function card(page: Page, title: string) {
-  return page.locator('[data-testid^="task-"]').filter({ hasText: title }).first();
+  return page
+    .locator('[data-column-status] [data-testid^="task-"]')
+    .filter({ hasText: title })
+    .first();
 }
 
 /**
@@ -294,7 +277,7 @@ test('en tema fosc, el modal i la paleta són opacs', async ({ page }) => {
   await enter(page);
   await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
 
-  const card = page.locator('[data-testid^="task-"]').first();
+  const card = page.locator('[data-column-status] [data-testid^="task-"]').first();
   await card.hover();
   await card.locator('[data-testid="card-edit"]').click();
   await expect(page.locator('[data-testid="task-modal"]')).toBeVisible();
