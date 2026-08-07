@@ -20,6 +20,7 @@ import { generatePosition } from '@fem-ho/contracts';
 import { dbBool } from '../db/bool.js';
 import { auditedTransaction, type AuditContext } from '../audit/audited-transaction.js';
 import { assertScopeAccess } from '../services/scopes.js';
+import { deleteTask } from '../services/tasks.js';
 import { findCollection, type DavCollection } from './collections.js';
 import { etagOf, getObject } from './objects.js';
 import { IcalError, parseResource, type ParsedEvent, type ParsedTodo } from './parse-ical.js';
@@ -416,19 +417,33 @@ export const del: DavHandler = async (context: DavContext) => {
     context.connection.db,
     context.principal,
     async (ctx) => {
-      const table = collection.kind === 'events' ? 'events' : 'tasks';
-      await sql`
-        UPDATE ${sql.raw(table)} SET deleted_at = ${ctx.now}, updated_at = ${ctx.now}
-        WHERE id = ${existing.entityId}
-      `.execute(ctx.tx);
+      if (collection.kind === 'todos') {
+        /**
+         * **Esborrar per CalDAV ha de fer el mateix que esborrar des de l'app.**
+         *
+         * Aquí hi havia un `UPDATE tasks SET deleted_at` a pèl, i per tant les subtasques
+         * i les llistes de la tasca es quedaven vives i sense pare: esborrar-la des del
+         * Thunderbird no era el mateix que esborrar-la des del tauler. Dues portes a la
+         * mateixa acció que fan coses diferents és, tard o d'hora, algú que no entén per
+         * què li reapareixen coses.
+         *
+         * Es delega al servei, que és qui sap què arrossega una tasca (regla 8).
+         */
+        await deleteTask(ctx, context.principal, existing.entityId);
+      } else {
+        await sql`
+          UPDATE events SET deleted_at = ${ctx.now}, updated_at = ${ctx.now}
+          WHERE id = ${existing.entityId}
+        `.execute(ctx.tx);
 
-      ctx.record({
-        entityType: collection.kind === 'events' ? 'event' : 'task',
-        entityId: existing.entityId,
-        scopeId: collection.scopeId,
-        verb: 'deleted',
-        changes: {},
-      });
+        ctx.record({
+          entityType: 'event',
+          entityId: existing.entityId,
+          scopeId: collection.scopeId,
+          verb: 'deleted',
+          changes: {},
+        });
+      }
 
       if (collection.calendarId !== null) await bumpCalendar(ctx, collection.calendarId);
     },

@@ -8,36 +8,9 @@
  */
 
 import { expect, test, type Page } from '@playwright/test';
+import { enter } from './entrar.js';
 
 test.describe.configure({ mode: 'serial' });
-
-const ADMIN = {
-  name: 'Borja',
-  email: 'borja@example.com',
-  password: 'la-contrasenya-de-prova',
-};
-
-async function enter(page: Page): Promise<void> {
-  const gate = await page.request.get('/api/v1/setup');
-  const open = ((await gate.json()) as { open: boolean }).open;
-
-  await page.goto('/');
-  if ((await page.locator('[data-testid="topbar"]').count()) > 0) return;
-
-  if (open) {
-    await page.goto('/setup');
-    await page.locator('[data-testid="setup-name"]').fill(ADMIN.name);
-    await page.locator('[data-testid="setup-email"]').fill(ADMIN.email);
-    await page.locator('[data-testid="setup-password"]').fill(ADMIN.password);
-    await page.locator('[data-testid="setup-submit"]').click();
-    await expect(page.locator('[data-testid="login"]')).toBeVisible({ timeout: 15_000 });
-  }
-
-  await page.locator('[data-testid="login-email"]').fill(ADMIN.email);
-  await page.locator('[data-testid="login-password"]').fill(ADMIN.password);
-  await page.locator('[data-testid="login-submit"]').click();
-  await expect(page.locator('[data-testid="topbar"]')).toBeVisible();
-}
 
 /**
  * Una crida a l'API **des de la pestanya**, amb la sessió que hi ha.

@@ -8,56 +8,9 @@
  */
 
 import { expect, test } from '@playwright/test';
+import { enter } from './entrar.js';
 
 test.describe.configure({ mode: 'serial' });
-
-const ADMIN = {
-  name: 'Borja',
-  email: 'borja@example.com',
-  password: 'la-contrasenya-de-prova',
-};
-
-async function enter(page: import('@playwright/test').Page): Promise<void> {
-  const gate = await page.request.get('/api/v1/setup');
-  const open = ((await gate.json()) as { open: boolean }).open;
-
-  await page.goto('/');
-  if ((await page.locator('[data-testid="topbar"]').count()) > 0) return;
-
-  // La instància la crea `app.spec.ts`. Si aquest fitxer corre sol, la crea ell.
-  if (open) {
-    await page.goto('/setup');
-    await page.locator('[data-testid="setup-name"]').fill(ADMIN.name);
-    await page.locator('[data-testid="setup-email"]').fill(ADMIN.email);
-    await page.locator('[data-testid="setup-password"]').fill(ADMIN.password);
-    await page.locator('[data-testid="setup-submit"]').click();
-  }
-
-  /**
-   * **Esperar tornant a mirar la portada, no quedant-se a `/setup`.**
-   *
-   * Qui perd la cursa d'arrencada rep un 403 i **es queda a la pantalla d'arrencada per
-   * sempre**: allà el camp de login no hi apareixerà mai, i esperar-lo era esperar el
-   * temps màxim sencer. Vint segons regalats a cada execució, i prou lentitud afegida
-   * perquè una prova d'arrossegament d'un altre fitxer comencés a fallar.
-   */
-  await expect
-    .poll(
-      async () => {
-        if ((await page.locator('[data-testid="login-email"]').count()) === 0) {
-          await page.goto('/');
-        }
-        return page.locator('[data-testid="login-email"]').count();
-      },
-      { timeout: 20_000, intervals: [200, 400, 800] },
-    )
-    .toBeGreaterThan(0);
-
-  await page.locator('[data-testid="login-email"]').fill(ADMIN.email);
-  await page.locator('[data-testid="login-password"]').fill(ADMIN.password);
-  await page.locator('[data-testid="login-submit"]').click();
-  await expect(page.locator('[data-testid="topbar"]')).toBeVisible({ timeout: 15_000 });
-}
 
 test('amb Gravatar apagat, la barra ensenya les inicials i no un forat', async ({ page }) => {
   await enter(page);

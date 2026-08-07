@@ -10,37 +10,22 @@
  * sobrevisqui a una recàrrega. Si qualsevol de les tres falla, l'idioma és decoració.
  */
 
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import { enterAsNew } from './entrar.js';
 
 test.describe.configure({ mode: 'serial' });
 
-const ADMIN = {
-  name: 'Borja',
-  email: 'borja@example.com',
+/**
+ * **El seu compte.** Aquest fitxer canvia la llengua *del perfil*, no la del navegador:
+ * clica `language-chips-en` a Ajustos i el compte es queda en anglès. Amb el compte
+ * compartit, la resta de la suite —que corre en paral·lel— es trobava l'app en anglès i
+ * fallava amb missatges que no hi apunten gens.
+ */
+const MEU = {
+  name: 'Idiomes',
+  email: 'idiomes@example.com',
   password: 'la-contrasenya-de-prova',
 };
-
-async function enter(page: Page): Promise<void> {
-  const gate = await page.request.get('/api/v1/setup');
-  const open = ((await gate.json()) as { open: boolean }).open;
-
-  await page.goto('/');
-  if ((await page.locator('[data-testid="topbar"]').count()) > 0) return;
-
-  if (open) {
-    await page.goto('/setup');
-    await page.locator('[data-testid="setup-name"]').fill(ADMIN.name);
-    await page.locator('[data-testid="setup-email"]').fill(ADMIN.email);
-    await page.locator('[data-testid="setup-password"]').fill(ADMIN.password);
-    await page.locator('[data-testid="setup-submit"]').click();
-    await expect(page.locator('[data-testid="login"]')).toBeVisible({ timeout: 15_000 });
-  }
-
-  await page.locator('[data-testid="login-email"]').fill(ADMIN.email);
-  await page.locator('[data-testid="login-password"]').fill(ADMIN.password);
-  await page.locator('[data-testid="login-submit"]').click();
-  await expect(page.locator('[data-testid="topbar"]')).toBeVisible();
-}
 
 /**
  * **Abans d'entrar, mana el navegador.**
@@ -78,7 +63,7 @@ test.describe('i en castellà, en castellà', () => {
  * permet que el servidor sàpiga en quin idioma enviar una notificació.
  */
 test("canviar-lo a Ajustos ho canvia a l'acte i sobreviu a una recàrrega", async ({ page }) => {
-  await enter(page);
+  await enterAsNew(page, MEU);
 
   await page.goto('/settings');
   await expect(page.locator('[data-testid="settings-tab-general"]')).toBeVisible();
@@ -97,13 +82,13 @@ test("canviar-lo a Ajustos ho canvia a l'acte i sobreviu a una recàrrega", asyn
 test('i el perfil mana per damunt del navegador', async ({ page }) => {
   // El navegador d'aquesta prova és català —el de la resta de la suite— i el perfil ha
   // quedat en anglès de la prova anterior. Ha de guanyar el perfil.
-  await enter(page);
+  await enterAsNew(page, MEU);
   await expect(page.locator('[data-testid="view-tasks"]')).toHaveText('Tasks');
   await expect(page.locator('html')).toHaveAttribute('lang', 'en');
 });
 
 test('i es pot tornar al català', async ({ page }) => {
-  await enter(page);
+  await enterAsNew(page, MEU);
   await page.goto('/settings');
   await page.locator('[data-testid="language-chips-ca"]').click();
   await expect(page.locator('[data-testid="settings-tab-scopes"]')).toHaveText('Àmbits');
@@ -139,7 +124,7 @@ test.describe("el calendari segueix l'idioma", () => {
   test.use({ locale: 'en-GB' });
 
   test('en anglès, la setmana comença en diumenge', async ({ page }) => {
-    await enter(page);
+    await enterAsNew(page, MEU);
     await page.goto('/settings');
     await page.locator('[data-testid="language-chips-en"]').click();
     await page.goto('/calendar');
@@ -154,7 +139,7 @@ test.describe("el calendari segueix l'idioma", () => {
 });
 
 test("i la tria manual mana per damunt de l'idioma", async ({ page }) => {
-  await enter(page);
+  await enterAsNew(page, MEU);
   await page.goto('/settings');
 
   // Segueix en anglès de la prova anterior: diumenge per idioma.
@@ -197,7 +182,7 @@ test("i la tria manual mana per damunt de l'idioma", async ({ page }) => {
  * servidor no deixi mai una pantalla muda ni obligui a desplegar les dues bandes alhora.
  */
 test('un error del servidor es veu traduït, no en anglès', async ({ page }) => {
-  await enter(page);
+  await enterAsNew(page, MEU);
 
   // Un àmbit que no existeix: el servidor respon `not-found` amb el tipus i les dades.
   const problem = await page.evaluate(async () => {

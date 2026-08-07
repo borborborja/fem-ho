@@ -11,44 +11,9 @@
  */
 
 import { expect, test } from '@playwright/test';
+import { enter } from './entrar.js';
 
 test.describe.configure({ mode: 'serial' });
-
-const ADMIN = {
-  name: 'Borja',
-  email: 'borja@example.com',
-  password: 'la-contrasenya-de-prova',
-};
-
-async function enter(page: import('@playwright/test').Page): Promise<void> {
-  /**
-   * **Es pregunta al servidor si la porta és oberta**, no es dedueix del que es veu.
-   *
-   * Mirar si hi ha formulari de login no serveix: amb la base buida també n'hi ha, i
-   * llavors s'intentava entrar amb un compte que encara no existeix. `GET /api/v1/setup`
-   * ho diu sense ambigüitat.
-   */
-  const gate = await page.request.get('/api/v1/setup');
-  const open = ((await gate.json()) as { open: boolean }).open;
-
-  await page.goto('/');
-  if ((await page.locator('[data-testid="topbar"]').count()) > 0) return;
-
-  // La instància la crea `app.spec.ts`. Si aquest fitxer corre sol, la crea ell.
-  if (open) {
-    await page.goto('/setup');
-    await page.locator('[data-testid="setup-name"]').fill(ADMIN.name);
-    await page.locator('[data-testid="setup-email"]').fill(ADMIN.email);
-    await page.locator('[data-testid="setup-password"]').fill(ADMIN.password);
-    await page.locator('[data-testid="setup-submit"]').click();
-    await expect(page.locator('[data-testid="login"]')).toBeVisible({ timeout: 15_000 });
-  }
-
-  await page.locator('[data-testid="login-email"]').fill(ADMIN.email);
-  await page.locator('[data-testid="login-password"]').fill(ADMIN.password);
-  await page.locator('[data-testid="login-submit"]').click();
-  await expect(page.locator('[data-testid="topbar"]')).toBeVisible();
-}
 
 /** Crea una tasca amb l'afegida ràpida i l'obre. */
 async function taskWithList(page: import('@playwright/test').Page, title: string): Promise<string> {

@@ -7,34 +7,11 @@
  */
 
 import { expect, test, type Browser, type Page } from '@playwright/test';
+import { ADMIN, enter } from './entrar.js';
 
 test.describe.configure({ mode: 'serial' });
 
-const ADMIN = { name: 'Borja', email: 'borja@example.com', password: 'la-contrasenya-de-prova' };
 const ALTRE = { name: 'Alba', email: 'alba@example.com', password: 'la-contrasenya-alba' };
-
-async function enter(page: Page, who: typeof ADMIN): Promise<void> {
-  // La instància pot ser nova: el primer que hi entra la configura.
-  const gate = await page.request.get('/api/v1/setup');
-  const open = ((await gate.json()) as { open: boolean }).open;
-
-  await page.goto('/');
-  if ((await page.locator('[data-testid="topbar"]').count()) > 0) return;
-
-  if (open && who === ADMIN) {
-    await page.goto('/setup');
-    await page.locator('[data-testid="setup-name"]').fill(ADMIN.name);
-    await page.locator('[data-testid="setup-email"]').fill(ADMIN.email);
-    await page.locator('[data-testid="setup-password"]').fill(ADMIN.password);
-    await page.locator('[data-testid="setup-submit"]').click();
-    await expect(page.locator('[data-testid="login"]')).toBeVisible({ timeout: 15_000 });
-  }
-
-  await page.locator('[data-testid="login-email"]').fill(who.email);
-  await page.locator('[data-testid="login-password"]').fill(who.password);
-  await page.locator('[data-testid="login-submit"]').click();
-  await expect(page.locator('[data-testid="topbar"]')).toBeVisible({ timeout: 15_000 });
-}
 
 /**
  * Una crida amb la sessió que hi ha a la pestanya.
