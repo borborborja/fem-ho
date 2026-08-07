@@ -13,7 +13,7 @@ import { useState } from 'react';
 import { dateTime, getLocale, resolveWeekStart, t, weekdayNames } from '@fem-ho/contracts';
 import { v7 as uuidv7 } from 'uuid';
 import { EmptyState } from '@fem-ho/design-system/femho';
-import { api } from '../app/api.js';
+import { api, ApiError } from '../app/api.js';
 import { useRouter } from '../app/router.js';
 import { useSession, useSessionData } from '../app/session.js';
 import { useApi, useMutation } from '../app/useApi.js';
@@ -369,21 +369,207 @@ function GeneralTab() {
   );
 }
 
+/**
+ * Els vuit colors d'àmbit de la paleta ampliada.
+ *
+ * `docs/00` reserva la tríada de Plou per als tres àmbits inicials i dona als que crea
+ * l'usuari una paleta pròpia. Els vuit tokens existien a `femho/tokens.css` des del
+ * primer dia i **no els feia servir ningú**: tots els àmbits creats des d'aquí sortien
+ * blaus perquè el color anava cablejat.
+ */
+const SCOPE_COLORS = [
+  '--femho-scope-1',
+  '--femho-scope-2',
+  '--femho-scope-3',
+  '--femho-scope-4',
+  '--femho-scope-5',
+  '--femho-scope-6',
+  '--femho-scope-7',
+  '--femho-scope-8',
+] as const;
+
+function ColorPicker({
+  value,
+  onChange,
+  testId,
+}: {
+  value: string;
+  onChange: (color: string) => void;
+  testId: string;
+}) {
+  return (
+    <div
+      role="radiogroup"
+      aria-label={t('settings.scopeColor')}
+      data-testid={testId}
+      style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}
+    >
+      {SCOPE_COLORS.map((color) => (
+        <button
+          key={color}
+          type="button"
+          role="radio"
+          aria-checked={value === color}
+          aria-label={color}
+          data-testid={`${testId}-${color}`}
+          onClick={() => onChange(color)}
+          style={{
+            width: 24,
+            height: 24,
+            borderRadius: '50%',
+            background: `var(${color})`,
+            cursor: 'pointer',
+            // La selecció es marca amb un anell separat i no amb una vora, que taparia
+            // el color just al color que s'està triant.
+            border: '2px solid var(--panel-bg)',
+            boxShadow: value === color ? '0 0 0 2px var(--ink)' : 'none',
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function ScopeRow({ scope, onDone }: { scope: Scope; onDone: () => Promise<void> }) {
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(scope.name);
+  const [color, setColor] = useState(scope.color);
+  const [kind, setKind] = useState<'individual' | 'collective'>(scope.kind);
+  const [openMembers, setOpenMembers] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const save = useMutation(async () => {
+    setError(null);
+    try {
+      await api.patch(`/api/v1/scopes/${scope.id}`, { name: name.trim(), color, kind });
+      setEditing(false);
+      await onDone();
+    } catch (problem) {
+      // El servidor diu QUI bloqueja el canvi de tipus i QUANTES coses queden a dins,
+      // i `ApiError` ja en porta el text traduït. Ensenyar "no s'ha pogut" seria
+      // fer-li endevinar què li falta.
+      setError(problem instanceof ApiError ? problem.message : t('error.generic'));
+    }
+  });
+
+  const remove = useMutation(async () => {
+    setError(null);
+    try {
+      await api.delete(`/api/v1/scopes/${scope.id}`);
+      await onDone();
+    } catch (problem) {
+      setError(problem instanceof ApiError ? problem.message : t('error.generic'));
+    }
+  });
+
+  return (
+    <div style={{ display: 'grid', gap: 8 }} data-testid={`scope-row-${scope.id}`}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+        <span
+          aria-hidden="true"
+          style={{ width: 9, height: 9, borderRadius: '50%', background: `var(${scope.color})` }}
+        />
+        <span style={{ fontSize: 13, fontWeight: 600 }}>{scope.name}</span>
+        <span style={{ fontSize: 11.5, color: 'var(--ink-faint)' }}>
+          {t(`settings.scopeKind.${scope.kind}`)}
+        </span>
+        <button
+          type="button"
+          data-testid={`scope-edit-${scope.id}`}
+          onClick={() => setEditing(!editing)}
+          style={LINK_BUTTON}
+        >
+          {t('settings.scopeEdit')}
+        </button>
+        {scope.kind === 'collective' ? (
+          <button
+            type="button"
+            data-testid={`scope-members-${scope.id}`}
+            onClick={() => setOpenMembers(!openMembers)}
+            style={LINK_BUTTON}
+          >
+            {t('settings.members')}
+          </button>
+        ) : null}
+      </div>
+
+      {editing ? (
+        <div style={{ display: 'grid', gap: 8, paddingLeft: 18 }}>
+          <input
+            className="plou-input"
+            data-testid={`scope-name-${scope.id}`}
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+          />
+          <ColorPicker value={color} onChange={setColor} testId={`scope-color-${scope.id}`} />
+          <Chips
+            testId={`scope-kind-${scope.id}`}
+            value={kind}
+            options={[
+              { key: 'individual' as const, label: t('settings.scopeKind.individual') },
+              { key: 'collective' as const, label: t('settings.scopeKind.collective') },
+            ]}
+            onChange={setKind}
+          />
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              type="button"
+              className="plou-btn plou-btn-primary"
+              data-testid={`scope-save-${scope.id}`}
+              disabled={save.busy}
+              onClick={() => void save.run()}
+            >
+              {t('settings.scopeSave')}
+            </button>
+            <button
+              type="button"
+              className="plou-btn"
+              data-testid={`scope-delete-${scope.id}`}
+              disabled={remove.busy}
+              onClick={() => {
+                if (window.confirm(t('settings.scopeDeleteConfirm', { name: scope.name }))) {
+                  void remove.run();
+                }
+              }}
+            >
+              {t('settings.scopeDelete')}
+            </button>
+          </div>
+          {error === null ? null : (
+            <p
+              data-testid={`scope-error-${scope.id}`}
+              style={{ fontSize: 12, color: 'var(--danger-text)', margin: 0 }}
+            >
+              {error}
+            </p>
+          )}
+        </div>
+      ) : null}
+
+      {openMembers ? <MembersList scopeId={scope.id} /> : null}
+    </div>
+  );
+}
+
+const LINK_BUTTON = {
+  border: 'none',
+  background: 'transparent',
+  font: 'inherit',
+  fontSize: 12,
+  cursor: 'pointer',
+  color: 'var(--ink-soft)',
+} as const;
+
 function ScopesTab() {
   const { scopes } = useSessionData();
   const { reload } = useSession();
   const [name, setName] = useState('');
   const [kind, setKind] = useState<'individual' | 'collective'>('individual');
-  const [openScope, setOpenScope] = useState<string | null>(null);
+  const [color, setColor] = useState<string>(SCOPE_COLORS[0]);
 
   const create = useMutation(async () => {
     if (name.trim() === '') return;
-    await api.post('/api/v1/scopes', {
-      id: uuidv7(),
-      name: name.trim(),
-      kind,
-      color: '--plou-blue',
-    });
+    await api.post('/api/v1/scopes', { id: uuidv7(), name: name.trim(), kind, color });
     setName('');
     await reload();
   });
@@ -392,41 +578,7 @@ function ScopesTab() {
     <>
       <Group title={t('settings.tab.scopes')}>
         {scopes.map((scope) => (
-          <div key={scope.id} style={{ display: 'grid', gap: 8 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-              <span
-                aria-hidden="true"
-                style={{
-                  width: 9,
-                  height: 9,
-                  borderRadius: '50%',
-                  background: `var(${scope.color})`,
-                }}
-              />
-              <span style={{ fontSize: 13, fontWeight: 600 }}>{scope.name}</span>
-              <span style={{ fontSize: 11.5, color: 'var(--ink-faint)' }}>
-                {t(`settings.scopeKind.${scope.kind}`)}
-              </span>
-              {scope.kind === 'collective' ? (
-                <button
-                  type="button"
-                  data-testid={`scope-members-${scope.id}`}
-                  onClick={() => setOpenScope(openScope === scope.id ? null : scope.id)}
-                  style={{
-                    border: 'none',
-                    background: 'transparent',
-                    font: 'inherit',
-                    fontSize: 12,
-                    cursor: 'pointer',
-                    color: 'var(--ink-soft)',
-                  }}
-                >
-                  {t('settings.members')}
-                </button>
-              ) : null}
-            </div>
-            {openScope === scope.id ? <MembersList scopeId={scope.id} /> : null}
-          </div>
+          <ScopeRow key={scope.id} scope={scope} onDone={reload} />
         ))}
       </Group>
 
@@ -438,6 +590,7 @@ function ScopesTab() {
           placeholder={t('settings.scopeName')}
           onChange={(event) => setName(event.target.value)}
         />
+        <ColorPicker value={color} onChange={setColor} testId="new-scope-color" />
         <Chips
           testId="new-scope-kind"
           value={kind}
