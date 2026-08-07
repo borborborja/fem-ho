@@ -486,11 +486,7 @@ export function guestPrincipal(
   };
 }
 
-export async function getShare(
-  db: MigrationDb,
-  principal: Principal,
-  id: string,
-): Promise<Share> {
+export async function getShare(db: MigrationDb, principal: Principal, id: string): Promise<Share> {
   if (!hasCapability(principal, 'shares:read')) throw missingCapability('shares:read');
 
   const found = await sql<ShareRow>`

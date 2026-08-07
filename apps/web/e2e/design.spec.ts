@@ -129,9 +129,12 @@ test('des de la targeta es pot afegir una subtasca sense obrir-la', async ({ pag
   await field.press('Enter');
 
   // Ara sí: un bloc, el de les subtasques.
-  await expect(card(page, title).locator('[data-testid="card-lists-toggle"]')).toContainText('(1)', {
-    timeout: 10_000,
-  });
+  await expect(card(page, title).locator('[data-testid="card-lists-toggle"]')).toContainText(
+    '(1)',
+    {
+      timeout: 10_000,
+    },
+  );
 });
 
 test('i una llista amb nom, que compta com un bloc a part', async ({ page }) => {
@@ -145,9 +148,12 @@ test('i una llista amb nom, que compta com un bloc a part', async ({ page }) => 
   await field.fill('#Farmaciola Ibuprofè');
   await field.press('Enter');
 
-  await expect(card(page, title).locator('[data-testid="card-lists-toggle"]')).toContainText('(2)', {
-    timeout: 10_000,
-  });
+  await expect(card(page, title).locator('[data-testid="card-lists-toggle"]')).toContainText(
+    '(2)',
+    {
+      timeout: 10_000,
+    },
+  );
 
   // I escriure el mateix nom una segona vegada **no crea una llista bessona**.
   await field.fill('#Farmaciola Tiretes');
@@ -167,7 +173,9 @@ test('desplegar ensenya els ítems, i marcar-ne un mou el recompte', async ({ pa
   await expect(card(page, title)).toContainText('Farmaciola');
 
   await expect(card(page, title)).toContainText('0/3');
-  await card(page, title).getByRole('checkbox', { name: /Passaport/u }).click();
+  await card(page, title)
+    .getByRole('checkbox', { name: /Passaport/u })
+    .click();
   await expect(card(page, title)).toContainText('1/3', { timeout: 10_000 });
 });
 
@@ -187,7 +195,7 @@ test('el camp de persones no surt a un àmbit individual', async ({ page }) => {
   await expect(page.locator('[data-testid="task-modal"]')).toHaveCount(0);
 });
 
-test("i a un de col·lectiu, només mentre la tasca és a la bústia", async ({ page }) => {
+test('i a un de col·lectiu, només mentre la tasca és a la bústia', async ({ page }) => {
   await enter(page);
 
   // Un àmbit col·lectiu nou: els tres del primer arrencament són individuals.
@@ -215,7 +223,9 @@ test("i a un de col·lectiu, només mentre la tasca és a la bústia", async ({ 
   await expect(page.locator('[data-testid="task-modal"]')).toHaveCount(0);
 
   // I en sortir de la bústia, el camp desapareix: ja és de qui la fa.
-  await card(page, 'Buidar la nevera').getByRole('button', { name: /Per fer/u }).click();
+  await card(page, 'Buidar la nevera')
+    .getByRole('button', { name: /Per fer/u })
+    .click();
   await expect(page.locator('[data-column-status="todo"]')).toContainText('Buidar la nevera', {
     timeout: 10_000,
   });

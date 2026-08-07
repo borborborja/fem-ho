@@ -549,7 +549,7 @@ export async function updateMember(
         'Last owner',
         409,
         `${scope.name} would be left with no owner. Make someone else an owner first.`,
-      { name: scope.name },
+        { name: scope.name },
       );
     }
   }
@@ -718,7 +718,9 @@ export function pickDefined<T extends object>(
 }
 
 export function assignmentsOf(fields: Record<string, unknown>): ReturnType<typeof sql> {
-  return sql.join(Object.entries(fields).map(([field, value]) => sql`${sql.raw(field)} = ${value}`));
+  return sql.join(
+    Object.entries(fields).map(([field, value]) => sql`${sql.raw(field)} = ${value}`),
+  );
 }
 
 export function changesOf(

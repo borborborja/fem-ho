@@ -221,15 +221,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/Problem'
 
-  # CONVENCIÓ DE LLISTES
-  #
-  # Les llistes **paginades** tornen `{ data, next_cursor, has_more }` (docs/05 §3). Les
-  # que no es paginen —àmbits, projectes, calendaris— tornen l'array pelat: un envoltori
-  # amb un sol camp que no porta cap cursor només afegeix una indirecció a cada client.
-  #
-  # `/tokens`, `/shares` i `/activity` fan servir l'envoltori sense paginar. És una
-  # inconsistència coneguda i es deixa estar a posta: canviar-los ara trencaria els
-  # clients per un guany estètic.
+    # CONVENCIÓ DE LLISTES
+    #
+    # Les llistes **paginades** tornen `{ data, next_cursor, has_more }` (docs/05 §3). Les
+    # que no es paginen —àmbits, projectes, calendaris— tornen l'array pelat: un envoltori
+    # amb un sol camp que no porta cap cursor només afegeix una indirecció a cada client.
+    #
+    # `/tokens`, `/shares` i `/activity` fan servir l'envoltori sense paginar. És una
+    # inconsistència coneguda i es deixa estar a posta: canviar-los ara trencaria els
+    # clients per un guany estètic.
     patch:
       tags: [auth]
       operationId: updateProfile
@@ -259,7 +259,8 @@ paths:
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '422':
           description: Un valor d'enum o un fus que no existeixen.
-          content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+          content:
+            { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
 
   /scopes:
     get:
@@ -673,14 +674,25 @@ paths:
         sencera. Mai s'emet `RANGE=THISANDFUTURE` (D8).
       parameters:
         - { name: id, in: path, required: true, schema: { type: string } }
-        - { name: series_mode, in: query, required: false, schema: { type: string, enum: [single, future, all] } }
-        - { name: occurrence, in: query, required: false, schema: { type: string, format: date-time } }
+        - {
+            name: series_mode,
+            in: query,
+            required: false,
+            schema: { type: string, enum: [single, future, all] },
+          }
+        - {
+            name: occurrence,
+            in: query,
+            required: false,
+            schema: { type: string, format: date-time },
+          }
       responses:
         '204': { description: Esborrat. }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403':
           description: El calendari és una subscripció.
-          content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+          content:
+            { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
         '404': { $ref: '#/components/responses/NotFound' }
 
   /calendars:
@@ -725,7 +737,8 @@ paths:
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '422':
           description: Falta l'àmbit, el nom o la URL d'origen.
-          content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+          content:
+            { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
 
   /tasks/{id}/checklists:
     get:
@@ -1140,7 +1153,7 @@ paths:
       tags: [scopes]
       operationId: getShare
       summary: Un enllaç compartit
-      description: "El token NO hi surt: no es pot recuperar del seu HMAC (docs/10 §6)."
+      description: 'El token NO hi surt: no es pot recuperar del seu HMAC (docs/10 §6).'
       parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
       responses:
         '200':
@@ -1180,7 +1193,8 @@ paths:
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '409':
           description: Està revocat i no es pot tornar a obrir.
-          content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+          content:
+            { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
 
   /push/subscriptions:
     post:
@@ -1444,7 +1458,8 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '409':
           description: Encara té coses a dins.
-          content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+          content:
+            { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
 
   /scopes/{id}/members:
     get:
@@ -1479,7 +1494,8 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '422':
           description: Forma de membre invàlida, o l'àmbit no és col·lectiu.
-          content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+          content:
+            { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
 
   /scopes/{id}/members/{memberId}:
     patch:
@@ -1506,7 +1522,8 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '409':
           description: Es quedaria sense cap propietari.
-          content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+          content:
+            { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
     delete:
       tags: [scopes]
       operationId: removeMember
@@ -1520,7 +1537,8 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '409':
           description: Es quedaria sense cap propietari.
-          content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+          content:
+            { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
 
   /projects/{id}:
     get:
@@ -1603,7 +1621,8 @@ paths:
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '422':
           description: Falta l'àmbit o el nom.
-          content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+          content:
+            { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
 
   /labels/{id}:
     delete:
@@ -1678,7 +1697,8 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '422':
           description: No és membre de l'àmbit col·lectiu.
-          content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+          content:
+            { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
     delete:
       tags: [tasks]
       operationId: removeAssignee
@@ -1706,7 +1726,8 @@ paths:
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '422':
           description: L'etiqueta és d'un altre àmbit.
-          content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+          content:
+            { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
     delete:
       tags: [tasks]
       operationId: removeTaskLabel
@@ -1750,7 +1771,8 @@ paths:
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '422':
           description: Falta el títol.
-          content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+          content:
+            { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
 
   /subtasks/{id}:
     patch:
@@ -1927,7 +1949,8 @@ paths:
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '409':
           description: Encara té esdeveniments.
-          content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+          content:
+            { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
 
   /auth/password:
     post:
@@ -1961,7 +1984,8 @@ paths:
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403':
           description: La contrasenya actual no és correcta.
-          content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+          content:
+            { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
 
   /auth/settings:
     get:
@@ -2098,7 +2122,8 @@ paths:
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '409':
           description: Ja la té algú altre.
-          content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+          content:
+            { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
 
   /ai/tasks/{id}/release:
     post:
@@ -2123,7 +2148,8 @@ paths:
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '422':
           description: Falta el motiu.
-          content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+          content:
+            { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
 
   /ai/tasks/{id}/lease:
     get:
@@ -2209,7 +2235,8 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '409':
           description: Ja hi ha un compte amb aquest correu.
-          content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+          content:
+            { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
 
   /admin/users/{id}:
     patch:
@@ -2246,7 +2273,8 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '409':
           description: És l'últim administrador, o ets tu mateix.
-          content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+          content:
+            { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
 
   /admin/wipe:
     post:
@@ -2280,7 +2308,8 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '422':
           description: La confirmació no coincideix.
-          content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+          content:
+            { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
 
   /admin/diagnostics:
     get:
@@ -2314,7 +2343,6 @@ paths:
 
 components:
   schemas:
-
     ScopePatch:
       type: object
       description: |
@@ -2666,7 +2694,17 @@ components:
 
     Agent:
       type: object
-      required: [id, name, on_behalf_of_user_id, actor_user_id, can_create_tasks, enabled, created_at, version]
+      required:
+        [
+          id,
+          name,
+          on_behalf_of_user_id,
+          actor_user_id,
+          can_create_tasks,
+          enabled,
+          created_at,
+          version,
+        ]
       properties:
         id: { type: string }
         name: { type: string }

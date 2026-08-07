@@ -68,9 +68,9 @@ async function tableNames(conn: Connection): Promise<string[]> {
   const query =
     conn.engine === 'sqlite'
       ? `SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'`
-      // `current_schema()` i no `'public'`: la suite corre al seu propi esquema
-      // (`test-postgres.ts`), i buscant a `public` es miraven les taules d'una altra.
-      : `SELECT tablename AS name FROM pg_tables WHERE schemaname = current_schema()`;
+      : // `current_schema()` i no `'public'`: la suite corre al seu propi esquema
+        // (`test-postgres.ts`), i buscant a `public` es miraven les taules d'una altra.
+        `SELECT tablename AS name FROM pg_tables WHERE schemaname = current_schema()`;
   const result = await sql.raw(query).execute(conn.db);
   return (result.rows as { name: string }[]).map((r) => r.name).sort();
 }

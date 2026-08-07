@@ -7,13 +7,7 @@
 
 import type { FastifyInstance } from 'fastify';
 import { auditedTransaction } from '../audit/audited-transaction.js';
-import {
-  createAgent,
-  deleteAgent,
-  getAgent,
-  listAgents,
-  updateAgent,
-} from '../services/agents.js';
+import { createAgent, deleteAgent, getAgent, listAgents, updateAgent } from '../services/agents.js';
 import { claim, leaseOf, nextTask, release } from '../services/leases.js';
 import { body, handle, query, str } from './handle.js';
 
@@ -41,7 +35,9 @@ export function registerAgentRoutes(app: FastifyInstance): void {
   );
 
   app.get<{ Params: { id: string } }>('/api/v1/ai/agents/:id', async (request, reply) =>
-    handle(app, request, reply, async (principal) => getAgent(db().db, principal, request.params.id)),
+    handle(app, request, reply, async (principal) =>
+      getAgent(db().db, principal, request.params.id),
+    ),
   );
 
   app.patch<{ Params: { id: string } }>('/api/v1/ai/agents/:id', async (request, reply) =>

@@ -51,7 +51,7 @@ describe('problemText', () => {
    * És el que permet desplegar el servidor abans que les apps sense que ningú es quedi
    * mirant un forat: es veu el text anglès, que és lleig però es llegeix.
    */
-  it("un tipus que el catàleg no coneix cau al detail anglès", () => {
+  it('un tipus que el catàleg no coneix cau al detail anglès', () => {
     const inventat: Problem = {
       type: 'https://femho.app/errors/quelcom-nou',
       title: 'Something new',

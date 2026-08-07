@@ -45,7 +45,12 @@ export async function listLabels(
 export async function createLabel(
   ctx: AuditContext,
   principal: Principal,
-  input: { id?: string | undefined; scope_id?: string | undefined; name?: string | undefined; color?: string | undefined },
+  input: {
+    id?: string | undefined;
+    scope_id?: string | undefined;
+    name?: string | undefined;
+    color?: string | undefined;
+  },
 ): Promise<{ label: LabelRow; created: boolean }> {
   if (!hasCapability(principal, 'tasks:write')) throw missingCapability('tasks:write');
 

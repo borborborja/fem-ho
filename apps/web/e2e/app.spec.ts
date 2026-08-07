@@ -33,7 +33,7 @@ async function login(page: import('@playwright/test').Page): Promise<void> {
   await expect(page.locator('[data-testid="topbar"]')).toBeVisible();
 }
 
-test('el primer arrencament crea l\'administrador i els seus tres àmbits', async ({ page }) => {
+test("el primer arrencament crea l'administrador i els seus tres àmbits", async ({ page }) => {
   await page.goto('/setup');
 
   await page.locator('[data-testid="setup-name"]').fill(ADMIN.name);
@@ -125,7 +125,7 @@ test('desactivar tots els àmbits es rebutja', async ({ page }) => {
   await expect(page.locator('[data-testid="kanban"]')).toBeVisible();
 });
 
-test('el filtre d\'àmbits viu a la URL i sobreviu a una recàrrega', async ({ page }) => {
+test("el filtre d'àmbits viu a la URL i sobreviu a una recàrrega", async ({ page }) => {
   await login(page);
 
   await page.goto('/');
@@ -138,7 +138,7 @@ test('el filtre d\'àmbits viu a la URL i sobreviu a una recàrrega', async ({ p
   expect(page.url()).toBe(url);
 });
 
-test('Ajustos no porta ni switch de vista ni chips d\'àmbit', async ({ page }) => {
+test("Ajustos no porta ni switch de vista ni chips d'àmbit", async ({ page }) => {
   await login(page);
   await page.goto('/settings');
 
@@ -215,7 +215,7 @@ test('un token es mostra un sol cop', async ({ page }) => {
   await expect(page.locator('[data-testid="token-value"]')).toHaveCount(0);
 });
 
-test('les dreceres de teclat funcionen, i no dins d\'un camp', async ({ page }) => {
+test("les dreceres de teclat funcionen, i no dins d'un camp", async ({ page }) => {
   await login(page);
 
   await page.locator('body').press('k');
@@ -237,7 +237,7 @@ test('les dreceres de teclat funcionen, i no dins d\'un camp', async ({ page }) 
   expect(await camp.inputValue()).toBe('kanban');
 });
 
-test('la paleta d\'ordres porta on vas amb tres tecles', async ({ page }) => {
+test("la paleta d'ordres porta on vas amb tres tecles", async ({ page }) => {
   await login(page);
 
   await page.keyboard.press('Control+k');

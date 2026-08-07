@@ -77,7 +77,7 @@ test.describe('i en castellà, en castellà', () => {
  * És el que fa que canviar l'idioma al portàtil també el canviï al telèfon, i el que
  * permet que el servidor sàpiga en quin idioma enviar una notificació.
  */
-test('canviar-lo a Ajustos ho canvia a l\'acte i sobreviu a una recàrrega', async ({ page }) => {
+test("canviar-lo a Ajustos ho canvia a l'acte i sobreviu a una recàrrega", async ({ page }) => {
   await enter(page);
 
   await page.goto('/settings');
@@ -135,7 +135,7 @@ test.describe('un idioma que no tenim', () => {
  * castellà, dilluns i 24 h. Fins ara dilluns era **una constant en tres llocs** i
  * l'hora un tall de cadena: dues coses que no es podien adaptar a res.
  */
-test.describe('el calendari segueix l\'idioma', () => {
+test.describe("el calendari segueix l'idioma", () => {
   test.use({ locale: 'en-GB' });
 
   test('en anglès, la setmana comença en diumenge', async ({ page }) => {
@@ -147,11 +147,13 @@ test.describe('el calendari segueix l\'idioma', () => {
     const headers = page.locator('[data-testid="calendar-month"] > div:nth-child(2) > div');
     await expect(headers.first()).toHaveText('sun');
     // I els mesos surten de CLDR, no de dotze noms separats per comes al catàleg.
-    await expect(page.locator('[data-testid="calendar-month"]')).toContainText(/[A-Z][a-z]+ 20\d\d/u);
+    await expect(page.locator('[data-testid="calendar-month"]')).toContainText(
+      /[A-Z][a-z]+ 20\d\d/u,
+    );
   });
 });
 
-test('i la tria manual mana per damunt de l\'idioma', async ({ page }) => {
+test("i la tria manual mana per damunt de l'idioma", async ({ page }) => {
   await enter(page);
   await page.goto('/settings');
 
@@ -200,7 +202,8 @@ test('un error del servidor es veu traduït, no en anglès', async ({ page }) =>
   // Un àmbit que no existeix: el servidor respon `not-found` amb el tipus i les dades.
   const problem = await page.evaluate(async () => {
     const stored = localStorage.getItem('femho.tokens');
-    const token = stored === null ? '' : (JSON.parse(stored) as { access_token: string }).access_token;
+    const token =
+      stored === null ? '' : (JSON.parse(stored) as { access_token: string }).access_token;
     const response = await fetch('/api/v1/tasks/no-existeixo', {
       headers: { authorization: `Bearer ${token}` },
     });

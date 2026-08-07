@@ -51,7 +51,7 @@ function findWebRoot(): string | null {
 export function registerSpaRoutes(app: FastifyInstance): boolean {
   const root = findWebRoot();
   if (root === null) {
-    app.log.info('sense construcció de la web: només se serveix l\'API');
+    app.log.info("sense construcció de la web: només se serveix l'API");
     return false;
   }
 
@@ -70,12 +70,15 @@ export function registerSpaRoutes(app: FastifyInstance): boolean {
 
     // Regla 1: el que és de l'API es queda com a 404 de l'API, amb la seva forma.
     if (API_PREFIXES.some((prefix) => url === prefix || url.startsWith(prefix))) {
-      void reply.code(404).type('application/problem+json').send({
-        type: 'https://femho.app/errors/not-found',
-        title: 'Not found',
-        status: 404,
-        detail: `No hi ha cap ruta ${request.method} ${url}.`,
-      });
+      void reply
+        .code(404)
+        .type('application/problem+json')
+        .send({
+          type: 'https://femho.app/errors/not-found',
+          title: 'Not found',
+          status: 404,
+          detail: `No hi ha cap ruta ${request.method} ${url}.`,
+        });
       return;
     }
 

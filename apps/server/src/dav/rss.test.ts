@@ -57,7 +57,7 @@ describe('llegir el canal', () => {
     expect(items[0]?.at).toBe('2026-10-02T07:00:00.000Z');
   });
 
-  it('un canal que no s\'entén no peta: torna el que hagi pogut llegir', () => {
+  it("un canal que no s'entén no peta: torna el que hagi pogut llegir", () => {
     expect(parseFeed('<rss><channel><item><title>A</title>')).toHaveLength(0);
     expect(parseFeed('no sóc xml')).toEqual([]);
   });

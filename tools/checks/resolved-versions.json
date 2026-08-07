@@ -209,10 +209,7 @@
     "conclusió": "La regla 2 es manté igual, però el motiu no és que research/ menteixi: és que cap versió pot entrar sense procedència comprovable. Aquest fitxer és aquesta procedència."
   },
   "resolvedMaven": {
-    "registries": [
-      "https://repo1.maven.org/maven2",
-      "https://dl.google.com/dl/android/maven2"
-    ],
+    "registries": ["https://repo1.maven.org/maven2", "https://dl.google.com/dl/android/maven2"],
     "checkedAt": "2026-08-06",
     "resolved": {
       "com.android.tools.build:gradle": "8.13.2",

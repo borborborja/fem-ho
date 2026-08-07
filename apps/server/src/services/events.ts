@@ -772,9 +772,7 @@ export async function updateCalendar(
    * comprova a la porta no és una invariant.
    */
   const writable =
-    input.writable === undefined
-      ? undefined
-      : input.writable && calendar.source_kind === 'caldav';
+    input.writable === undefined ? undefined : input.writable && calendar.source_kind === 'caldav';
 
   await sql`
     UPDATE calendars SET name = ${name}, color = ${color},
@@ -833,7 +831,7 @@ export async function deleteCalendar(
         'Calendar not empty',
         409,
         `The "${calendar.name}" calendar still has ${String(n)} event(s). Move or delete them first.`,
-      { name: calendar.name, count: n },
+        { name: calendar.name, count: n },
       );
     }
   }

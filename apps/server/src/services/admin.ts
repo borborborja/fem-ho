@@ -73,7 +73,12 @@ export async function inviteUser(
   const email = input.email?.trim().toLowerCase() ?? '';
   const name = input.name?.trim() ?? '';
   if (email === '' || !email.includes('@')) {
-    throw new PolicyError('invalid-email', 'Invalid email', 422, 'A valid email address is needed.');
+    throw new PolicyError(
+      'invalid-email',
+      'Invalid email',
+      422,
+      'A valid email address is needed.',
+    );
   }
   if (name === '') {
     throw new PolicyError('name-required', 'Name required', 422, 'Cal el nom de la persona.');

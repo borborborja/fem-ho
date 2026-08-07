@@ -66,7 +66,9 @@ export function registerScopeRoutes(app: FastifyInstance): void {
   );
 
   app.get<{ Params: { id: string } }>('/api/v1/scopes/:id', async (request, reply) =>
-    handle(app, request, reply, async (principal) => getScope(db().db, principal, request.params.id)),
+    handle(app, request, reply, async (principal) =>
+      getScope(db().db, principal, request.params.id),
+    ),
   );
 
   app.patch<{ Params: { id: string } }>('/api/v1/scopes/:id', async (request, reply) =>
@@ -124,12 +126,15 @@ export function registerScopeRoutes(app: FastifyInstance): void {
       handle(app, request, reply, async (principal) => {
         const role = parseRole(body(request).role);
         if (role === undefined) {
-          void reply.code(422).type('application/problem+json').send({
-            type: 'https://femho.app/errors/invalid-value',
-            title: 'Invalid value',
-            status: 422,
-            detail: `El rol ha de ser un de: ${ROLES.join(', ')}.`,
-          });
+          void reply
+            .code(422)
+            .type('application/problem+json')
+            .send({
+              type: 'https://femho.app/errors/invalid-value',
+              title: 'Invalid value',
+              status: 422,
+              detail: `El rol ha de ser un de: ${ROLES.join(', ')}.`,
+            });
           return undefined;
         }
         return auditedTransaction(db().db, principal, (ctx) =>

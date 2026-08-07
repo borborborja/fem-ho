@@ -287,7 +287,7 @@ test("i a l'escriptori torna a ser la graella de sempre", async ({ page }) => {
  * segueix el cursor, que **penja de `<body>` i no del tauler** —que és l'única manera
  * que cap avantpassat la retalli— i que es veu quan el cursor ja és a l'altra punta.
  */
-test("arrossegar no amaga la targeta en sortir de la columna", async ({ page }) => {
+test('arrossegar no amaga la targeta en sortir de la columna', async ({ page }) => {
   await page.goto('/proof/board');
   const surface = page.locator('[data-testid="board-light"]');
 
@@ -310,9 +310,9 @@ test("arrossegar no amaga la targeta en sortir de la columna", async ({ page }) 
   await expect(overlay).toContainText('Trucar al fontaner');
 
   // Penja de <body> i no del tauler: si fos a dins, tornaria a quedar retallada.
-  expect(
-    await overlay.evaluate((node) => node.closest('[data-testid="kanban"]') === null),
-  ).toBe(true);
+  expect(await overlay.evaluate((node) => node.closest('[data-testid="kanban"]') === null)).toBe(
+    true,
+  );
 
   // I és on és el cursor, no on era la targeta.
   const box = await overlay.boundingBox();
@@ -320,10 +320,10 @@ test("arrossegar no amaga la targeta en sortir de la columna", async ({ page }) 
   expect(box.x + box.width / 2).toBeGreaterThan(to.x);
 
   // L'original es queda al seu lloc, atenuat (docs/02 §4).
-  await expect(surface.locator('[data-column-status="inbox"] [data-testid="task-1"]')).toBeVisible();
+  await expect(
+    surface.locator('[data-column-status="inbox"] [data-testid="task-1"]'),
+  ).toBeVisible();
 
   await page.mouse.up();
-  await expect(
-    surface.locator('[data-column-status="done"] [data-testid="task-1"]'),
-  ).toBeVisible();
+  await expect(surface.locator('[data-column-status="done"] [data-testid="task-1"]')).toBeVisible();
 });

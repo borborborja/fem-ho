@@ -102,7 +102,9 @@ export function TaskModal({
   // Una tasca que encara no existeix no té res a demanar: cap crida fins que es desa.
   const task = useApi<Task>(creating ? null : `/api/v1/tasks/${taskId ?? ''}`);
   const subtasks = useApi<Subtask[]>(creating ? null : `/api/v1/tasks/${taskId ?? ''}/subtasks`);
-  const checklists = useApi<Checklist[]>(creating ? null : `/api/v1/tasks/${taskId ?? ''}/checklists`);
+  const checklists = useApi<Checklist[]>(
+    creating ? null : `/api/v1/tasks/${taskId ?? ''}/checklists`,
+  );
   const comments = useApi<Comment[]>(creating ? null : `/api/v1/tasks/${taskId ?? ''}/comments`);
   const activity = useApi<{ data: ActivityEntry[] }>(
     creating ? null : `/api/v1/tasks/${taskId ?? ''}/activity`,
@@ -475,44 +477,44 @@ export function TaskModal({
               convidava a repartir feina que algú ja havia agafat.
             */}
             {scope?.kind !== 'collective' || data?.status !== 'inbox' ? null : (
-            <section style={{ display: 'grid', gap: 6 }} data-testid="task-assignees">
-              {label(t('task.assignees'))}
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                {people.map((person) => {
-                  const assigned = (data?.assignee_ids ?? []).includes(person.id);
-                  return (
-                    <button
-                      key={person.id}
-                      type="button"
-                      data-testid={`task-assignee-${person.id}`}
-                      aria-pressed={assigned}
-                      onClick={() => {
-                        // S'aplica de seguida i no al desar: assignar és un gest, no un
-                        // camp del formulari, i el servidor ja el registra com a tal.
-                        const call = assigned ? api.delete : api.post;
-                        void call(`/api/v1/tasks/${taskId}/assignees/${person.id}`).then(() => {
-                          task.reload();
-                          onChanged();
-                        });
-                      }}
-                      style={{
-                        padding: '5px 11px',
-                        borderRadius: 100,
-                        cursor: 'pointer',
-                        font: 'inherit',
-                        fontSize: 12,
-                        fontWeight: assigned ? 700 : 500,
-                        border: '1px solid var(--card-border)',
-                        background: assigned ? 'var(--ghost-bg)' : 'transparent',
-                        color: 'var(--ink)',
-                      }}
-                    >
-                      {person.name}
-                    </button>
-                  );
-                })}
-              </div>
-            </section>
+              <section style={{ display: 'grid', gap: 6 }} data-testid="task-assignees">
+                {label(t('task.assignees'))}
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {people.map((person) => {
+                    const assigned = (data?.assignee_ids ?? []).includes(person.id);
+                    return (
+                      <button
+                        key={person.id}
+                        type="button"
+                        data-testid={`task-assignee-${person.id}`}
+                        aria-pressed={assigned}
+                        onClick={() => {
+                          // S'aplica de seguida i no al desar: assignar és un gest, no un
+                          // camp del formulari, i el servidor ja el registra com a tal.
+                          const call = assigned ? api.delete : api.post;
+                          void call(`/api/v1/tasks/${taskId}/assignees/${person.id}`).then(() => {
+                            task.reload();
+                            onChanged();
+                          });
+                        }}
+                        style={{
+                          padding: '5px 11px',
+                          borderRadius: 100,
+                          cursor: 'pointer',
+                          font: 'inherit',
+                          fontSize: 12,
+                          fontWeight: assigned ? 700 : 500,
+                          border: '1px solid var(--card-border)',
+                          background: assigned ? 'var(--ghost-bg)' : 'transparent',
+                          color: 'var(--ink)',
+                        }}
+                      >
+                        {person.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
             )}
 
             <section style={{ display: 'grid', gap: 6 }}>
@@ -724,8 +726,7 @@ export function TaskModal({
                     ),
                     undo: t('activity.undo'),
                   }}
-                  formatTime={(iso) => dateTime(getLocale(), new Date(iso))
-                  }
+                  formatTime={(iso) => dateTime(getLocale(), new Date(iso))}
                   onUndo={(id: string) => {
                     void api.post(`/api/v1/activity/${id}/undo`).then(() => {
                       activity.reload();

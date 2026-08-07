@@ -36,8 +36,7 @@ export function registerInstanceRoutes(app: FastifyInstance): void {
      * que potser no existeix, la primera és recuperable.
      */
     const conn = app.connection;
-    const setupRequired =
-      conn === undefined ? true : await setupIsOpen(conn.db).catch(() => true);
+    const setupRequired = conn === undefined ? true : await setupIsOpen(conn.db).catch(() => true);
 
     return {
       name: app.config.instanceName,

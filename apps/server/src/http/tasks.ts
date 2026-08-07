@@ -124,7 +124,9 @@ export function registerTaskRoutes(app: FastifyInstance): void {
   );
 
   app.get<{ Params: { id: string } }>('/api/v1/tasks/:id', async (request, reply) =>
-    handle(app, request, reply, async (principal) => getTask(db().db, principal, request.params.id)),
+    handle(app, request, reply, async (principal) =>
+      getTask(db().db, principal, request.params.id),
+    ),
   );
 
   app.patch<{ Params: { id: string } }>('/api/v1/tasks/:id', async (request, reply) =>
@@ -144,7 +146,9 @@ export function registerTaskRoutes(app: FastifyInstance): void {
               ? input.recurrence_mode
               : undefined,
           ai_mode:
-            input.ai_mode === 'manual' || input.ai_mode === 'assisted' || input.ai_mode === 'delegated'
+            input.ai_mode === 'manual' ||
+            input.ai_mode === 'assisted' ||
+            input.ai_mode === 'delegated'
               ? input.ai_mode
               : undefined,
           ai_instructions: nullable(input, 'ai_instructions'),
@@ -456,7 +460,8 @@ export function registerEventRoutes(app: FastifyInstance, secret: () => string):
               ? seal(secret(), `calendar:${request.params.id}`, input.source_secret)
               : undefined,
           writable: typeof input.writable === 'boolean' ? input.writable : undefined,
-          refresh_interval: 'refresh_interval' in input ? (num(input.refresh_interval) ?? null) : undefined,
+          refresh_interval:
+            'refresh_interval' in input ? (num(input.refresh_interval) ?? null) : undefined,
           strip_alarms: typeof input.strip_alarms === 'boolean' ? input.strip_alarms : undefined,
         }),
       );

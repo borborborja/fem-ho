@@ -45,9 +45,7 @@ export interface SessionData {
 }
 
 export type SessionState =
-  | { status: 'loading' }
-  | { status: 'anonymous' }
-  | { status: 'ready'; data: SessionData };
+  { status: 'loading' } | { status: 'anonymous' } | { status: 'ready'; data: SessionData };
 
 interface SessionApi {
   state: SessionState;

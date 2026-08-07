@@ -57,20 +57,20 @@ No són linters de format: cadascuna impedeix **una manera concreta de trencar e
 sense que res falli**. Totes tenen autoprova, perquè una comprovació que diu "verd" sense
 comprovar res és pitjor que no tenir-la.
 
-| | Què impedeix |
-| --- | --- |
-| `openapi-diff` | Tocar un handler sense actualitzar el contracte |
-| `vocab-lint` | Que el vocabulari del prototip s'infiltri al codi (`column: 'fet'`) |
-| `no-hardcoded-colors` | Un color escrit a mà que no segueixi el tema ni l'accent |
-| `i18n-lint` | Text escrit al codi en comptes del catàleg |
-| `i18n-parity` | Una clau o un marcador `{x}` que falti en un idioma |
-| `i18n-keys-exist` | Una errata a `t('...')`, que compila i s'ensenya crua a la cara |
-| `no-pinned-from-research` | Una versió de dependència sense procedència registrada |
-| `contrast-check` | Contrast per sota de l'AA als vuit temes |
-| `audit-coverage` | Un camí d'escriptura que no deixi rastre a l'historial |
-| `parser-parity` | Que el parser de la web i el d'Android divergeixin |
-| `tokens-parity` | Que els colors de Compose s'endarrereixin respecte del CSS |
-| `css-classes` | Una classe que no existeix — es veu sense estil i res falla |
+|                           | Què impedeix                                                        |
+| ------------------------- | ------------------------------------------------------------------- |
+| `openapi-diff`            | Tocar un handler sense actualitzar el contracte                     |
+| `vocab-lint`              | Que el vocabulari del prototip s'infiltri al codi (`column: 'fet'`) |
+| `no-hardcoded-colors`     | Un color escrit a mà que no segueixi el tema ni l'accent            |
+| `i18n-lint`               | Text escrit al codi en comptes del catàleg                          |
+| `i18n-parity`             | Una clau o un marcador `{x}` que falti en un idioma                 |
+| `i18n-keys-exist`         | Una errata a `t('...')`, que compila i s'ensenya crua a la cara     |
+| `no-pinned-from-research` | Una versió de dependència sense procedència registrada              |
+| `contrast-check`          | Contrast per sota de l'AA als vuit temes                            |
+| `audit-coverage`          | Un camí d'escriptura que no deixi rastre a l'historial              |
+| `parser-parity`           | Que el parser de la web i el d'Android divergeixin                  |
+| `tokens-parity`           | Que els colors de Compose s'endarrereixin respecte del CSS          |
+| `css-classes`             | Una classe que no existeix — es veu sense estil i res falla         |
 
 ## Com està fet
 

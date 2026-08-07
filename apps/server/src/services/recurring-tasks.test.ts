@@ -30,7 +30,7 @@ describe('la data següent', () => {
     expect(nextDueDate('RRULE:FREQ=DAILY', '2026-08-06')).toBe('2026-08-07');
   });
 
-  it('el canvi d\'hora NO mou el dia', () => {
+  it("el canvi d'hora NO mou el dia", () => {
     /**
      * L'últim diumenge d'octubre a Europa té 25 hores. Sumant mil·lisegons, "d'aquí a
      * una setmana" cau al dia anterior; comptant dies de calendari, no.
@@ -53,7 +53,7 @@ describe('la data següent', () => {
     expect(nextDueDate('FREQ=DAILY;UNTIL=20260806T000000Z', '2026-08-06')).toBeNull();
   });
 
-  it('una regla que no s\'entén NO genera res', () => {
+  it("una regla que no s'entén NO genera res", () => {
     // Millor una tasca que no apareix —es nota— que una que apareix el dia equivocat
     // durant setmanes, que no.
     expect(nextDueDate('FREQ=SECONDLY', '2026-08-06')).toBeNull();

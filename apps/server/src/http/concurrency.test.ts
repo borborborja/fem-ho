@@ -61,8 +61,7 @@ describe.each(MOTORS)('motor $engine', (motor) => {
   beforeAll(async () => {
     // Esquema propi per no xocar amb les altres suites que corren alhora contra la
     // mateixa base (veure `db/test-postgres.ts`).
-    schema =
-      motor.engine === 'postgres' ? await connectTestSchema(motor.url, 'concurrency') : null;
+    schema = motor.engine === 'postgres' ? await connectTestSchema(motor.url, 'concurrency') : null;
     conn = schema ?? connect(motor.url);
 
     await migrateToLatest(conn.db, { engine: motor.engine });

@@ -80,9 +80,13 @@ export function registerMeRoutes(app: FastifyInstance): void {
             ? input.hidden_calendar_ids.filter((v): v is string => typeof v === 'string')
             : undefined,
           show_calendar_widget:
-            typeof input.show_calendar_widget === 'boolean' ? input.show_calendar_widget : undefined,
+            typeof input.show_calendar_widget === 'boolean'
+              ? input.show_calendar_widget
+              : undefined,
           show_overdue_section:
-            typeof input.show_overdue_section === 'boolean' ? input.show_overdue_section : undefined,
+            typeof input.show_overdue_section === 'boolean'
+              ? input.show_overdue_section
+              : undefined,
           quiet_hours_start: nullable(input, 'quiet_hours_start'),
           quiet_hours_end: nullable(input, 'quiet_hours_end'),
           daily_digest_at: nullable(input, 'daily_digest_at'),

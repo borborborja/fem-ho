@@ -130,7 +130,10 @@ export function toArgb(value) {
     const alpha = parts.length > 3 ? Number(parts[3]) : 1;
     if (!Number.isFinite(alpha)) return null;
 
-    const byte = (n) => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, '0');
+    const byte = (n) =>
+      Math.max(0, Math.min(255, Math.round(n)))
+        .toString(16)
+        .padStart(2, '0');
     return `0x${byte(alpha * 255).toUpperCase()}${channels.map(byte).join('').toUpperCase()}`;
   }
 
@@ -153,7 +156,9 @@ export function toArgb(value) {
 function readBlock(css, selector) {
   // El selector es busca amb qualsevol de les dues cometes.
   const pattern = new RegExp(
-    selector.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&').replace(/\\\[|['"]/gu, (match) => (match === '\\[' ? '\\[' : `["']`)),
+    selector
+      .replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')
+      .replace(/\\\[|['"]/gu, (match) => (match === '\\[' ? '\\[' : `["']`)),
     'u',
   );
   const found = pattern.exec(css);
@@ -245,7 +250,7 @@ function readBlockRequired(css, selector, label) {
   if (Object.keys(block).length === 0) {
     console.error(
       `tokens-compose · el bloc ${selector} de ${label} no s'ha trobat o és buit.\n` +
-        '  Sense això el tema sortiria com una còpia de l\'altre i no fallaria res.',
+        "  Sense això el tema sortiria com una còpia de l'altre i no fallaria res.",
     );
     process.exit(1);
   }
@@ -367,7 +372,10 @@ ${Object.keys(gradients.light)
 internal val lightGradients = FemhoGradientStops(
 ${Object.keys(gradients.light)
   .sort()
-  .map((name) => `        ${kotlinName(name)} = listOf(${gradients.light[name].map((s) => `Color(${s})`).join(', ')}),`)
+  .map(
+    (name) =>
+      `        ${kotlinName(name)} = listOf(${gradients.light[name].map((s) => `Color(${s})`).join(', ')}),`,
+  )
   .join('\n')}
 )
 
@@ -424,9 +432,9 @@ function assertNeutral(accents) {
   }
   if (guilty.length > 0) {
     console.error(
-      'tokens-compose · un token amb forma depèn de l\'accent i el recurs XML no ho pot expressar:\n' +
+      "tokens-compose · un token amb forma depèn de l'accent i el recurs XML no ho pot expressar:\n" +
         guilty.map((entry) => `  ${entry}`).join('\n') +
-        '\n  Treu-lo de SHAPE_TOKENS i pinta\'l amb un vector tenyit.',
+        "\n  Treu-lo de SHAPE_TOKENS i pinta'l amb un vector tenyit.",
     );
     process.exit(1);
   }
