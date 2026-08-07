@@ -58,10 +58,32 @@ jobs:
       - name: APK de depuració
         run: npm run android:build
 
+      # I la de PUBLICACIÓ, a cada canvi.
+      #
+      # És la que passa per R8, i **fins avui no s'havia construït mai**: la feina
+      # `release` d'aquí sota només corre a les etiquetes `v*`, o sigui que ningú
+      # l'havia intentada. Quan s'ha intentat, ha fallat per dos motius alhora —el
+      # fitxer de regles que `build.gradle.kts` referencia no existia, i R8 s'aturava
+      # amb les anotacions d'Error Prone que arrossega Tink.
+      #
+      # El que això evita d'ara endavant és pitjor que un error de compilació: R8
+      # retira les classes que només es referencien pel nom —els widgets de Glance i
+      # les seves accions— i el resultat seria un widget que es pinta i que **no fa res
+      # en tocar-lo, només a la versió publicada**. Aquí es veu de seguida.
+      - name: APK de publicació, que és la que passa per R8
+        run: cd apps/android && ./gradlew assembleRelease --console=plain
+
       - uses: actions/upload-artifact@v4
         with:
           name: femho-debug-apk
           path: apps/android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: femho-release-apk-unsigned
+          path: apps/android/app/build/outputs/apk/release/*.apk
           if-no-files-found: error
           retention-days: 30
 
