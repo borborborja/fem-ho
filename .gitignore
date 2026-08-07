@@ -5,7 +5,15 @@ coverage/
 *.tsbuildinfo
 
 # Dades locals de desenvolupament
-data/
+#
+# **Ancorat a l'arrel.** Sense la barra del davant, `data/` coincideix amb QUALSEVOL
+# carpeta que es digui `data` a qualsevol profunditat — i n'hi ha una que és codi:
+# `apps/android/core-data/src/main/kotlin/ho/fem/data/`. El resultat va ser que el mòdul
+# `:core-data` sencer —Room, el repositori, el contenidor, la cua de sortida— no s'ha
+# pujat mai al repositori: qui el clonés tenia una app que no compilava.
+#
+# No ho va dir ningú perquè en local els fitxers hi són i CI no s'havia executat mai.
+/data/
 *.db
 *.db-wal
 *.db-shm

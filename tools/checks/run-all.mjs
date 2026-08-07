@@ -21,6 +21,7 @@ const CHECKS = [
   { name: 'i18n-parity', script: 'i18n-parity.mjs', selfTest: true },
   { name: 'i18n-keys-exist', script: 'i18n-keys-exist.mjs', selfTest: true },
   { name: 'no-pinned-from-research', script: 'no-pinned-from-research.mjs' },
+  { name: 'no-ignored-sources', script: 'no-ignored-sources.mjs', selfTest: true },
   { name: 'contrast-check', script: 'contrast-check.mjs' },
   { name: 'audit-coverage', script: 'audit-coverage.mjs' },
   { name: 'parser-parity', script: 'parser-parity.mjs' },
