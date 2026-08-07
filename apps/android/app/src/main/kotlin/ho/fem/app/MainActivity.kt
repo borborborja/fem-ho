@@ -1,5 +1,6 @@
 package ho.fem.app
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -20,6 +21,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -80,11 +83,21 @@ import kotlinx.coroutines.launch
  * reconsidera.
  */
 class MainActivity : ComponentActivity() {
+    /**
+     * L'intent que encara no s'ha atès.
+     *
+     * És estat de Compose i no una lectura de `getIntent()` perquè `onNewIntent` arriba
+     * amb l'activitat ja composta: sense això, tocar un widget amb l'app oberta no faria
+     * res visible, que és el pitjor dels casos —sembla que el widget estigui trencat.
+     */
+    private val pending = mutableStateOf<Intent?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
         val container = (application as FemhoApplication).container
+        pending.value = intent
 
         setContent {
             val model: AppViewModel = viewModel(
@@ -105,10 +118,16 @@ class MainActivity : ComponentActivity() {
                         .background(Femho.pageBackground)
                         .safeDrawingPadding(),
                 ) {
-                    Root(model)
+                    Root(model, pending)
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        pending.value = intent
     }
 
     /**
@@ -124,12 +143,25 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private enum class Screen { BOARD, CALENDAR, SETTINGS }
-
 @Composable
-private fun Root(model: AppViewModel) {
+private fun Root(model: AppViewModel, pending: MutableState<Intent?>) {
     val session by model.session.collectAsStateWithLifecycle()
     var screen by remember { mutableStateOf(Screen.BOARD) }
+
+    /**
+     * L'intent s'atén i **es consumeix**.
+     *
+     * Sense buidar-lo, una rotació de pantalla tornaria a obrir la tasca que el widget
+     * va demanar fa mitja hora. La tasca es demana per identificador i no per objecte
+     * perquè qui l'envia és un altre procés que no en té cap.
+     */
+    LaunchedEffect(pending.value) {
+        val intent = pending.value ?: return@LaunchedEffect
+        screen = Route.screenOf(intent)
+        Route.taskOf(intent)?.let { model.openById(it) }
+        if (Route.quickAddOf(intent)) model.requestQuickAdd(Route.draftOf(intent) ?: "")
+        pending.value = null
+    }
 
     when (val state = session) {
         is AppViewModel.Session.Checking -> Loading()

@@ -44,4 +44,18 @@ class DatesParityTest {
         assertEquals("August", Dates.monthName("en", 8))
         assertTrue(Dates.weekdayNames("ca", Dates.MONDAY).none { it.endsWith(".") })
     }
+
+    /**
+     * El nom sencer del dia, per als widgets.
+     *
+     * Es comprova que **no** és el curt: el defecte que això arregla era una capçalera
+     * que deia "dv" a la pantalla d'inici, que no vol dir res per a qui la mira.
+     */
+    @Test
+    fun `el nom del dia es sencer i en minuscula`() {
+        val divendres = LocalDate.of(2026, 8, 7)
+        assertEquals("divendres", Dates.dayName("ca", divendres))
+        assertEquals("friday", Dates.dayName("en", divendres))
+        assertEquals("viernes", Dates.dayName("es", divendres))
+    }
 }

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  El widget de tasques d'avui. `updatePeriodMillis="0"` pel mateix motiu que el del
+  tauler: el refresc penja del `SyncWorker` que ja hi és.
+
+  `minHeight` de 80dp perquè és l'alçada per sota de la qual el disseny passa a la forma
+  d'una sola línia; deixar-lo baixar més ensenyaria una llista de zero files.
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/widget_today_description"
+    android:initialLayout="@layout/glance_default_loading_layout"
+    android:minWidth="180dp"
+    android:minHeight="40dp"
+    android:resizeMode="horizontal|vertical"
+    android:targetCellWidth="4"
+    android:targetCellHeight="3"
+    android:updatePeriodMillis="0"
+    android:widgetCategory="home_screen" />

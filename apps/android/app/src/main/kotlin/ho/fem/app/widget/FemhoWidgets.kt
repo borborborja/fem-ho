@@ -19,5 +19,6 @@ import androidx.glance.appwidget.updateAll
 object FemhoWidgets {
     suspend fun updateAll(context: Context) {
         BoardWidget().updateAll(context)
+        TodayWidget().updateAll(context)
     }
 }
