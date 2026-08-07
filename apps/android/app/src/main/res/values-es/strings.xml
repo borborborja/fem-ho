@@ -153,9 +153,13 @@
     <string name="error_window_required">Hace falta un periodo: sin él no se pueden expandir las repeticiones.</string>
     <string name="error_wrong_component">«{name}» es de tareas y no acepta eventos.</string>
     <string name="error_wrong_password">La contraseña actual no es correcta.</string>
+    <string name="inbox_mailbox">Qué se ve en la bandeja</string>
     <string name="inbox_mailbox_all">Todo</string>
-    <string name="inbox_mailbox_own">Mía</string>
-    <string name="inbox_mailbox_shared">Compartida</string>
+    <string name="inbox_mailbox_allhint">Toda la bandeja: los ámbitos individuales y los compartidos</string>
+    <string name="inbox_mailbox_own">Individuales</string>
+    <string name="inbox_mailbox_ownhint">Solo lo que hay en tus ámbitos individuales</string>
+    <string name="inbox_mailbox_shared">Compartidos</string>
+    <string name="inbox_mailbox_sharedhint">Solo lo que hay en los ámbitos que compartes con alguien</string>
     <string name="invite_done">Ya puedes entrar con tu correo y esta contraseña.</string>
     <string name="invite_mismatch">Las dos contraseñas no coinciden.</string>
     <string name="invite_password">Contraseña</string>

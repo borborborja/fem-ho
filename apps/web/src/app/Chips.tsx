@@ -14,20 +14,36 @@ export function Chips<T extends string>({
   options,
   onChange,
   testId,
+  groupLabel,
 }: {
   value: T;
-  options: { key: T; label: string }[];
+  options: {
+    key: T;
+    label: string;
+    /** Quants n'hi ha. **Veure el número és el que fa entendre el botó abans de clicar-lo.** */
+    count?: number;
+    /** La frase sencera, per a qui s'hi atura o hi navega amb lector de pantalla. */
+    hint?: string;
+  }[];
   onChange: (next: T) => void;
   testId: string;
+  /** Què tria aquesta fila. Sense això, tres adjectius solts no diuen de què parlen. */
+  groupLabel?: string;
 }) {
   return (
-    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }} data-testid={testId}>
+    <div
+      style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}
+      data-testid={testId}
+      role="group"
+      {...(groupLabel === undefined ? {} : { 'aria-label': groupLabel })}
+    >
       {options.map((option) => (
         <button
           key={option.key}
           type="button"
           data-testid={`${testId}-${option.key}`}
           aria-pressed={value === option.key}
+          {...(option.hint === undefined ? {} : { title: option.hint, 'aria-label': option.hint })}
           onClick={() => onChange(option.key)}
           style={{
             padding: '7px 14px',
@@ -42,6 +58,19 @@ export function Chips<T extends string>({
           }}
         >
           {option.label}
+          {option.count === undefined ? null : (
+            <span
+              aria-hidden="true"
+              style={{
+                marginLeft: 6,
+                opacity: 0.65,
+                fontWeight: 500,
+                fontVariantNumeric: 'tabular-nums',
+              }}
+            >
+              {option.count}
+            </span>
+          )}
         </button>
       ))}
     </div>
