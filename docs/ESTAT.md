@@ -113,7 +113,7 @@ Les dotze seccions de `docs/02`:
 | §4 Kanban | fet, amb arrossegament de ratolí i de teclat |
 | §5 Calendari | fet: mes, setmana, dia i rail configurable |
 | §6 Vista de llista senzilla | fet |
-| §7 Modal d'edició completa | fet, adjunts inclosos |
+| §7 Modal d'edició completa | fet menys el commutador de context per a la IA |
 | §8 Tauler general | fet |
 | §9 Ajustos | fet, les vuit pestanyes |
 | §10 Responsive | fet; el kanban del mòbil es va **arreglar** en ajustar-se al disseny |
@@ -134,6 +134,22 @@ adjunts dels esdeveniments compartits— i es va decidir així:
 - **El tipus surt del contingut** i no de l'extensió, i mai és `text/html`.
 - **Els `ATTACH` d'un calendari subscrit** entren: els que porten bytes en base64 es
   desen; els que són una URI **no es baixen mai**, només se'n guarda l'enllaç.
+
+### El que dels adjunts encara NO hi és
+
+El servidor els té sencers —pujar, baixar, el tall dels calendaris compartits, el sync i
+els `ATTACH` de l'iCal— i la interfície només en cobreix una part:
+
+- **El commutador de context per a la IA.** `docs/02` §7 el demana amb aquestes paraules,
+  i la columna (`attachments.is_ai_context`) i el paràmetre de l'API hi són des del primer
+  dia. El que falta és la casella.
+- **Els adjunts d'un esdeveniment, a la web.** El component ja accepta `parent="events"` i
+  no el crida ningú: **no hi ha cap vista de detall d'un esdeveniment**. Al calendari es
+  poden veure, i clicar-ne un no obre res. Fins que hi hagi aquella pantalla, la promesa
+  que el receptor d'un àmbit compartit veu els adjunts dels esdeveniments **només es
+  compleix per l'API**.
+- **Android**: no en té res.
+- **El MCP** no els dona com a enllaços a recurs, que és el que `docs/09` §5 descriu.
 
 La repetició, la data límit i el canvi de projecte **també hi són**.
 
