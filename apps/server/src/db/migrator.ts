@@ -26,6 +26,7 @@ import * as userInvites from './migrations/005-user-invites.js';
 import * as calendarSources from './migrations/006-calendar-sources.js';
 import * as weekStart from './migrations/007-week-start.js';
 import * as sharedScopes from './migrations/008-shared-scopes.js';
+import * as federation from './migrations/009-federation.js';
 
 export interface Migration {
   name: string;
@@ -46,6 +47,7 @@ export const MIGRATIONS: Migration[] = [
   { name: '006-calendar-sources', up: calendarSources.up, down: calendarSources.down },
   { name: '007-week-start', up: weekStart.up, down: weekStart.down },
   { name: '008-shared-scopes', up: sharedScopes.up, down: sharedScopes.down },
+  { name: '009-federation', up: federation.up, down: federation.down },
 ];
 
 const MIGRATIONS_TABLE = 'schema_migrations';

@@ -23,7 +23,7 @@ import type { Principal } from './principal.js';
 interface UserRow {
   id: string;
   role: 'admin' | 'member';
-  kind: 'human' | 'ai' | 'caldav_only';
+  kind: 'human' | 'ai' | 'caldav_only' | 'remote';
   name: string;
   deleted_at: string | null;
 }
@@ -154,9 +154,20 @@ async function loadUser(tx: MigrationDb, userId: string): Promise<UserRow | null
   `.execute(tx);
   const row = found.rows[0];
   if (row === undefined || row.deleted_at !== null) return null;
-  // Un usuari 'ai' o 'caldav_only' no entra per aquí: el primer no té credencials i el
-  // segon només té una app password de CalDAV (docs/01 §2).
-  if (row.kind !== 'human') return null;
+  /**
+   * Qui pot ser el propietari d'un token d'API.
+   *
+   * Un usuari `ai` no té credencials i un `caldav_only` només té una app password de
+   * CalDAV (`docs/01` §2): cap dels dos entra per aquí.
+   *
+   * **Un `remote` sí**, i és tot el que la federació necessita d'aquesta capa. És
+   * l'usuari ombra d'una altra instància, i la seva única credencial és exactament un
+   * `api_token` —no té correu ni contrasenya, o sigui que no pot entrar per la porta de
+   * davant ni per la de CalDAV—. Deixar-lo passar aquí és el que fa que un servidor remot
+   * sigui un client d'API més i que no calgui un segon camí d'autorització, que és el que
+   * la regla 8 prohibeix.
+   */
+  if (row.kind !== 'human' && row.kind !== 'remote') return null;
   return row;
 }
 

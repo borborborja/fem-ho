@@ -89,7 +89,7 @@ export function isOpen(grant: GrantRow, now: string): boolean {
  * triguen igual. Si es distingissin, es podrien enumerar concessions — la mateixa regla
  * que `docs/10` §4 imposa als enllaços compartits.
  */
-function invalidGrant(): PolicyError {
+export function invalidGrant(): PolicyError {
   return new PolicyError(
     'invalid-grant',
     'Invalid invitation',

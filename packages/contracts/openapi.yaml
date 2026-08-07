@@ -2598,8 +2598,138 @@ paths:
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Forbidden' }
 
+  /federation/redeem:
+    post:
+      tags: [instance]
+      operationId: redeemFederationGrant
+      summary: Bescanviar un convit federat
+      description: >-
+        **No demana sessió, i és l'única ruta d'escriptura que no en demana**: qui la
+        crida és un servidor, no una persona, i no té compte aquí. El que la protegeix és
+        el token opac —amb el mateix silenci per a un d'inventat, un de caducat i un de
+        revocat (`docs/10` §4)— i que el que en surt només val per a un àmbit i per a les
+        capacitats de contingut.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token: { type: string }
+                instance_name: { type: [string, 'null'] }
+                user_name: { type: [string, 'null'] }
+      responses:
+        '200':
+          description: La credencial amb què l'altra instància ens parlarà.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [token, scope_id, scope_name, role]
+                properties:
+                  token:
+                    type: string
+                    description: Es dona **una sola vegada** i no es pot recuperar.
+                  scope_id: { type: string }
+                  scope_name: { type: string }
+                  role: { type: string }
+        '404':
+          description: El convit no val. La resposta és idèntica sigui quin sigui el motiu.
+          content:
+            { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+
+  /federation/links:
+    get:
+      tags: [instance]
+      operationId: listInstanceLinks
+      summary: Els enllaços amb altres instàncies
+      responses:
+        '200':
+          description: Els enllaços. `token_enc` no hi surt mai.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/InstanceLink' } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+    post:
+      tags: [instance]
+      operationId: createInstanceLink
+      summary: Enllaçar-se amb un àmbit d'una altra instància
+      description: >-
+        Demana `scopes:share`. **Només HTTPS pública**: `http:` es rebutja aquí perquè el
+        token viatjaria en clar, i `safeFetch` segueix blocant els rangs privats, o sigui
+        que dues cases de la mateixa xarxa local no es poden federar sense exposar-ne una.
+        Crea un àmbit espill local on viurà el que arribi.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [base_url, token]
+              properties:
+                base_url: { type: string, format: uri }
+                token: { type: string }
+                name: { type: string }
+      responses:
+        '201':
+          description: Enllaçat.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [link, scope_id]
+                properties:
+                  link: { $ref: '#/components/schemas/InstanceLink' }
+                  scope_id: { type: string }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422':
+          description: L'adreça no val, no és HTTPS, o l'altra banda no és Fem-ho.
+          content:
+            { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+
+  /federation/links/{id}:
+    delete:
+      tags: [instance]
+      operationId: deleteInstanceLink
+      summary: Desenllaçar-se d'una altra instància
+      description: >-
+        **L'àmbit espill es queda**, com un àmbit local qualsevol: esborrar-lo s'enduria
+        tot el que hi hagi passat sense avisar. El que es perd és el token remot, que és
+        el que sí que ha de passar.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '204': { description: Desenllaçat. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
 components:
   schemas:
+    InstanceLink:
+      type: object
+      description: >-
+        Un enllaç amb una altra instància. **`token_enc` no hi és**: és un secret xifrat
+        amb clau derivada del secret d'aquesta instància i no surt de la base.
+      required: [id, scope_id, base_url, created_at, updated_at]
+      properties:
+        id: { type: string }
+        scope_id:
+          type: string
+          description: L'àmbit espill local on viu el que arriba de fora.
+        base_url: { type: string, format: uri }
+        name: { type: [string, 'null'] }
+        cursor:
+          type: [string, 'null']
+          description: >-
+            El cursor del sync remot. És opac: ve de l'altre servidor i no s'interpreta.
+        last_sync_at: { type: [string, 'null'], format: date-time }
+        last_error: { type: [string, 'null'] }
+        last_error_at: { type: [string, 'null'], format: date-time }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
     Attachment:
       type: object
       description: >-

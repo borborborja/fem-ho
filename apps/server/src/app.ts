@@ -22,6 +22,7 @@ import { registerAgentRoutes } from './http/agents.js';
 import { registerMeRoutes } from './http/me.js';
 import { registerAttachmentRoutes } from './http/attachments.js';
 import { registerScopeRoutes } from './http/scopes.js';
+import { registerFederationRoutes } from './http/federation.js';
 import { registerSpaRoutes } from './http/spa.js';
 import { registerSetupRoutes } from './http/setup.js';
 import { registerShareRoutes } from './http/shares.js';
@@ -99,6 +100,7 @@ export function buildApp(config: Config, options: BuildOptions = {}): FastifyIns
   registerScopeRoutes(app, instanceSecret);
   registerTaskRoutes(app);
   registerAttachmentRoutes(app);
+  registerFederationRoutes(app, instanceSecret);
   registerEventRoutes(app, instanceSecret);
   registerChecklistRoutes(app);
   registerSyncRoutes(app);

@@ -1608,10 +1608,91 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/federation/redeem": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bescanviar un convit federat
+         * @description **No demana sessió, i és l'única ruta d'escriptura que no en demana**: qui la crida és un servidor, no una persona, i no té compte aquí. El que la protegeix és el token opac —amb el mateix silenci per a un d'inventat, un de caducat i un de revocat (`docs/10` §4)— i que el que en surt només val per a un àmbit i per a les capacitats de contingut.
+         */
+        post: operations["redeemFederationGrant"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/federation/links": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Els enllaços amb altres instàncies */
+        get: operations["listInstanceLinks"];
+        put?: never;
+        /**
+         * Enllaçar-se amb un àmbit d'una altra instància
+         * @description Demana `scopes:share`. **Només HTTPS pública**: `http:` es rebutja aquí perquè el token viatjaria en clar, i `safeFetch` segueix blocant els rangs privats, o sigui que dues cases de la mateixa xarxa local no es poden federar sense exposar-ne una. Crea un àmbit espill local on viurà el que arribi.
+         */
+        post: operations["createInstanceLink"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/federation/links/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Desenllaçar-se d'una altra instància
+         * @description **L'àmbit espill es queda**, com un àmbit local qualsevol: esborrar-lo s'enduria tot el que hi hagi passat sense avisar. El que es perd és el token remot, que és el que sí que ha de passar.
+         */
+        delete: operations["deleteInstanceLink"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @description Un enllaç amb una altra instància. **`token_enc` no hi és**: és un secret xifrat amb clau derivada del secret d'aquesta instància i no surt de la base. */
+        InstanceLink: {
+            id: string;
+            /** @description L'àmbit espill local on viu el que arriba de fora. */
+            scope_id: string;
+            /** Format: uri */
+            base_url: string;
+            name?: string | null;
+            /** @description El cursor del sync remot. És opac: ve de l'altre servidor i no s'interpreta. */
+            cursor?: string | null;
+            /** Format: date-time */
+            last_sync_at?: string | null;
+            last_error?: string | null;
+            /** Format: date-time */
+            last_error_at?: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
         /** @description Les metadades d'un adjunt. **`storage_path` no hi és**: és una ruta interna i el client demana el contingut per identificador. */
         Attachment: {
             id: string;
@@ -5974,6 +6055,135 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Esborrat. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    redeemFederationGrant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    token: string;
+                    instance_name?: string | null;
+                    user_name?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description La credencial amb què l'altra instància ens parlarà. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Es dona **una sola vegada** i no es pot recuperar. */
+                        token: string;
+                        scope_id: string;
+                        scope_name: string;
+                        role: string;
+                    };
+                };
+            };
+            /** @description El convit no val. La resposta és idèntica sigui quin sigui el motiu. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listInstanceLinks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Els enllaços. `token_enc` no hi surt mai. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstanceLink"][];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    createInstanceLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: uri */
+                    base_url: string;
+                    token: string;
+                    name?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Enllaçat. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        link: components["schemas"]["InstanceLink"];
+                        scope_id: string;
+                    };
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            /** @description L'adreça no val, no és HTTPS, o l'altra banda no és Fem-ho. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    deleteInstanceLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Desenllaçat. */
             204: {
                 headers: {
                     [name: string]: unknown;

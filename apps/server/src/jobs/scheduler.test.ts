@@ -117,7 +117,7 @@ describe('el tic', () => {
 
   it('sense res a fer, no peta ni escriu', async () => {
     const result = await tick(options());
-    expect(result).toEqual({ reminders: 0, refreshed: 0, errors: 0 });
+    expect(result).toEqual({ reminders: 0, refreshed: 0, federated: 0, errors: 0 });
   });
 });
 
