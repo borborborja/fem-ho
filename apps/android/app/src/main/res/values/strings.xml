@@ -243,6 +243,10 @@
     <string name="settings_empty_calendars">Aquest àmbit encara no té cap calendari.</string>
     <string name="settings_empty_shares">Encara no has creat cap enllaç compartit.</string>
     <string name="settings_enableai">Activar l\'usuari IA</string>
+    <string name="settings_gravatar">Fer servir Gravatar per a la meva foto</string>
+    <string name="settings_gravatarfill">Omplir amb el que hi ha a Gravatar</string>
+    <string name="settings_gravatarhelp">El servidor demana la teva foto a gravatar.com amb el hash del teu correu. El hash no és anònim: qui ja sospiti la teva adreça la pot comprovar. Si ho treus, es veuran les teves inicials.</string>
+    <string name="settings_gravatarnothing">Gravatar no té res per a aquest correu.</string>
     <string name="settings_inbox_below">A sota</string>
     <string name="settings_inbox_left">Esquerra</string>
     <string name="settings_inbox_right">Dreta</string>

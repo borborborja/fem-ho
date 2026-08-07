@@ -70,17 +70,26 @@ function envRegistration(): RegistrationMode {
   return wanted;
 }
 
-function envAllowRegistration(): boolean | undefined {
-  const raw = env('ALLOW_REGISTRATION');
+/**
+ * Un booleà d'entorn.
+ *
+ * **El que no és ni `true` ni `false` es rebutja, no s'endevina.** Amb la regla habitual
+ * de "qualsevol cosa que no sigui buit és cert", un `FEMHO_ALLOW_REGISTRATION=nope`
+ * deixaria el registre obert de bat a bat.
+ */
+function envBool(name: string): boolean | undefined {
+  const raw = env(name);
   if (raw === undefined) return undefined;
 
   const value = raw.trim().toLowerCase();
   if (['true', '1', 'yes', 'si', 'sí'].includes(value)) return true;
   if (['false', '0', 'no'].includes(value)) return false;
 
-  // Ni `true` ni `false`: **no s'endevina**. Un "sisplau" mal escrit no ha de deixar el
-  // registre obert perquè "qualsevol cosa que no sigui buit és cert".
-  throw new Error(`FEMHO_ALLOW_REGISTRATION ha de ser true o false, i és "${raw}"`);
+  throw new Error(`FEMHO_${name} ha de ser true o false, i és "${raw}"`);
+}
+
+function envAllowRegistration(): boolean | undefined {
+  return envBool('ALLOW_REGISTRATION');
 }
 
 export interface Config {
@@ -107,6 +116,15 @@ export interface Config {
   /** Cadena de connexió. Per defecte SQLite a /data, que és el cas recomanat (D11). */
   databaseUrl: string;
   registration: RegistrationMode;
+  /**
+   * Deixar que els avatars surtin de Gravatar.
+   *
+   * **Apagat per defecte, i no per prudència genèrica.** Fem-ho és autoallotjat: encendre
+   * això vol dir que el servidor de casa comença a preguntar a un tercer —Automattic— per
+   * la cara de cadascú. Val la pena tenir-ho, però ha de ser una decisió que algú prengui,
+   * no una cosa que passi sola.
+   */
+  gravatar: boolean;
   logLevel: string;
   /**
    * El secret de la instància. Si no es dona, es genera un sol cop al volum de dades
@@ -135,6 +153,7 @@ export function loadConfig(version: string): Config {
     maxUploadBytes: (Number(env('MAX_UPLOAD_MB')) || 25) * 1_048_576,
     databaseUrl: env('DATABASE_URL') ?? 'sqlite:///data/femho.db',
     registration: envRegistration(),
+    gravatar: envBool('GRAVATAR') ?? false,
     secret: env('SECRET'),
     logLevel: env('LOG_LEVEL') ?? 'info',
   };

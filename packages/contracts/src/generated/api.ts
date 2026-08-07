@@ -72,6 +72,61 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/users/{id}/avatar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * La foto d'una persona
+         * @description **Passa pel servidor a posta.** Un `<img>` directe a gravatar.com seria una línia
+         *     menys, però llavors cada navegador de casa parlaria amb Automattic i els arribaria
+         *     la IP de cadascú a cada càrrega de pàgina. Així en veuen una, i la còpia es guarda
+         *     al volum —o sigui que la cara segueix sortint sense connexió.
+         *
+         *     Demana sessió com la resta de l'API: qui són les persones d'aquesta instància no és
+         *     públic.
+         *
+         *     Un **404 no és un error**: vol dir que la instància no té Gravatar encès, que la
+         *     persona ha dit que no, o que no en té. La interfície es queda amb les inicials.
+         */
+        get: operations["userAvatar"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/gravatar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Què sap Gravatar del meu correu
+         * @description **Per proposar, no per aplicar.** Ajustos ofereix omplir el que tinc buit; fer-ho
+         *     sol seria canviar-me el nom que he escrit aquí pel que vaig posar fa cinc anys en
+         *     un altre lloc. Només del propi perfil.
+         *
+         *     Va contra `api.gravatar.com/v3`, i **no** contra el `gravatar.com/<hash>.json` que
+         *     surt a mig internet: aquell ja no funciona i respon `404 "User not found"` fins i
+         *     tot per a un correu que sí que té perfil i foto.
+         */
+        get: operations["myGravatarProfile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/register": {
         parameters: {
             query?: never;
@@ -2036,6 +2091,17 @@ export interface components {
             quiet_hours_start?: string | null;
             quiet_hours_end?: string | null;
             daily_digest_at?: string | null;
+            /**
+             * @description Deixar que la meva foto surti de Gravatar. **Només compta si la instància ho té
+             *     encès** (`FEMHO_GRAVATAR`); amb la instància apagada no es pregunta res de
+             *     ningú.
+             *
+             *     La casella és de cadascú perquè **el correu que es converteix en hash i viatja
+             *     és el seu**, no el de qui administra. I el hash no és cap anonimat: per a una
+             *     adreça que algú ja sospita, comprovar-la és calcular-lo i comparar.
+             * @default true
+             */
+            gravatar: boolean;
         };
         UserProfile: {
             id: string;
@@ -2867,6 +2933,67 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+        };
+    };
+    userAvatar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description La imatge. El tipus s'infereix del contingut. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/png": string;
+                    "image/jpeg": string;
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            /** @description No en té, o no toca. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    myGravatarProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description El que hi ha, o `null` si no hi ha res o la instància ho té apagat. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        display_name?: string | null;
+                        location?: string | null;
+                        description?: string | null;
+                        pronouns?: string | null;
+                        job_title?: string | null;
+                        company?: string | null;
+                    } | null;
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
         };
     };
     register: {

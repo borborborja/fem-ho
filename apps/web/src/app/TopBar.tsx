@@ -16,6 +16,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { t } from '@fem-ho/contracts';
 import { ScopeChip, useIsMobile } from '@fem-ho/design-system/femho';
+import { Avatar } from './Avatar.js';
 import { useRouter } from './router.js';
 import { useSession, useSessionData } from './session.js';
 import type { Checklist } from './types.js';
@@ -132,11 +133,14 @@ export function TopBar({
       ? t('nav.allProjects')
       : (visibleProjects.find((project) => project.id === projectId)?.name ?? t('nav.allProjects'));
 
-  const initials = profile.name
-    .split(/\s+/u)
-    .slice(0, 2)
-    .map((part) => part.charAt(0).toUpperCase())
-    .join('');
+  /**
+   * La cara de qui ha entrat.
+   *
+   * Fins ara eren les inicials i prou; ara és el component que hi posa la foto a sobre si
+   * la instància té Gravatar encès i la persona en té. Les inicials segueixen sent el cas
+   * normal, no el pla B: en una casa, la majoria no en tindrà.
+   */
+  const avatar = <Avatar userId={profile.id} name={profile.name} size={36} />;
 
   const round = (label: string, key: Menu, content: ReactNode, badge?: number): ReactNode => (
     <div style={{ position: 'relative' }}>
@@ -463,7 +467,7 @@ export function TopBar({
   function profileButton(): ReactNode {
     return (
       <div style={{ position: 'relative' }}>
-        {round(t('nav.profile'), 'profile', initials)}
+        {round(t('nav.profile'), 'profile', avatar)}
         {menu === 'profile'
           ? menuBox(
               <>

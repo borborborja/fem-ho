@@ -243,6 +243,10 @@
     <string name="settings_empty_calendars">Este ámbito todavía no tiene ningún calendario.</string>
     <string name="settings_empty_shares">Todavía no has creado ningún enlace compartido.</string>
     <string name="settings_enableai">Activar el usuario IA</string>
+    <string name="settings_gravatar">Usar Gravatar para mi foto</string>
+    <string name="settings_gravatarfill">Rellenar con lo que hay en Gravatar</string>
+    <string name="settings_gravatarhelp">El servidor pide tu foto a gravatar.com con el hash de tu correo. El hash no es anónimo: quien ya sospeche tu dirección puede comprobarla. Si lo quitas, se verán tus iniciales.</string>
+    <string name="settings_gravatarnothing">Gravatar no tiene nada para este correo.</string>
     <string name="settings_inbox_below">Debajo</string>
     <string name="settings_inbox_left">Izquierda</string>
     <string name="settings_inbox_right">Derecha</string>

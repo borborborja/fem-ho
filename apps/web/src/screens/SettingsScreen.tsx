@@ -14,6 +14,7 @@ import { dateTime, getLocale, resolveWeekStart, t, weekdayNames } from '@fem-ho/
 import { v7 as uuidv7 } from 'uuid';
 import { EmptyState } from '@fem-ho/design-system/femho';
 import { api, ApiError } from '../app/api.js';
+import { Avatar } from '../app/Avatar.js';
 import { Chips } from '../app/Chips.js';
 import { useRouter } from '../app/router.js';
 import { useSession, useSessionData } from '../app/session.js';
@@ -1320,12 +1321,31 @@ function ShareAccesses({ shareId }: { shareId: string }) {
 }
 
 function ProfileTab() {
-  const { profile } = useSessionData();
-  const { updateProfile } = useSession();
+  const { profile, settings } = useSessionData();
+  const { updateProfile, updateSettings } = useSession();
   const [name, setName] = useState(profile.name);
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
   const [done, setDone] = useState(false);
+  const [gravatarSays, setGravatarSays] = useState<string | null>(null);
+
+  /**
+   * Omplir el nom amb el que hi ha a Gravatar.
+   *
+   * **Es proposa, no s'aplica sol.** Sobreescriure el nom que algú ha escrit aquí amb el
+   * que va posar fa cinc anys en un altre lloc és canviar-li les dades sense demanar-ho;
+   * per això és un botó i no una sincronització.
+   */
+  const fill = useMutation(async () => {
+    const found = await api.get<{ display_name: string | null } | null>('/api/v1/me/gravatar');
+    if (found?.display_name == null || found.display_name === '') {
+      setGravatarSays(t('settings.gravatarNothing'));
+      return;
+    }
+    setGravatarSays(null);
+    setName(found.display_name);
+    await updateProfile({ name: found.display_name });
+  });
 
   const change = useMutation(async () => {
     await api.post('/api/v1/auth/password', {
@@ -1357,6 +1377,43 @@ function ProfileTab() {
         </label>
         <div style={{ fontSize: 12.5, color: 'var(--ink-faint)' }}>{profile.email ?? ''}</div>
         <div style={{ fontSize: 12.5, color: 'var(--ink-faint)' }}>{profile.timezone}</div>
+      </Group>
+
+      <Group title="Gravatar">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <Avatar userId={profile.id} name={profile.name} size={48} />
+          <div style={{ display: 'grid', gap: 6 }}>
+            <Toggle
+              label={t('settings.gravatar')}
+              testId="settings-gravatar"
+              checked={settings.gravatar !== false}
+              onChange={(value) => void updateSettings({ gravatar: value })}
+            />
+          </div>
+        </div>
+
+        {/*
+          **Es diu què costa, i es diu bé.** "Només s'envia un hash" es llegeix sovint i no
+          és cap protecció: per a una adreça que algú ja sospita, comprovar-la és calcular
+          el hash i comparar.
+        */}
+        <p style={{ margin: 0, fontSize: 12, color: 'var(--ink-faint)', lineHeight: 1.5 }}>
+          {t('settings.gravatarHelp')}
+        </p>
+
+        {gravatarSays !== null ? (
+          <p style={{ margin: 0, fontSize: 12, color: 'var(--ink-soft)' }}>{gravatarSays}</p>
+        ) : null}
+
+        <button
+          type="button"
+          className="plou-btn"
+          data-testid="settings-gravatar-fill"
+          disabled={fill.busy || settings.gravatar === false}
+          onClick={() => void fill.run()}
+        >
+          {t('settings.gravatarFill')}
+        </button>
       </Group>
 
       <Group title={t('settings.changePassword')}>

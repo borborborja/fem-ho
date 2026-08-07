@@ -94,7 +94,21 @@ function isBlockedV4(address: string): boolean {
   if (a === 100 && b >= 64 && b <= 127) return true; // CGNAT, RFC 6598
   if (a === 169 && b === 254) return true; // enllaç local, i amb ell el 169.254.169.254
   if (a === 172 && b >= 16 && b <= 31) return true; // RFC 1918
-  if (a === 192 && b === 0) return true; // IETF, inclou el 192.0.0.0/24
+  /**
+   * **Dins de `192.0.0.0/16` només dos `/24` són reservats**, no el bloc sencer.
+   *
+   * Aquí hi deia `a === 192 && b === 0`, que bloca `192.0.0.0/16` — seixanta-cinc mil
+   * adreces públiques de debò. Es va veure el dia que es va encendre Gravatar: el seu
+   * servidor és `192.0.80.239` i la petició no sortia mai, amb un error que semblava una
+   * defensa funcionant i era una defensa mal escrita.
+   *
+   * Els que sí que ho són: `192.0.0.0/24` (assignacions de l'IETF) i `192.0.2.0/24`
+   * (TEST-NET-1, documentació).
+   */
+  if (a === 192 && b === 0) {
+    const third = parts[2] ?? 0;
+    return third === 0 || third === 2;
+  }
   if (a === 192 && b === 168) return true; // RFC 1918
   if (a === 198 && (b === 18 || b === 19)) return true; // proves de rendiment
   if (a >= 224) return true; // multicast i reservat
@@ -175,6 +189,15 @@ export interface SafeResponse {
   status: number;
   headers: Headers;
   body: string;
+  /**
+   * Els bytes tal com han arribat.
+   *
+   * Hi són sempre —el lector ja els té a la mà i `body` en surt— i importen quan el que
+   * es baixa **no és text**: una imatge passada per `toString('utf8')` i tornada a
+   * codificar ja no és la mateixa imatge. Fins ara tot el que es baixava era `.ics` o
+   * XML, i per això no calia.
+   */
+  bytes: Buffer;
   /** L'URL final, després de les redireccions. */
   url: string;
 }
@@ -238,6 +261,8 @@ export async function safeFetch(
     }
     clearTimeout(timer);
 
+    const bytes = await readCapped(response, maxBytes);
+
     if (response.status >= 300 && response.status < 400) {
       const location = response.headers.get('location');
       if (location === null) throw new SsrfError('Una redirecció sense Location.');
@@ -248,7 +273,8 @@ export async function safeFetch(
     return {
       status: response.status,
       headers: response.headers,
-      body: await readCapped(response, maxBytes),
+      body: bytes.toString('utf8'),
+      bytes,
       url: url.toString(),
     };
   }
@@ -272,12 +298,12 @@ function connectionUrl(url: URL, address: string): string {
 }
 
 /** Mitigació 6: es talla en arribar al límit, no després de baixar-ho tot. */
-async function readCapped(response: Response, maxBytes: number): Promise<string> {
+async function readCapped(response: Response, maxBytes: number): Promise<Buffer> {
   const declared = Number(response.headers.get('content-length') ?? '0');
   if (declared > maxBytes) throw new SsrfError('La resposta passa de la mida màxima.');
 
   const reader = response.body?.getReader();
-  if (reader === undefined) return '';
+  if (reader === undefined) return Buffer.alloc(0);
 
   const chunks: Uint8Array[] = [];
   let size = 0;
@@ -293,5 +319,5 @@ async function readCapped(response: Response, maxBytes: number): Promise<string>
     chunks.push(value);
   }
 
-  return Buffer.concat(chunks).toString('utf8');
+  return Buffer.concat(chunks);
 }

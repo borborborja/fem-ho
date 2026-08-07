@@ -53,6 +53,13 @@ export interface UserSettings {
   quiet_hours_start: string | null;
   quiet_hours_end: string | null;
   daily_digest_at: string | null;
+  /**
+   * Deixar que la meva cara surti de Gravatar.
+   *
+   * Només compta si la instància ho té encès. **És el meu correu el que es converteix en
+   * hash i viatja**, no el de qui administra, i per això la casella és meva.
+   */
+  gravatar: boolean;
 }
 
 const PROFILE_COLUMNS = sql`
@@ -251,6 +258,7 @@ const DEFAULT_SETTINGS: UserSettings = {
   quiet_hours_start: null,
   quiet_hours_end: null,
   daily_digest_at: null,
+  gravatar: true,
 };
 
 /**
@@ -273,10 +281,11 @@ export async function getSettings(db: MigrationDb, userId: string): Promise<User
     quiet_hours_start: string | null;
     quiet_hours_end: string | null;
     daily_digest_at: string | null;
+    gravatar: unknown;
   }>`SELECT done_cleared_at, inbox_position, inbox_show_overdue, inbox_origin, collapsed_groups,
             hidden_calendar_ids, week_start,
             show_calendar_widget, show_overdue_section, quiet_hours_start, quiet_hours_end,
-            daily_digest_at
+            daily_digest_at, gravatar
      FROM user_settings WHERE user_id = ${userId}`.execute(db);
 
   const row = found.rows[0];
@@ -295,6 +304,7 @@ export async function getSettings(db: MigrationDb, userId: string): Promise<User
     quiet_hours_start: row.quiet_hours_start,
     quiet_hours_end: row.quiet_hours_end,
     daily_digest_at: row.daily_digest_at,
+    gravatar: isTrue(row.gravatar),
   };
 }
 
@@ -322,6 +332,7 @@ export interface UpdateSettingsInput {
   quiet_hours_start?: string | null | undefined;
   quiet_hours_end?: string | null | undefined;
   daily_digest_at?: string | null | undefined;
+  gravatar?: boolean | undefined;
 }
 
 export async function updateSettings(
@@ -353,6 +364,7 @@ export async function updateSettings(
       input.quiet_hours_end === undefined ? before.quiet_hours_end : input.quiet_hours_end,
     daily_digest_at:
       input.daily_digest_at === undefined ? before.daily_digest_at : input.daily_digest_at,
+    gravatar: input.gravatar ?? before.gravatar,
   };
 
   if (JSON.stringify(next) === JSON.stringify(before)) {
@@ -367,14 +379,14 @@ export async function updateSettings(
                                inbox_origin, collapsed_groups, hidden_calendar_ids, week_start,
                                show_calendar_widget, show_overdue_section,
                                quiet_hours_start, quiet_hours_end, daily_digest_at,
-                               notify_prefs, updated_at)
+                               gravatar, notify_prefs, updated_at)
     VALUES (${principal.userId}, ${next.done_cleared_at}, ${next.inbox_position},
             ${dbBool(next.inbox_show_overdue)}, ${next.inbox_origin},
             ${JSON.stringify(next.collapsed_groups)},
             ${JSON.stringify(next.hidden_calendar_ids)}, ${next.week_start},
             ${dbBool(next.show_calendar_widget)}, ${dbBool(next.show_overdue_section)},
             ${next.quiet_hours_start}, ${next.quiet_hours_end}, ${next.daily_digest_at},
-            '{}', ${ctx.now})
+            ${dbBool(next.gravatar)}, '{}', ${ctx.now})
     ON CONFLICT (user_id) DO UPDATE SET
       done_cleared_at = excluded.done_cleared_at,
       inbox_position = excluded.inbox_position,
@@ -388,6 +400,7 @@ export async function updateSettings(
       quiet_hours_start = excluded.quiet_hours_start,
       quiet_hours_end = excluded.quiet_hours_end,
       daily_digest_at = excluded.daily_digest_at,
+      gravatar = excluded.gravatar,
       updated_at = excluded.updated_at
   `.execute(ctx.tx);
 
