@@ -495,3 +495,79 @@ describe("enllaçar-se amb l'altra casa", () => {
     expect(rastre.rows.map((r) => r.verb)).toContain('revoked');
   });
 });
+
+/**
+ * **La rèplica va en tots dos sentits.**
+ *
+ * Sense la pujada, federar seria mirar el tauler d'algú altre. El que es va demanar és
+ * que se sincronitzi tot: qui rep un àmbit hi ha de poder col·laborar.
+ */
+describe('la pujada', () => {
+  it("porta cap a l'altra casa el que s'escriu a l'àmbit espill", async () => {
+    const { token } = await emetConvit('scope_federation', scopeB);
+    const enllac = await auditedTransaction(connA.db, ownerA(), (ctx) =>
+      linkInstance(ctx, ownerA(), { base_url: baseB, token }, SECRET_A, permetLoopback),
+    );
+
+    // Una tasca escrita a la casa A, dins de l'àmbit espill.
+    const meva = await appA.inject({
+      method: 'POST',
+      url: '/api/v1/auth/login',
+      payload: { email: 'a@e.com', password: PASSWORD },
+    });
+    const authA = {
+      authorization: `Bearer ${meva.json<{ access_token: string }>().access_token}`,
+    };
+    const creada = await appA.inject({
+      method: 'POST',
+      url: '/api/v1/tasks',
+      headers: authA,
+      payload: { scope_id: enllac.scope_id, title: 'Portar el cotxe al taller' },
+    });
+    expect(creada.statusCode, creada.body).toBe(201);
+
+    const link = await sql<never>`
+      SELECT * FROM instance_links WHERE id = ${enllac.link.id}
+    `.execute(connA.db);
+    const result = await pullFromLink(
+      connA.db,
+      link.rows[0] as never,
+      SECRET_A,
+      NOW,
+      permetLoopback,
+    );
+    expect(result.pushed).toBeGreaterThan(0);
+
+    // I ha arribat a l'àmbit de l'altra banda, no a cap altre.
+    const alla = await sql<{ title: string; scope_id: string }>`
+      SELECT title, scope_id FROM tasks WHERE title = 'Portar el cotxe al taller'
+    `.execute(connB.db);
+    expect(alla.rows[0]?.scope_id).toBe(scopeB);
+  });
+
+  /**
+   * **El que ve de fora no torna a sortir.** Sense aquesta parada, cada tic reenviaria a
+   * la casa B el que la casa B ens acaba d'enviar, i les dues instàncies es passarien la
+   * mateixa tasca per sempre.
+   */
+  it('i el que ha arribat de fora no hi torna, que seria un bucle', async () => {
+    const enllacos = await sql<{ id: string; local_seq: number }>`
+      SELECT id, local_seq FROM instance_links ORDER BY created_at DESC
+    `.execute(connA.db);
+    const linkId = enllacos.rows[0]!.id;
+
+    const link = await sql<never>`SELECT * FROM instance_links WHERE id = ${linkId}`.execute(
+      connA.db,
+    );
+    const segon = await pullFromLink(
+      connA.db,
+      link.rows[0] as never,
+      SECRET_A,
+      NOW,
+      permetLoopback,
+    );
+
+    // Res de nou per pujar: el que hi ha a l'espill o ja ha pujat, o ve d'ells.
+    expect(segon.pushed).toBe(0);
+  });
+});

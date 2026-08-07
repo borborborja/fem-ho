@@ -516,6 +516,9 @@ function ScopeRow({ scope, onDone }: { scope: Scope; onDone: () => Promise<void>
   );
 }
 
+/** L'explicació petita sota d'un camp: el mateix pes a totes les pantalles. */
+const HINT = { fontSize: 12, color: 'var(--ink-soft)', margin: 0 } as const;
+
 const LINK_BUTTON = {
   border: 'none',
   background: 'transparent',
@@ -525,17 +528,53 @@ const LINK_BUTTON = {
   color: 'var(--ink-soft)',
 } as const;
 
+/**
+ * D'on surt un àmbit nou.
+ *
+ * Les tres portes que es van demanar, i **una sola pantalla**: crear-lo de nou, o
+ * sincronitzar-lo amb un que ja existeix —d'aquest servidor, enganxant el token; o d'un
+ * altre, enganxant també l'adreça—. Que siguin un commutador i no tres llocs diferents és
+ * el que fa que no calgui saber abans quina de les tres es vol.
+ */
+type ScopeSource = 'new' | 'here' | 'remote';
+
 function ScopesTab() {
   const { scopes } = useSessionData();
   const { reload } = useSession();
+  const [source, setSource] = useState<ScopeSource>('new');
   const [name, setName] = useState('');
   const [kind, setKind] = useState<'individual' | 'collective'>('individual');
   const [color, setColor] = useState<string>(SCOPE_COLORS[0]);
+  const [token, setToken] = useState('');
+  const [serverUrl, setServerUrl] = useState('');
+  const [error, setError] = useState<string | null>(null);
 
   const create = useMutation(async () => {
-    if (name.trim() === '') return;
-    await api.post('/api/v1/scopes', { id: uuidv7(), name: name.trim(), kind, color });
+    setError(null);
+    try {
+      if (source === 'here') {
+        // El mateix camí que la pantalla del convit: un token d'aquesta casa es bescanvia
+        // i prou, i qui l'accepta ja és membre de l'àmbit que ja hi era.
+        if (token.trim() === '') return;
+        await api.post(`/api/v1/join/${encodeURIComponent(token.trim())}`);
+      } else if (source === 'remote') {
+        if (token.trim() === '' || serverUrl.trim() === '') return;
+        await api.post('/api/v1/federation/links', {
+          base_url: serverUrl.trim(),
+          token: token.trim(),
+          ...(name.trim() === '' ? {} : { name: name.trim() }),
+        });
+      } else {
+        if (name.trim() === '') return;
+        await api.post('/api/v1/scopes', { id: uuidv7(), name: name.trim(), kind, color });
+      }
+    } catch (problem: unknown) {
+      setError(problem instanceof ApiError ? problem.message : String(problem));
+      return;
+    }
     setName('');
+    setToken('');
+    setServerUrl('');
     await reload();
   });
 
@@ -548,23 +587,65 @@ function ScopesTab() {
       </Group>
 
       <Group title={t('settings.newScope')}>
-        <input
-          className="plou-input"
-          data-testid="new-scope-name"
-          value={name}
-          placeholder={t('settings.scopeName')}
-          onChange={(event) => setName(event.target.value)}
-        />
-        <ColorPicker value={color} onChange={setColor} testId="new-scope-color" />
         <Chips
-          testId="new-scope-kind"
-          value={kind}
+          testId="new-scope-source"
+          value={source}
           options={[
-            { key: 'individual' as const, label: t('settings.scopeKind.individual') },
-            { key: 'collective' as const, label: t('settings.scopeKind.collective') },
+            { key: 'new' as const, label: t('settings.scopeSource.new') },
+            { key: 'here' as const, label: t('settings.scopeSource.here') },
+            { key: 'remote' as const, label: t('settings.scopeSource.remote') },
           ]}
-          onChange={setKind}
+          onChange={setSource}
         />
+
+        {source === 'new' ? (
+          <>
+            <input
+              className="plou-input"
+              data-testid="new-scope-name"
+              value={name}
+              placeholder={t('settings.scopeName')}
+              onChange={(event) => setName(event.target.value)}
+            />
+            <ColorPicker value={color} onChange={setColor} testId="new-scope-color" />
+            <Chips
+              testId="new-scope-kind"
+              value={kind}
+              options={[
+                { key: 'individual' as const, label: t('settings.scopeKind.individual') },
+                { key: 'collective' as const, label: t('settings.scopeKind.collective') },
+              ]}
+              onChange={setKind}
+            />
+          </>
+        ) : (
+          <>
+            <p style={HINT}>{t('settings.scopeSourceHelp')}</p>
+            {source === 'remote' && (
+              <input
+                className="plou-input"
+                data-testid="new-scope-server"
+                value={serverUrl}
+                placeholder={t('settings.scopeServerUrl')}
+                onChange={(event) => setServerUrl(event.target.value)}
+              />
+            )}
+            <input
+              className="plou-input"
+              data-testid="new-scope-token"
+              value={token}
+              placeholder={t('settings.scopeToken')}
+              onChange={(event) => setToken(event.target.value)}
+            />
+          </>
+        )}
+
+        {error !== null && (
+          <p role="alert" style={{ ...HINT, color: 'var(--danger-text)' }}>
+            {error}
+          </p>
+        )}
+
         <button
           type="button"
           className="plou-btn plou-btn-primary"
@@ -572,7 +653,7 @@ function ScopesTab() {
           disabled={create.busy}
           onClick={() => void create.run()}
         >
-          {t('nav.create')}
+          {source === 'new' ? t('nav.create') : t('settings.scopeJoin')}
         </button>
       </Group>
     </>

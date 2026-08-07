@@ -74,7 +74,11 @@ export interface InstanceLinkRow {
   scope_id: string;
   base_url: string;
   name: string | null;
+  /** L'àmbit a l'altra banda. El de l'espill no vol dir res allà. */
+  remote_scope_id: string | null;
   cursor: string | null;
+  /** Per on anàvem del NOSTRE `change_log`: què hem escrit aquí i encara no hem enviat. */
+  local_seq: number;
   last_sync_at: string | null;
   last_error: string | null;
   last_error_at: string | null;
@@ -84,8 +88,8 @@ export interface InstanceLinkRow {
 
 /** `token_enc` no hi és mai: és un secret i no surt de la base. */
 const LINK_COLUMNS = sql`
-  id, scope_id, base_url, name, cursor, last_sync_at, last_error, last_error_at,
-  created_at, updated_at
+  id, scope_id, base_url, name, remote_scope_id, cursor, local_seq, last_sync_at,
+  last_error, last_error_at, created_at, updated_at
 `;
 
 /**
@@ -361,9 +365,9 @@ export async function linkInstance(
 
   const id = uuidv7();
   await sql`
-    INSERT INTO instance_links (id, scope_id, base_url, name, token_enc, cursor,
-                                created_by, created_at, updated_at)
-    VALUES (${id}, ${scopeId}, ${baseUrl}, ${manifest.name},
+    INSERT INTO instance_links (id, scope_id, base_url, name, remote_scope_id, token_enc,
+                                cursor, created_by, created_at, updated_at)
+    VALUES (${id}, ${scopeId}, ${baseUrl}, ${manifest.name}, ${redeemed.scope_id},
             ${seal(masterSecret, `link:${id}`, redeemed.token)}, ${null},
             ${principal.userId}, ${ctx.now}, ${ctx.now})
   `.execute(ctx.tx);
@@ -428,6 +432,8 @@ export async function unlinkInstance(
 
 export interface PullResult {
   applied: number;
+  /** Quantes operacions nostres han pujat cap a l'altra banda. */
+  pushed: number;
   cursor: string | null;
 }
 
@@ -489,6 +495,8 @@ export async function pullFromLink(
     );
   }
 
+  const pushed = await pushToLink(db, link, token, now, fetchOptions);
+
   await sql`
     UPDATE instance_links
     SET cursor = ${delta.next_cursor}, last_sync_at = ${now}, last_error = NULL,
@@ -496,7 +504,129 @@ export async function pullFromLink(
     WHERE id = ${link.id}
   `.execute(db);
 
-  return { applied, cursor: delta.next_cursor };
+  return { applied, pushed, cursor: delta.next_cursor };
+}
+
+/**
+ * Puja el que s'ha escrit aquí cap a l'altra instància.
+ *
+ * **Sense això la federació seria de només lectura**, i el que es va demanar és que se
+ * sincronitzi tot: qui rep un àmbit hi ha de poder col·laborar de debò, no mirar-lo.
+ *
+ * S'aprofita el lot que ja hi és (`POST /api/v1/sync/batch`) i, amb ell, la seva
+ * idempotència: l'`op_id` es deriva del `seq` local, o sigui que **reenviar el mateix
+ * canvi després d'una caiguda no el duplica** encara que el cursor no s'hagi desat. I
+ * l'`scope_id` es reescriu al de l'altra banda, que és l'únic que allà vol dir alguna
+ * cosa.
+ *
+ * El que arriba de fora **no torna a sortir**: les files replicades porten l'autoria de
+ * l'usuari ombra, i enviar-les faria un bucle entre les dues cases.
+ */
+async function pushToLink(
+  db: MigrationDb,
+  link: InstanceLinkRow & { token_enc: string },
+  token: string,
+  now: string,
+  fetchOptions: SafeFetchOptions,
+): Promise<number> {
+  if (link.remote_scope_id === null) return 0;
+
+  const face = await sql<{ id: string }>`
+    SELECT id FROM users WHERE kind = 'remote' AND instance_link_id = ${link.id}
+  `.execute(db);
+  const faceId = face.rows[0]?.id ?? '';
+
+  const pending = await sql<{
+    seq: number;
+    entity_type: string;
+    entity_id: string;
+    operation: string;
+    is_first: number;
+  }>`
+    SELECT c.seq, c.entity_type, c.entity_id, c.operation,
+           CASE WHEN c.seq = (
+             SELECT MIN(seq) FROM change_log WHERE entity_id = c.entity_id
+           ) THEN 1 ELSE 0 END AS is_first
+    FROM change_log c
+    WHERE c.scope_id = ${link.scope_id} AND c.seq > ${link.local_seq}
+    ORDER BY c.seq ASC
+    LIMIT 200
+  `.execute(db);
+  if (pending.rows.length === 0) return 0;
+
+  const operations: BatchOperation[] = [];
+  let lastSeq = link.local_seq;
+
+  for (const row of pending.rows) {
+    lastSeq = row.seq;
+    const table = REPLICATED[row.entity_type];
+    if (table === undefined) continue;
+
+    const found = await sql
+      .raw(`SELECT * FROM ${table} WHERE id = '${row.entity_id.replace(/'/gu, '')}'`)
+      .execute(db);
+    const data = found.rows[0] as Record<string, unknown> | undefined;
+    if (data === undefined) continue;
+    // El que ve de fora no torna a sortir: seria un bucle entre les dues cases.
+    if (faceId !== '' && data.created_by === faceId) continue;
+
+    const payload = { ...data };
+    delete payload.version;
+    if (row.entity_type === 'task') payload.scope_id = link.remote_scope_id;
+
+    operations.push({
+      op_id: `link:${link.id}:${String(row.seq)}`,
+      entity: row.entity_type,
+      /**
+       * **Crear i actualitzar no són el mateix a l'altra banda.** El lot resol una
+       * actualització buscant la fila, i una que allà encara no existeix la rebutja: la
+       * tasca es donava per pujada i no hi arribava mai.
+       *
+       * El `change_log` no ho diu —només distingeix `upsert` de `delete`— però sí que ho
+       * diu la posició: **la creació és la primera fila d'aquella entitat**.
+       */
+      op: data.deleted_at != null ? 'delete' : Number(row.is_first) === 1 ? 'create' : 'update',
+      id: row.entity_id,
+      data: payload,
+    });
+  }
+
+  if (operations.length > 0) {
+    /**
+     * **El 200 del lot no vol dir que hagi anat bé.** Cada operació es resol per separat
+     * (`docs/06` §4) i el cos porta el veredicte de cadascuna; quedar-se amb el codi
+     * d'estat és donar per pujat el que l'altra banda ha rebutjat. El que falli es queda
+     * al registre de l'enllaç, que és on l'usuari el pot llegir.
+     */
+    const answer = await postJson<{ results: { op_id: string; status: string }[] }>(
+      `${link.base_url}/api/v1/sync/batch`,
+      { operations },
+      { authorization: `Bearer ${token}` },
+      fetchOptions,
+    );
+    const refused = answer.results.filter((r) => r.status === 'rejected');
+    if (refused.length > 0) {
+      throw new Error(
+        `L'altra instància ha rebutjat ${String(refused.length)} de ${String(operations.length)} operacions: ` +
+          JSON.stringify(refused[0]),
+      );
+    }
+  }
+
+  await sql`
+    UPDATE instance_links SET local_seq = ${lastSeq}, updated_at = ${now} WHERE id = ${link.id}
+  `.execute(db);
+
+  return operations.length;
+}
+
+/** La forma d'una operació del lot, tal com l'espera `POST /sync/batch`. */
+interface BatchOperation {
+  op_id: string;
+  entity: string;
+  op: 'create' | 'update' | 'delete';
+  id: string;
+  data?: Record<string, unknown> | undefined;
 }
 
 /**

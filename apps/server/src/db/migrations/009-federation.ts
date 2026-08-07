@@ -119,7 +119,21 @@ export async function up(db: MigrationDb, engine: Engine): Promise<void> {
          */
         token_enc      ${t.text} NOT NULL,
         /** El cursor del sync remot. Opac: ve de l'altre servidor i no s'interpreta. */
+        /**
+         * L'àmbit **a l'altra banda**.
+         *
+         * Sense això la rèplica només podria baixar: per pujar una tasca cal dir a quin
+         * àmbit va, i el de l'espill local no vol dir res allà.
+         */
+        remote_scope_id ${t.text},
         cursor         ${t.text},
+        /**
+         * Per on anàvem de la nostra banda.
+         *
+         * És un seq del nostre change_log, no del seu: diu què hem escrit aquí que
+         * encara no hem enviat. Barrejar-los seria enviar dues vegades o cap.
+         */
+        local_seq      ${t.int} NOT NULL DEFAULT 0,
         last_sync_at   ${t.instant},
         last_error     ${t.text},
         last_error_at  ${t.instant},

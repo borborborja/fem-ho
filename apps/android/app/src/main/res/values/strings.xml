@@ -274,6 +274,7 @@
     <string name="settings_scopedelete">Esborrar l\'àmbit</string>
     <string name="settings_scopedeleteconfirm">S\'esborrarà «{name}». Només es pot si és buit.</string>
     <string name="settings_scopeedit">Editar</string>
+    <string name="settings_scopejoin">Sincronitzar</string>
     <string name="settings_scopekind">Tipus</string>
     <string name="settings_scopekind_collective">Col·lectiu</string>
     <string name="settings_scopekind_individual">Individual</string>
@@ -282,6 +283,12 @@
     <string name="settings_scopename">Nom</string>
     <string name="settings_scopeowner">Propietari</string>
     <string name="settings_scopesave">Desar</string>
+    <string name="settings_scopeserverurl">Adreça del servidor (https://…)</string>
+    <string name="settings_scopesource_here">D\'aquest servidor</string>
+    <string name="settings_scopesource_new">De nou</string>
+    <string name="settings_scopesource_remote">D\'un altre servidor</string>
+    <string name="settings_scopesourcehelp">Qui comparteix l\'àmbit et dona un token. Si és d\'aquest mateix servidor només cal el token; si és d\'un altre, també l\'adreça.</string>
+    <string name="settings_scopetoken">Enganxa el token del convit</string>
     <string name="settings_sharedcalendars">Calendaris que es comparteixen</string>
     <string name="settings_showcalendarwidget">Calendari en miniatura</string>
     <string name="settings_showoverduesection">Secció d\'endarrerides</string>

@@ -274,6 +274,7 @@
     <string name="settings_scopedelete">Eliminar el ámbito</string>
     <string name="settings_scopedeleteconfirm">Se eliminará «{name}». Solo es posible si está vacío.</string>
     <string name="settings_scopeedit">Editar</string>
+    <string name="settings_scopejoin">Sincronizar</string>
     <string name="settings_scopekind">Tipo</string>
     <string name="settings_scopekind_collective">Colectivo</string>
     <string name="settings_scopekind_individual">Individual</string>
@@ -282,6 +283,12 @@
     <string name="settings_scopename">Nombre</string>
     <string name="settings_scopeowner">Propietario</string>
     <string name="settings_scopesave">Guardar</string>
+    <string name="settings_scopeserverurl">Dirección del servidor (https://…)</string>
+    <string name="settings_scopesource_here">De este servidor</string>
+    <string name="settings_scopesource_new">Nuevo</string>
+    <string name="settings_scopesource_remote">De otro servidor</string>
+    <string name="settings_scopesourcehelp">Quien comparte el ámbito te da un token. Si es de este mismo servidor solo hace falta el token; si es de otro, también la dirección.</string>
+    <string name="settings_scopetoken">Pega el token de la invitación</string>
     <string name="settings_sharedcalendars">Calendarios que se comparten</string>
     <string name="settings_showcalendarwidget">Calendario en miniatura</string>
     <string name="settings_showoverduesection">Sección de atrasadas</string>

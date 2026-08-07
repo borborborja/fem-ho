@@ -274,6 +274,7 @@
     <string name="settings_scopedelete">Delete scope</string>
     <string name="settings_scopedeleteconfirm">“{name}” will be deleted. Only possible if it is empty.</string>
     <string name="settings_scopeedit">Edit</string>
+    <string name="settings_scopejoin">Sync</string>
     <string name="settings_scopekind">Kind</string>
     <string name="settings_scopekind_collective">Collective</string>
     <string name="settings_scopekind_individual">Individual</string>
@@ -282,6 +283,12 @@
     <string name="settings_scopename">Name</string>
     <string name="settings_scopeowner">Owner</string>
     <string name="settings_scopesave">Save</string>
+    <string name="settings_scopeserverurl">Server address (https://…)</string>
+    <string name="settings_scopesource_here">From this server</string>
+    <string name="settings_scopesource_new">New</string>
+    <string name="settings_scopesource_remote">From another server</string>
+    <string name="settings_scopesourcehelp">Whoever shares the scope gives you a token. From this same server the token is enough; from another one, the address too.</string>
+    <string name="settings_scopetoken">Paste the invitation token</string>
     <string name="settings_sharedcalendars">Shared calendars</string>
     <string name="settings_showcalendarwidget">Small calendar</string>
     <string name="settings_showoverduesection">Overdue section</string>

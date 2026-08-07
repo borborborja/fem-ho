@@ -127,3 +127,49 @@ test("un àmbit amb tasques no s'esborra, i la pantalla diu quantes en té", asy
   await expect(error).toBeVisible();
   await expect(error).toContainText('1');
 });
+
+/**
+ * Les tres portes per fer un àmbit.
+ *
+ * Es va demanar que en crear-ne un es pugui fer de nou, o sincronitzar-lo amb un que ja
+ * existeix —d'aquest servidor amb un token, o d'un altre amb l'adreça i el token—. El que
+ * es comprova aquí és **que siguin una sola pantalla**: un commutador i els camps que
+ * calen, i no tres llocs on s'hagi de saber d'entrada quin es vol.
+ */
+test('en crear un àmbit hi ha tres portes, i cadascuna demana el que li cal', async ({ page }) => {
+  await enter(page);
+  await openScopes(page);
+
+  const font = page.locator('[data-testid="new-scope-source"]');
+  await expect(font).toBeVisible();
+
+  // De nou: nom i color, res de tokens.
+  await expect(page.locator('[data-testid="new-scope-name"]')).toBeVisible();
+  await expect(page.locator('[data-testid="new-scope-token"]')).toHaveCount(0);
+
+  // D'aquest servidor: només el token, que és tot el que cal.
+  await font.getByRole('button').nth(1).click();
+  await expect(page.locator('[data-testid="new-scope-token"]')).toBeVisible();
+  await expect(page.locator('[data-testid="new-scope-server"]')).toHaveCount(0);
+
+  // D'un altre: l'adreça també.
+  await font.getByRole('button').nth(2).click();
+  await expect(page.locator('[data-testid="new-scope-server"]')).toBeVisible();
+  await expect(page.locator('[data-testid="new-scope-token"]')).toBeVisible();
+});
+
+/**
+ * **I `http:` es rebutja amb un motiu, no amb un silenci.** El token de federació viatjaria
+ * en clar, i qui el llegís pel camí tindria accés escrivible a l'àmbit.
+ */
+test('una adreça en text pla es rebutja i la pantalla ho diu', async ({ page }) => {
+  await enter(page);
+  await openScopes(page);
+
+  await page.locator('[data-testid="new-scope-source"]').getByRole('button').nth(2).click();
+  await page.locator('[data-testid="new-scope-server"]').fill('http://exemple.org');
+  await page.locator('[data-testid="new-scope-token"]').fill('femho_inv_qualsevolcosa');
+  await page.locator('[data-testid="new-scope-create"]').click();
+
+  await expect(page.getByRole('alert')).toBeVisible({ timeout: 10_000 });
+});
