@@ -59,11 +59,21 @@ jobs:
       - name: Linter
         run: npm run lint
 
-      - name: Tipus
-        run: npm run typecheck
-
+      # **La construcció va ABANS que els tipus**, i no és una preferència d'estil.
+      #
+      # `apps/web` importa `@fem-ho/contracts`, que es resol a `packages/contracts/dist`
+      # — sortida de construcció, que el repositori no porta i que ha de no portar. En un
+      # clon net, `tsc --noEmit` abans de construir dona noranta-un errors del tipus
+      # "Cannot find module '@fem-ho/contracts'", que no són errors de tipus sinó de
+      # l'ordre de les feines.
+      #
+      # En local no es veia mai perquè el `dist` hi és de la primera construcció, i CI
+      # no s'havia executat mai per dir-ho.
       - name: Construcció
         run: npm run build
+
+      - name: Tipus
+        run: npm run typecheck
 
       - name: Proves
         run: npm test
