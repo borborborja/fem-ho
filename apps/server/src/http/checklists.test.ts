@@ -113,7 +113,7 @@ beforeAll(async () => {
   for (const member of [userId, altreUserId]) {
     await sql`
       INSERT INTO scope_members (id, scope_id, user_id, role, created_at)
-      VALUES (${uuidv7()}, ${scopeId}, ${member}, 'member', ${NOW})
+      VALUES (${uuidv7()}, ${scopeId}, ${member}, 'collaborator', ${NOW})
     `.execute(conn.db);
   }
 

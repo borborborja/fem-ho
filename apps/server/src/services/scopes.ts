@@ -13,6 +13,8 @@ import type { AuditContext } from '../audit/audited-transaction.js';
 import type { MigrationDb } from '../db/migration-db.js';
 import { PolicyError, missingCapability, notFound, scopeForbidden } from '../policy/errors.js';
 import { canSeeScope, hasCapability, type Principal } from '../policy/principal.js';
+import { visibleScopesPredicate } from '../policy/scope-visibility.js';
+import type { ScopeRole } from '../policy/scope-roles.js';
 
 export interface ScopeRow {
   id: string;
@@ -43,10 +45,7 @@ export async function listScopes(db: MigrationDb, principal: Principal): Promise
     SELECT s.id, s.name, s.kind, s.color, s.icon, s.ai_instructions, s.ai_description,
            s.position, s.owner_id, s.created_at, s.updated_at, s.version
     FROM scopes s
-    WHERE s.deleted_at IS NULL
-      AND (s.owner_id = ${principal.userId}
-           OR EXISTS (SELECT 1 FROM scope_members m
-                      WHERE m.scope_id = s.id AND m.user_id = ${principal.userId}))
+    WHERE s.deleted_at IS NULL AND ${visibleScopesPredicate(principal.userId)}
     ORDER BY s.position
   `.execute(db);
 
@@ -59,10 +58,7 @@ export async function listScopes(db: MigrationDb, principal: Principal): Promise
 export async function visibleScopeNames(db: MigrationDb, principal: Principal): Promise<string[]> {
   const scopes = await sql<{ id: string; name: string }>`
     SELECT s.id, s.name FROM scopes s
-    WHERE s.deleted_at IS NULL
-      AND (s.owner_id = ${principal.userId}
-           OR EXISTS (SELECT 1 FROM scope_members m
-                      WHERE m.scope_id = s.id AND m.user_id = ${principal.userId}))
+    WHERE s.deleted_at IS NULL AND ${visibleScopesPredicate(principal.userId)}
     ORDER BY s.name
   `.execute(db);
   return scopes.rows.filter((s) => canSeeScope(principal, s.id)).map((s) => s.name);
@@ -91,10 +87,7 @@ export async function assertScopeAccess(
 
   const isMember = await sql<{ n: number }>`
     SELECT COUNT(*) AS n FROM scopes s
-    WHERE s.id = ${scopeId}
-      AND (s.owner_id = ${principal.userId}
-           OR EXISTS (SELECT 1 FROM scope_members m
-                      WHERE m.scope_id = s.id AND m.user_id = ${principal.userId}))
+    WHERE s.id = ${scopeId} AND ${visibleScopesPredicate(principal.userId)}
   `.execute(db);
 
   if (Number(isMember.rows[0]?.n ?? 0) === 0 || !canSeeScope(principal, scopeId)) {
@@ -418,7 +411,7 @@ export interface MemberRow {
   scope_id: string;
   user_id: string | null;
   external_calendar_id: string | null;
-  role: 'owner' | 'admin' | 'member' | 'viewer';
+  role: ScopeRole;
   created_at: string;
   /** Nom llegible, per no obligar la interfície a una segona crida. */
   name: string | null;
@@ -503,7 +496,7 @@ export async function addMember(
     INSERT INTO scope_members (id, scope_id, user_id, external_calendar_id, role, created_at)
     VALUES (${id}, ${scopeId}, ${hasUser ? input.user_id : null},
             ${hasCalendar ? input.external_calendar_id : null},
-            ${input.role ?? 'member'}, ${ctx.now})
+            ${input.role ?? 'collaborator'}, ${ctx.now})
   `.execute(ctx.tx);
 
   ctx.record({ entityType: 'scope_member', entityId: id, scopeId, verb: 'created' });

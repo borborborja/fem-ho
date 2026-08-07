@@ -173,7 +173,7 @@ describe('membres', () => {
   it("s'hi pot afegir una persona a un de col·lectiu", async () => {
     const res = await api('POST', `/api/v1/scopes/${scopeCollectiu}/members`, {
       user_id: altreId,
-      role: 'member',
+      role: 'collaborator',
     });
     expect(res.statusCode, res.body).toBe(201);
     memberId = res.json<{ id: string }>().id;
@@ -208,7 +208,7 @@ describe('membres', () => {
     expect(owner).toBeDefined();
 
     const degradat = await api('PATCH', `/api/v1/scopes/${scopeCollectiu}/members/${owner!.id}`, {
-      role: 'member',
+      role: 'collaborator',
     });
     expect(degradat.statusCode).toBe(409);
     expect(

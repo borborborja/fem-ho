@@ -1513,7 +1513,7 @@ paths:
               type: object
               required: [role]
               properties:
-                role: { type: string, enum: [owner, admin, member, viewer] }
+                role: { type: string, enum: [owner, collaborator, viewer] }
       responses:
         '200':
           description: Canviat.
@@ -2365,7 +2365,7 @@ components:
           type: [string, 'null']
           description: P3 · o això o `external_calendar_id`, mai totes dues coses.
         external_calendar_id: { type: [string, 'null'] }
-        role: { type: string, enum: [owner, admin, member, viewer] }
+        role: { type: string, enum: [owner, collaborator, viewer] }
         created_at: { type: string, format: date-time }
         name: { type: [string, 'null'] }
         email: { type: [string, 'null'] }
@@ -2376,7 +2376,7 @@ components:
       properties:
         user_id: { type: string }
         external_calendar_id: { type: string }
-        role: { type: string, enum: [owner, admin, member, viewer] }
+        role: { type: string, enum: [owner, collaborator, viewer] }
 
     ProjectPatch:
       type: object

@@ -15,6 +15,7 @@ import type { AuditContext } from '../audit/audited-transaction.js';
 import type { MigrationDb } from '../db/migration-db.js';
 import { PolicyError, missingCapability, notFound } from '../policy/errors.js';
 import { hasCapability, type Principal } from '../policy/principal.js';
+import { visibleScopesPredicate } from '../policy/scope-visibility.js';
 import { normalizeForSearch, normalizeQuery } from '../text/search-text.js';
 import { clampInt } from '../util/clamp.js';
 import { assertScopeAccess, listScopes } from './scopes.js';
@@ -975,10 +976,7 @@ export async function setAssignee(
     if (scope.kind === 'collective') {
       const member = await sql<{ n: number }>`
         SELECT COUNT(*) AS n FROM scopes s
-        WHERE s.id = ${task.scope_id}
-          AND (s.owner_id = ${userId}
-               OR EXISTS (SELECT 1 FROM scope_members m
-                          WHERE m.scope_id = s.id AND m.user_id = ${userId}))
+        WHERE s.id = ${task.scope_id} AND ${visibleScopesPredicate(userId)}
       `.execute(ctx.tx);
       if (Number(member.rows[0]?.n ?? 0) === 0) {
         throw new PolicyError(

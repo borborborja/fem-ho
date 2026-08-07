@@ -1464,7 +1464,7 @@ export interface components {
             user_id: string | null;
             external_calendar_id: string | null;
             /** @enum {string} */
-            role: "owner" | "admin" | "member" | "viewer";
+            role: "owner" | "collaborator" | "viewer";
             /** Format: date-time */
             created_at: string;
             name?: string | null;
@@ -1475,7 +1475,7 @@ export interface components {
             user_id?: string;
             external_calendar_id?: string;
             /** @enum {string} */
-            role?: "owner" | "admin" | "member" | "viewer";
+            role?: "owner" | "collaborator" | "viewer";
         };
         ProjectPatch: {
             name?: string;
@@ -4096,7 +4096,7 @@ export interface operations {
             content: {
                 "application/json": {
                     /** @enum {string} */
-                    role: "owner" | "admin" | "member" | "viewer";
+                    role: "owner" | "collaborator" | "viewer";
                 };
             };
         };

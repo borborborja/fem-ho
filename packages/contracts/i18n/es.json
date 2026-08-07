@@ -251,6 +251,7 @@
   "settings.profileEmail": "Correo",
   "settings.profileName": "Nombre",
   "settings.role.admin": "Administrador",
+  "settings.role.collaborator": "Colaborador",
   "settings.role.member": "Miembro",
   "settings.role.owner": "Propietario",
   "settings.role.viewer": "Solo lectura",

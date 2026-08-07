@@ -14,6 +14,7 @@
 
 import { sql } from 'kysely';
 import type { MigrationDb } from '../db/migration-db.js';
+import { visibleScopesPredicate } from '../policy/scope-visibility.js';
 import type { DavPrincipal } from './auth.js';
 import { collectionName, slugify, type CollectionKind } from './paths.js';
 
@@ -68,11 +69,10 @@ export async function listCollections(
       : sql`s.id IN (${sql.join([...principal.scopeIds].map((id) => sql`${id}`))})`;
 
   const scopes = await sql<ScopeRow>`
-    SELECT DISTINCT s.id, s.name, s.color
+    SELECT s.id, s.name, s.color
     FROM scopes s
-    LEFT JOIN scope_members m ON m.scope_id = s.id AND m.user_id = ${principal.userId}
     WHERE s.deleted_at IS NULL
-      AND (s.owner_id = ${principal.userId} OR m.id IS NOT NULL)
+      AND ${visibleScopesPredicate(principal.userId)}
       AND ${scopeFilter}
     ORDER BY s.name
   `.execute(db);

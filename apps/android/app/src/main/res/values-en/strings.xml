@@ -246,6 +246,7 @@
     <string name="settings_profileemail">Email</string>
     <string name="settings_profilename">Name</string>
     <string name="settings_role_admin">Administrator</string>
+    <string name="settings_role_collaborator">Collaborator</string>
     <string name="settings_role_member">Member</string>
     <string name="settings_role_owner">Owner</string>
     <string name="settings_role_viewer">Read only</string>

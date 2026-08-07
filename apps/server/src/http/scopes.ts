@@ -9,6 +9,7 @@
 
 import type { FastifyInstance } from 'fastify';
 import { auditedTransaction } from '../audit/audited-transaction.js';
+import { SCOPE_ROLES } from '../policy/scope-roles.js';
 import { createLabel, deleteLabel, listLabels } from '../services/labels.js';
 import {
   addMember,
@@ -29,7 +30,7 @@ import {
 } from '../services/scopes.js';
 import { body, handle, nullable, query, str } from './handle.js';
 
-const ROLES: MemberRow['role'][] = ['owner', 'admin', 'member', 'viewer'];
+const ROLES: MemberRow['role'][] = [...SCOPE_ROLES];
 
 function parseRole(value: unknown): MemberRow['role'] | undefined {
   return typeof value === 'string' && (ROLES as string[]).includes(value)

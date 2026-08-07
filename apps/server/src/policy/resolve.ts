@@ -14,6 +14,7 @@
 import { sql } from 'kysely';
 import type { Source } from '@fem-ho/contracts';
 import type { MigrationDb } from '../db/migration-db.js';
+import { visibleScopeIds } from './scope-visibility.js';
 import { hashToken, isApiToken } from '../auth/tokens.js';
 import { capabilitiesForRole, isCapability, type Capability } from './capabilities.js';
 import { unauthenticated } from './errors.js';
@@ -37,16 +38,14 @@ interface TokenRow {
   revoked_at: string | null;
 }
 
-/** Els àmbits que un usuari pot veure: els que té i els col·lectius on és membre. */
+/**
+ * Els àmbits que un usuari pot veure.
+ *
+ * Delega al predicat únic. Abans era la quarta còpia del mateix SQL, i és **la còpia que
+ * fa mal si divergeix**: el que no surti d'aquí, `intersectScopes` l'esborra en silenci.
+ */
 export async function scopeIdsOwnedBy(tx: MigrationDb, userId: string): Promise<Set<string>> {
-  const result = await sql<{ id: string }>`
-    SELECT s.id FROM scopes s
-    WHERE s.deleted_at IS NULL
-      AND (s.owner_id = ${userId}
-           OR EXISTS (SELECT 1 FROM scope_members m
-                      WHERE m.scope_id = s.id AND m.user_id = ${userId}))
-  `.execute(tx);
-  return new Set(result.rows.map((r) => r.id));
+  return visibleScopeIds(tx, userId);
 }
 
 export interface ResolveInput {
