@@ -16,9 +16,59 @@ import {
   updateProfile,
   updateSettings,
 } from '../services/users.js';
+import { avatarFor, profileFor } from '../services/gravatar.js';
 import { body, handle, nullable, str } from './handle.js';
 
+/**
+ * L'avatar d'una persona.
+ *
+ * **Passa pel servidor a posta.** Un `<img src="https://gravatar.com/…">` seria una línia
+ * menys, però llavors cada navegador de casa parlaria amb Automattic i els arribaria la IP
+ * de cadascú a cada càrrega de pàgina. Aquí Gravatar veu una màquina.
+ *
+ * Demana sessió com la resta de l'API: qui són les persones d'aquesta instància no és
+ * públic, i una ruta d'avatars oberta les enumeraria per identificador.
+ *
+ * Un 404 no és un error, és **"no en té"**: la interfície es queda amb les inicials.
+ */
+function registerAvatarRoute(app: FastifyInstance): void {
+  const db = (): NonNullable<FastifyInstance['connection']> => app.connection!;
+
+  app.get<{ Params: { id: string } }>('/api/v1/users/:id/avatar', async (request, reply) =>
+    handle(app, request, reply, async () => {
+      const { data, mimeType } = await avatarFor(db().db, request.params.id, app.config.dataDir, {
+        enabled: app.config.gravatar,
+      });
+
+      void reply
+        .code(200)
+        .header('content-type', mimeType)
+        .header('x-content-type-options', 'nosniff')
+        // Una cara no canvia cada minut, i el servidor ja en té la seva pròpia còpia.
+        .header('cache-control', 'private, max-age=3600')
+        .send(data);
+      return undefined;
+    }),
+  );
+
+  /**
+   * El que Gravatar sap de mi.
+   *
+   * **Només del meu perfil, i només per proposar.** La pantalla d'Ajustos ofereix omplir
+   * el que tinc buit; aplicar-ho sol seria canviar-me el nom que he escrit aquí pel que
+   * vaig posar fa cinc anys en un altre lloc.
+   */
+  app.get('/api/v1/me/gravatar', async (request, reply) =>
+    handle(app, request, reply, async (principal) => {
+      const profile = await getProfile(db().db, principal.userId);
+      if (profile.email === null) return null;
+      return profileFor(profile.email, { enabled: app.config.gravatar });
+    }),
+  );
+}
+
 export function registerMeRoutes(app: FastifyInstance): void {
+  registerAvatarRoute(app);
   const db = (): NonNullable<FastifyInstance['connection']> => app.connection!;
 
   app.patch('/api/v1/auth/me', async (request, reply) =>
@@ -92,6 +142,7 @@ export function registerMeRoutes(app: FastifyInstance): void {
           quiet_hours_start: nullable(input, 'quiet_hours_start'),
           quiet_hours_end: nullable(input, 'quiet_hours_end'),
           daily_digest_at: nullable(input, 'daily_digest_at'),
+          gravatar: typeof input.gravatar === 'boolean' ? input.gravatar : undefined,
         }),
       );
     }),

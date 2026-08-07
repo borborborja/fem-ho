@@ -73,6 +73,7 @@ Variables d'entorn amb prefix `FEMHO_`. Els secrets accepten el sufix `_FILE` pe
 | `FEMHO_SECRET_KEY` | generat | Es persisteix al primer arrencament |
 | `FEMHO_SMTP_*` | — | Amfitrió, port, usuari, contrasenya, xifratge, remitent |
 | `FEMHO_ALLOW_REGISTRATION` | `false` | Qualsevol es pot fer un compte. **El primer serà administrador.** |
+| `FEMHO_GRAVATAR` | `false` | Les fotos de perfil surten de Gravatar. Veure l'avís de sota. |
 | `FEMHO_REGISTRATION` | `disabled` | La forma llarga: `disabled`, `invite`, `open` |
 | `FEMHO_MAX_UPLOAD_MB` | `25` | |
 | `FEMHO_LOG_LEVEL` | `info` | |
@@ -194,3 +195,17 @@ deploy/
 docs/DEPLOY.md                guia per a qui allotja
 docs/BACKUP.md                copiar i restaurar, amb el procediment provat
 ```
+
+## Gravatar, i què costa
+
+`FEMHO_GRAVATAR=true` fa que les fotos de perfil surtin de [Gravatar](https://gravatar.com). Val la pena tenir-ho i **no és gratis**, en un sentit que no és el dels diners: Fem-ho és autoallotjat, i encendre això vol dir que el servidor de casa comença a preguntar a un tercer —Automattic— per la cara de cadascú.
+
+El que se li envia és el hash SHA-256 del correu. Es llegeix sovint que "només s'envia un hash", i **no és cap protecció**: per a una adreça que algú ja sospita, comprovar-la és calcular-ne el hash i comparar. Encendre-ho és, doncs, dir a Gravatar quines adreces hi ha en aquesta instància.
+
+Si es decideix encendre, hi ha tres coses fetes perquè costi el mínim possible:
+
+- **Les peticions les fa el servidor, no el navegador de cadascú.** Un `<img>` directe a gravatar.com és una línia menys de codi i fa que a cada càrrega de pàgina els arribi la IP de cada persona de la casa. Així en veuen una.
+- **La foto es guarda al volum** amb un dia de vida. Per això segueix sortint sense connexió, que és el que la regla 6 demana, i per això una casa de deu persones no pica el servei deu vegades per pantalla.
+- **Cada persona ho pot treure** des d'Ajustos ▸ Perfil. El correu que viatja és el seu, no el de qui administra.
+
+Amb això apagat —el valor per defecte— els avatars són les inicials i no es pregunta res de ningú.

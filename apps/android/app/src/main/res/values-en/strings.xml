@@ -243,6 +243,10 @@
     <string name="settings_empty_calendars">This scope has no calendars yet.</string>
     <string name="settings_empty_shares">You have not created any share link yet.</string>
     <string name="settings_enableai">Turn on the AI user</string>
+    <string name="settings_gravatar">Use Gravatar for my picture</string>
+    <string name="settings_gravatarfill">Fill in from Gravatar</string>
+    <string name="settings_gravatarhelp">The server asks gravatar.com for your picture using a hash of your email. The hash is not anonymous: anyone who already suspects your address can check it. Turn this off and your initials are shown instead.</string>
+    <string name="settings_gravatarnothing">Gravatar has nothing for this address.</string>
     <string name="settings_inbox_below">Below</string>
     <string name="settings_inbox_left">Left</string>
     <string name="settings_inbox_right">Right</string>

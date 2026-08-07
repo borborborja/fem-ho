@@ -272,3 +272,36 @@ describe('robustesa', () => {
     ).rejects.toThrow(/resoldre/u);
   });
 });
+
+/**
+ * **Un guarda massa ample també és un defecte.**
+ *
+ * `192.0.0.0/16` estava blocat sencer quan només dos `/24` són reservats, i això vol dir
+ * seixanta-cinc mil adreces públiques inabastables. Es va veure encenent Gravatar —el seu
+ * servidor és `192.0.80.239`— i sortia com un error que semblava la defensa funcionant.
+ *
+ * Val la pena tenir-ho escrit: quan una mitigació bloca de més, ningú se n'adona fins que
+ * algú necessita justament allò, i llavors sembla un problema de l'altre costat.
+ */
+describe('el bloc 192.0.0.0/16', () => {
+  it('bloca els dos /24 que de debò són reservats', () => {
+    // Assignacions de l'IETF.
+    expect(isBlockedAddress('192.0.0.1')).toBe(true);
+    expect(isBlockedAddress('192.0.0.170')).toBe(true);
+    // TEST-NET-1, de documentació.
+    expect(isBlockedAddress('192.0.2.1')).toBe(true);
+  });
+
+  it('i deixa passar la resta, que són adreces públiques de debò', () => {
+    expect(isBlockedAddress('192.0.80.239')).toBe(false);
+    expect(isBlockedAddress('192.0.1.1')).toBe(false);
+    expect(isBlockedAddress('192.0.255.255')).toBe(false);
+  });
+
+  it('sense afluixar res del que sí que és privat', () => {
+    expect(isBlockedAddress('192.168.1.1')).toBe(true);
+    expect(isBlockedAddress('10.0.0.1')).toBe(true);
+    expect(isBlockedAddress('127.0.0.1')).toBe(true);
+    expect(isBlockedAddress('169.254.169.254')).toBe(true);
+  });
+});
