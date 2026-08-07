@@ -72,6 +72,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/register": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Fer-se un compte
+         * @description Només quan la instància ho permet: `FEMHO_ALLOW_REGISTRATION=true`, o el seu
+         *     equivalent llarg `FEMHO_REGISTRATION=open`. Si no, respon 403 i diu que cal
+         *     demanar un convit a qui la porta.
+         *
+         *     **El primer que es registra és administrador** i es troba els àmbits inicials: amb
+         *     la base buida, registrar-se *és* el primer arrencament, i no un camí paral·lel.
+         *     Del segon endavant, `member` amb un àmbit propi.
+         *
+         *     **Mai es diu si el correu ja existeix** (docs/02 §2): un correu repetit respon
+         *     exactament igual que un de nou i triga el mateix, perquè si no el formulari seria
+         *     una manera d'esbrinar qui té compte en aquesta casa. Amb el mateix bloqueig
+         *     progressiu que el login: sense ell, una instància oberta és un formulari per crear
+         *     comptes en massa.
+         *
+         *     Deixa la sessió oberta: torna els mateixos tokens que el login.
+         */
+        post: operations["register"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/login": {
         parameters: {
             query?: never;
@@ -2826,6 +2860,65 @@ export interface operations {
             };
             /** @description La base no respon o les migracions no s'han aplicat. */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    register: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: email */
+                    email: string;
+                    /** @description El nom amb què es veu la persona. És `users.name`, el mateix que demana el primer arrencament; no hi ha un identificador d'usuari a part. */
+                    name: string;
+                    password: string;
+                    /** @description L'idioma del navegador, per al perfil i els àmbits inicials. */
+                    locale?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Compte creat, i la sessió ja oberta. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthTokens"];
+                };
+            };
+            /** @description La instància no accepta comptes nous. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Correu que no ho sembla, nom buit o contrasenya massa curta. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Massa intents. Porta `Retry-After`. */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -33,14 +33,54 @@ function envInt(name: string, fallback: number): number {
 const REGISTRATION_MODES = ['disabled', 'invite', 'open'] as const;
 export type RegistrationMode = (typeof REGISTRATION_MODES)[number];
 
+/**
+ * Qui pot fer-se un compte.
+ *
+ * Hi ha **dues maneres de dir-ho i una sola veritat**, i val la pena que quedi escrit per
+ * què. `FEMHO_REGISTRATION` és de sempre i té tres estats —`disabled`, `invite`, `open`—;
+ * `FEMHO_ALLOW_REGISTRATION` és el booleà que fa falta el 99% dels cops: la posa a `true`
+ * qui vol que la gent es pugui registrar i prou.
+ *
+ * El booleà és **una drecera, no una segona opció**: `true` vol dir `open` i `false` vol
+ * dir `disabled`. I si algú posa les dues dient coses diferents, **el servidor no arrenca**
+ * en comptes de triar-ne una: dues variables que es contradiuen és exactament el cas en què
+ * qualsevol tria per defecte deixa una instància oberta que algú creia tancada, o al revés.
+ * Fallar aviat i dir-ho és l'única resposta honesta.
+ */
 function envRegistration(): RegistrationMode {
-  const raw = env('REGISTRATION') ?? 'disabled';
-  if (!(REGISTRATION_MODES as readonly string[]).includes(raw)) {
+  const explicit = env('REGISTRATION');
+  const shorthand = envAllowRegistration();
+
+  if (explicit !== undefined && !(REGISTRATION_MODES as readonly string[]).includes(explicit)) {
     throw new Error(
-      `FEMHO_REGISTRATION ha de ser un de ${REGISTRATION_MODES.join(', ')}, i és "${raw}"`,
+      `FEMHO_REGISTRATION ha de ser un de ${REGISTRATION_MODES.join(', ')}, i és "${explicit}"`,
     );
   }
-  return raw as RegistrationMode;
+
+  if (shorthand === undefined) return (explicit as RegistrationMode) ?? 'disabled';
+
+  const wanted: RegistrationMode = shorthand ? 'open' : 'disabled';
+  if (explicit !== undefined && explicit !== wanted) {
+    throw new Error(
+      `FEMHO_ALLOW_REGISTRATION="${String(shorthand)}" vol dir "${wanted}", i FEMHO_REGISTRATION diu ` +
+        `"${explicit}". Deixa'n només una: dues variables que es contradiuen deixarien la ` +
+        'instància oberta o tancada per accident.',
+    );
+  }
+  return wanted;
+}
+
+function envAllowRegistration(): boolean | undefined {
+  const raw = env('ALLOW_REGISTRATION');
+  if (raw === undefined) return undefined;
+
+  const value = raw.trim().toLowerCase();
+  if (['true', '1', 'yes', 'si', 'sí'].includes(value)) return true;
+  if (['false', '0', 'no'].includes(value)) return false;
+
+  // Ni `true` ni `false`: **no s'endevina**. Un "sisplau" mal escrit no ha de deixar el
+  // registre obert perquè "qualsevol cosa que no sigui buit és cert".
+  throw new Error(`FEMHO_ALLOW_REGISTRATION ha de ser true o false, i és "${raw}"`);
 }
 
 export interface Config {

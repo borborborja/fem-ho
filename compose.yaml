@@ -25,9 +25,12 @@ services:
       FEMHO_DATABASE_URL: sqlite:///data/femho.db
       # El rang del proxy invers, perquè `X-Forwarded-For` es pugui creure.
       FEMHO_TRUSTED_PROXIES: 172.16.0.0/12
-      # Per defecte, les altes les fa l'administrador. És el correcte per a una
-      # instància familiar exposada a internet (docs/12 §7).
-      FEMHO_REGISTRATION: disabled
+      # Deixa que la gent es faci un compte, i **el primer que ho faci serà
+      # administrador**. Per defecte no: les altes les fa l'administrador, que és el
+      # correcte per a una instància familiar exposada a internet (docs/12 §7).
+      #
+      # Surt del `.env` del costat, que Compose llegeix sol. Veure `.env.example`.
+      FEMHO_ALLOW_REGISTRATION: ${FEMHO_ALLOW_REGISTRATION:-false}
     healthcheck:
       test:
         - CMD
