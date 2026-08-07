@@ -33,6 +33,26 @@
           especificació defineix; el quart és el que el distribuïdor fa servir per
           descobrir les apps que en volen (docs/11 §1).
         -->
+
+        <!--
+          Els widgets de la pantalla d'inici (docs/03 §9).
+
+          `exported="true"` no és una tria: el sistema d'AppWidget és qui envia les
+          emissions, i un receptor no exportat no en rebria cap. No hi ha cap permís
+          propi perquè no hi ha res que ningú altre pugui demanar-li.
+        -->
+        <receiver
+            android:name=".widget.BoardWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_board_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_board_info" />
+        </receiver>
+
         <receiver
             android:name=".PushReceiver"
             android:exported="true">

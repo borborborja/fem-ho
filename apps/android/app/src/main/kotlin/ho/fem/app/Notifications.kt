@@ -10,6 +10,7 @@ import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import ho.fem.app.widget.FemhoWidgets
 import kotlinx.coroutines.flow.first
 import java.util.concurrent.TimeUnit
 
@@ -36,7 +37,7 @@ object Notifications {
         manager.createNotificationChannel(
             NotificationChannel(
                 CHANNEL_REMINDERS,
-                context.getString(ho.fem.R.string.app_name),
+                context.getString(ho.fem.app.R.string.app_name),
                 NotificationManager.IMPORTANCE_DEFAULT,
             ),
         )
@@ -80,7 +81,13 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
             .fold(
                 // Un error de xarxa és `retry`, no `failure`: la feina segueix sent
                 // vàlida i el sistema la tornarà a provar amb espera creixent.
-                onSuccess = { Result.success() },
+                onSuccess = {
+                    // Els widgets es repinten **només si el refresc ha anat bé**: repintar
+                    // després d'un error ensenyaria les mateixes dades i gastaria una
+                    // transacció amb el llançador per no dir res de nou.
+                    FemhoWidgets.updateAll(applicationContext)
+                    Result.success()
+                },
                 onFailure = { Result.retry() },
             )
     }

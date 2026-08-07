@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  GENERAT · no l'editis a mà.
+
+  Surt dels mateixos tokens que `Tokens.kt`, amb `node tools/gen/tokens-compose.mjs`.
+  Existeix perquè els `<shape>` dels widgets necessiten un `@color/...` i no poden
+  llegir un `ColorProvider` de Kotlin.
+-->
+<resources>
+    <color name="femho_dialog_bg">#FFFFFFFF</color>
+    <color name="femho_panel_bg">#FFFFFFFF</color>
+    <color name="femho_card_bg">#FFFFFFFF</color>
+    <color name="femho_card_border">#1214161E</color>
+    <color name="femho_column_bg">#0514161E</color>
+    <color name="femho_input_bg">#0D14161E</color>
+    <color name="femho_input_border">#1A14161E</color>
+    <color name="femho_danger_bg">#1AE64646</color>
+    <color name="femho_divider">#1414161E</color>
+</resources>

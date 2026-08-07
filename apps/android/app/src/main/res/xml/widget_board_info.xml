@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  El descriptor del widget del tauler.
+
+  `updatePeriodMillis="0"` a posta: **no s'inventa cap cicle nou**. El refresc penja del
+  `SyncWorker` que ja corre cada quinze minuts amb restricció de xarxa, que és el moment
+  exacte en què les dades poden haver canviat. Qualsevol altre valor programaria un
+  despertar del sistema en paral·lel al que ja tenim, i el mínim real són trenta minuts.
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/widget_board_description"
+    android:initialLayout="@layout/glance_default_loading_layout"
+    android:minWidth="180dp"
+    android:minHeight="40dp"
+    android:resizeMode="horizontal|vertical"
+    android:targetCellWidth="4"
+    android:targetCellHeight="2"
+    android:updatePeriodMillis="0"
+    android:widgetCategory="home_screen" />

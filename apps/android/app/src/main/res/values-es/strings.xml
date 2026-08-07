@@ -398,4 +398,16 @@
     <string name="tokens_revoke">Revoca</string>
     <string name="tokens_scopes">Ámbitos</string>
     <string name="tokens_title">Tokens de API</string>
+    <string name="widget_board_description">Los contadores de las cuatro columnas.</string>
+    <string name="widget_board_name">Fem-ho · Tablero</string>
+    <string name="widget_more">+{count} más</string>
+    <string name="widget_pending">pendientes</string>
+    <string name="widget_pinned_choose">Elige qué lista quieres ver</string>
+    <string name="widget_pinned_description">Una lista fijada, para marcar desde la pantalla de inicio.</string>
+    <string name="widget_pinned_name">Fem-ho · Lista</string>
+    <string name="widget_quickadd_description">Apunta una tarea sin abrir la app.</string>
+    <string name="widget_quickadd_name">Fem-ho · Añadir</string>
+    <string name="widget_signedout">Conéctate para ver tus tareas.</string>
+    <string name="widget_today_description">Lo que vence hoy, con añadido rápido.</string>
+    <string name="widget_today_name">Fem-ho · Hoy</string>
 </resources>

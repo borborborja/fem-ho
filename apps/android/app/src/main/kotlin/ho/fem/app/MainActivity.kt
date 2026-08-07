@@ -27,7 +27,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -36,14 +35,17 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import ho.fem.R
+import ho.fem.app.R
+import ho.fem.app.widget.FemhoWidgets
 import ho.fem.designsystem.Femho
 import ho.fem.designsystem.FemhoSize
 import ho.fem.designsystem.FemhoText
 import ho.fem.designsystem.FemhoTheme
 import ho.fem.designsystem.ScopeChip
+import ho.fem.designsystem.scopeColor
 import ho.fem.model.Scope
 import ho.fem.model.TaskStatus
 import ho.fem.calendar.CalendarLabels
@@ -67,6 +69,7 @@ import ho.fem.model.QuickAddContext
 import ho.fem.model.QuickAddPerson
 import ho.fem.model.QuickAddProject
 import ho.fem.model.QuickAddScope
+import kotlinx.coroutines.launch
 
 /**
  * L'activitat única. docs/03.
@@ -106,6 +109,18 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    /**
+     * En sortir de l'app, els widgets es posen al dia.
+     *
+     * És el moment exacte en què la persona torna a mirar la pantalla d'inici, i el que
+     * evita que hi vegi el que hi havia abans d'entrar. La resta del temps ja se n'ocupa
+     * el `SyncWorker`; això només tapa el buit entre dues execucions seves.
+     */
+    override fun onStop() {
+        super.onStop()
+        lifecycleScope.launch { FemhoWidgets.updateAll(applicationContext) }
     }
 }
 
@@ -570,10 +585,12 @@ private fun CalendarHost(model: AppViewModel, onSettings: () -> Unit, onBoard: (
         emptyWeek = stringResource(R.string.calendar_empty_week),
     )
 
-    val colors = scopes.associate { it.id to scopeColor(it.color) }
-    // Es resol FORA del `colorOf`: `scopeColor` és `@Composable` i el callback de
-    // `DayList` no ho és. Amb el mapa ja resolt, el callback és una consulta i prou.
-    val fallback = Femho.colors.inkFaint
+    // Es resol FORA del `colorOf`: llegir `Femho.colors` és una lectura de composició i
+    // el callback de `DayList` no ho és. Amb el mapa ja resolt, el callback és una
+    // consulta i prou.
+    val palette = Femho.colors
+    val colors = scopes.associate { it.id to palette.scopeColor(it.color) }
+    val fallback = palette.inkFaint
     var mode by remember { mutableStateOf(CalendarMode.MONTH) }
 
     Column(Modifier.fillMaxSize()) {
@@ -766,7 +783,7 @@ private fun TopBar(
             scopes.forEach { scope ->
                 ScopeChip(
                     label = scope.name,
-                    color = scopeColor(scope.color),
+                    color = Femho.colors.scopeColor(scope.color),
                     active = active.isEmpty() || scope.id in active,
                     onClick = { onToggle(scope.id) },
                 )
@@ -775,22 +792,8 @@ private fun TopBar(
     }
 }
 
-/** `--plou-blue` → el color viu del tema. El nom del token no es guarda com a valor. */
-@Composable
-private fun scopeColor(token: String): Color = when (token) {
-    "--plou-blue" -> Femho.colors.plouBlue
-    "--plou-orange" -> Femho.colors.plouOrange
-    "--plou-pink" -> Femho.colors.plouPink
-    "--femho-scope-1" -> Femho.colors.femhoScope1
-    "--femho-scope-2" -> Femho.colors.femhoScope2
-    "--femho-scope-3" -> Femho.colors.femhoScope3
-    "--femho-scope-4" -> Femho.colors.femhoScope4
-    "--femho-scope-5" -> Femho.colors.femhoScope5
-    "--femho-scope-6" -> Femho.colors.femhoScope6
-    "--femho-scope-7" -> Femho.colors.femhoScope7
-    "--femho-scope-8" -> Femho.colors.femhoScope8
-    else -> Femho.colors.inkFaint
-}
+// `scopeColor` viu ara a `:core-designsystem` (`Palette.kt`), com a funció pura: els
+// widgets de la pantalla d'inici la necessiten i allà no hi ha composició.
 
 private fun Modifier.androidClickable(onClick: () -> Unit): Modifier = this.clickable(onClick = onClick)
 

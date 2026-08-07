@@ -398,4 +398,16 @@
     <string name="tokens_revoke">Revoca</string>
     <string name="tokens_scopes">Àmbits</string>
     <string name="tokens_title">Tokens d\'API</string>
+    <string name="widget_board_description">Els comptadors de les quatre columnes.</string>
+    <string name="widget_board_name">Fem-ho · Tauler</string>
+    <string name="widget_more">+{count} més</string>
+    <string name="widget_pending">pendents</string>
+    <string name="widget_pinned_choose">Tria quina llista vols veure</string>
+    <string name="widget_pinned_description">Una llista pinejada, per marcar des de la pantalla d\'inici.</string>
+    <string name="widget_pinned_name">Fem-ho · Llista</string>
+    <string name="widget_quickadd_description">Apunta una tasca sense obrir l\'app.</string>
+    <string name="widget_quickadd_name">Fem-ho · Afegir</string>
+    <string name="widget_signedout">Connecta\'t per veure les teves tasques.</string>
+    <string name="widget_today_description">El que venç avui, amb afegida ràpida.</string>
+    <string name="widget_today_name">Fem-ho · Avui</string>
 </resources>
