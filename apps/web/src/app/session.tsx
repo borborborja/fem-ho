@@ -50,6 +50,13 @@ export type SessionState =
 interface SessionApi {
   state: SessionState;
   login: (email: string, password: string) => Promise<void>;
+  /**
+   * Fer-se un compte i entrar-hi.
+   *
+   * Torna les mateixes credencials que el login, o sigui que aquí no hi ha res de
+   * diferent: es desen i es carrega la sessió.
+   */
+  register: (email: string, name: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   /** Torna a llegir el perfil, els àmbits i els projectes. */
   reload: () => Promise<void>;
@@ -132,6 +139,19 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       state,
       login: async (email, password) => {
         const tokens = await api.post<Tokens>('/api/v1/auth/login', { email, password });
+        setTokens(tokens);
+        setState({ status: 'loading' });
+        await load();
+      },
+      register: async (email, name, password) => {
+        const tokens = await api.post<Tokens>('/api/v1/auth/register', {
+          email,
+          name,
+          password,
+          // L'idioma del navegador: l'únic moment en què "automàtic" és inequívoc, perquè
+          // encara no hi ha perfil on algú hagi triat res.
+          locale: navigator.language.slice(0, 2),
+        });
         setTokens(tokens);
         setState({ status: 'loading' });
         await load();

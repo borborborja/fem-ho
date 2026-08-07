@@ -13,6 +13,8 @@ import { auditedTransaction } from '../audit/audited-transaction.js';
 import { LoginLockout } from '../auth/lockout.js';
 import { verifyPassword } from '../auth/password.js';
 import { createSession, revokeSession, rotateRefreshToken } from '../auth/sessions.js';
+import { registerUser } from '../services/registration.js';
+import { setupPrincipal } from '../services/setup.js';
 import { generateAccessToken, isApiToken } from '../auth/tokens.js';
 import { PolicyError, unauthenticated } from '../policy/errors.js';
 import { bearerFrom, resolveApiToken, resolveSession, scopeIdsOwnedBy } from '../policy/resolve.js';
@@ -104,6 +106,108 @@ function sendProblem(reply: FastifyReply, error: unknown, instance: string): voi
 }
 
 export function registerAuthRoutes(app: FastifyInstance): void {
+  /**
+   * Fer-se un compte, quan la instància ho permet.
+   *
+   * **Deixa la sessió oberta**, com el login. Registrar-se i tot seguit haver d'escriure
+   * el mateix correu i la mateixa contrasenya no aporta cap seguretat —qui acaba de posar
+   * la contrasenya ja ha demostrat que la sap— i és una pantalla de frec per res.
+   *
+   * Va amb **el mateix bloqueig per intents que el login**, i comptat pel correu. Sense
+   * ell, una instància oberta és un formulari per crear comptes en massa: cada intent fa
+   * treballar argon2id i deixa una fila, i n'hi ha prou amb un bucle.
+   */
+  app.post('/api/v1/auth/register', async (request, reply): Promise<AuthTokens | undefined> => {
+    const conn = app.connection;
+    if (conn === undefined) {
+      sendProblem(reply, unauthenticated('The instance has no database.'), '/api/v1/auth/register');
+      return undefined;
+    }
+
+    const body = request.body as Record<string, unknown> | undefined;
+    const text = (key: string): string =>
+      typeof body?.[key] === 'string' ? (body[key] as string) : '';
+    const email = text('email').trim().toLowerCase();
+
+    const nowMs = Date.now();
+    const espera = lockout.retryAfterMs(email, nowMs);
+    if (espera > 0) {
+      void reply
+        .code(429)
+        .header('Retry-After', String(Math.ceil(espera / 1000)))
+        .type('application/problem+json')
+        .send({
+          type: 'https://femho.app/errors/too-many-attempts',
+          title: 'Too many attempts',
+          status: 429,
+          detail: `Too many attempts. Try again in ${Math.ceil(espera / 1000)} seconds.`,
+          params: { seconds: Math.ceil(espera / 1000) },
+        });
+      return undefined;
+    }
+
+    const nowIso = new Date(nowMs).toISOString();
+    let userId: string;
+    try {
+      const created = await auditedTransaction(
+        conn.db,
+        // Encara no hi ha ningú autenticat: l'entrada de l'historial ha de dir que la va
+        // escriure el sistema i no un usuari que no existeix.
+        setupPrincipal(),
+        (ctx) =>
+          registerUser(
+            ctx,
+            {
+              email,
+              name: text('name'),
+              password: text('password'),
+              locale: text('locale') === '' ? undefined : text('locale'),
+            },
+            app.config.registration === 'open',
+          ),
+        { now: nowIso },
+      );
+      userId = created.userId;
+    } catch (error) {
+      // Un registre que falla compta com un intent: si no, el comptador només val per al
+      // login i la porta del costat es queda oberta de bat a bat.
+      lockout.recordFailure(email, nowMs);
+      sendProblem(reply, error, '/api/v1/auth/register');
+      return undefined;
+    }
+
+    const principal: Principal = {
+      kind: 'user',
+      userId,
+      capabilities: new Set(),
+      scopeIds: null,
+      source: sourceOf(request),
+    };
+
+    const sessio = await auditedTransaction(
+      conn.db,
+      principal,
+      async (ctx) => {
+        const issued = await createSession(
+          ctx.tx,
+          userId,
+          ctx.now,
+          String(request.headers['user-agent'] ?? ''),
+        );
+        ctx.record({ entityType: 'session', entityId: issued.sessionId, verb: 'logged_in' });
+        return issued;
+      },
+      { now: nowIso },
+    );
+
+    void reply.code(201);
+    return {
+      access_token: issueAccessToken(sessio.sessionId, nowMs),
+      refresh_token: sessio.refreshToken,
+      expires_at: sessio.expiresAt,
+    };
+  });
+
   app.post('/api/v1/auth/login', async (request, reply): Promise<AuthTokens | undefined> => {
     const conn = app.connection;
     if (conn === undefined) {

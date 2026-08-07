@@ -174,6 +174,7 @@
     <string name="login_forgot">Forgotten your password?</string>
     <string name="login_insecure">This address is not encrypted. Anyone on the network can read what goes through it.</string>
     <string name="login_password">Password</string>
+    <string name="login_register">Create an account</string>
     <string name="login_server">Server</string>
     <string name="login_serverhint">The address of your Fem-ho server</string>
     <string name="login_servernewer">The server is newer than this app. Update it.</string>
@@ -212,6 +213,12 @@
     <string name="palette_tasks">Tasks</string>
     <string name="quickadd_groupown">Mine</string>
     <string name="quickadd_groupshared">Shared</string>
+    <string name="register_error">The account could not be created.</string>
+    <string name="register_haveaccount">I already have an account</string>
+    <string name="register_name">Username</string>
+    <string name="register_submit">Create the account</string>
+    <string name="register_subtitle">Pick a name and a password. You can change them later in Settings.</string>
+    <string name="register_title">Create an account</string>
     <string name="settings_about">About</string>
     <string name="settings_accent">Accent</string>
     <string name="settings_accent_default">Default</string>

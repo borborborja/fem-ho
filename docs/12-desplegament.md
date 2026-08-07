@@ -72,7 +72,8 @@ Variables d'entorn amb prefix `FEMHO_`. Els secrets accepten el sufix `_FILE` pe
 | `FEMHO_TRUSTED_PROXIES` | — | Rangs dels quals s'accepten les capçaleres `X-Forwarded-*` |
 | `FEMHO_SECRET_KEY` | generat | Es persisteix al primer arrencament |
 | `FEMHO_SMTP_*` | — | Amfitrió, port, usuari, contrasenya, xifratge, remitent |
-| `FEMHO_REGISTRATION` | `disabled` | `disabled`, `invite`, `open` |
+| `FEMHO_ALLOW_REGISTRATION` | `false` | Qualsevol es pot fer un compte. **El primer serà administrador.** |
+| `FEMHO_REGISTRATION` | `disabled` | La forma llarga: `disabled`, `invite`, `open` |
 | `FEMHO_MAX_UPLOAD_MB` | `25` | |
 | `FEMHO_LOG_LEVEL` | `info` | |
 | `FEMHO_CALDAV_ALLOWLIST` | — | Restricció opcional d'orígens externs |
@@ -131,7 +132,17 @@ Amb la base buida, el servidor crea l'esquema, genera els secrets i els persiste
 
 En crear l'administrador es creen els seus tres àmbits inicials (Personal, Feina, Família) amb els colors de la tríada. **No són especials**: es poden reanomenar i esborrar.
 
-Les altes posteriors depenen de `FEMHO_REGISTRATION`. Per defecte, `disabled`: els usuaris els crea l'administrador. És el comportament correcte per a una instància familiar exposada a internet.
+Les altes posteriors depenen del registre. Per defecte està tancat: els usuaris els crea l'administrador, que és el comportament correcte per a una instància familiar exposada a internet.
+
+Per obrir-lo n'hi ha prou amb una línia al `.env`:
+
+```
+FEMHO_ALLOW_REGISTRATION=true
+```
+
+**Amb la base buida, registrar-se és el primer arrencament**: qui hi arribi primer serà administrador i es trobarà els tres àmbits inicials, exactament igual que si hagués passat per `/setup`. No són dos camins: el registre delega en aquell. Del segon endavant, `member` amb un àmbit propi.
+
+Hi ha també `FEMHO_REGISTRATION`, amb tres estats, per si es vol el mode `invite`. `FEMHO_ALLOW_REGISTRATION=true` vol dir `open` i `false` vol dir `disabled`, i **si es posen les dues dient coses diferents el servidor no arrenca**: dues variables que es contradiuen deixarien la instància oberta o tancada per accident, i triar-ne una per defecte seria decidir-ho per l'operador.
 
 Dades de demostració: opcionals, darrere d'una variable, i mai per defecte.
 

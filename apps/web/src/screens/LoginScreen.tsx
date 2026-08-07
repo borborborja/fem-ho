@@ -9,7 +9,7 @@
  * incorrectes": distingir-los convertiria el formulari en un comprovador de comptes.
  */
 
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { t } from '@fem-ho/contracts';
 import { useSession } from '../app/session.js';
 import { useMutation } from '../app/useApi.js';
@@ -19,6 +19,28 @@ export function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const { run, busy, error } = useMutation(login);
+
+  /**
+   * L'enllaç per fer-se un compte **només surt si la instància ho permet**.
+   *
+   * Ho diu `/info`, que és públic i no demana sessió. Ensenyar-lo sempre portaria a un
+   * formulari que respon 403, i una porta pintada que no obre és pitjor que cap porta.
+   */
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    fetch('/info')
+      .then(async (res) => (res.ok ? ((await res.json()) as { registration?: string }) : null))
+      .then((info) => {
+        if (alive) setOpen(info?.registration === 'open');
+      })
+      .catch(() => {
+        // Sense `/info` no se sap: es deixa amagat, que és el que no promet res.
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const onSubmit = (event: FormEvent): void => {
     event.preventDefault();
@@ -112,6 +134,21 @@ export function LoginScreen() {
         >
           {t('login.submit')}
         </button>
+
+        {open ? (
+          <a
+            href="/register"
+            data-testid="login-register"
+            style={{
+              fontSize: 12.5,
+              color: 'var(--brand-ink)',
+              textAlign: 'center',
+              fontWeight: 600,
+            }}
+          >
+            {t('login.register')}
+          </a>
+        ) : null}
 
         <a
           href="/settings"

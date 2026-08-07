@@ -24,6 +24,7 @@ import { JoinScopeScreen } from '../screens/JoinScopeScreen.js';
 import { InviteScreen, SetupScreen } from '../screens/GateScreens.js';
 import { ListScreen } from '../screens/ListScreen.js';
 import { LoginScreen } from '../screens/LoginScreen.js';
+import { RegisterScreen } from '../screens/RegisterScreen.js';
 import { PublicShareScreen } from '../screens/PublicShareScreen.js';
 import { CommandPalette } from '../screens/CommandPalette.js';
 import { SearchScreen } from '../screens/SearchScreen.js';
@@ -62,6 +63,19 @@ export function App() {
     if (state.status === 'anonymous') return <LoginScreen />;
     if (state.status === 'loading') return null;
     return <JoinScopeScreen token={join.token!} />;
+  }
+
+  /**
+   * El registre, quan la instància l'obre.
+   *
+   * La pantalla hi és sempre i **qui decideix és el servidor**: si el registre està
+   * tancat, respon 403 i el formulari ho ensenya. Amagar la ruta al client no protegiria
+   * res —l'API és la mateixa per a tothom— i faria que un enllaç compartit portés a una
+   * pàgina que no existeix en comptes de dir què passa.
+   */
+  if (route.path === '/register') {
+    if (state.status === 'anonymous') return <RegisterScreen />;
+    if (state.status === 'loading') return null;
   }
 
   if (route.path === '/setup') {

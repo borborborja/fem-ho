@@ -174,6 +174,7 @@
     <string name="login_forgot">¿Has olvidado la contraseña?</string>
     <string name="login_insecure">Esta dirección no va cifrada. Cualquiera de la red puede leer lo que pase por ella.</string>
     <string name="login_password">Contraseña</string>
+    <string name="login_register">Crear una cuenta</string>
     <string name="login_server">Servidor</string>
     <string name="login_serverhint">La dirección de tu servidor de Fem-ho</string>
     <string name="login_servernewer">El servidor es más nuevo que esta app. Actualízala.</string>
@@ -212,6 +213,12 @@
     <string name="palette_tasks">Tareas</string>
     <string name="quickadd_groupown">Los míos</string>
     <string name="quickadd_groupshared">Compartidos</string>
+    <string name="register_error">No se ha podido crear la cuenta.</string>
+    <string name="register_haveaccount">Ya tengo cuenta</string>
+    <string name="register_name">Nombre de usuario</string>
+    <string name="register_submit">Crear la cuenta</string>
+    <string name="register_subtitle">Elige un nombre y una contraseña. Podrás cambiarlo desde Ajustes.</string>
+    <string name="register_title">Crear una cuenta</string>
     <string name="settings_about">Acerca de</string>
     <string name="settings_accent">Acento</string>
     <string name="settings_accent_default">Por defecto</string>

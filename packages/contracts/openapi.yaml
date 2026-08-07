@@ -113,6 +113,69 @@ paths:
               schema:
                 $ref: '#/components/schemas/Problem'
 
+  /auth/register:
+    post:
+      tags: [auth]
+      operationId: register
+      summary: Fer-se un compte
+      description: |
+        Només quan la instància ho permet: `FEMHO_ALLOW_REGISTRATION=true`, o el seu
+        equivalent llarg `FEMHO_REGISTRATION=open`. Si no, respon 403 i diu que cal
+        demanar un convit a qui la porta.
+
+        **El primer que es registra és administrador** i es troba els àmbits inicials: amb
+        la base buida, registrar-se *és* el primer arrencament, i no un camí paral·lel.
+        Del segon endavant, `member` amb un àmbit propi.
+
+        **Mai es diu si el correu ja existeix** (docs/02 §2): un correu repetit respon
+        exactament igual que un de nou i triga el mateix, perquè si no el formulari seria
+        una manera d'esbrinar qui té compte en aquesta casa. Amb el mateix bloqueig
+        progressiu que el login: sense ell, una instància oberta és un formulari per crear
+        comptes en massa.
+
+        Deixa la sessió oberta: torna els mateixos tokens que el login.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, name, password]
+              properties:
+                email: { type: string, format: email }
+                name:
+                  type: string
+                  description: >-
+                    El nom amb què es veu la persona. És `users.name`, el mateix que demana
+                    el primer arrencament; no hi ha un identificador d'usuari a part.
+                password: { type: string, minLength: 12 }
+                locale:
+                  type: string
+                  description: L'idioma del navegador, per al perfil i els àmbits inicials.
+      responses:
+        '201':
+          description: Compte creat, i la sessió ja oberta.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokens'
+        '403':
+          description: La instància no accepta comptes nous.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '422':
+          description: Correu que no ho sembla, nom buit o contrasenya massa curta.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '429':
+          description: Massa intents. Porta `Retry-After`.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
   /auth/login:
     post:
       tags: [auth]

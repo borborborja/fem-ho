@@ -53,6 +53,7 @@
     "pushSync": "apps/server/src/http/sync.test.ts · \"cas 1 · mode avió\" i la resta dels vuit casos de docs/06 §10",
     "redeemFederationGrant": "apps/server/src/services/federation.test.ts · \"d'un convit federat dona un token, sense demanar cap sessió\"",
     "redeemScopeInvite": "apps/server/src/services/grants.test.ts · \"acceptar-lo hi entra, i converteix l'àmbit a col·lectiu\"",
+    "register": "apps/server/src/services/registration.test.ts · \"el primer que es registra és administrador i deixa la sessió oberta\"",
     "releaseTask": "apps/server/src/http/api-surface.test.ts · \"reservar deixa rastre, i alliberar sense motiu es rebutja\"",
     "removeAssignee": "apps/server/src/http/api-surface.test.ts · \"i qui sí, sí, amb rastre\"",
     "removeMember": "apps/server/src/http/api-surface.test.ts · \"i un membre normal sí\"",

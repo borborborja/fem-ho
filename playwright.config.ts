@@ -62,6 +62,15 @@ export default defineConfig({
         FEMHO_LOG_LEVEL: 'warn',
         FEMHO_INSTANCE_NAME: 'Fem-ho de proves',
         FEMHO_BASE_URL: 'http://localhost:4173',
+        /**
+         * El registre, obert a la suite.
+         *
+         * No és per comoditat: és **l'única manera de comprovar-lo al navegador**. Una
+         * instància de proves amb el registre tancat faria que la pantalla de registre no
+         * s'arribés a provar mai, que és exactament com `FEMHO_REGISTRATION` va viure
+         * anys sent una opció que no feia res.
+         */
+        FEMHO_ALLOW_REGISTRATION: 'true',
       },
     },
     {

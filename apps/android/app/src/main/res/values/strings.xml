@@ -174,6 +174,7 @@
     <string name="login_forgot">Has oblidat la contrasenya?</string>
     <string name="login_insecure">Aquesta adreça no va xifrada. Qualsevol de la xarxa pot llegir el que hi passi.</string>
     <string name="login_password">Contrasenya</string>
+    <string name="login_register">Fer-se un compte</string>
     <string name="login_server">Servidor</string>
     <string name="login_serverhint">L\'adreça del teu servidor de Fem-ho</string>
     <string name="login_servernewer">El servidor és més nou que aquesta app. Actualitza-la.</string>
@@ -212,6 +213,12 @@
     <string name="palette_tasks">Tasques</string>
     <string name="quickadd_groupown">Els meus</string>
     <string name="quickadd_groupshared">Compartits</string>
+    <string name="register_error">No s\'ha pogut crear el compte.</string>
+    <string name="register_haveaccount">Ja tinc compte</string>
+    <string name="register_name">Nom d\'usuari</string>
+    <string name="register_submit">Crear el compte</string>
+    <string name="register_subtitle">Escull un nom i una contrasenya. Ja podràs canviar-ho des d\'Ajustos.</string>
+    <string name="register_title">Fer-se un compte</string>
     <string name="settings_about">Sobre</string>
     <string name="settings_accent">Accent</string>
     <string name="settings_accent_default">Per defecte</string>
