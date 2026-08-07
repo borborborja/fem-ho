@@ -1497,6 +1497,100 @@ paths:
           content:
             { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
 
+  /scopes/{id}/invites:
+    get:
+      operationId: listScopeInvites
+      summary: Els convits oberts d'un àmbit
+      tags: [Àmbits]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Convits
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ScopeInvite' }
+    post:
+      operationId: createScopeInvite
+      summary: Convidar algú a un àmbit
+      description: >-
+        Demana la capacitat `scopes:share`, separada de `scopes:write`: regalar un àmbit
+        a un desconegut no és el mateix poder que reanomenar-lo. **El token sencer surt
+        una sola vegada** i no es pot recuperar del hash.
+      tags: [Àmbits]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                role: { type: string, enum: [collaborator, viewer] }
+                max_uses: { type: integer, minimum: 1 }
+      responses:
+        '201':
+          description: Convit emès
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ScopeInviteCreated' }
+
+  /scopes/{id}/invites/{grantId}:
+    delete:
+      operationId: revokeScopeInvite
+      summary: Revocar un convit
+      tags: [Àmbits]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: grantId, in: path, required: true, schema: { type: string } }
+      responses:
+        '204': { description: Revocat }
+
+  /join/{token}:
+    get:
+      operationId: peekScopeInvite
+      summary: Mirar un convit sense acceptar-lo
+      description: >-
+        Perquè la pantalla pugui dir de qui és i a quin àmbit convida abans d'acceptar.
+        Un token inventat, un de caducat i un de revocat responen **igual** (docs/10 §4).
+      tags: [Àmbits]
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: El convit
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ScopeInvitePreview' }
+        '404':
+          description: No és vàlid
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+    post:
+      operationId: redeemScopeInvite
+      summary: Acceptar un convit
+      description: >-
+        Demana sessió: un convit d'àmbit no és un enllaç anònim —això són els `shares`—
+        sinó una relació entre dues persones amb compte. És idempotent per a qui ja hi és.
+      tags: [Àmbits]
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Dins
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [scope_id, scope_name, role]
+                properties:
+                  scope_id: { type: string }
+                  scope_name: { type: string }
+                  role: { type: string }
+
   /scopes/{id}/members/me:
     delete:
       operationId: leaveScope
@@ -2365,6 +2459,39 @@ paths:
 
 components:
   schemas:
+    ScopeInvite:
+      type: object
+      required: [id, role, max_uses, use_count, expires_at, created_at]
+      properties:
+        id: { type: string }
+        role: { type: [string, 'null'] }
+        max_uses: { type: integer }
+        use_count: { type: integer }
+        expires_at: { type: [string, 'null'], format: date-time }
+        created_at: { type: string, format: date-time }
+
+    ScopeInviteCreated:
+      type: object
+      required: [id, role, expires_at, invite_url]
+      properties:
+        id: { type: string }
+        role: { type: [string, 'null'] }
+        expires_at: { type: [string, 'null'], format: date-time }
+        invite_url:
+          type: string
+          description: |
+            **Surt una sola vegada.** No es pot recuperar del hash; si es perd, cal
+            emetre'n un de nou. Cal dir-ho a qui el crea (docs/10 §6).
+
+    ScopeInvitePreview:
+      type: object
+      required: [kind, scope_name, role, invited_by]
+      properties:
+        kind: { type: string }
+        scope_name: { type: string }
+        role: { type: string }
+        invited_by: { type: string }
+
     ScopePatch:
       type: object
       description: |
@@ -2910,12 +3037,22 @@ components:
     SyncResponse:
       type: object
       additionalProperties: false
-      required: [changes, next_cursor, has_more, server_time]
+      required: [changes, dropped_scopes, next_cursor, has_more, server_time]
       properties:
         changes:
           type: array
           items:
             $ref: '#/components/schemas/SyncChange'
+        dropped_scopes:
+          type: array
+          items: { type: string }
+          description: |
+            Àmbits que aquest usuari ha deixat de veure des del seu cursor. El client hi
+            ha d'esborrar tot el que en porti l'identificador.
+
+            **No arriba per `changes`**: perdre accés a un àmbit no genera cap fila de
+            canvi, i sense això les dades d'un àmbit del qual has sortit et queden al
+            dispositiu per sempre.
         next_cursor: { type: string }
         has_more: { type: boolean }
         server_time:

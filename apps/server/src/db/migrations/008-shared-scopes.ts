@@ -239,6 +239,30 @@ export async function up(db: MigrationDb, engine: Engine): Promise<void> {
     .execute(db);
   await sql.raw('CREATE INDEX idx_sync_op_ids_age ON sync_op_ids(created_at)').execute(db);
 
+  // ---------------------------------------------------- perdre accés a un àmbit
+  //
+  // El comentari de `services/sync.ts` afirmava que qui perd accés a un àmbit rep
+  // tombstones i que "això ho aconsegueix la consulta sola". **És fals**: el
+  // `WHERE scope_id IN (permesos)` simplement EXCLOU aquelles files. Qui surti d'un
+  // àmbit compartit es quedaria les tasques al SQLite d'Android i a l'IndexedDB de la
+  // web per sempre, sense senyal de cap mena.
+  //
+  // Sense això, compartir no es pot desplegar: compartir sense poder descompartir de
+  // debò no és compartir.
+  await sql
+    .raw(
+      `CREATE TABLE scope_access_revocations (
+        id         ${t.text} PRIMARY KEY NOT NULL,
+        scope_id   ${t.text} NOT NULL,
+        user_id    ${t.text} NOT NULL,
+        revoked_at ${t.instant} NOT NULL
+      )`,
+    )
+    .execute(db);
+  await sql
+    .raw('CREATE INDEX idx_revocations_user ON scope_access_revocations(user_id, revoked_at)')
+    .execute(db);
+
   // ---------------------------------------------- què es comparteix d'un àmbit
   //
   // La polaritat és l'OPOSADA a `hidden_calendar_ids`, i és deliberat. Allà es desa el
@@ -334,6 +358,7 @@ export async function up(db: MigrationDb, engine: Engine): Promise<void> {
 }
 
 export async function down(db: MigrationDb, engine: Engine): Promise<void> {
+  await sql.raw('DROP TABLE IF EXISTS scope_access_revocations').execute(db);
   await sql.raw('DROP TABLE IF EXISTS sync_op_ids').execute(db);
   await sql.raw('DROP TABLE IF EXISTS grants').execute(db);
   await sql.raw('ALTER TABLE calendars DROP COLUMN shared_with_scope').execute(db);

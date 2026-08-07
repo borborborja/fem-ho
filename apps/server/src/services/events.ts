@@ -17,6 +17,7 @@ import type { MigrationDb } from '../db/migration-db.js';
 import { expandOccurrences, splitSeries } from '../events/recurrence.js';
 import { PolicyError, missingCapability, notFound } from '../policy/errors.js';
 import { hasCapability, type Principal } from '../policy/principal.js';
+import { visibleCalendarIds } from '../policy/calendar-visibility.js';
 import { assertScopeAccess, listScopes } from './scopes.js';
 
 export interface CalendarRow {
@@ -112,7 +113,12 @@ export async function listCalendars(db: MigrationDb, principal: Principal): Prom
     ORDER BY name
   `.execute(db);
 
-  return rows.rows;
+  /**
+   * **I es tallen els que no s'han compartit.** L'àmbit compartit arriba sencer, però un
+   * calendari amb credencials d'un tercer no ha de sortir si el propietari no ho ha dit.
+   */
+  const visible = await visibleCalendarIds(db, principal.userId);
+  return rows.rows.filter((row) => visible.has(row.id));
 }
 
 export interface ListEventsOptions {
@@ -187,8 +193,13 @@ export async function listEventOccurrences(
       AND c.scope_id IN (${sql.join(allowed)})
   `.execute(db);
 
-  const masters = rows.rows.filter((row) => row.recurrence_id === null);
-  const overrides = rows.rows.filter((row) => row.recurrence_id !== null);
+  // El mateix tall que a `listCalendars`: l'àmbit no basta, cal que el calendari s'hagi
+  // compartit. Els esdeveniments no tenen `scope_id` propi i el treuen del calendari.
+  const visible = await visibleCalendarIds(db, principal.userId);
+  const rowsVisibles = rows.rows.filter((row) => visible.has(row.calendar_id));
+
+  const masters = rowsVisibles.filter((row) => row.recurrence_id === null);
+  const overrides = rowsVisibles.filter((row) => row.recurrence_id !== null);
 
   // Les excepcions s'indexen per (uid, recurrence_id): és el que les lliga a
   // l'ocurrència que substitueixen (D8).

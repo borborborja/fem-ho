@@ -43,6 +43,7 @@ export type AuditVerb =
   | 'claimed'
   | 'released'
   | 'left'
+  | 'revoked'
   | 'joined'
   | 'logged_in'
   | 'logged_out'

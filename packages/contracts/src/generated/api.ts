@@ -816,6 +816,68 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/scopes/{id}/invites": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Els convits oberts d'un àmbit */
+        get: operations["listScopeInvites"];
+        put?: never;
+        /**
+         * Convidar algú a un àmbit
+         * @description Demana la capacitat `scopes:share`, separada de `scopes:write`: regalar un àmbit a un desconegut no és el mateix poder que reanomenar-lo. **El token sencer surt una sola vegada** i no es pot recuperar del hash.
+         */
+        post: operations["createScopeInvite"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/scopes/{id}/invites/{grantId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Revocar un convit */
+        delete: operations["revokeScopeInvite"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/join/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Mirar un convit sense acceptar-lo
+         * @description Perquè la pantalla pugui dir de qui és i a quin àmbit convida abans d'acceptar. Un token inventat, un de caducat i un de revocat responen **igual** (docs/10 §4).
+         */
+        get: operations["peekScopeInvite"];
+        put?: never;
+        /**
+         * Acceptar un convit
+         * @description Demana sessió: un convit d'àmbit no és un enllaç anònim —això són els `shares`— sinó una relació entre dues persones amb compte. És idempotent per a qui ja hi és.
+         */
+        post: operations["redeemScopeInvite"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/scopes/{id}/members/me": {
         parameters: {
             query?: never;
@@ -1468,6 +1530,33 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        ScopeInvite: {
+            id: string;
+            role: string | null;
+            max_uses: number;
+            use_count: number;
+            /** Format: date-time */
+            expires_at: string | null;
+            /** Format: date-time */
+            created_at: string;
+        };
+        ScopeInviteCreated: {
+            id: string;
+            role: string | null;
+            /** Format: date-time */
+            expires_at: string | null;
+            /**
+             * @description **Surt una sola vegada.** No es pot recuperar del hash; si es perd, cal
+             *     emetre'n un de nou. Cal dir-ho a qui el crea (docs/10 §6).
+             */
+            invite_url: string;
+        };
+        ScopeInvitePreview: {
+            kind: string;
+            scope_name: string;
+            role: string;
+            invited_by: string;
+        };
         /**
          * @description Només els camps donats. `kind` sí que hi és: cap a col·lectiu sempre, i cap a
          *     individual només si no queda cap altre membre (409 amb qui queda).
@@ -1901,6 +1990,15 @@ export interface components {
         };
         SyncResponse: {
             changes: components["schemas"]["SyncChange"][];
+            /**
+             * @description Àmbits que aquest usuari ha deixat de veure des del seu cursor. El client hi
+             *     ha d'esborrar tot el que en porti l'identificador.
+             *
+             *     **No arriba per `changes`**: perdre accés a un àmbit no genera cap fila de
+             *     canvi, i sense això les dades d'un àmbit del qual has sortit et queden al
+             *     dispositiu per sempre.
+             */
+            dropped_scopes: string[];
             next_cursor: string;
             has_more: boolean;
             /**
@@ -4071,6 +4169,136 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listScopeInvites: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Convits */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScopeInvite"][];
+                };
+            };
+        };
+    };
+    createScopeInvite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    role?: "collaborator" | "viewer";
+                    max_uses?: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Convit emès */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScopeInviteCreated"];
+                };
+            };
+        };
+    };
+    revokeScopeInvite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                grantId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Revocat */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    peekScopeInvite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description El convit */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScopeInvitePreview"];
+                };
+            };
+            /** @description No és vàlid */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    redeemScopeInvite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Dins */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        scope_id: string;
+                        scope_name: string;
+                        role: string;
+                    };
                 };
             };
         };

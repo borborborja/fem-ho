@@ -75,7 +75,6 @@ export function buildApp(config: Config, options: BuildOptions = {}): FastifyIns
   registerInstanceRoutes(app);
   registerAuthRoutes(app);
   registerMeRoutes(app);
-  registerScopeRoutes(app);
   registerAgentRoutes(app);
   /**
    * El secret es resol **quan es necessita**, no en construir l'app: `buildApp` no ha de
@@ -88,6 +87,7 @@ export function buildApp(config: Config, options: BuildOptions = {}): FastifyIns
     return secret;
   };
 
+  registerScopeRoutes(app, instanceSecret);
   registerTaskRoutes(app);
   registerEventRoutes(app, instanceSecret);
   registerChecklistRoutes(app);

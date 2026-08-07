@@ -106,6 +106,39 @@ export async function assertScopeAccess(
  *
  * Regla 8: viu a la capa de servei, mai al handler.
  */
+/**
+ * Deixa constància que algú ha perdut l'accés a un àmbit.
+ *
+ * És el que fa que `pull` pugui enviar `dropped_scopes` i que el client esborri de debò.
+ * Sense això, treure un membre el treu del servidor i li deixa les dades al dispositiu.
+ */
+async function recordRevocation(ctx: AuditContext, scopeId: string, userId: string): Promise<void> {
+  await sql`
+    INSERT INTO scope_access_revocations (id, scope_id, user_id, revoked_at)
+    VALUES (${uuidv7()}, ${scopeId}, ${userId}, ${ctx.now})
+  `.execute(ctx.tx);
+}
+
+/**
+ * Afegeix un membre **sense comprovar res**.
+ *
+ * Existeix perquè totes les escriptures a `scope_members` visquin en aquest fitxer, que
+ * és el que la comprovació `scope-predicate` fa complir. Qui la crida ja ha decidit que
+ * pot: el bescanvi d'un convit valida la concessió, no el rol de qui l'accepta —justament
+ * no en té cap encara.
+ */
+export async function joinScope(
+  ctx: AuditContext,
+  scopeId: string,
+  userId: string,
+  role: ScopeRole,
+): Promise<void> {
+  await sql`
+    INSERT INTO scope_members (id, scope_id, user_id, role, created_at)
+    VALUES (${uuidv7()}, ${scopeId}, ${userId}, ${role}, ${ctx.now})
+  `.execute(ctx.tx);
+}
+
 export async function assertScopeRole(
   db: MigrationDb,
   principal: Principal,
@@ -646,6 +679,7 @@ export async function removeMember(
   }
 
   await sql`DELETE FROM scope_members WHERE id = ${memberId}`.execute(ctx.tx);
+  if (member.user_id !== null) await recordRevocation(ctx, scopeId, member.user_id);
   ctx.record({ entityType: 'scope_member', entityId: memberId, scopeId, verb: 'deleted' });
 }
 
@@ -679,6 +713,7 @@ export async function leaveScope(
   await sql`
     DELETE FROM scope_members WHERE scope_id = ${scopeId} AND user_id = ${principal.userId}
   `.execute(ctx.tx);
+  await recordRevocation(ctx, scopeId, principal.userId);
 
   ctx.record({
     entityType: 'scope_member',

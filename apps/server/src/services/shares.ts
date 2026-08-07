@@ -15,7 +15,7 @@
  * triguen el mateix.
  */
 
-import { createHmac, randomBytes } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import { sql } from 'kysely';
 import { v7 as uuidv7 } from 'uuid';
 import { dbBool } from '../db/bool.js';
@@ -25,12 +25,8 @@ import type { MigrationDb } from '../db/migration-db.js';
 import type { Capability } from '../policy/capabilities.js';
 import { PolicyError, missingCapability, notFound } from '../policy/errors.js';
 import { hasCapability, type Principal } from '../policy/principal.js';
+import { generateOpaqueToken, tokenHmac } from '../util/opaque-token.js';
 import { assertScopeAccess } from './scopes.js';
-
-/** L'alfabet del token: segur per a URL i sense caràcters que es confonguin. */
-const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
-/** 32 caràcters d'aquest alfabet són ~183 bits: no s'endevina. */
-const TOKEN_LENGTH = 32;
 
 export const SHARE_PERMISSIONS = ['view', 'check', 'comment'] as const;
 export type SharePermission = (typeof SHARE_PERMISSIONS)[number];
@@ -53,24 +49,9 @@ export const MIN_SHARE_PASSWORD_LENGTH = 6;
 const LOCK_BASE_MS = 60_000;
 const LOCK_MAX_MS = 60 * 60_000;
 
-export function generateShareToken(): string {
-  const bytes = randomBytes(TOKEN_LENGTH);
-  let token = '';
-  for (const byte of bytes) token += ALPHABET[byte % ALPHABET.length];
-  return token;
-}
+export const generateShareToken = generateOpaqueToken;
 
-/**
- * L'HMAC del token amb el pebre del servidor.
- *
- * HMAC i no un hash pelat: sense el pebre, qui es quedés la base podria provar tokens
- * candidats offline. Amb el pebre, per fer-ho també li cal el secret de la instància.
- */
-export function tokenHmac(token: string, pepper: string, version = 1): string {
-  return createHmac('sha256', `${pepper}:v${String(version)}`)
-    .update(token)
-    .digest('hex');
-}
+export { tokenHmac };
 
 export interface Share {
   id: string;

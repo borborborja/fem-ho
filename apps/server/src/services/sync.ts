@@ -16,6 +16,7 @@ import type { AuditContext } from '../audit/audited-transaction.js';
 import type { MigrationDb } from '../db/migration-db.js';
 import { PolicyError, missingCapability } from '../policy/errors.js';
 import { hasCapability, type Principal } from '../policy/principal.js';
+import { visibleCalendarIds } from '../policy/calendar-visibility.js';
 import { listScopes } from './scopes.js';
 import { clampInt } from '../util/clamp.js';
 
@@ -32,6 +33,14 @@ export interface SyncChange {
 
 export interface SyncResponse {
   changes: SyncChange[];
+  /**
+   * Àmbits que aquest usuari ha deixat de veure des del seu cursor.
+   *
+   * El client hi ha d'esborrar **tot el que en porti l'identificador**. No arriba per
+   * `changes`: perdre accés no genera cap fila de canvi, i sense això les tasques d'un
+   * àmbit del qual has sortit et queden al dispositiu per sempre.
+   */
+  dropped_scopes: string[];
   next_cursor: string;
   has_more: boolean;
   server_time: string;
@@ -94,12 +103,24 @@ export async function pull(
   const limit = clampInt(options.limit, { min: 1, max: 1000, fallback: 500 });
 
   let from = 0;
+  /**
+   * La data del cursor, per a les revocacions.
+   *
+   * Una revocació **no escriu cap fila a `change_log`** —treure un membre no canvia cap
+   * entitat sincronitzable—, o sigui que no té `seq` i no es pot comparar amb el cursor.
+   * El que sí que es pot comparar és el moment: la fila del cursor en porta un.
+   */
+  let cursorTime: string | undefined;
   if (options.cursor !== undefined && options.cursor !== '') {
     const decoded = decodeCursor(options.cursor);
     if (decoded === null) throw new ResyncRequired();
     from = decoded;
 
     await assertCursorFresh(db, from, now);
+    const at = await sql<{ created_at: string }>`
+      SELECT created_at FROM change_log WHERE seq = ${from}
+    `.execute(db);
+    cursorTime = at.rows[0]?.created_at;
   }
 
   const scopes = await listScopes(db, principal);
@@ -109,9 +130,14 @@ export async function pull(
    * El delta va **filtrat pel principal**: només arriba el dels àmbits que el token pot
    * veure. Les files sense àmbit —preferències, sessions— no viatgen pel sync.
    *
-   * Si un token perd accés a un àmbit, el client rep tombstones d'aquelles entitats
-   * (docs/06 §3). Això ho aconsegueix la consulta sola: les files d'aquell àmbit deixen
-   * de sortir i el client, en resincronitzar, no les torna a veure.
+   * **Perdre accés a un àmbit NO arriba per aquesta consulta.** Aquí hi deia el
+   * contrari —"les files d'aquell àmbit deixen de sortir i el client no les torna a
+   * veure"— i és fals: deixar de sortir no és el mateix que arribar com a esborrat. El
+   * client no rep res, i es queda les tasques al seu SQLite per sempre.
+   *
+   * El que ho resol és `dropped_scopes`, aquí sota: els àmbits dels quals aquest usuari
+   * ha perdut l'accés des del seu cursor. Els dos clients hi esborren tot el que en
+   * porti l'identificador.
    */
   const rows =
     allowed.length === 0
@@ -127,8 +153,27 @@ export async function pull(
   const hasMore = rows.rows.length > limit;
   const page = hasMore ? rows.rows.slice(0, limit) : rows.rows;
 
+  /**
+   * **El `seq` de l'última fila es pren de la pàgina SENSE filtrar.**
+   *
+   * Si es prengués del que queda després del post-filtre i una pàgina sencera quedés
+   * buida, `next_cursor` no avançaria i el client entraria en un bucle infinit demanant
+   * el mateix tros. Es calcula abans i no es toca.
+   */
+  const lastSeqOfPage = page[page.length - 1]?.seq ?? from;
+
+  /**
+   * Un esdeveniment d'un calendari NO compartit porta l'`scope_id` de l'àmbit, o sigui
+   * que el filtre per àmbit sol el deixaria passar. El tall va aquí.
+   */
+  const visibleCalendars = await visibleCalendarIds(db, principal.userId);
+
   const changes: SyncChange[] = [];
   for (const row of page) {
+    if (row.entity_type === 'event' || row.entity_type === 'calendar') {
+      const belongs = await calendarOf(db, row.entity_type, row.entity_id);
+      if (belongs !== null && !visibleCalendars.has(belongs)) continue;
+    }
     if (row.operation === 'delete') {
       // Un `delete` només porta l'identificador (docs/06 §3).
       changes.push({ entity: row.entity_type, id: row.entity_id, op: 'delete', seq: row.seq });
@@ -145,10 +190,27 @@ export async function pull(
     });
   }
 
-  const lastSeq = page[page.length - 1]?.seq ?? from;
+  const lastSeq = lastSeqOfPage;
+
+  /**
+   * Els àmbits que aquest usuari ha deixat de veure.
+   *
+   * Es filtra per data i no per cursor perquè el cursor és un `seq` de `change_log` i una
+   * revocació no hi escriu cap fila: treure un membre no canvia cap entitat sincronitzable.
+   * Amb `cursor` buit —una sincronització completa— no cal enviar-ne cap: el client no té
+   * res per esborrar.
+   */
+  const dropped =
+    cursorTime === undefined
+      ? { rows: [] as { scope_id: string }[] }
+      : await sql<{ scope_id: string }>`
+          SELECT DISTINCT scope_id FROM scope_access_revocations
+          WHERE user_id = ${principal.userId} AND revoked_at > ${cursorTime}
+        `.execute(db);
 
   return {
     changes,
+    dropped_scopes: dropped.rows.map((r) => r.scope_id),
     next_cursor: encodeCursor(lastSeq),
     has_more: hasMore,
     // Cada resposta el porta perquè el client pugui detectar desviació de rellotge: un
@@ -163,6 +225,25 @@ export async function pull(
  * Es mira la data de la fila del cursor, no la seva posició: amb poques escriptures, un
  * `seq` baix pot ser d'ahir, i obligar a resincronitzar seria gratuït.
  */
+/**
+ * A quin calendari pertany una fila del registre de canvis.
+ *
+ * `null` vol dir que ja no hi és: llavors mana el filtre d'àmbit i la fila viatja com a
+ * tombstone, que és el que ha de passar quan una cosa s'esborra.
+ */
+async function calendarOf(
+  db: MigrationDb,
+  entityType: string,
+  entityId: string,
+): Promise<string | null> {
+  if (entityType === 'calendar') return entityId;
+
+  const found = await sql<{ calendar_id: string }>`
+    SELECT calendar_id FROM events WHERE id = ${entityId}
+  `.execute(db);
+  return found.rows[0]?.calendar_id ?? null;
+}
+
 async function assertCursorFresh(db: MigrationDb, seq: number, now: string): Promise<void> {
   if (seq === 0) return;
 
