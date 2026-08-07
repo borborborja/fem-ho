@@ -153,6 +153,9 @@
     <string name="error_window_required">Cal un període: sense ell no es poden expandir les repeticions.</string>
     <string name="error_wrong_component">«{name}» és de tasques i no accepta esdeveniments.</string>
     <string name="error_wrong_password">La contrasenya actual no és correcta.</string>
+    <string name="inbox_mailbox_all">Tot</string>
+    <string name="inbox_mailbox_own">Meva</string>
+    <string name="inbox_mailbox_shared">Compartida</string>
     <string name="invite_done">Ja pots entrar amb el teu correu i aquesta contrasenya.</string>
     <string name="invite_mismatch">Les dues contrasenyes no coincideixen.</string>
     <string name="invite_password">Contrasenya</string>
@@ -207,6 +210,8 @@
     <string name="palette_go">Anar a</string>
     <string name="palette_placeholder">Escriu per anar a un lloc o buscar una tasca…</string>
     <string name="palette_tasks">Tasques</string>
+    <string name="quickadd_groupown">Els meus</string>
+    <string name="quickadd_groupshared">Compartits</string>
     <string name="settings_about">Sobre</string>
     <string name="settings_accent">Accent</string>
     <string name="settings_accent_default">Per defecte</string>

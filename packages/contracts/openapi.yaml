@@ -1966,6 +1966,21 @@ paths:
         - { name: date, in: query, required: false, schema: { type: string, format: date } }
         - { name: include_overdue, in: query, required: false, schema: { type: boolean } }
         - { name: scope_ids, in: query, required: false, schema: { type: string } }
+        - name: mailbox
+          in: query
+          required: false
+          schema: { type: string, enum: [own, shared, all] }
+          description: |
+            De quin calaix. **Es composa amb `scope_ids`, no el substitueix**: és un
+            commutador de calaix, no un filtre, i els xips d'àmbit de dalt segueixen
+            valent.
+
+            «Propi» són els àmbits individuals i «compartit» els col·lectius. Surt del
+            tipus de l'àmbit i no de qui té la tasca assignada: a un àmbit individual tot
+            està assignat al propietari per la regla d'autoassignació, i a un de compartit
+            una tasca sense assignar no cauria a cap dels dos calaixos.
+
+            Sense el paràmetre mana `user_settings.inbox_origin`.
       responses:
         '200':
           description: L'Inbox.
@@ -2784,6 +2799,10 @@ components:
           description: El botó de netejar la columna Fet. No esborra res (P2).
         inbox_position: { type: string, enum: [left, right, below] }
         inbox_show_overdue: { type: boolean }
+        inbox_origin:
+          type: string
+          enum: [own, shared, all]
+          description: El calaix de la bústia. Per usuari, com la resta de preferències.
         collapsed_groups:
           type: array
           items: { type: string }

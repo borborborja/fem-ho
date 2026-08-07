@@ -263,6 +263,14 @@ export async function up(db: MigrationDb, engine: Engine): Promise<void> {
     .raw('CREATE INDEX idx_revocations_user ON scope_access_revocations(user_id, revoked_at)')
     .execute(db);
 
+  // ------------------------------------------------------- el calaix de la bústia
+  //
+  // Una preferència d'usuari més, com `inbox_position` i `inbox_show_overdue`: és una
+  // tria personal i ha de sobreviure a una recàrrega i valdre a tots els dispositius.
+  await sql
+    .raw(`ALTER TABLE user_settings ADD COLUMN inbox_origin ${t.text} NOT NULL DEFAULT 'all'`)
+    .execute(db);
+
   // ---------------------------------------------- què es comparteix d'un àmbit
   //
   // La polaritat és l'OPOSADA a `hidden_calendar_ids`, i és deliberat. Allà es desa el

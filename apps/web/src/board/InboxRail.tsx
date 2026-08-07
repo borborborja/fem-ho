@@ -18,6 +18,7 @@
 import type { ReactNode } from 'react';
 import { t } from '@fem-ho/contracts';
 import { EmptyState, KanbanColumn, ScopeGroupHeader } from '@fem-ho/design-system/femho';
+import { sharedMark } from './KanbanBoard.js';
 import { BoardCard } from './BoardCard.js';
 import type { BoardScope, BoardTask } from './KanbanBoard.js';
 
@@ -109,6 +110,7 @@ export function InboxRail({
               color={scope.color}
               open={open}
               onToggle={() => onToggleGroup?.(scope.id)}
+              extra={sharedMark(scope)}
             />
             {open ? tasks.filter((task) => task.scope_id === scope.id).map(cardFor) : null}
           </div>

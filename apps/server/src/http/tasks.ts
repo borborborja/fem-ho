@@ -55,7 +55,8 @@ import {
   setAssignee,
   updateTask,
 } from '../services/tasks.js';
-import { getProfile } from '../services/users.js';
+import { isMailbox, type Mailbox } from '../policy/mailbox.js';
+import { getProfile, getSettings } from '../services/users.js';
 import { body, bool, handle, ids, nullable, num, query, str, today } from './handle.js';
 
 function parseStatuses(raw: unknown): TaskStatus[] | undefined {
@@ -309,6 +310,10 @@ export function registerTaskRoutes(app: FastifyInstance): void {
     }),
   );
 
+  /** Un valor inventat cau a `undefined` i mana la preferència; mai canvia res en silenci. */
+  const parseMailbox = (value: string | undefined): Mailbox | undefined =>
+    isMailbox(value) ? value : undefined;
+
   app.get('/api/v1/inbox', async (request, reply) =>
     handle(app, request, reply, async (principal) => {
       const q = query(request);
@@ -319,6 +324,11 @@ export function registerTaskRoutes(app: FastifyInstance): void {
         date: str(q.date) ?? today(profile.timezone),
         includeOverdue: bool(q.include_overdue) ?? true,
         scopeIds: ids(q.scope_ids),
+        // Sense paràmetre, el calaix és la preferència de l'usuari. Un valor inventat
+        // cau a `all`, que és el comportament de sempre.
+        mailbox:
+          parseMailbox(str(q.mailbox)) ??
+          (await getSettings(db().db, principal.userId)).inbox_origin,
       });
     }),
   );

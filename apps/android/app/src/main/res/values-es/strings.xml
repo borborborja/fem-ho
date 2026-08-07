@@ -153,6 +153,9 @@
     <string name="error_window_required">Hace falta un periodo: sin él no se pueden expandir las repeticiones.</string>
     <string name="error_wrong_component">«{name}» es de tareas y no acepta eventos.</string>
     <string name="error_wrong_password">La contraseña actual no es correcta.</string>
+    <string name="inbox_mailbox_all">Todo</string>
+    <string name="inbox_mailbox_own">Mía</string>
+    <string name="inbox_mailbox_shared">Compartida</string>
     <string name="invite_done">Ya puedes entrar con tu correo y esta contraseña.</string>
     <string name="invite_mismatch">Las dos contraseñas no coinciden.</string>
     <string name="invite_password">Contraseña</string>
@@ -207,6 +210,8 @@
     <string name="palette_go">Ir a</string>
     <string name="palette_placeholder">Escribe para ir a un sitio o buscar una tarea…</string>
     <string name="palette_tasks">Tareas</string>
+    <string name="quickadd_groupown">Los míos</string>
+    <string name="quickadd_groupshared">Compartidos</string>
     <string name="settings_about">Acerca de</string>
     <string name="settings_accent">Acento</string>
     <string name="settings_accent_default">Por defecto</string>

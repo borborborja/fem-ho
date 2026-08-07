@@ -14,6 +14,7 @@ import { dateTime, getLocale, resolveWeekStart, t, weekdayNames } from '@fem-ho/
 import { v7 as uuidv7 } from 'uuid';
 import { EmptyState } from '@fem-ho/design-system/femho';
 import { api, ApiError } from '../app/api.js';
+import { Chips } from '../app/Chips.js';
 import { useRouter } from '../app/router.js';
 import { useSession, useSessionData } from '../app/session.js';
 import { useApi, useMutation } from '../app/useApi.js';
@@ -162,45 +163,6 @@ function Group({ title, children }: { title: string; children: React.ReactNode }
       <h2 style={{ margin: 0, fontSize: 14, fontWeight: 800, color: 'var(--ink)' }}>{title}</h2>
       {children}
     </section>
-  );
-}
-
-function Chips<T extends string>({
-  value,
-  options,
-  onChange,
-  testId,
-}: {
-  value: T;
-  options: { key: T; label: string }[];
-  onChange: (next: T) => void;
-  testId: string;
-}) {
-  return (
-    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }} data-testid={testId}>
-      {options.map((option) => (
-        <button
-          key={option.key}
-          type="button"
-          data-testid={`${testId}-${option.key}`}
-          aria-pressed={value === option.key}
-          onClick={() => onChange(option.key)}
-          style={{
-            padding: '7px 14px',
-            borderRadius: 100,
-            cursor: 'pointer',
-            font: 'inherit',
-            fontSize: 12,
-            fontWeight: value === option.key ? 700 : 500,
-            border: '1px solid var(--card-border)',
-            background: value === option.key ? 'var(--ghost-bg)' : 'transparent',
-            color: 'var(--ink)',
-          }}
-        >
-          {option.label}
-        </button>
-      ))}
-    </div>
   );
 }
 

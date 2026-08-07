@@ -205,7 +205,12 @@ export function CalendarScreen({ activeScopeIds, onOpenTask }: CalendarScreenPro
       }))}
       scopes={scopes
         .filter((scope) => activeScopeIds.includes(scope.id))
-        .map((scope) => ({ id: scope.id, name: scope.name, color: `var(${scope.color})` }))}
+        .map((scope) => ({
+          id: scope.id,
+          name: scope.name,
+          color: `var(${scope.color})`,
+          kind: scope.kind,
+        }))}
       placement="rail"
       dayLabel={longDay(locale, new Date(`${selected}T12:00:00`))}
       onOpen={onOpenTask}

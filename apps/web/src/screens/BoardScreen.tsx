@@ -15,6 +15,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { generatePosition, t, type QuickAddContext, type TaskStatus } from '@fem-ho/contracts';
 import { v7 as uuidv7 } from 'uuid';
 import { api } from '../app/api.js';
+import { Chips } from '../app/Chips.js';
 import { useSessionData, useSession } from '../app/session.js';
 import { useApi } from '../app/useApi.js';
 import type { Board, Task } from '../app/types.js';
@@ -62,6 +63,39 @@ function toBoardTask(
     aiMode: task.ai_mode,
     progress: task.progress,
   };
+}
+
+/**
+ * El commutador de calaix de la bústia.
+ *
+ * **Només surt si entre els àmbits actius n'hi ha algun de compartit.** Amb tots
+ * individuals no hi ha res per distingir, i un commutador que sempre diu "tot" és soroll
+ * que ensenya a ignorar la capçalera.
+ *
+ * La tria es desa al perfil, com `inbox_show_overdue`: és una preferència personal i ha
+ * de sobreviure a una recàrrega i valdre a tots els dispositius.
+ */
+function MailboxSwitch() {
+  const { scopes, settings } = useSessionData();
+  const { reload } = useSession();
+  const value = settings.inbox_origin ?? 'all';
+
+  if (!scopes.some((scope) => scope.kind === 'collective')) return null;
+
+  return (
+    <Chips
+      testId="inbox-mailbox"
+      value={value}
+      options={[
+        { key: 'all' as const, label: t('inbox.mailbox.all') },
+        { key: 'own' as const, label: t('inbox.mailbox.own') },
+        { key: 'shared' as const, label: t('inbox.mailbox.shared') },
+      ]}
+      onChange={(next) => {
+        void api.patch('/api/v1/me/settings', { inbox_origin: next }).then(() => reload());
+      }}
+    />
+  );
 }
 
 export function BoardScreen({
@@ -265,6 +299,8 @@ export function BoardScreen({
       <KanbanBoard
         aiBoard={aiBoard}
         flip={flip}
+        inboxHeader={<MailboxSwitch />}
+        mailbox={settings.inbox_origin ?? 'all'}
         renderFooter={(status) =>
           // L'Inbox conserva l'afegida ràpida als dos taulers: és l'entrada de tot, i al
           // tauler de la IA no hi ha cap columna d'inbox pròpia — és la mateixa.
@@ -312,6 +348,7 @@ export function BoardScreen({
           id: scope.id,
           name: scope.name,
           color: `var(${scope.color})`,
+          kind: scope.kind,
         }))}
         collapsed={collapsed}
         onToggleGroup={toggleGroup}

@@ -153,6 +153,9 @@
     <string name="error_window_required">A window is needed: without one, recurrences cannot be expanded.</string>
     <string name="error_wrong_component">“{name}” is for tasks and does not accept events.</string>
     <string name="error_wrong_password">The current password is not correct.</string>
+    <string name="inbox_mailbox_all">All</string>
+    <string name="inbox_mailbox_own">Mine</string>
+    <string name="inbox_mailbox_shared">Shared</string>
     <string name="invite_done">You can now sign in with your email and this password.</string>
     <string name="invite_mismatch">The two passwords do not match.</string>
     <string name="invite_password">Password</string>
@@ -207,6 +210,8 @@
     <string name="palette_go">Go to</string>
     <string name="palette_placeholder">Type to go somewhere or find a task…</string>
     <string name="palette_tasks">Tasks</string>
+    <string name="quickadd_groupown">Mine</string>
+    <string name="quickadd_groupshared">Shared</string>
     <string name="settings_about">About</string>
     <string name="settings_accent">Accent</string>
     <string name="settings_accent_default">Default</string>

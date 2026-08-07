@@ -1789,6 +1789,11 @@ export interface components {
             /** @enum {string} */
             inbox_position?: "left" | "right" | "below";
             inbox_show_overdue?: boolean;
+            /**
+             * @description El calaix de la bústia. Per usuari, com la resta de preferències.
+             * @enum {string}
+             */
+            inbox_origin?: "own" | "shared" | "all";
             collapsed_groups?: string[];
             /**
              * @description Fonts del calendari que aquest usuari no vol veure. **S'hi guarda el que
@@ -4949,6 +4954,19 @@ export interface operations {
                 date?: string;
                 include_overdue?: boolean;
                 scope_ids?: string;
+                /**
+                 * @description De quin calaix. **Es composa amb `scope_ids`, no el substitueix**: és un
+                 *     commutador de calaix, no un filtre, i els xips d'àmbit de dalt segueixen
+                 *     valent.
+                 *
+                 *     «Propi» són els àmbits individuals i «compartit» els col·lectius. Surt del
+                 *     tipus de l'àmbit i no de qui té la tasca assignada: a un àmbit individual tot
+                 *     està assignat al propietari per la regla d'autoassignació, i a un de compartit
+                 *     una tasca sense assignar no cauria a cap dels dos calaixos.
+                 *
+                 *     Sense el paràmetre mana `user_settings.inbox_origin`.
+                 */
+                mailbox?: "own" | "shared" | "all";
             };
             header?: never;
             path?: never;

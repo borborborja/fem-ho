@@ -15,6 +15,7 @@ import type { AuditContext } from '../audit/audited-transaction.js';
 import type { MigrationDb } from '../db/migration-db.js';
 import { PolicyError, missingCapability, notFound } from '../policy/errors.js';
 import { hasCapability, type Principal } from '../policy/principal.js';
+import type { Mailbox } from '../policy/mailbox.js';
 import { visibleScopesPredicate } from '../policy/scope-visibility.js';
 import { normalizeForSearch, normalizeQuery } from '../text/search-text.js';
 import { clampInt } from '../util/clamp.js';
@@ -1052,13 +1053,37 @@ export async function getInbox(
     date: string;
     includeOverdue?: boolean | undefined;
     scopeIds?: string[] | undefined;
+    /**
+     * De quin calaix.
+     *
+     * **És un commutador, no un filtre**: canvies de calaix, no acotes una llista. Per
+     * això es composa amb `scopeIds` en comptes de substituir-lo — els xips d'àmbit de
+     * dalt segueixen valent.
+     */
+    mailbox?: Mailbox | undefined;
   },
 ): Promise<InboxView> {
   if (!hasCapability(principal, 'tasks:read')) throw missingCapability('tasks:read');
 
   const scopes = await listScopes(db, principal);
   const requested = options.scopeIds;
+  const mailbox = options.mailbox ?? 'all';
+
+  /**
+   * «Propi» i «compartit» surten del **tipus de l'àmbit**, no de qui té la tasca
+   * assignada.
+   *
+   * Per assignació semblaria més fi i seria pitjor: a un àmbit individual tot està
+   * assignat a tu per la regla d'autoassignació (`docs/01` §4), i a un de compartit una
+   * tasca sense assignar no cauria a cap dels dos calaixos. Amb el tipus, cada cosa és
+   * exactament d'un costat i es pot explicar en una frase.
+   */
   const allowed = scopes
+    .filter((s) => {
+      if (mailbox === 'all') return true;
+      const own = s.kind === 'individual';
+      return mailbox === 'own' ? own : !own;
+    })
     .map((s) => s.id)
     .filter((id) => requested === undefined || requested.includes(id));
 

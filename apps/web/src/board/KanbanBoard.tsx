@@ -43,10 +43,40 @@ export interface BoardTask {
   assignedToOther?: boolean | undefined;
 }
 
+/**
+ * La marca que distingeix un àmbit compartit a l'epígraf.
+ *
+ * **No cal cap agrupació nova per a les tasques compartides.** Les columnes ja agrupen
+ * per àmbit amb epígraf plegable quan n'hi ha més d'un actiu, i l'estat persisteix a
+ * `collapsed_groups`. Un àmbit compartit només hi afegeix això.
+ */
+export function sharedMark(scope: { kind?: 'individual' | 'collective' }): ReactNode {
+  if (scope.kind !== 'collective') return null;
+  return (
+    <span
+      data-testid="scope-shared-mark"
+      title={t('settings.scopeKind.collective')}
+      aria-label={t('settings.scopeKind.collective')}
+      style={{ fontSize: 10, color: 'var(--ink-faint)', letterSpacing: '0.04em' }}
+    >
+      ●●
+    </span>
+  );
+}
+
 export interface BoardScope {
   id: string;
   name: string;
   color: string;
+  /**
+   * Individual o col·lectiu.
+   *
+   * El tauler el necessita per dues coses: el calaix de la bústia i el distintiu de
+   * l'epígraf d'un àmbit compartit. **No cal cap agrupació nova per a les tasques
+   * compartides**: les columnes ja agrupen per àmbit amb epígraf plegable quan n'hi ha
+   * més d'un actiu, i un àmbit compartit només hi afegeix una marca.
+   */
+  kind?: 'individual' | 'collective';
 }
 
 export interface KanbanBoardProps {
@@ -54,6 +84,16 @@ export interface KanbanBoardProps {
   scopes: BoardScope[];
   /** Àmbits plegats, per columna. Persisteix a les preferències de l'usuari. */
   collapsed?: Record<string, boolean>;
+  /**
+   * Els controls propis de la capçalera de l'Inbox.
+   *
+   * El forat ja existia a `InboxRail` —el calendari hi posa el navegador de dia— i al
+   * kanban anava buit. El commutador de calaix hi entra sense tocar el component, que és
+   * el mateix als dos llocs per P4.
+   */
+  inboxHeader?: ReactNode;
+  /** De quin calaix es veu la bústia. El mateix criteri que `/inbox` al servidor. */
+  mailbox?: 'own' | 'shared' | 'all';
   onToggleGroup?: (status: TaskStatus, scopeId: string) => void;
   onMove?: (taskId: string, status: TaskStatus) => void;
   onOpen?: (taskId: string) => void;
@@ -120,6 +160,8 @@ const COLUMNS: { status: TaskStatus; labelKey: string; emptyKey: string }[] = [
 export function KanbanBoard({
   tasks,
   scopes,
+  inboxHeader,
+  mailbox = 'all',
   collapsed = {},
   onToggleGroup,
   onMove,
@@ -201,30 +243,33 @@ export function KanbanBoard({
                 open={open}
                 onToggle={() => onToggleGroup?.(column.status, scope.id)}
                 extra={
-                  column.status === 'inbox' ? undefined : (
-                    <button
-                      type="button"
-                      data-testid={`others-${key}`}
-                      title={t('board.others')}
-                      aria-label={t('board.others')}
-                      aria-pressed={showOthers[key] === true}
-                      onClick={() =>
-                        setShowOthers((current) => ({ ...current, [key]: current[key] !== true }))
-                      }
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        padding: 2,
-                        border: 'none',
-                        background: 'transparent',
-                        cursor: 'pointer',
-                        color:
-                          showOthers[key] === true ? 'var(--plou-blue-ink)' : 'var(--ink-faint)',
-                      }}
-                    >
-                      <PeopleIcon />
-                    </button>
-                  )
+                  <>
+                    {sharedMark(scope)}
+                    {column.status === 'inbox' ? null : (
+                      <button
+                        type="button"
+                        data-testid={`others-${key}`}
+                        title={t('board.others')}
+                        aria-label={t('board.others')}
+                        aria-pressed={showOthers[key] === true}
+                        onClick={() =>
+                          setShowOthers((current) => ({ ...current, [key]: current[key] !== true }))
+                        }
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          padding: 2,
+                          border: 'none',
+                          background: 'transparent',
+                          cursor: 'pointer',
+                          color:
+                            showOthers[key] === true ? 'var(--plou-blue-ink)' : 'var(--ink-faint)',
+                        }}
+                      >
+                        <PeopleIcon />
+                      </button>
+                    )}
+                  </>
                 }
               />
               {open ? ofGroup.map(cardFor) : null}
@@ -259,7 +304,19 @@ export function KanbanBoard({
   };
 
   const [, ...rest] = COLUMNS;
-  const inboxTasks = tasks.filter((task) => task.status === 'inbox');
+  /**
+   * La bústia del tauler i el rail del calendari **han de dir el mateix** (P4).
+   *
+   * El rail crida `/inbox`, que ja honora la preferència al servidor. Aquí les dades ja
+   * hi són —vénen de `/board`— i el filtre s'aplica sobre el que hi ha, en comptes de
+   * demanar la mateixa cosa dues vegades. El criteri és idèntic: el tipus de l'àmbit.
+   */
+  const inboxTasks = tasks.filter((task) => {
+    if (task.status !== 'inbox') return false;
+    if (mailbox === 'all') return true;
+    const own = scopes.find((scope) => scope.id === task.scope_id)?.kind === 'individual';
+    return mailbox === 'own' ? own : !own;
+  });
 
   const titleOf = (taskId: string): string => tasks.find((task) => task.id === taskId)?.title ?? '';
   const labelOf = (status: TaskStatus): string =>
@@ -367,6 +424,7 @@ export function KanbanBoard({
                 // no des de dins d'InboxRail perquè el rail també viu al calendari, on el
                 // peu és un altre.
                 footer={renderFooter?.('inbox')}
+                header={inboxHeader}
                 wrapCard={(task, card) => (
                   <DraggableCard key={task.id} id={task.id} testId={`task-${task.id}`}>
                     {card}
