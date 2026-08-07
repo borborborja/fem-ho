@@ -93,8 +93,8 @@ afterAll(async () => {
   rmSync(tmp, { recursive: true, force: true });
 });
 
-beforeEach(() => {
-  forgetAllOps();
+beforeEach(async () => {
+  await forgetAllOps(conn.db);
 });
 
 describe('el cursor', () => {
@@ -634,5 +634,113 @@ describe('crear des del lot', () => {
       .results[0];
     expect(result?.status).toBe('rejected');
     expect(result?.error?.detail ?? '').not.toBe('');
+  });
+});
+
+/**
+ * **El que baixa ha de poder pujar.**
+ *
+ * El lot en cobria quatre entitats i el `pull` en baixa vuit. Un comentari, un projecte o
+ * un esdeveniment creat en mode avió —o replicat des d'una altra instància— no tenia camí
+ * de tornada: es perdia en silenci quan la connexió tornava. Una asimetria entre el que
+ * arriba i el que se'n pot enviar és, per definició, una manera de perdre dades.
+ */
+describe('el lot cobreix el mateix que el pull', () => {
+  it('un comentari creat des del lot arriba a la tasca', async () => {
+    const taskId = await novaTasca('Amb comentari des del lot');
+
+    const res = await api('POST', '/api/v1/sync/batch', {
+      operations: [
+        {
+          op_id: uuidv7(),
+          entity: 'comment',
+          op: 'create',
+          id: uuidv7(),
+          data: { task_id: taskId, body: 'Escrit sense connexió' },
+        },
+      ],
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    expect(res.json<{ results: { status: string }[] }>().results[0]?.status).toBe('ok');
+
+    const comentaris = await api('GET', `/api/v1/tasks/${taskId}/comments`);
+    expect(comentaris.body).toContain('Escrit sense connexió');
+  });
+
+  it('i un projecte també', async () => {
+    const res = await api('POST', '/api/v1/sync/batch', {
+      operations: [
+        {
+          op_id: uuidv7(),
+          entity: 'project',
+          op: 'create',
+          id: uuidv7(),
+          data: { scope_id: scopeId, name: 'La reforma' },
+        },
+      ],
+    });
+    expect(res.json<{ results: { status: string }[] }>().results[0]?.status).toBe('ok');
+
+    const projectes = await api('GET', '/api/v1/projects');
+    expect(projectes.body).toContain('La reforma');
+  });
+});
+
+/**
+ * **La idempotència ha de sobreviure a un reinici.**
+ *
+ * Era un `Map` en memòria, amb el raonament que "per a una casa és suficient: el que ha
+ * d'evitar és el reenviament immediat". Amb la federació deixa de ser cert: la rèplica
+ * torna a intentar el que no ha confirmat, i una actualització del servidor entremig li
+ * esborrava la memòria i li feia aplicar dues vegades el mateix lot.
+ */
+describe("l'op_id", () => {
+  it('es recorda a la base i no a la memòria del procés', async () => {
+    const taskId = uuidv7();
+    const opId = uuidv7();
+    const operacio = {
+      op_id: opId,
+      entity: 'task',
+      op: 'create',
+      id: taskId,
+      data: { scope_id: scopeId, title: 'Una sola vegada' },
+    };
+
+    const primera = await api('POST', '/api/v1/sync/batch', { operations: [operacio] });
+    expect(primera.json<{ results: { status: string }[] }>().results[0]?.status).toBe('ok');
+
+    // La fila hi és, i és el que fa que un reinici no oblidi res.
+    const desat = await sql<{ op_id: string }>`
+      SELECT op_id FROM sync_op_ids WHERE op_id = ${opId}
+    `.execute(conn.db);
+    expect(desat.rows).toHaveLength(1);
+
+    // Reenviar-la no crea res de nou.
+    const segona = await api('POST', '/api/v1/sync/batch', { operations: [operacio] });
+    expect(segona.json<{ results: { status: string }[] }>().results[0]?.status).toBe('ok');
+
+    const quantes = await sql<{ n: number }>`
+      SELECT COUNT(*) AS n FROM tasks WHERE title = 'Una sola vegada'
+    `.execute(conn.db);
+    expect(Number(quantes.rows[0]?.n)).toBe(1);
+  });
+
+  it('i una operació sense op_id es rebutja sola, sense tombar el lot', async () => {
+    const res = await api('POST', '/api/v1/sync/batch', {
+      operations: [
+        { entity: 'task', op: 'create', id: uuidv7(), data: { scope_id: scopeId, title: 'X' } },
+        {
+          op_id: uuidv7(),
+          entity: 'task',
+          op: 'create',
+          id: uuidv7(),
+          data: { scope_id: scopeId, title: 'La bona' },
+        },
+      ],
+    });
+    expect(res.statusCode).toBe(200);
+
+    const estats = res.json<{ results: { status: string }[] }>().results.map((r) => r.status);
+    expect(estats).toEqual(['rejected', 'ok']);
   });
 });

@@ -10,7 +10,13 @@ Una **tasca amb les seves subtasques i llistes**, o una **llista senzilla** sola
 
 El cas del brief és exacte: la tasca "Fer la maleta" amb la llista "Maleta Borja" a dins, compartida amb algú de fora perquè pugui anar marcant.
 
-No es comparteixen projectes ni àmbits sencers. Un enllaç públic és per a una cosa concreta i acotada.
+**Per aquesta via** no es comparteixen projectes ni àmbits sencers: un enllaç públic és per
+a una cosa concreta i acotada, i qui l'obre és algú sense compte de qui no en sabem res.
+
+Un àmbit sencer sí que es comparteix, però **per una altra via i amb una altra gent**: amb
+persones que tenen compte, que hi entren com a membres i que es poden expulsar. Veure
+`docs/14` P5, que explica per què la diferència no és de mida sinó de qui hi ha a l'altra
+banda.
 
 ---
 

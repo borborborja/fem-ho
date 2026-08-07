@@ -22,6 +22,7 @@ import type { MigrationDb } from '../db/migration-db.js';
 import { FALLBACK, catalogOf, isLocale, type Locale } from '@fem-ho/contracts';
 import { isDue, refreshSubscription, type SubscriptionRow } from '../dav/client.js';
 import { pullFromLink, type InstanceLinkRow } from '../services/federation.js';
+import { pruneOps } from '../services/sync.js';
 import type { Principal } from '../policy/principal.js';
 import {
   ensureVapidKeys,
@@ -94,6 +95,15 @@ export async function tick(options: SchedulerOptions): Promise<TickResult> {
   try {
     result.refreshed = await runRefreshes(options, principal, now);
     result.federated = await runFederationPulls(options, now);
+
+    /**
+     * La poda de les operacions ja aplicades.
+     *
+     * És barata i va aquí perquè `sync_op_ids` només creix: cada lot de cada dispositiu
+     * hi deixa una fila, i sense ningú que les tregui la taula acaba sent la més gran de
+     * la base per a res.
+     */
+    await pruneOps(options.connection.db, now);
   } catch (error) {
     result.errors += 1;
     log("El refresc d'orígens externs ha fallat", error);

@@ -15,6 +15,9 @@ import { assertScopeAccess } from '../services/scopes.js';
 import { createChecklist, createChecklistItem } from '../services/checklists.js';
 import { createSubtask } from '../services/subtasks.js';
 import { createTask } from '../services/tasks.js';
+import { addComment } from '../services/comments.js';
+import { createProject } from '../services/scopes.js';
+import { createEvent } from '../services/events.js';
 import {
   decodeCursor,
   encodeCursor,
@@ -49,12 +52,22 @@ async function handle<T>(
   }
 }
 
-/** Les taules on el sync pot escriure, per entitat. */
+/**
+ * Les taules on el sync pot escriure, per entitat.
+ *
+ * **Han de ser les mateixes que baixen.** Amb quatre aquí i vuit al `pull`, un comentari
+ * o un esdeveniment creat en mode avió baixava però no pujava mai: es perdia sense dir
+ * res. L'asimetria entre el que arriba i el que se'n pot enviar és, per definició, una
+ * manera de perdre dades.
+ */
 const TABLES: Record<string, string> = {
   task: 'tasks',
   subtask: 'subtasks',
   checklist: 'checklists',
   checklist_item: 'checklist_items',
+  comment: 'comments',
+  project: 'projects',
+  event: 'events',
 };
 
 export function registerSyncRoutes(app: FastifyInstance): void {
@@ -215,6 +228,30 @@ async function createFromBatch(
         data as never,
       )) as unknown as Record<string, unknown>;
     }
+    /**
+     * Les tres que **baixaven i no pujaven**.
+     *
+     * El lot en cobria quatre, i el sync en baixa vuit: un comentari, un projecte o un
+     * esdeveniment creat en mode avió —o replicat des d'una altra instància— no tenia
+     * camí de tornada i es perdia sense dir res. Que hi hagi asimetria entre el que
+     * arriba i el que se'n pot enviar és, per definició, una manera de perdre dades.
+     */
+    case 'comment': {
+      const taskId = text('task_id');
+      if (taskId === undefined) throw missingParent('comment', 'task_id');
+      return (await addComment(ctx, principal, taskId, text('body') ?? '')) as unknown as Record<
+        string,
+        unknown
+      >;
+    }
+    case 'project': {
+      const { entity: project } = await createProject(ctx, principal, data as never);
+      return project as unknown as Record<string, unknown>;
+    }
+    case 'event': {
+      const { event } = await createEvent(ctx, principal, data as never);
+      return event as unknown as Record<string, unknown>;
+    }
     default:
       throw new PolicyError(
         'not-creatable',
@@ -242,7 +279,26 @@ async function applyOne(
   operation: BatchOperation,
 ): Promise<BatchResult> {
   // Idempotència: el mateix `op_id` reenviat torna el resultat d'abans.
-  const already = recallOp(principal, operation.op_id);
+  const db = app.connection!.db;
+  const now = new Date().toISOString();
+
+  /**
+   * **Un `op_id` que no és una cadena es rebutja aquí i no més avall.**
+   *
+   * Amb la memòria en un `Map` passava desapercebut: una clau `undefined` s'hi guardava
+   * sense queixar-se. Ara la clau va a taula i és `NOT NULL`, i un lot amb l'`op_id`
+   * absent tornava un 500 en comptes de dir què li passava. La idempotència del lot es
+   * recolza sencera en aquest camp: sense ell no hi ha res a recordar.
+   */
+  if (typeof operation.op_id !== 'string' || operation.op_id === '') {
+    return {
+      op_id: 'desconegut',
+      status: 'rejected',
+      error: { detail: 'Cada operació del lot necessita un `op_id` que sigui una cadena.' },
+    };
+  }
+
+  const already = await recallOp(db, principal, operation.op_id);
   if (already !== undefined) return already;
 
   const table = TABLES[operation.entity];
@@ -252,7 +308,7 @@ async function applyOne(
       status: 'rejected',
       error: { detail: `"${operation.entity}" no és una entitat que se sincronitzi.` },
     };
-    rememberOp(principal, operation.op_id, rejected);
+    await rememberOp(db, principal, operation.op_id, rejected, now);
     return rejected;
   }
 
@@ -400,7 +456,7 @@ async function applyOne(
       { engine: app.connection!.engine },
     );
 
-    rememberOp(principal, operation.op_id, result);
+    await rememberOp(db, principal, operation.op_id, result, now);
     return result;
   } catch (error) {
     const rejected: BatchResult = {
@@ -411,7 +467,7 @@ async function applyOne(
           ? error.toProblem()
           : { detail: "No s'ha pogut aplicar aquesta operació." },
     };
-    rememberOp(principal, operation.op_id, rejected);
+    await rememberOp(db, principal, operation.op_id, rejected, now);
     return rejected;
   }
 }

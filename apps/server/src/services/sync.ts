@@ -445,12 +445,17 @@ export function resolveConflict(options: ResolveOptions): Resolution {
  * `op_id` és la clau d'idempotència: reenviar un lot després d'una caiguda no duplica
  * res (docs/06 §4).
  *
- * Es guarda en memòria per procés i amb un sostre. Per a una casa és suficient: el que
- * ha d'evitar és el reenviament immediat d'un lot que ja s'havia aplicat, no un
- * reenviament d'una setmana després — aquell el resol la comprovació de `version`.
+ * **Va a taula i no a un Map en memòria.** Ho era, amb un sostre de deu mil i el
+ * raonament que "per a una casa és suficient: el que ha d'evitar és el reenviament
+ * immediat". Amb la federació deixa de ser cert: la rèplica torna a intentar el que no ha
+ * confirmat, i un reinici del servidor entremig —una actualització, un tall de llum— li
+ * esborrava la memòria i li feia aplicar dues vegades el mateix lot. La taula
+ * `sync_op_ids` hi era des de la 008 esperant precisament això.
+ *
+ * Es conserven **set dies**: prou per cobrir un dispositiu que ha estat una setmana
+ * apagat, i el que arribi més tard el resol igualment la comprovació de `version`.
  */
-const appliedOps = new Map<string, BatchResult>();
-const MAX_REMEMBERED_OPS = 10_000;
+export const OP_RETENTION_DAYS = 7;
 
 /**
  * La clau porta **qui pregunta**, no només l'`op_id`.
@@ -458,28 +463,59 @@ const MAX_REMEMBERED_OPS = 10_000;
  * Amb l'`op_id` sol, un client que n'encertés un d'un altre rebia el seu `BatchResult`
  * —que porta l'entitat sencera— sense passar per cap comprovació d'àmbit. L'`op_id` el
  * genera el client i no és cap secret: viatja al cos de cada lot.
- *
- * La idempotència que això ha de donar és "el MEU lot reenviat no es duplica", i per a
- * això la clau correcta inclou el principal.
  */
-function opKey(principal: Principal, opId: string): string {
-  return `${principal.kind}:${principal.userId}:${opId}`;
+function opKey(principal: Principal): string {
+  return `${principal.kind}:${principal.userId}`;
 }
 
-export function rememberOp(principal: Principal, opId: string, result: BatchResult): void {
-  if (appliedOps.size >= MAX_REMEMBERED_OPS) {
-    const oldest = appliedOps.keys().next().value;
-    if (oldest !== undefined) appliedOps.delete(oldest);
+export async function rememberOp(
+  db: MigrationDb,
+  principal: Principal,
+  opId: string,
+  result: BatchResult,
+  now: string,
+): Promise<void> {
+  const key = opKey(principal);
+  // Reenviar el mateix lot no ha de petar amb una violació de clau primària: el que hi
+  // havia ja era la resposta bona.
+  const existing = await sql<{ op_id: string }>`
+    SELECT op_id FROM sync_op_ids WHERE op_id = ${opId} AND principal_key = ${key}
+  `.execute(db);
+  if (existing.rows.length > 0) return;
+
+  await sql`
+    INSERT INTO sync_op_ids (op_id, principal_key, result, created_at)
+    VALUES (${opId}, ${key}, ${JSON.stringify(result)}, ${now})
+  `.execute(db);
+}
+
+export async function recallOp(
+  db: MigrationDb,
+  principal: Principal,
+  opId: string,
+): Promise<BatchResult | undefined> {
+  const found = await sql<{ result: string }>`
+    SELECT result FROM sync_op_ids WHERE op_id = ${opId} AND principal_key = ${opKey(principal)}
+  `.execute(db);
+  const row = found.rows[0];
+  if (row === undefined) return undefined;
+  try {
+    return JSON.parse(row.result) as BatchResult;
+  } catch {
+    // Una fila malmesa no ha de tombar el lot: es tracta com si no hi fos i s'aplica.
+    return undefined;
   }
-  appliedOps.set(opKey(principal, opId), result);
 }
 
-export function recallOp(principal: Principal, opId: string): BatchResult | undefined {
-  return appliedOps.get(opKey(principal, opId));
+/** Poda les operacions velles. La crida el planificador amb la resta de neteges. */
+export async function pruneOps(db: MigrationDb, now: string): Promise<void> {
+  const limit = new Date(Date.parse(now) - OP_RETENTION_DAYS * 86_400_000).toISOString();
+  await sql`DELETE FROM sync_op_ids WHERE created_at < ${limit}`.execute(db);
 }
 
-export function forgetAllOps(): void {
-  appliedOps.clear();
+/** Buida la memòria d'operacions. Només les proves, que comparteixen base entre casos. */
+export async function forgetAllOps(db: MigrationDb): Promise<void> {
+  await sql`DELETE FROM sync_op_ids`.execute(db);
 }
 
 /** Escriu una tombstone. Cap `DELETE` real en entitats sincronitzables (docs/01 §12). */
