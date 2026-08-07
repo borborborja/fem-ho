@@ -2140,6 +2140,22 @@ export interface components {
             last_error?: string | null;
             /** Format: date-time */
             last_error_at?: string | null;
+            /**
+             * @description Si els membres de l'àmbit el veuen.
+             *
+             *     **El defecte és `false`, i la polaritat és l'oposada a `hidden_calendar_ids`.**
+             *     Allà es desa el que s'amaga perquè una font nova ha de sortir sola; aquí un
+             *     calendari creat DESPRÉS de compartir l'àmbit no pot filtrar-se tot sol. El
+             *     fracàs de l'un és una molèstia; el de l'altre és una divulgació.
+             * @default false
+             */
+            shared_with_scope: boolean;
+            /**
+             * @description Si la font porta usuari i contrasenya guardats. **El secret no surt mai** del
+             *     servei; això només diu que n'hi ha, perquè la interfície pugui avisar abans
+             *     de compartir el calendari.
+             */
+            has_credentials?: boolean;
         };
         Event: {
             id: string;
@@ -2216,6 +2232,11 @@ export interface components {
             name: string;
             /** @enum {string} */
             kind: "individual" | "collective";
+            /**
+             * @description Qui el va crear. Mana sempre, sigui quin sigui el `kind` i hi hagi fila de
+             *     membre o no. La interfície el necessita per saber si pot convidar i expulsar.
+             */
+            owner_id: string;
             /** @description Token CSS o hex. Els tres inicials fan servir la tríada de Plou. */
             color: string;
             icon?: string | null;

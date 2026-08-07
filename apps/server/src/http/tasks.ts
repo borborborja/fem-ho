@@ -463,6 +463,8 @@ export function registerEventRoutes(app: FastifyInstance, secret: () => string):
           refresh_interval:
             'refresh_interval' in input ? (num(input.refresh_interval) ?? null) : undefined,
           strip_alarms: typeof input.strip_alarms === 'boolean' ? input.strip_alarms : undefined,
+          shared_with_scope:
+            typeof input.shared_with_scope === 'boolean' ? input.shared_with_scope : undefined,
         }),
       );
     }),

@@ -431,6 +431,9 @@ function ColorPicker({
 }
 
 function ScopeRow({ scope, onDone }: { scope: Scope; onDone: () => Promise<void> }) {
+  const { profile } = useSessionData();
+  // Qui mana a l'àmbit. `owner_id` mana sempre, hi hagi fila de membre o no.
+  const isOwner = scope.owner_id === profile.id;
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(scope.name);
   const [color, setColor] = useState(scope.color);
@@ -546,7 +549,7 @@ function ScopeRow({ scope, onDone }: { scope: Scope; onDone: () => Promise<void>
         </div>
       ) : null}
 
-      {openMembers ? <MembersList scopeId={scope.id} /> : null}
+      {openMembers ? <MembersList scopeId={scope.id} canManage={isOwner} /> : null}
     </div>
   );
 }
@@ -614,15 +617,183 @@ function ScopesTab() {
   );
 }
 
-function MembersList({ scopeId }: { scopeId: string }) {
+interface ScopeInvite {
+  id: string;
+  role: string | null;
+  max_uses: number;
+  use_count: number;
+  expires_at: string | null;
+  created_at: string;
+}
+
+/**
+ * Els membres d'un àmbit, i com se n'hi posen.
+ *
+ * Fins avui això era **estrictament de lectura**: els endpoints de membres existien i no
+ * els cridava ningú, i per afegir algú calia saber-ne l'identificador d'usuari i fer-ho a
+ * mà. Ara hi ha el convit, que és el camí que fa que compartir sigui una cosa que es pugui
+ * fer sense mirar la base de dades.
+ */
+function MembersList({ scopeId, canManage }: { scopeId: string; canManage: boolean }) {
   const members = useApi<Member[]>(`/api/v1/scopes/${scopeId}/members`);
+  const invites = useApi<ScopeInvite[]>(canManage ? `/api/v1/scopes/${scopeId}/invites` : null);
+  const [role, setRole] = useState<'collaborator' | 'viewer'>('collaborator');
+  const [fresh, setFresh] = useState<string | null>(null);
+
+  const invite = useMutation(async () => {
+    const created = await api.post<{ invite_url: string }>(`/api/v1/scopes/${scopeId}/invites`, {
+      role,
+    });
+    // **Surt una sola vegada.** Del hash no es pot recuperar (docs/10 §6).
+    setFresh(created.invite_url);
+    invites.reload();
+  });
+
   return (
-    <div style={{ paddingLeft: 18, display: 'grid', gap: 5 }}>
-      {(members.data ?? []).map((member) => (
-        <div key={member.id} style={{ fontSize: 12.5, color: 'var(--ink-soft)' }}>
-          {member.name ?? member.user_id ?? ''} · {t(`settings.role.${member.role}`)}
-        </div>
-      ))}
+    <div style={{ paddingLeft: 18, display: 'grid', gap: 8 }}>
+      <div style={{ display: 'grid', gap: 5 }}>
+        {(members.data ?? []).map((member) => (
+          <div
+            key={member.id}
+            data-testid={`member-${member.id}`}
+            style={{ fontSize: 12.5, color: 'var(--ink-soft)', display: 'flex', gap: 8 }}
+          >
+            <span>
+              {member.name ?? member.user_id ?? ''} · {t(`settings.role.${member.role}`)}
+            </span>
+            {canManage && member.role !== 'owner' ? (
+              <button
+                type="button"
+                data-testid={`member-remove-${member.id}`}
+                style={LINK_BUTTON}
+                onClick={() => {
+                  void api
+                    .delete(`/api/v1/scopes/${scopeId}/members/${member.id}`)
+                    .then(() => members.reload());
+                }}
+              >
+                {t('settings.memberRemove')}
+              </button>
+            ) : null}
+          </div>
+        ))}
+      </div>
+
+      {canManage ? (
+        <>
+          <Chips
+            testId={`invite-role-${scopeId}`}
+            value={role}
+            options={[
+              { key: 'collaborator' as const, label: t('settings.role.collaborator') },
+              { key: 'viewer' as const, label: t('settings.role.viewer') },
+            ]}
+            onChange={setRole}
+          />
+          <button
+            type="button"
+            className="plou-btn"
+            data-testid={`invite-create-${scopeId}`}
+            disabled={invite.busy}
+            onClick={() => void invite.run()}
+          >
+            {t('settings.inviteCreate')}
+          </button>
+
+          {fresh === null ? null : (
+            <div style={{ display: 'grid', gap: 4 }}>
+              <code
+                data-testid={`invite-url-${scopeId}`}
+                style={{
+                  fontSize: 11.5,
+                  background: 'var(--code-bg)',
+                  padding: '6px 8px',
+                  borderRadius: 8,
+                  wordBreak: 'break-all',
+                }}
+              >
+                {fresh}
+              </code>
+              <span style={{ fontSize: 11.5, color: 'var(--ink-faint)' }}>
+                {t('settings.inviteOnce')}
+              </span>
+            </div>
+          )}
+
+          {(invites.data ?? []).length === 0 ? null : (
+            <div style={{ display: 'grid', gap: 4 }}>
+              {(invites.data ?? []).map((row) => (
+                <div key={row.id} style={{ fontSize: 11.5, color: 'var(--ink-soft)' }}>
+                  {t(`settings.role.${row.role ?? 'collaborator'}`)} · {row.use_count}/
+                  {row.max_uses}{' '}
+                  <button
+                    type="button"
+                    style={LINK_BUTTON}
+                    data-testid={`invite-revoke-${row.id}`}
+                    onClick={() => {
+                      void api
+                        .delete(`/api/v1/scopes/${scopeId}/invites/${row.id}`)
+                        .then(() => invites.reload());
+                    }}
+                  >
+                    {t('settings.inviteRevoke')}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Un calendari d'un àmbit, i si els membres el veuen.
+ *
+ * **L'avís de credencials no és decoratiu.** El secret d'una font externa està segellat
+ * amb una clau derivada del secret d'aquesta instància: no pot viatjar enlloc. El que sí
+ * que passa, i no és obvi, és que si la font és bidireccional el que escriguin els
+ * membres anirà al servei d'un tercer **amb les credencials del propietari**.
+ */
+function SharedCalendarRow({
+  calendar,
+  collective,
+  onDone,
+}: {
+  calendar: Calendar;
+  collective: boolean;
+  onDone: () => void;
+}) {
+  const shared = calendar.shared_with_scope === true;
+
+  const toggle = (): void => {
+    if (!shared && calendar.has_credentials === true) {
+      if (!window.confirm(t('settings.calendarCredWarning'))) return;
+    }
+    void api.patch(`/api/v1/calendars/${calendar.id}`, { shared_with_scope: !shared }).then(onDone);
+  };
+
+  return (
+    <div style={{ fontSize: 12.5, color: 'var(--ink-soft)', display: 'flex', gap: 8 }}>
+      <span>
+        {calendar.name} ·{' '}
+        {calendar.kind === 'todos' ? t('settings.caldavTodos') : t('settings.caldavEvents')}
+      </span>
+      {/*
+        Només té sentit a un àmbit col·lectiu: a un d'individual no hi ha ningú amb qui
+        compartir, i un commutador que no fa res convida a pensar que sí que en fa.
+      */}
+      {collective ? (
+        <button
+          type="button"
+          data-testid={`calendar-share-${calendar.id}`}
+          style={LINK_BUTTON}
+          onClick={toggle}
+        >
+          {shared ? t('settings.calendarShared') : t('settings.calendarPrivate')}
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -642,12 +813,12 @@ function CalendarsTab() {
               <EmptyState>{t('settings.empty.calendars')}</EmptyState>
             ) : (
               own.map((calendar) => (
-                <div key={calendar.id} style={{ fontSize: 12.5, color: 'var(--ink-soft)' }}>
-                  {calendar.name} ·{' '}
-                  {calendar.kind === 'todos'
-                    ? t('settings.caldavTodos')
-                    : t('settings.caldavEvents')}
-                </div>
+                <SharedCalendarRow
+                  key={calendar.id}
+                  calendar={calendar}
+                  collective={scope.kind === 'collective'}
+                  onDone={() => calendars.reload()}
+                />
               ))
             )}
 

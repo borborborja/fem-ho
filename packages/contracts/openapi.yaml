@@ -3245,6 +3245,22 @@ components:
             Per què va fallar l'últim refresc. Sense això, una font caiguda es veu
             exactament igual que una que no té esdeveniments.
         last_error_at: { type: [string, 'null'], format: date-time }
+        shared_with_scope:
+          type: boolean
+          default: false
+          description: |
+            Si els membres de l'àmbit el veuen.
+
+            **El defecte és `false`, i la polaritat és l'oposada a `hidden_calendar_ids`.**
+            Allà es desa el que s'amaga perquè una font nova ha de sortir sola; aquí un
+            calendari creat DESPRÉS de compartir l'àmbit no pot filtrar-se tot sol. El
+            fracàs de l'un és una molèstia; el de l'altre és una divulgació.
+        has_credentials:
+          type: boolean
+          description: |
+            Si la font porta usuari i contrasenya guardats. **El secret no surt mai** del
+            servei; això només diu que n'hi ha, perquè la interfície pugui avisar abans
+            de compartir el calendari.
 
     Event:
       type: object
@@ -3327,13 +3343,18 @@ components:
     Scope:
       type: object
       additionalProperties: false
-      required: [id, name, kind, color, position, created_at, updated_at, version]
+      required: [id, name, kind, color, owner_id, position, created_at, updated_at, version]
       properties:
         id: { type: string }
         name: { type: string }
         kind:
           type: string
           enum: [individual, collective]
+        owner_id:
+          type: string
+          description: |
+            Qui el va crear. Mana sempre, sigui quin sigui el `kind` i hi hagi fila de
+            membre o no. La interfície el necessita per saber si pot convidar i expulsar.
         color:
           type: string
           description: Token CSS o hex. Els tres inicials fan servir la tríada de Plou.
