@@ -54,6 +54,19 @@ object Dates {
     }
 
     /**
+     * El nom sencer d'un dia. **Només Android**, per a la capçalera dels widgets.
+     *
+     * `weekdayNames` dona la forma curta perquè és per a una graella de set columnes de
+     * dues lletres; en un widget, "dv" no diu res. No té bessona a `dates.ts` a posta:
+     * la web no té widgets, i duplicar-la per simetria seria mantenir codi que ningú
+     * crida. La font és la mateixa —el CLDR—, o sigui que no diverging res.
+     */
+    fun dayName(locale: String, date: LocalDate): String {
+        val l = Locale.forLanguageTag(locale)
+        return date.dayOfWeek.getDisplayName(TextStyle.FULL_STANDALONE, l).lowercase(l)
+    }
+
+    /**
      * El nom d'un mes, per a la capçalera del calendari.
      *
      * `FULL_STANDALONE` i no `FULL`: en català, `FULL` dona la forma que va dins d'una

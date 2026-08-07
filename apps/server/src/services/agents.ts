@@ -80,9 +80,8 @@ export async function getAgent(
   principal: Principal,
   id: string,
 ): Promise<AgentView> {
-  const found = await sql<AgentRow>`SELECT ${AGENT_COLUMNS} FROM ai_agents WHERE id = ${id}`.execute(
-    db,
-  );
+  const found =
+    await sql<AgentRow>`SELECT ${AGENT_COLUMNS} FROM ai_agents WHERE id = ${id}`.execute(db);
   const row = found.rows[0];
   if (row === undefined) throw notFound('agent', id);
   if (row.on_behalf_of_user_id !== principal.userId) {
@@ -138,7 +137,11 @@ export async function updateAgent(
   ctx: AuditContext,
   principal: Principal,
   id: string,
-  input: { name?: string | undefined; can_create_tasks?: boolean | undefined; enabled?: boolean | undefined },
+  input: {
+    name?: string | undefined;
+    can_create_tasks?: boolean | undefined;
+    enabled?: boolean | undefined;
+  },
 ): Promise<AgentView> {
   if (!hasCapability(principal, 'tasks:write')) throw missingCapability('tasks:write');
   const before = await getAgent(ctx.tx, principal, id);

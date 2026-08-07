@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  La superfície d'un widget. Per sota d'API 31 `cornerRadius` no existeix i les
+  cantonades només es poden fer així. El color surt de `femho_widget_colors.xml`, que és
+  generat des dels tokens de Plou: aquí no hi ha cap valor escrit a mà.
+
+  El fons és `dialog_bg` i no `card_bg`: un widget seu damunt del fons de pantalla de
+  qualcú, no damunt d'un panell nostre, i una targeta translúcida hi seria il·legible.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/femho_dialog_bg" />
+    <stroke android:width="1dp" android:color="@color/femho_card_border" />
+    <corners android:radius="20dp" />
+</shape>

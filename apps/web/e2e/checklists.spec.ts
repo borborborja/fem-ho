@@ -51,10 +51,7 @@ async function enter(page: import('@playwright/test').Page): Promise<void> {
 }
 
 /** Crea una tasca amb l'afegida ràpida i l'obre. */
-async function taskWithList(
-  page: import('@playwright/test').Page,
-  title: string,
-): Promise<string> {
+async function taskWithList(page: import('@playwright/test').Page, title: string): Promise<string> {
   const scope = await page.locator('[data-testid="scope-chips"] button').first().innerText();
   const field = page.locator('input[role="combobox"]').first();
   await field.fill(`#${scope} ${title}`);
@@ -86,7 +83,7 @@ async function addItem(page: import('@playwright/test').Page, text: string): Pro
   await expect(page.locator('[data-testid="list-screen"]')).toContainText(text);
 }
 
-test('es pot crear una llista dins d\'una tasca i afegir-hi ítems', async ({ page }) => {
+test("es pot crear una llista dins d'una tasca i afegir-hi ítems", async ({ page }) => {
   await enter(page);
   await taskWithList(page, 'La maleta');
 
@@ -138,13 +135,12 @@ test('el commutador mou els completats a una secció plegada amb el recompte', a
 test('AQUESTA és la de docs/13: la cascada amunt completa la tasca', async ({ page }) => {
   await enter(page);
   const listId = await taskWithList(page, 'Amb cascada');
-  await addItem(page, 'L\'única');
+  await addItem(page, "L'única");
 
   await page.locator('[data-testid="list-screen"] [role="checkbox"]').first().click();
-  await expect(page.locator('[data-testid="list-screen"] [role="checkbox"]').first()).toHaveAttribute(
-    'aria-checked',
-    'true',
-  );
+  await expect(
+    page.locator('[data-testid="list-screen"] [role="checkbox"]').first(),
+  ).toHaveAttribute('aria-checked', 'true');
 
   // La tasca d'origen ha de quedar feta: la cascada puja de la llista a la tasca dins
   // de la mateixa transacció (P1), i per tant es veu de seguida a l'API.
@@ -206,10 +202,17 @@ test('la repetició es tria al modal i genera la següent instància', async ({ 
   await field.press('Escape');
   await field.press('Enter');
 
-  await expect(page.locator('[data-testid="inbox-rail"]')).toContainText('Treure les escombraries', {
-    timeout: 10_000,
-  });
-  await page.locator('[data-testid="inbox-rail"]').getByText('Treure les escombraries').first().click();
+  await expect(page.locator('[data-testid="inbox-rail"]')).toContainText(
+    'Treure les escombraries',
+    {
+      timeout: 10_000,
+    },
+  );
+  await page
+    .locator('[data-testid="inbox-rail"]')
+    .getByText('Treure les escombraries')
+    .first()
+    .click();
 
   const modal = page.locator('[data-testid="task-modal"]');
   await expect(modal).toBeVisible();
@@ -240,8 +243,9 @@ test('la repetició es tria al modal i genera la següent instància', async ({ 
   const després = await page.request.get('/api/v1/tasks?limit=200', {
     headers: { authorization: `Bearer ${token}` },
   });
-  const totes = ((await després.json()) as { data: { title: string; due_date: string | null }[] })
-    .data.filter((t) => t.title === 'Treure les escombraries');
+  const totes = (
+    (await després.json()) as { data: { title: string; due_date: string | null }[] }
+  ).data.filter((t) => t.title === 'Treure les escombraries');
 
   expect(totes.length).toBe(2);
   // Cada dimarts és cada dimarts: la següent surt del venciment, no d'avui.

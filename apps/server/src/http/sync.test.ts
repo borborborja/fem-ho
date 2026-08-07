@@ -305,7 +305,10 @@ describe('CAS 3 · reordenació concurrent', () => {
       const current = final.rows[i]!;
       const byPosition = comparePositions(previous.position, current.position);
       const strictlyBefore = byPosition === -1 || (byPosition === 0 && previous.id < current.id);
-      expect(strictlyBefore, `${previous.position}/${previous.id} abans de ${current.position}/${current.id}`).toBe(true);
+      expect(
+        strictlyBefore,
+        `${previous.position}/${previous.id} abans de ${current.position}/${current.id}`,
+      ).toBe(true);
     }
   });
 });
@@ -612,7 +615,7 @@ describe('crear des del lot', () => {
     expect(llista?.items.map((i) => i.id)).toContain(itemId);
   });
 
-  it("una creació sense àmbit es rebutja, i **es queda dient per què**", async () => {
+  it('una creació sense àmbit es rebutja, i **es queda dient per què**', async () => {
     const id = uuidv7();
     const res = await api('POST', '/api/v1/sync/batch', {
       operations: [

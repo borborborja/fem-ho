@@ -524,7 +524,10 @@ export async function getChecklist(
 
   // El títol de la tasca hi va perquè la vista de llista el pinta com a molla de pa
   // clicable (docs/02 §6), i una segona crida per a un sol camp és una segona fallada.
-  return { ...toView(checklist, items.get(checklistId) ?? [], principal), task_title: task.rows[0]?.title ?? '' };
+  return {
+    ...toView(checklist, items.get(checklistId) ?? [], principal),
+    task_title: task.rows[0]?.title ?? '',
+  };
 }
 
 export async function updateChecklist(

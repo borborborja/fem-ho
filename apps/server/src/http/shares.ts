@@ -101,11 +101,15 @@ export function registerShareRoutes(app: FastifyInstance, secret: SecretProvider
       return auditedTransaction(app.connection!.db, principal, (ctx) =>
         updateShare(ctx, principal, request.params.id, {
           permission:
-            input.permission === 'view' || input.permission === 'check' || input.permission === 'comment'
+            input.permission === 'view' ||
+            input.permission === 'check' ||
+            input.permission === 'comment'
               ? input.permission
               : undefined,
-          expires_at: 'expires_at' in input ? ((input.expires_at as string | null) ?? null) : undefined,
-          max_views: 'max_views' in input ? ((input.max_views as number | null) ?? null) : undefined,
+          expires_at:
+            'expires_at' in input ? ((input.expires_at as string | null) ?? null) : undefined,
+          max_views:
+            'max_views' in input ? ((input.max_views as number | null) ?? null) : undefined,
           require_name: typeof input.require_name === 'boolean' ? input.require_name : undefined,
           password: 'password' in input ? ((input.password as string | null) ?? null) : undefined,
         }),

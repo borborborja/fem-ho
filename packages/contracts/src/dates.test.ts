@@ -26,7 +26,7 @@ describe('el primer dia de la setmana', () => {
     expect(weekStart('en')).toBe(0);
   });
 
-  it('la tria de la persona mana per damunt de l\'idioma', () => {
+  it("la tria de la persona mana per damunt de l'idioma", () => {
     expect(resolveWeekStart('sunday', 'ca')).toBe(0);
     expect(resolveWeekStart('monday', 'en')).toBe(1);
     // El primer dia no és només una convenció lingüística: qui treballa el cap de

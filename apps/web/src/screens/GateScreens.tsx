@@ -10,7 +10,15 @@ import { useState, type FormEvent, type ReactNode } from 'react';
 import { negotiate, t } from '@fem-ho/contracts';
 import { request } from '../app/api.js';
 
-function Card({ title, subtitle, children }: { title: string; subtitle: string; children: ReactNode }) {
+function Card({
+  title,
+  subtitle,
+  children,
+}: {
+  title: string;
+  subtitle: string;
+  children: ReactNode;
+}) {
   return (
     <main
       style={{
@@ -118,7 +126,11 @@ export function InviteScreen({ token }: { token: string }) {
           onChange={(event) => setRepeat(event.target.value)}
         />
         {error !== null ? (
-          <p role="alert" data-testid="invite-error" style={{ margin: 0, fontSize: 12, color: 'var(--danger-text)' }}>
+          <p
+            role="alert"
+            data-testid="invite-error"
+            style={{ margin: 0, fontSize: 12, color: 'var(--danger-text)' }}
+          >
             {error}
           </p>
         ) : null}

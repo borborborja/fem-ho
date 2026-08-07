@@ -51,8 +51,7 @@ export function CommandPalette({
     query.length >= 2 ? `/api/v1/search?q=${encodeURIComponent(query)}&limit=8` : null,
   );
 
-  const fold = (value: string): string =>
-    value.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/gu, '');
+  const fold = (value: string): string => value.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/gu, '');
 
   const places = destinations.filter(
     (place) => text === '' || fold(place.label).includes(fold(text)),
@@ -153,7 +152,9 @@ export function CommandPalette({
           }}
         />
 
-        <div style={{ maxHeight: 340, overflowY: 'auto', borderTop: '1px solid var(--card-border)' }}>
+        <div
+          style={{ maxHeight: 340, overflowY: 'auto', borderTop: '1px solid var(--card-border)' }}
+        >
           {total === 0 ? (
             <p style={{ margin: 0, padding: 16, fontSize: 12.5, color: 'var(--ink-faint)' }}>
               {t('palette.empty')}
@@ -162,7 +163,10 @@ export function CommandPalette({
 
           {[
             { title: t('palette.go'), rows: places.map((p) => ({ id: p.id, label: p.label })) },
-            { title: t('palette.tasks'), rows: tasks.map((task) => ({ id: task.id, label: task.title })) },
+            {
+              title: t('palette.tasks'),
+              rows: tasks.map((task) => ({ id: task.id, label: task.title })),
+            },
           ].map((group, groupIndex) =>
             group.rows.length === 0 ? null : (
               <div key={group.title}>

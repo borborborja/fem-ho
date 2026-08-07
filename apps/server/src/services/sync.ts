@@ -363,7 +363,7 @@ export async function softDelete(
       'Unknown entity',
       422,
       `"${entityType}" is not an entity that syncs.`,
-        { entity: entityType },
+      { entity: entityType },
     );
   }
 

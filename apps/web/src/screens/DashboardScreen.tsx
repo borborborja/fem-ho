@@ -80,12 +80,7 @@ export function DashboardScreen({ onOpenTask, onPickScope, onNewTask }: Dashboar
     />
   );
 
-  const section = (
-    title: string,
-    tasks: Task[],
-    emptyKey: string,
-    testId: string,
-  ) => (
+  const section = (title: string, tasks: Task[], emptyKey: string, testId: string) => (
     <section data-testid={testId} style={{ display: 'grid', gap: 9 }}>
       <h2 style={{ margin: 0, fontSize: 14.5, fontWeight: 800, color: 'var(--ink)' }}>{title}</h2>
       {tasks.length === 0 ? <EmptyState>{t(emptyKey)}</EmptyState> : tasks.map(taskRow)}
@@ -103,23 +98,25 @@ export function DashboardScreen({ onOpenTask, onPickScope, onNewTask }: Dashboar
 
       <div style={{ maxWidth: 620, display: 'flex', gap: 8, alignItems: 'flex-start' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-        <QuickAdd
-          context={context}
-          columnLabel={t('dashboard.title')}
-          scopeColors={Object.fromEntries(scopes.map((scope) => [scope.id, `var(${scope.color})`]))}
-          onCreate={(task) => {
-            void api
-              .post('/api/v1/tasks', {
-                id: uuidv7(),
-                scope_id: task.scopeId,
-                project_id: task.projectId ?? undefined,
-                title: task.title,
-              })
-              .then(() => {
-                dashboard.reload();
-              });
-          }}
-        />
+          <QuickAdd
+            context={context}
+            columnLabel={t('dashboard.title')}
+            scopeColors={Object.fromEntries(
+              scopes.map((scope) => [scope.id, `var(${scope.color})`]),
+            )}
+            onCreate={(task) => {
+              void api
+                .post('/api/v1/tasks', {
+                  id: uuidv7(),
+                  scope_id: task.scopeId,
+                  project_id: task.projectId ?? undefined,
+                  title: task.title,
+                })
+                .then(() => {
+                  dashboard.reload();
+                });
+            }}
+          />
         </div>
         <button
           type="button"
@@ -176,7 +173,9 @@ export function DashboardScreen({ onOpenTask, onPickScope, onNewTask }: Dashboar
             <div style={{ fontSize: 13.5, fontWeight: 700 }}>{scope.name}</div>
             <div style={{ fontSize: 11.5, color: 'var(--ink-soft)', paddingTop: 3 }}>
               {t('dashboard.pending', { count: scope.pending })}
-              {scope.overdue > 0 ? ` · ${t('dashboard.overdueCount', { count: scope.overdue })}` : ''}
+              {scope.overdue > 0
+                ? ` · ${t('dashboard.overdueCount', { count: scope.overdue })}`
+                : ''}
             </div>
           </button>
         ))}

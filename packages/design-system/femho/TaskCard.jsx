@@ -240,12 +240,7 @@ export function TaskCard({
           }}
         >
           {onEdit === undefined ? null : (
-            <CardAction
-              label={editLabel}
-              onClick={onEdit}
-              revealed={revealed}
-              testId="card-edit"
-            >
+            <CardAction label={editLabel} onClick={onEdit} revealed={revealed} testId="card-edit">
               <PencilIcon />
             </CardAction>
           )}

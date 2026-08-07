@@ -49,7 +49,8 @@ export default defineConfig({
        * servir el producte. És l'única prova que pot veure els errors que només
        * existeixen quan les peces van juntes.
        */
-      command: 'npm run build -w @fem-ho/contracts && npm run build -w @fem-ho/server && node apps/server/dist/index.js',
+      command:
+        'npm run build -w @fem-ho/contracts && npm run build -w @fem-ho/server && node apps/server/dist/index.js',
       url: `http://localhost:${String(API_PORT)}/healthz`,
       reuseExistingServer: false,
       timeout: 180_000,

@@ -27,7 +27,10 @@ export async function handle<T>(
     return await work(principal);
   } catch (error) {
     if (error instanceof PolicyError) {
-      void reply.code(error.status).type('application/problem+json').send(error.toProblem(request.url));
+      void reply
+        .code(error.status)
+        .type('application/problem+json')
+        .send(error.toProblem(request.url));
       return undefined;
     }
     throw error;

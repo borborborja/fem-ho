@@ -77,7 +77,7 @@ export const TOOLS: ToolSpec[] = [
     name: 'create_task',
     title: 'Create a task',
     description:
-      'Creates a task. It always has to have a scope; it may have no project. Respects the agent\'s `can_create_tasks`.',
+      "Creates a task. It always has to have a scope; it may have no project. Respects the agent's `can_create_tasks`.",
     inputSchema: {
       scope_id: scopeId,
       title: z.string().describe('The title, already free of sigils.'),
@@ -124,8 +124,7 @@ export const TOOLS: ToolSpec[] = [
   {
     name: 'list_scopes',
     title: 'Scopes',
-    description:
-      'Accessible scopes, with the description and AI instructions of each one.',
+    description: 'Accessible scopes, with the description and AI instructions of each one.',
     inputSchema: {},
     annotations: READ,
   },
@@ -149,7 +148,10 @@ export const TOOLS: ToolSpec[] = [
     inputSchema: {
       task_id: taskId,
       status: z.enum(['inbox', 'todo', 'doing', 'done']),
-      position: z.string().optional().describe('The fractional index. If not given, it goes to the end.'),
+      position: z
+        .string()
+        .optional()
+        .describe('The fractional index. If not given, it goes to the end.'),
     },
     annotations: MODIFY,
   },

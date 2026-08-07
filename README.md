@@ -46,31 +46,32 @@ npm ci
 npm run build
 npm test                 # unitàries, SQLite
 npm run test:postgres    # les mateixes, contra Postgres
-npm run check            # les dotze comprovacions permanents
+npm run check            # les tretze comprovacions permanents
 npx playwright test      # navegador, contra un servidor real
 npm run test:android     # Kotlin pur, sense emulador
 ```
 
-### Les dotze comprovacions permanents
+### Les tretze comprovacions permanents
 
 No són linters de format: cadascuna impedeix **una manera concreta de trencar el producte
 sense que res falli**. Totes tenen autoprova, perquè una comprovació que diu "verd" sense
 comprovar res és pitjor que no tenir-la.
 
-| | Què impedeix |
-| --- | --- |
-| `openapi-diff` | Tocar un handler sense actualitzar el contracte |
-| `vocab-lint` | Que el vocabulari del prototip s'infiltri al codi (`column: 'fet'`) |
-| `no-hardcoded-colors` | Un color escrit a mà que no segueixi el tema ni l'accent |
-| `i18n-lint` | Text escrit al codi en comptes del catàleg |
-| `i18n-parity` | Una clau o un marcador `{x}` que falti en un idioma |
-| `i18n-keys-exist` | Una errata a `t('...')`, que compila i s'ensenya crua a la cara |
-| `no-pinned-from-research` | Una versió de dependència sense procedència registrada |
-| `contrast-check` | Contrast per sota de l'AA als vuit temes |
-| `audit-coverage` | Un camí d'escriptura que no deixi rastre a l'historial |
-| `parser-parity` | Que el parser de la web i el d'Android divergeixin |
-| `tokens-parity` | Que els colors de Compose s'endarrereixin respecte del CSS |
-| `css-classes` | Una classe que no existeix — es veu sense estil i res falla |
+|                           | Què impedeix                                                        |
+| ------------------------- | ------------------------------------------------------------------- |
+| `openapi-diff`            | Tocar un handler sense actualitzar el contracte                     |
+| `vocab-lint`              | Que el vocabulari del prototip s'infiltri al codi (`column: 'fet'`) |
+| `no-hardcoded-colors`     | Un color escrit a mà que no segueixi el tema ni l'accent            |
+| `i18n-lint`               | Text escrit al codi en comptes del catàleg                          |
+| `i18n-parity`             | Una clau o un marcador `{x}` que falti en un idioma                 |
+| `i18n-keys-exist`         | Una errata a `t('...')`, que compila i s'ensenya crua a la cara     |
+| `no-pinned-from-research` | Una versió de dependència sense procedència registrada              |
+| `no-ignored-sources`      | Codi font que `.gitignore` s'empassa i que qui cloni no tindrà      |
+| `contrast-check`          | Contrast per sota de l'AA als vuit temes                            |
+| `audit-coverage`          | Un camí d'escriptura que no deixi rastre a l'historial              |
+| `parser-parity`           | Que el parser de la web i el d'Android divergeixin                  |
+| `tokens-parity`           | Que els colors de Compose s'endarrereixin respecte del CSS          |
+| `css-classes`             | Una classe que no existeix — es veu sense estil i res falla         |
 
 ## Com està fet
 
@@ -82,7 +83,7 @@ apps/web         React + Vite, PWA amb cua de sortida
 apps/android     Kotlin + Compose, Room i UnifiedPush
 packages/contracts       openapi.yaml, catàlegs d'idioma, parser i índex fraccional
 packages/design-system   Plou vendoritzat + els components de Fem-ho
-tools/checks     les dotze comprovacions
+tools/checks     les tretze comprovacions
 docs/            quinze documents normatius
 ```
 

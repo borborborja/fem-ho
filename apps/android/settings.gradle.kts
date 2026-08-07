@@ -10,7 +10,12 @@
  *   - `:core-network` no coneix la base de dades i `:core-data` no coneix la xarxa des
  *     de les pantalles: **els repositoris exposen fluxos des de la base local i cap
  *     pantalla crida la xarxa directament** (docs/03 §11).
- *   - Les tres `:feature-*` no es coneixen entre elles. El que comparteixen va a `core`.
+ *   - Les `:feature-*` no es coneixen entre elles. El que comparteixen va a `core`.
+ *   - `:core-widget` és el design system de la pantalla d'inici i l'única que porta
+ *     Glance: els widgets es pinten amb un altre motor —`RemoteViews`, no Compose de
+ *     veritat— i posar-lo a `:core-designsystem` l'arrossegaria a tot arreu. **Els
+ *     widgets en si viuen a `:app`**, com les pantalles: necessiten text, i en aquest
+ *     projecte cap mòdul de funcionalitat té text propi; el té `:app` i el passa avall.
  */
 
 rootProject.name = "fem-ho"
@@ -19,6 +24,7 @@ include(":core-model")
 include(":core-designsystem")
 include(":core-network")
 include(":core-data")
+include(":core-widget")
 include(":feature-tasks")
 include(":feature-calendar")
 include(":feature-settings")

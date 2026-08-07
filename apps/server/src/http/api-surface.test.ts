@@ -120,7 +120,7 @@ describe('àmbits', () => {
     expect(res.json<{ name: string }>().name).toBe('Personal');
   });
 
-  it('es pot canviar el nom, i queda a l\'historial', async () => {
+  it("es pot canviar el nom, i queda a l'historial", async () => {
     const res = await api('PATCH', `/api/v1/scopes/${scopeIndividual}`, { name: 'El meu' });
     expect(res.statusCode, res.body).toBe(200);
     expect(res.json<{ name: string }>().name).toBe('El meu');
@@ -129,7 +129,7 @@ describe('àmbits', () => {
     await api('PATCH', `/api/v1/scopes/${scopeIndividual}`, { name: 'Personal' });
   });
 
-  it("`kind` NO es pot canviar", async () => {
+  it('`kind` NO es pot canviar', async () => {
     await api('PATCH', `/api/v1/scopes/${scopeIndividual}`, { kind: 'collective' });
     const res = await api('GET', `/api/v1/scopes/${scopeIndividual}`);
     // Passar d'individual a col·lectiu deixaria totes les tasques assignades al
@@ -137,7 +137,7 @@ describe('àmbits', () => {
     expect(res.json<{ kind: string }>().kind).toBe('individual');
   });
 
-  it('un àmbit amb tasques NO s\'esborra, i diu quantes en té', async () => {
+  it("un àmbit amb tasques NO s'esborra, i diu quantes en té", async () => {
     const scopeId = (
       await api('POST', '/api/v1/scopes', { name: 'Ple', color: '--plou-red' })
     ).json<{ id: string }>().id;
@@ -148,7 +148,7 @@ describe('àmbits', () => {
     expect(res.json<{ detail: string }>().detail).toContain('1 tasca');
   });
 
-  it("un de buit sí, i queda registrat", async () => {
+  it('un de buit sí, i queda registrat', async () => {
     const scopeId = (
       await api('POST', '/api/v1/scopes', { name: 'Buit', color: '--plou-red' })
     ).json<{ id: string }>().id;
@@ -183,7 +183,9 @@ describe('membres', () => {
   });
 
   it('ni usuari ni calendari, o tots dos, és 422', async () => {
-    expect((await api('POST', `/api/v1/scopes/${scopeCollectiu}/members`, {})).statusCode).toBe(422);
+    expect((await api('POST', `/api/v1/scopes/${scopeCollectiu}/members`, {})).statusCode).toBe(
+      422,
+    );
     const tots = await api('POST', `/api/v1/scopes/${scopeCollectiu}/members`, {
       user_id: altreId,
       external_calendar_id: uuidv7(),
@@ -322,7 +324,7 @@ describe('una tasca sola', () => {
     expect(res.json<{ title: string }>().title).toBe('Per llegir');
   });
 
-  it("es pot editar, i el canvi queda amb el valor anterior i el nou", async () => {
+  it('es pot editar, i el canvi queda amb el valor anterior i el nou', async () => {
     const taskId = await novaTasca('Títol vell');
     const res = await api('PATCH', `/api/v1/tasks/${taskId}`, {
       title: 'Títol nou',
@@ -338,7 +340,7 @@ describe('una tasca sola', () => {
     expect(canvis.rows[0]?.changes).toContain('Títol nou');
   });
 
-  it("`null` buida un camp i absent no el toca", async () => {
+  it('`null` buida un camp i absent no el toca', async () => {
     const taskId = await novaTasca('Amb data');
     await api('PATCH', `/api/v1/tasks/${taskId}`, { due_date: '2026-09-01' });
 
@@ -387,9 +389,9 @@ describe('assignats', () => {
     expect(res.json<{ detail: string }>().detail).toContain('Alba');
   });
 
-  it("i qui sí, sí, amb rastre", async () => {
+  it('i qui sí, sí, amb rastre', async () => {
     await api('POST', `/api/v1/scopes/${scopeCollectiu}/members`, { user_id: altreId });
-    const taskId = await novaTasca('Per a l\'Alba', scopeCollectiu);
+    const taskId = await novaTasca("Per a l'Alba", scopeCollectiu);
 
     const res = await api('POST', `/api/v1/tasks/${taskId}/assignees/${altreId}`);
     expect(res.statusCode, res.body).toBe(200);
@@ -407,9 +409,9 @@ describe('subtasques', () => {
 
   beforeAll(async () => {
     taskId = await novaTasca('Amb subtasques');
-    subtaskId = (
-      await api('POST', `/api/v1/tasks/${taskId}/subtasks`, { title: 'Primera' })
-    ).json<{ id: string }>().id;
+    subtaskId = (await api('POST', `/api/v1/tasks/${taskId}/subtasks`, { title: 'Primera' })).json<{
+      id: string;
+    }>().id;
   });
 
   it('es creen i es llisten en ordre', async () => {
@@ -465,9 +467,9 @@ describe('llistes senzilles, la resta del CRUD', () => {
 
   beforeAll(async () => {
     taskId = await novaTasca('Amb llista completa');
-    listId = (
-      await api('POST', `/api/v1/tasks/${taskId}/checklists`, { name: 'La compra' })
-    ).json<{ id: string }>().id;
+    listId = (await api('POST', `/api/v1/tasks/${taskId}/checklists`, { name: 'La compra' })).json<{
+      id: string;
+    }>().id;
   });
 
   it("es pot llegir sola, amb el títol de la tasca d'origen", async () => {
@@ -491,18 +493,18 @@ describe('llistes senzilles, la resta del CRUD', () => {
   });
 
   it("un ítem s'esborra i deixa rastre", async () => {
-    const itemId = (
-      await api('POST', `/api/v1/checklists/${listId}/items`, { text: 'Pa' })
-    ).json<{ id: string }>().id;
+    const itemId = (await api('POST', `/api/v1/checklists/${listId}/items`, { text: 'Pa' })).json<{
+      id: string;
+    }>().id;
 
     expect((await api('DELETE', `/api/v1/checklist-items/${itemId}`)).statusCode).toBe(204);
     expect((await rastre(itemId)).map((e) => e.verb)).toContain('deleted');
   });
 
   it("i la llista sencera s'endú els seus ítems", async () => {
-    const itemId = (
-      await api('POST', `/api/v1/checklists/${listId}/items`, { text: 'Vi' })
-    ).json<{ id: string }>().id;
+    const itemId = (await api('POST', `/api/v1/checklists/${listId}/items`, { text: 'Vi' })).json<{
+      id: string;
+    }>().id;
 
     expect((await api('DELETE', `/api/v1/checklists/${listId}`)).statusCode).toBe(204);
     expect((await rastre(listId)).map((e) => e.verb)).toContain('deleted');
@@ -663,7 +665,7 @@ describe('esdeveniments', () => {
     expect(res.json<{ summary: string }>().summary).toBe('Reunió');
   });
 
-  it("i esborrar-lo, amb rastre", async () => {
+  it('i esborrar-lo, amb rastre', async () => {
     const id = (
       await api('POST', '/api/v1/events', {
         calendar_id: calendarId,
@@ -696,7 +698,7 @@ describe('el compte propi', () => {
     expect(res.json<{ detail: string }>().detail).toContain('system, light, dark');
   });
 
-  it("un fus que no existeix, també", async () => {
+  it('un fus que no existeix, també', async () => {
     const res = await api('PATCH', '/api/v1/auth/me', { timezone: 'Europa/Madrit' });
     expect(res.statusCode).toBe(422);
     expect(res.json<{ detail: string }>().detail).toContain('IANA');
@@ -718,7 +720,7 @@ describe('el compte propi', () => {
     });
   });
 
-  it('una posició d\'Inbox inventada es rebutja', async () => {
+  it("una posició d'Inbox inventada es rebutja", async () => {
     const res = await api('PATCH', '/api/v1/auth/settings', { inbox_position: 'dalt' });
     expect(res.statusCode).toBe(422);
   });
@@ -766,7 +768,7 @@ describe('agents', () => {
     expect(Number(reserves.rows[0]?.n)).toBe(0);
   });
 
-  it("esborrar-lo desdelega les tasques però no se les endú", async () => {
+  it('esborrar-lo desdelega les tasques però no se les endú', async () => {
     const taskId = await novaTasca('Delegada');
     await sql`
       UPDATE tasks SET delegate_agent_id = ${agentId}, ai_mode = 'delegated' WHERE id = ${taskId}
@@ -784,9 +786,8 @@ describe('agents', () => {
   });
 
   it("l'agent d'algú altre no existeix", async () => {
-    const meu = (
-      await api('POST', '/api/v1/ai/agents', { name: 'Privat' })
-    ).json<{ id: string }>().id;
+    const meu = (await api('POST', '/api/v1/ai/agents', { name: 'Privat' })).json<{ id: string }>()
+      .id;
 
     await sql`UPDATE ai_agents SET on_behalf_of_user_id = ${altreId} WHERE id = ${meu}`.execute(
       conn.db,
@@ -797,7 +798,7 @@ describe('agents', () => {
 });
 
 describe('reserves', () => {
-  it("`next-task` amb res a fer torna null i no un 404", async () => {
+  it('`next-task` amb res a fer torna null i no un 404', async () => {
     const res = await api('GET', '/api/v1/ai/next-task');
     expect(res.statusCode, res.body).toBe(200);
     // Un 404 faria que un agent que consulta cada minut ho llegís com un error de
@@ -829,9 +830,9 @@ describe('compartits, la resta', () => {
     const taskId = await novaTasca('Per compartir');
     // La creació torna `{url, token, share}`: l'URL sencer surt aquí i enlloc més
     // (docs/10 §6), perquè el token no es pot recuperar del seu HMAC.
-    shareId = (
-      await api('POST', '/api/v1/shares', { task_id: taskId, permission: 'view' })
-    ).json<{ share: { id: string } }>().share.id;
+    shareId = (await api('POST', '/api/v1/shares', { task_id: taskId, permission: 'view' })).json<{
+      share: { id: string };
+    }>().share.id;
   });
 
   it("se'n pot llegir un de sol, i el token no hi surt", async () => {
@@ -847,13 +848,13 @@ describe('compartits, la resta', () => {
     expect((await rastre(shareId)).map((e) => e.verb)).toContain('updated');
   });
 
-  it("els accessos són pseudònims i no hi ha cap IP", async () => {
+  it('els accessos són pseudònims i no hi ha cap IP', async () => {
     const res = await api('GET', `/api/v1/shares/${shareId}/accesses`);
     expect(res.statusCode).toBe(200);
     expect(res.body).not.toMatch(/\b\d{1,3}(\.\d{1,3}){3}\b/u);
   });
 
-  it("un enllaç revocat no es pot reconfigurar", async () => {
+  it('un enllaç revocat no es pot reconfigurar', async () => {
     await api('DELETE', `/api/v1/shares/${shareId}`);
     const res = await api('PATCH', `/api/v1/shares/${shareId}`, { permission: 'view' });
     expect(res.statusCode).toBe(409);
@@ -917,25 +918,25 @@ describe('administració', () => {
     expect(res.statusCode).toBe(409);
   });
 
-  it("un administrador NO es pot esborrar a si mateix", async () => {
+  it('un administrador NO es pot esborrar a si mateix', async () => {
     const res = await api('DELETE', `/api/v1/admin/users/${userId}`);
     expect(res.statusCode).toBe(409);
     expect(res.json<{ detail: string }>().detail).toContain('another administrator');
   });
 
-  it("ni deixar la instància sense cap", async () => {
+  it('ni deixar la instància sense cap', async () => {
     const res = await api('PATCH', `/api/v1/admin/users/${userId}`, { role: 'member' });
     expect(res.statusCode).toBe(409);
   });
 
-  it("i un altre usuari sí, amb rastre", async () => {
+  it('i un altre usuari sí, amb rastre', async () => {
     const res = await api('PATCH', `/api/v1/admin/users/${altreId}`, { name: 'Alba Puig' });
     expect(res.statusCode, res.body).toBe(200);
     expect(res.json<{ name: string }>().name).toBe('Alba Puig');
     expect((await rastre(altreId)).map((e) => e.verb)).toContain('updated');
   });
 
-  it("el diagnòstic no porta cap secret", async () => {
+  it('el diagnòstic no porta cap secret', async () => {
     const res = await api('GET', '/api/v1/admin/diagnostics');
     expect(res.statusCode, res.body).toBe(200);
     expect(res.body).not.toContain('x'.repeat(40));
@@ -966,7 +967,7 @@ describe('administració', () => {
  * que ningú podia omplir, i moure una tasca de projecte no es podia fer des de l'API.
  */
 describe('data límit i projecte', () => {
-  it("la data límit és SEPARADA del venciment", async () => {
+  it('la data límit és SEPARADA del venciment', async () => {
     const taskId = await novaTasca('Amb les dues dates');
 
     await api('PATCH', `/api/v1/tasks/${taskId}`, {
@@ -983,7 +984,7 @@ describe('data límit i projecte', () => {
     expect(cos.deadline).toContain('2026-09-30');
   });
 
-  it('es pot moure de projecte i tornar a l\'espai general', async () => {
+  it("es pot moure de projecte i tornar a l'espai general", async () => {
     const projectId = (
       await api('POST', '/api/v1/projects', { scope_id: scopeIndividual, name: 'Obres' })
     ).json<{ id: string }>().id;
@@ -1019,7 +1020,7 @@ describe('data límit i projecte', () => {
  * repeteix, distingint `recurrence_mode` `schedule` de `completion`."
  */
 describe('tasques que es repeteixen', () => {
-  it("amb `schedule`, la següent surt del VENCIMENT anterior", async () => {
+  it('amb `schedule`, la següent surt del VENCIMENT anterior', async () => {
     const taskId = await novaTasca('Treure les escombraries');
     await api('PATCH', `/api/v1/tasks/${taskId}`, {
       due_date: '2026-08-04',
@@ -1061,7 +1062,7 @@ describe('tasques que es repeteixen', () => {
     expect(seguent.rows[0]?.due_date).toBe(esperat);
   });
 
-  it("els assignats van amb la instància nova", async () => {
+  it('els assignats van amb la instància nova', async () => {
     const taskId = await novaTasca('Amb responsable');
     await api('PATCH', `/api/v1/tasks/${taskId}`, {
       due_date: '2026-08-04',
@@ -1124,4 +1125,3 @@ describe('netejar la instància', () => {
     expect(Number(usuaris.rows[0]?.n)).toBeGreaterThan(0);
   });
 });
-

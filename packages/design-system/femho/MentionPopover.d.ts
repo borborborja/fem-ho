@@ -1,8 +1,10 @@
 import type { CSSProperties, HTMLAttributes } from 'react';
 import type { QuickAddSuggestion } from './QuickAddInput.js';
 
-export interface MentionPopoverProps
-  extends Omit<HTMLAttributes<HTMLUListElement>, 'onSelect' | 'id'> {
+export interface MentionPopoverProps extends Omit<
+  HTMLAttributes<HTMLUListElement>,
+  'onSelect' | 'id'
+> {
   /** Identificador del `listbox`. Ha de coincidir amb l'`aria-controls` de l'input. */
   id: string;
   suggestions?: QuickAddSuggestion[] | undefined;

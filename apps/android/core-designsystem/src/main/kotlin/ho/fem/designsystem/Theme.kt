@@ -109,19 +109,15 @@ fun FemhoTheme(
         else -> isSystemInDarkTheme()
     }
 
-    val chosen = when (accent) {
-        "soft" -> FemhoAccent.SOFT
-        "mono-warm" -> FemhoAccent.MONOWARM
-        "mono-cool" -> FemhoAccent.MONOCOOL
-        else -> FemhoAccent.DEFAULT
-    }
-
-    val colors = applyAccent(if (dark) darkColors else lightColors, chosen)
+    // La resolució viu a `Palette.kt` i no aquí: els widgets de la pantalla d'inici van
+    // amb Glance, sense runtime de Compose, i han de donar exactament els mateixos
+    // colors. Dos camins de resolució divergirien sense que cap prova ho digués.
+    val chosen = accentOf(accent)
 
     CompositionLocalProvider(
-        LocalFemhoColors provides colors,
+        LocalFemhoColors provides femhoColorsOf(dark, accent),
         LocalFemhoAccent provides chosen,
-        LocalFemhoGradients provides if (dark) darkGradients else lightGradients,
+        LocalFemhoGradients provides femhoGradientsOf(dark),
         content = content,
     )
 }

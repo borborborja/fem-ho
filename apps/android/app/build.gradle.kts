@@ -5,7 +5,20 @@ plugins {
 }
 
 android {
-    namespace = "ho.fem"
+    /**
+     * El `namespace` és el paquet del codi; l'`applicationId`, la identitat de l'app.
+     *
+     * **No són el mateix i aquí no ho eren.** El codi viu a `ho.fem.app` i el namespace
+     * deia `ho.fem`, o sigui que els noms relatius del manifest —`.MainActivity`,
+     * `.FemhoApplication`, `.PushReceiver`— es resolien contra `ho.fem` i apuntaven a
+     * classes que no existeixen. L'app no arrencava: `ClassNotFoundException` abans de
+     * pintar res. Compilava, l'APK es construïa i les proves de Kotlin passaven, perquè
+     * cap de les tres coses arrenca mai l'aplicació.
+     *
+     * L'`applicationId` es queda com estava: és el que identifica l'app al telèfon i
+     * canviar-lo faria que fos una app diferent de la que algú tingués instal·lada.
+     */
+    namespace = "ho.fem.app"
     compileSdk = 36
 
     defaultConfig {
@@ -66,8 +79,8 @@ dependencies {
     implementation(project(":core-network"))
     implementation(project(":core-data"))
     implementation(project(":core-designsystem"))
+    implementation(project(":core-widget"))
     implementation(project(":feature-tasks"))
-    implementation(project(":core-network"))
     implementation(project(":feature-calendar"))
     implementation(project(":feature-settings"))
 

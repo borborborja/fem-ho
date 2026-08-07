@@ -168,9 +168,7 @@ export function KanbanBoard({
            * A "Fent" i a "Fet" la barra de la dreta és la casella d'estat, que és on
            * acaba el recorregut. L'Inbox el pinta InboxRail i té la seva.
            */
-          onAdvance={
-            task.status === 'todo' ? () => onMove?.(task.id, 'doing') : undefined
-          }
+          onAdvance={task.status === 'todo' ? () => onMove?.(task.id, 'doing') : undefined}
         />
       </DraggableCard>
     );
@@ -320,22 +318,22 @@ export function KanbanBoard({
                 scrollbarWidth: 'none',
               }
             : {
-          display: 'grid',
-          // L'Inbox se separa de les altres tres amb 24px en comptes de 16 (docs/02 §4),
-          // i les tres van dins d'una sola targeta perquè "es sentin un sol element"
-          // (brief línia 39), que és el que fa el prototip.
-          gridTemplateColumns: '1fr 3fr',
-          /**
-           * `minmax(0, 1fr)` a les files i `stretch`: les quatre columnes fan la mateixa
-           * alçada i es desplacen per dins. Amb `start` i files automàtiques, una
-           * columna amb quaranta targetes estirava la pàgina i les altres tres quedaven
-           * penjades a dalt.
-           */
-          gridTemplateRows: 'minmax(0, 1fr)',
-          gap: 24,
-          alignItems: 'stretch',
-          flex: 1,
-          minHeight: 0,
+                display: 'grid',
+                // L'Inbox se separa de les altres tres amb 24px en comptes de 16 (docs/02 §4),
+                // i les tres van dins d'una sola targeta perquè "es sentin un sol element"
+                // (brief línia 39), que és el que fa el prototip.
+                gridTemplateColumns: '1fr 3fr',
+                /**
+                 * `minmax(0, 1fr)` a les files i `stretch`: les quatre columnes fan la mateixa
+                 * alçada i es desplacen per dins. Amb `start` i files automàtiques, una
+                 * columna amb quaranta targetes estirava la pàgina i les altres tres quedaven
+                 * penjades a dalt.
+                 */
+                gridTemplateRows: 'minmax(0, 1fr)',
+                gap: 24,
+                alignItems: 'stretch',
+                flex: 1,
+                minHeight: 0,
               }
         }
       >
@@ -352,31 +350,31 @@ export function KanbanBoard({
               : { display: 'contents' }
           }
         >
-        <DroppableColumn status="inbox">
-          {() => (
-            <InboxRail
-              tasks={inboxTasks}
-              scopes={scopes}
-              placement="column"
-              collapsed={Object.fromEntries(
-                scopes.map((scope) => [scope.id, collapsed[`inbox:${scope.id}`] === true]),
-              )}
-              onToggleGroup={(scopeId) => onToggleGroup?.('inbox', scopeId)}
-              onMove={(taskId, status) => onMove?.(taskId, status)}
-              onOpen={onOpen}
-              onToggleDone={onToggleDone}
-              // L'Inbox també porta el seu peu d'afegida ràpida. Es passa des d'aquí i
-              // no des de dins d'InboxRail perquè el rail també viu al calendari, on el
-              // peu és un altre.
-              footer={renderFooter?.('inbox')}
-              wrapCard={(task, card) => (
-                <DraggableCard key={task.id} id={task.id} testId={`task-${task.id}`}>
-                  {card}
-                </DraggableCard>
-              )}
-            />
-          )}
-        </DroppableColumn>
+          <DroppableColumn status="inbox">
+            {() => (
+              <InboxRail
+                tasks={inboxTasks}
+                scopes={scopes}
+                placement="column"
+                collapsed={Object.fromEntries(
+                  scopes.map((scope) => [scope.id, collapsed[`inbox:${scope.id}`] === true]),
+                )}
+                onToggleGroup={(scopeId) => onToggleGroup?.('inbox', scopeId)}
+                onMove={(taskId, status) => onMove?.(taskId, status)}
+                onOpen={onOpen}
+                onToggleDone={onToggleDone}
+                // L'Inbox també porta el seu peu d'afegida ràpida. Es passa des d'aquí i
+                // no des de dins d'InboxRail perquè el rail també viu al calendari, on el
+                // peu és un altre.
+                footer={renderFooter?.('inbox')}
+                wrapCard={(task, card) => (
+                  <DraggableCard key={task.id} id={task.id} testId={`task-${task.id}`}>
+                    {card}
+                  </DraggableCard>
+                )}
+              />
+            )}
+          </DroppableColumn>
         </div>
         {/*
           El gir viu aquí i no a cada columna: el que gira és la targeta sencera, i

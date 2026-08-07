@@ -17,19 +17,19 @@ import { api } from '../app/api.js';
 import { useRouter } from '../app/router.js';
 import { useSession, useSessionData } from '../app/session.js';
 import { useApi, useMutation } from '../app/useApi.js';
-import type { AdminUser, Agent, ApiTokenSummary, Calendar, Info, Member, Scope, ShareSummary } from '../app/types.js';
+import type {
+  AdminUser,
+  Agent,
+  ApiTokenSummary,
+  Calendar,
+  Info,
+  Member,
+  Scope,
+  ShareSummary,
+} from '../app/types.js';
 import { ErrorBanner } from './BoardScreen.js';
 
-const TABS = [
-  'general',
-  'scopes',
-  'calendars',
-  'mcp',
-  'ai',
-  'shares',
-  'profile',
-  'admin',
-] as const;
+const TABS = ['general', 'scopes', 'calendars', 'mcp', 'ai', 'shares', 'profile', 'admin'] as const;
 type Tab = (typeof TABS)[number];
 
 export function SettingsScreen() {
@@ -490,7 +490,10 @@ function CalendarsTab() {
             ) : (
               own.map((calendar) => (
                 <div key={calendar.id} style={{ fontSize: 12.5, color: 'var(--ink-soft)' }}>
-                  {calendar.name} · {calendar.kind === 'todos' ? t('settings.caldavTodos') : t('settings.caldavEvents')}
+                  {calendar.name} ·{' '}
+                  {calendar.kind === 'todos'
+                    ? t('settings.caldavTodos')
+                    : t('settings.caldavEvents')}
                 </div>
               ))
             )}
@@ -972,7 +975,9 @@ function ProfileTab() {
       {/* El brief és explícit (línia 42): aquí NO s'editen els altres. */}
       <Group title={t('settings.tab.profile')}>
         <label style={{ display: 'grid', gap: 5 }}>
-          <span style={{ fontSize: 11.5, color: 'var(--ink-soft)' }}>{t('settings.profileName')}</span>
+          <span style={{ fontSize: 11.5, color: 'var(--ink-soft)' }}>
+            {t('settings.profileName')}
+          </span>
           <input
             className="plou-input"
             data-testid="profile-name"

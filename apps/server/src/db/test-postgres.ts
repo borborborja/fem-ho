@@ -47,7 +47,9 @@ export async function connectTestSchema(url: string, name: string): Promise<Test
   await admin.close();
 
   const separator = url.includes('?') ? '&' : '?';
-  const scoped = connect(`${url}${separator}options=${encodeURIComponent(`-c search_path=${schema}`)}`);
+  const scoped = connect(
+    `${url}${separator}options=${encodeURIComponent(`-c search_path=${schema}`)}`,
+  );
 
   return {
     ...scoped,

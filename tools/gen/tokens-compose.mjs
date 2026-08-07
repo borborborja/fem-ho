@@ -40,6 +40,52 @@ const OUTPUT = join(
   'Tokens.kt',
 );
 
+/**
+ * La segona sortida: colors com a **recursos d'Android**.
+ *
+ * Els widgets de la pantalla d'inici no poden arrodonir una cantonada per sota d'API 31
+ * (`GlanceModifier.cornerRadius` és `@RequiresApi(31)`), i la manera de fer-ho és un
+ * `<shape>` drawable. Un drawable no llegeix un `ColorProvider` de Kotlin: vol un
+ * `@color/...`. Sense aquest fitxer, cada forma portaria un `#14161e` escrit a mà que
+ * es quedaria enrere el dia que Plou canviés — i **`no-hardcoded-colors` no escaneja
+ * `.xml`**, o sigui que no ho diria ningú.
+ */
+const RES = join(ROOT, 'apps', 'android', 'core-widget', 'src', 'main', 'res');
+
+/**
+ * Els tokens que necessiten forma, i per tant recurs.
+ *
+ * Són **tots neutres a posta**: els accents només sobreescriuen colors de marca
+ * (`plou*`, `dot*`, `kicker`, `onBrand`, `ringRadar`), o sigui que aquests valen igual
+ * per als quatre i un sol parell clar/fosc els cobreix. El que sí que canvia amb
+ * l'accent es pinta amb un vector tenyit en temps d'execució, que no té aquest límit.
+ *
+ * Si algun dia un accent en toqués un, el generat seria correcte només per al primer
+ * accent i ningú ho veuria: per això `assertNeutral` peta en comptes de continuar.
+ */
+const SHAPE_TOKENS = [
+  /**
+   * La superfície del widget és `--dialog-bg`, **no `--card-bg`**.
+   *
+   * A l'app una targeta és translúcida (a fosc, blanc al 6%) perquè seu damunt d'un
+   * panell que li dona el fons. Un widget no té panell a sota: té el fons de pantalla de
+   * qui sigui, que pot ser una foto clara. Amb `--card-bg` el text quedaria damunt del
+   * que hi hagués, i el contrast que `contrast-check` garanteix deixaria de valer.
+   *
+   * `--dialog-bg` és justament el token pensat per seure damunt d'una cosa que no
+   * controlem, i és opac als dos temes.
+   */
+  '--dialog-bg',
+  '--panel-bg',
+  '--card-bg',
+  '--card-border',
+  '--column-bg',
+  '--input-bg',
+  '--input-border',
+  '--danger-bg',
+  '--divider',
+];
+
 /** `--card-bg` → `cardBg`. */
 export function kotlinName(cssName) {
   return cssName
@@ -84,16 +130,39 @@ export function toArgb(value) {
     const alpha = parts.length > 3 ? Number(parts[3]) : 1;
     if (!Number.isFinite(alpha)) return null;
 
-    const byte = (n) => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, '0');
+    const byte = (n) =>
+      Math.max(0, Math.min(255, Math.round(n)))
+        .toString(16)
+        .padStart(2, '0');
     return `0x${byte(alpha * 255).toUpperCase()}${channels.map(byte).join('').toUpperCase()}`;
   }
 
   return null;
 }
 
-/** Els parells `--nom: valor` d'un bloc de selector concret. */
+/**
+ * Els parells `--nom: valor` d'un bloc de selector concret.
+ *
+ * **Les cometes del selector no compten.** `plou/tokens/theme.css` escriu
+ * `[data-theme="dark"]` amb dobles i `femho/tokens.css` amb simples, i buscar-ne una
+ * mena literal feia que el bloc fosc de Plou no es trobés mai: `darkColors` sortia com
+ * una còpia de `lightColors` i **el tema fosc d'Android pintava les superfícies clares**.
+ * Res fallava —el fitxer es generava, `tokens-parity` el comparava contra ell mateix— i
+ * l'única manera de veure-ho era mirar el fosc al costat del clar.
+ *
+ * És la mateixa família de defecte que ja s'havia corregit per als accents; aquí havia
+ * quedat.
+ */
 function readBlock(css, selector) {
-  const start = css.indexOf(selector);
+  // El selector es busca amb qualsevol de les dues cometes.
+  const pattern = new RegExp(
+    selector
+      .replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')
+      .replace(/\\\[|['"]/gu, (match) => (match === '\\[' ? '\\[' : `["']`)),
+    'u',
+  );
+  const found = pattern.exec(css);
+  const start = found === null ? -1 : found.index;
   if (start === -1) return {};
   const open = css.indexOf('{', start);
   const close = css.indexOf('}', open);
@@ -168,6 +237,26 @@ function colorsOf(values) {
   return out;
 }
 
+/**
+ * Com `readBlock`, però un bloc buit és un error.
+ *
+ * El defecte de les cometes va viure perquè un selector que no es troba tornava `{}` en
+ * silenci i la reserva `?? light[name]` el tapava amb un valor plausible. Un bloc que no
+ * hi és o que no té cap color **no és un bloc buit: és un fitxer que ha canviat de forma**
+ * i que s'ha de mirar.
+ */
+function readBlockRequired(css, selector, label) {
+  const block = readBlock(css, selector);
+  if (Object.keys(block).length === 0) {
+    console.error(
+      `tokens-compose · el bloc ${selector} de ${label} no s'ha trobat o és buit.\n` +
+        "  Sense això el tema sortiria com una còpia de l'altre i no fallaria res.",
+    );
+    process.exit(1);
+  }
+  return block;
+}
+
 export function buildTokens() {
   const theme = readFileSync(join(PLOU, 'theme.css'), 'utf8');
   const accents = readFileSync(join(PLOU, 'accents.css'), 'utf8');
@@ -188,17 +277,20 @@ export function buildTokens() {
     ...readBlock(theme, "[data-theme='light']"),
     ...readBlock(femho, ':root'),
   });
+  // Els dos blocs foscos són OBLIGATORIS. Que un no es trobés és exactament el que va
+  // fer que el tema fosc d'Android fos una còpia del clar durant tot el projecte.
   const dark = colorsOf({
-    ...readBlock(theme, "[data-theme='dark']"),
-    ...readBlock(femho, "[data-theme='dark']"),
+    ...readBlockRequired(theme, "[data-theme='dark']", 'plou/theme.css'),
+    ...readBlockRequired(femho, "[data-theme='dark']", 'femho/tokens.css'),
   });
 
   /**
    * Els accents.
    *
-   * `accents.css` fa servir cometes DOBLES als selectors (`[data-accent="soft"]`), i
-   * `theme.css` en fa servir de simples. Buscar-ne només una mena donava zero accents i
-   * un fitxer generat que semblava correcte: quatre accents col·lapsats en un.
+   * Els fitxers de Plou fan servir cometes DOBLES als selectors (`[data-accent="soft"]`)
+   * i els de Fem-ho, simples. Buscar-ne només una mena donava zero accents i un fitxer
+   * generat que semblava correcte: quatre accents col·lapsats en un. `readBlock` ja no
+   * en distingeix, però el nom del bloc es continua escrivint amb simples per costum.
    *
    * **`default` no porta atribut**: és la tríada original i no té bloc propi. Es
    * representa com un accent sense cap sobreescriptura, que és exactament el que és.
@@ -280,7 +372,10 @@ ${Object.keys(gradients.light)
 internal val lightGradients = FemhoGradientStops(
 ${Object.keys(gradients.light)
   .sort()
-  .map((name) => `        ${kotlinName(name)} = listOf(${gradients.light[name].map((s) => `Color(${s})`).join(', ')}),`)
+  .map(
+    (name) =>
+      `        ${kotlinName(name)} = listOf(${gradients.light[name].map((s) => `Color(${s})`).join(', ')}),`,
+  )
   .join('\n')}
 )
 
@@ -311,24 +406,95 @@ ${overrides.map((key) => `        ${kotlinName(key)} = Color(${block[key]}),`).j
 `;
 }
 
-const source = buildTokens();
-const generated = render(source);
+/** `--card-bg` → `femho_card_bg`. El prefix evita xocar amb res del sistema. */
+export function resName(cssName) {
+  return `femho_${cssName.replace(/^--/u, '').replace(/-/gu, '_')}`;
+}
 
-if (process.argv.includes('--check')) {
-  const current = existsSync(OUTPUT) ? readFileSync(OUTPUT, 'utf8') : '';
-  if (current !== generated) {
+/** `0xAARRGGBB` → `#AARRGGBB`. */
+function toResColor(argb) {
+  return `#${argb.replace(/^0x/iu, '').toUpperCase()}`;
+}
+
+/**
+ * Cap token amb forma pot dependre de l'accent.
+ *
+ * Si en depengués, el `values/` generat només seria correcte per a un accent dels
+ * quatre i les cantonades es veurien d'un altre color que la resta del widget. És
+ * exactament el tipus de defecte que no fa fallar res i que ningú mira.
+ */
+function assertNeutral(accents) {
+  const guilty = [];
+  for (const [name, block] of Object.entries(accents)) {
+    for (const token of SHAPE_TOKENS) {
+      if (token in block) guilty.push(`${token} (accent ${name})`);
+    }
+  }
+  if (guilty.length > 0) {
     console.error(
-      'tokens-compose · el Kotlin generat no coincideix amb els tokens CSS.\n' +
-        '  Android pintaria colors vells. Executa `node tools/gen/tokens-compose.mjs`.',
+      "tokens-compose · un token amb forma depèn de l'accent i el recurs XML no ho pot expressar:\n" +
+        guilty.map((entry) => `  ${entry}`).join('\n') +
+        "\n  Treu-lo de SHAPE_TOKENS i pinta'l amb un vector tenyit.",
     );
     process.exit(1);
   }
+}
+
+function renderRes({ light, dark }, variant) {
+  const block = variant === 'night' ? dark : light;
+  const rows = SHAPE_TOKENS.map((token) => {
+    const argb = block[token] ?? light[token];
+    if (argb === undefined) {
+      console.error(`tokens-compose · falta el token ${token} al CSS de Plou.`);
+      process.exit(1);
+    }
+    return `    <color name="${resName(token)}">${toResColor(argb)}</color>`;
+  });
+
+  return `<?xml version="1.0" encoding="utf-8"?>
+<!--
+  GENERAT · no l'editis a mà.
+
+  Surt dels mateixos tokens que \`Tokens.kt\`, amb \`node tools/gen/tokens-compose.mjs\`.
+  Existeix perquè els \`<shape>\` dels widgets necessiten un \`@color/...\` i no poden
+  llegir un \`ColorProvider\` de Kotlin.
+-->
+<resources>
+${rows.join('\n')}
+</resources>
+`;
+}
+
+const source = buildTokens();
+const generated = render(source);
+assertNeutral(source.accents);
+
+const outputs = [
+  [OUTPUT, generated],
+  [join(RES, 'values', 'femho_widget_colors.xml'), renderRes(source, 'day')],
+  [join(RES, 'values-night', 'femho_widget_colors.xml'), renderRes(source, 'night')],
+];
+
+if (process.argv.includes('--check')) {
+  for (const [path, expected] of outputs) {
+    const current = existsSync(path) ? readFileSync(path, 'utf8') : '';
+    if (current !== expected) {
+      console.error(
+        `tokens-compose · el generat no coincideix amb els tokens CSS: ${path}\n` +
+          '  Android pintaria colors vells. Executa `node tools/gen/tokens-compose.mjs`.',
+      );
+      process.exit(1);
+    }
+  }
   console.log(`tokens-compose · al dia (${String(Object.keys(source.light).length)} colors)`);
 } else {
-  mkdirSync(dirname(OUTPUT), { recursive: true });
-  writeFileSync(OUTPUT, generated);
+  for (const [path, contents] of outputs) {
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, contents);
+  }
   console.log(
     `tokens-compose · escrit ${OUTPUT} (${String(Object.keys(source.light).length)} colors, ` +
-      `${String(Object.keys(source.accents).length)} accents)`,
+      `${String(Object.keys(source.accents).length)} accents) i ` +
+      `${String(SHAPE_TOKENS.length)} colors de forma a ${RES}`,
   );
 }

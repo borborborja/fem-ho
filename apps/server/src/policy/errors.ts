@@ -110,18 +110,12 @@ export function scopeForbidden(
    * ha de saber muntar un JSON dins d'un JSON per pintar un error—, i el catàleg de
    * cada idioma la posa on toqui amb la seva puntuació.
    */
-  return new PolicyError(
-    'scope-forbidden',
-    'Scope not accessible',
-    403,
-    `${sees}.${where}`,
-    {
-      count: visibleNames.length,
-      visible: visibleNames.join(', '),
-      ...(requestedName === undefined ? {} : { requested: requestedName }),
-      ...(entity === undefined ? {} : { entityType: entity.type, entityId: entity.id }),
-    },
-  );
+  return new PolicyError('scope-forbidden', 'Scope not accessible', 403, `${sees}.${where}`, {
+    count: visibleNames.length,
+    visible: visibleNames.join(', '),
+    ...(requestedName === undefined ? {} : { requested: requestedName }),
+    ...(entity === undefined ? {} : { entityType: entity.type, entityId: entity.id }),
+  });
 }
 
 export function notFound(entityType: string, id: string): PolicyError {

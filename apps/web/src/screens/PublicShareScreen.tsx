@@ -55,7 +55,13 @@ export function PublicShareScreen({ token }: { token: string }) {
        */
       const reason = (cause as { problem?: { reason?: string } }).problem?.reason;
       const body = cause instanceof Error ? cause.message : '';
-      const wants = reason ?? (body.includes('needs_password') ? 'needs_password' : body.includes('needs_name') ? 'needs_name' : 'unavailable');
+      const wants =
+        reason ??
+        (body.includes('needs_password')
+          ? 'needs_password'
+          : body.includes('needs_name')
+            ? 'needs_name'
+            : 'unavailable');
 
       if (wants === 'needs_password' || wants === 'needs_name') {
         setNeeds({ name: wants === 'needs_name', password: wants === 'needs_password' });

@@ -107,11 +107,7 @@ export function registerAuthRoutes(app: FastifyInstance): void {
   app.post('/api/v1/auth/login', async (request, reply): Promise<AuthTokens | undefined> => {
     const conn = app.connection;
     if (conn === undefined) {
-      sendProblem(
-        reply,
-        unauthenticated('The instance has no database.'),
-        '/api/v1/auth/login',
-      );
+      sendProblem(reply, unauthenticated('The instance has no database.'), '/api/v1/auth/login');
       return undefined;
     }
 

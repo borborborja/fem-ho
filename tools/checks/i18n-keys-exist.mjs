@@ -75,7 +75,7 @@ if (process.argv.includes('--self-test')) {
   );
   if (found.length !== 1 || found[0].rel !== 'y.tsx') {
     console.error(
-      'i18n-keys-exist · autoprova fallida: ha de marcar NOMÉS l\'errata, i no la ' +
+      "i18n-keys-exist · autoprova fallida: ha de marcar NOMÉS l'errata, i no la " +
         `plantilla ni la crida amb valors. Ha marcat: ${JSON.stringify(found.map((p) => p.rel))}`,
     );
     process.exit(1);

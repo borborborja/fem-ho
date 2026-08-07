@@ -402,5 +402,17 @@
   "tokens.prefix": "Prefijo",
   "tokens.revoke": "Revoca",
   "tokens.scopes": "Ámbitos",
-  "tokens.title": "Tokens de API"
+  "tokens.title": "Tokens de API",
+  "widget.board.description": "Los contadores de las cuatro columnas.",
+  "widget.board.name": "Fem-ho · Tablero",
+  "widget.more": "+{count} más",
+  "widget.pending": "pendientes",
+  "widget.pinned.choose": "Elige qué lista quieres ver",
+  "widget.pinned.description": "Una lista fijada, para marcar desde la pantalla de inicio.",
+  "widget.pinned.name": "Fem-ho · Lista",
+  "widget.quickAdd.description": "Apunta una tarea sin abrir la app.",
+  "widget.quickAdd.name": "Fem-ho · Añadir",
+  "widget.signedOut": "Conéctate para ver tus tareas.",
+  "widget.today.description": "Lo que vence hoy, con añadido rápido.",
+  "widget.today.name": "Fem-ho · Hoy"
 }

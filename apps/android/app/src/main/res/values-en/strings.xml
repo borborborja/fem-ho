@@ -398,4 +398,16 @@
     <string name="tokens_revoke">Revoke</string>
     <string name="tokens_scopes">Scopes</string>
     <string name="tokens_title">API tokens</string>
+    <string name="widget_board_description">The counts for the four columns.</string>
+    <string name="widget_board_name">Fem-ho · Board</string>
+    <string name="widget_more">+{count} more</string>
+    <string name="widget_pending">pending</string>
+    <string name="widget_pinned_choose">Choose which list to show</string>
+    <string name="widget_pinned_description">A pinned list, to tick off from the home screen.</string>
+    <string name="widget_pinned_name">Fem-ho · List</string>
+    <string name="widget_quickadd_description">Jot down a task without opening the app.</string>
+    <string name="widget_quickadd_name">Fem-ho · Add</string>
+    <string name="widget_signedout">Sign in to see your tasks.</string>
+    <string name="widget_today_description">What is due today, with quick add.</string>
+    <string name="widget_today_name">Fem-ho · Today</string>
 </resources>

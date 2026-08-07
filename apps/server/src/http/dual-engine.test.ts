@@ -66,8 +66,7 @@ describe.each(MOTORS)('motor $engine', (motor) => {
     tmp = mkdtempSync(join(tmpdir(), 'femho-dual-'));
     // Esquema propi: tres suites comparteixen la base i esborrar `public` les feia
     // xocar entre elles (veure `db/test-postgres.ts`).
-    schema =
-      motor.url === null ? null : await connectTestSchema(motor.url, 'dual_engine');
+    schema = motor.url === null ? null : await connectTestSchema(motor.url, 'dual_engine');
     conn = schema ?? connect(`sqlite://${join(tmp, 't.db')}`);
 
     await migrateToLatest(conn.db, { engine: motor.engine });
@@ -118,9 +117,13 @@ describe.each(MOTORS)('motor $engine', (motor) => {
       const llista = await api('POST', `/api/v1/tasks/${taskId}/checklists`, { name: 'Compra' });
       expect(llista.statusCode, llista.body).toBe(201);
 
-      const item = await api('POST', `/api/v1/checklists/${llista.json<{ id: string }>().id}/items`, {
-        text: 'Pa',
-      });
+      const item = await api(
+        'POST',
+        `/api/v1/checklists/${llista.json<{ id: string }>().id}/items`,
+        {
+          text: 'Pa',
+        },
+      );
       expect(item.statusCode, item.body).toBe(201);
       expect(item.json<{ done: boolean }>().done).toBe(false);
     });
@@ -173,7 +176,9 @@ describe.each(MOTORS)('motor $engine', (motor) => {
       expect(res.statusCode, res.body).toBeLessThan(400);
 
       // Marcar l'últim ítem marca la subtasca ancorada i, si tot està fet, la tasca (P1).
-      const cascada = res.json<{ cascade: { subtask_completed: boolean; task_completed: boolean } }>();
+      const cascada = res.json<{
+        cascade: { subtask_completed: boolean; task_completed: boolean };
+      }>();
       expect(cascada.cascade.subtask_completed).toBe(true);
       expect(cascada.cascade.task_completed).toBe(true);
 

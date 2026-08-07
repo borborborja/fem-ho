@@ -77,7 +77,12 @@ export function registerAdminRoutes(app: FastifyInstance, secret: () => string):
   app.post('/api/v1/admin/wipe', async (request, reply) =>
     handle(app, request, reply, async (principal) =>
       auditedTransaction(db().db, principal, (ctx) =>
-        wipeInstance(ctx, principal, String(body(request).confirmation ?? ''), app.config.instanceName),
+        wipeInstance(
+          ctx,
+          principal,
+          String(body(request).confirmation ?? ''),
+          app.config.instanceName,
+        ),
       ),
     ),
   );
@@ -127,12 +132,7 @@ export function registerAdminRoutes(app: FastifyInstance, secret: () => string):
         // registre ha de dir que la va escriure el sistema i no un usuari inexistent.
         setupPrincipal(),
         (ctx) =>
-          acceptInvite(
-            ctx,
-            request.params.token,
-            String(body(request).password ?? ''),
-            secret(),
-          ),
+          acceptInvite(ctx, request.params.token, String(body(request).password ?? ''), secret()),
       );
       void reply.code(200);
       return result;

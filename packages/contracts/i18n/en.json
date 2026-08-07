@@ -403,5 +403,17 @@
   "tokens.prefix": "Prefix",
   "tokens.revoke": "Revoke",
   "tokens.scopes": "Scopes",
-  "tokens.title": "API tokens"
+  "tokens.title": "API tokens",
+  "widget.board.description": "The counts for the four columns.",
+  "widget.board.name": "Fem-ho · Board",
+  "widget.more": "+{count} more",
+  "widget.pending": "pending",
+  "widget.pinned.choose": "Choose which list to show",
+  "widget.pinned.description": "A pinned list, to tick off from the home screen.",
+  "widget.pinned.name": "Fem-ho · List",
+  "widget.quickAdd.description": "Jot down a task without opening the app.",
+  "widget.quickAdd.name": "Fem-ho · Add",
+  "widget.signedOut": "Sign in to see your tasks.",
+  "widget.today.description": "What is due today, with quick add.",
+  "widget.today.name": "Fem-ho · Today"
 }

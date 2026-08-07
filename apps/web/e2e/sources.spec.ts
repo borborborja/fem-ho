@@ -55,7 +55,8 @@ async function apiCall(
   return page.evaluate(
     async ([method, path, body]) => {
       const stored = localStorage.getItem('femho.tokens');
-      const token = stored === null ? '' : (JSON.parse(stored) as { access_token: string }).access_token;
+      const token =
+        stored === null ? '' : (JSON.parse(stored) as { access_token: string }).access_token;
       const response = await fetch(path as string, {
         method: method as string,
         headers: {
@@ -152,7 +153,8 @@ test('al calendari, les fonts es poden apagar i encendre', async ({ page }) => {
 
   // I sobreviu a una recàrrega: és una preferència, no un estat de pantalla.
   await page.reload();
-  await expect(
-    page.locator('[data-testid="calendar-sources"] button').first(),
-  ).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.locator('[data-testid="calendar-sources"] button').first()).toHaveAttribute(
+    'aria-pressed',
+    'false',
+  );
 });

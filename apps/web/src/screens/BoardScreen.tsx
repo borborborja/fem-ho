@@ -55,9 +55,8 @@ function toBoardTask(
      * que la inicial seria la teva a totes les targetes: una columna de la mateixa
      * lletra que no distingeix res. I a "Per fer", el mateix.
      */
-    assigneeInitials: (collective && task.status === 'inbox') || assignedToOther
-      ? initials
-      : undefined,
+    assigneeInitials:
+      (collective && task.status === 'inbox') || assignedToOther ? initials : undefined,
     assignedToOther,
     time: task.due_time ?? undefined,
     aiMode: task.ai_mode,
@@ -191,9 +190,9 @@ export function BoardScreen({
       const lastPosition =
         last === undefined
           ? null
-          : ((board.data?.columns
+          : (board.data?.columns
               .flatMap((c) => c.groups.flatMap((g) => g.tasks))
-              .find((task) => task.id === last.id)?.position ?? null));
+              .find((task) => task.id === last.id)?.position ?? null);
 
       await api.post(`/api/v1/tasks/${taskId}/move`, {
         status,
@@ -261,9 +260,7 @@ export function BoardScreen({
         opacity: board.revalidating ? 0.6 : 1,
       }}
     >
-      {board.error !== undefined ? (
-        <ErrorBanner onRetry={board.reload} />
-      ) : null}
+      {board.error !== undefined ? <ErrorBanner onRetry={board.reload} /> : null}
 
       <KanbanBoard
         aiBoard={aiBoard}

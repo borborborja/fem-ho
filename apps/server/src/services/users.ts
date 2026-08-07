@@ -114,7 +114,7 @@ export async function updateProfile(
       'Invalid timezone',
       422,
       `"${timezone}" is not a time zone. Use an IANA name, such as Europe/Madrid.`,
-    { value: timezone },
+      { value: timezone },
     );
   }
 

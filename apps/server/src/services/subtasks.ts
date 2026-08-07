@@ -139,7 +139,12 @@ export async function updateSubtask(
   await assertScopeAccess(ctx.tx, principal, scopeId);
 
   if (input.title !== undefined && input.title.trim() === '') {
-    throw new PolicyError('title-required', 'Title required', 422, 'The title cannot be left empty.');
+    throw new PolicyError(
+      'title-required',
+      'Title required',
+      422,
+      'The title cannot be left empty.',
+    );
   }
 
   const done = input.done ?? isTrue(row.done);

@@ -96,7 +96,22 @@ class AppViewModel(private val container: Container) : ViewModel() {
                 _session.value =
                     if (container.tokens.refresh() != null) Session.Ready(saved)
                     else Session.NeedsLogin(saved, "")
-                if (container.tokens.refresh() != null) observe(saved)
+                if (container.tokens.refresh() != null) {
+                    observe(saved)
+                    /**
+                     * **I es demana al servidor.**
+                     *
+                     * Abans només s'observava la base local: obrir l'app amb una sessió
+                     * desada ensenyava el que hi havia l'últim cop i no preguntava res.
+                     * El que ho tapava era la consulta periòdica de quinze minuts, que
+                     * acaba arribant — o sigui que el defecte es veia com "l'app va
+                     * endarrerida una estona" i no com "l'app no sincronitza en obrir-se".
+                     *
+                     * `docs/03` §7 ho demana explícitament: la sincronització es dispara
+                     * quan l'app passa a primer pla.
+                     */
+                    refresh()
+                }
             }
         }
     }
@@ -209,6 +224,41 @@ class AppViewModel(private val container: Container) : ViewModel() {
             runCatching { container.api(base).checklists(task.id) }
                 .onSuccess { _openChecklists.value = it }
         }
+    }
+
+    /**
+     * Obre una tasca per identificador, que és tot el que un widget en sap.
+     *
+     * **Pot arribar abans que les tasques.** El sistema obre l'activitat de seguida i la
+     * base local es llegeix en un flux; si en aquest moment `_tasks` encara és buida,
+     * l'identificador es guarda i s'obre quan arribi. Sense això, tocar una tasca al
+     * widget amb l'app tancada obriria el tauler i prou, i semblaria que el widget no
+     * funciona quan el que passa és que ha anat massa de pressa.
+     */
+    fun openById(id: String) {
+        pendingOpen = id
+        resolvePendingOpen()
+    }
+
+    private var pendingOpen: String? = null
+
+    private fun resolvePendingOpen() {
+        val id = pendingOpen ?: return
+        val task = _tasks.value.firstOrNull { it.id == id } ?: return
+        pendingOpen = null
+        open(task)
+    }
+
+    /** L'afegida ràpida demanada des de fora, amb el text que hi hagi de sortir escrit. */
+    private val _quickAddDraft = MutableStateFlow<String?>(null)
+    val quickAddDraft: StateFlow<String?> = _quickAddDraft.asStateFlow()
+
+    fun requestQuickAdd(draft: String) {
+        _quickAddDraft.value = draft
+    }
+
+    fun quickAddConsumed() {
+        _quickAddDraft.value = null
     }
 
     fun closeTask() {
@@ -463,7 +513,13 @@ class AppViewModel(private val container: Container) : ViewModel() {
 
     private fun observe(base: String) {
         val repository = container.repository(base)
-        viewModelScope.launch { repository.tasks.collect { _tasks.value = it } }
+        viewModelScope.launch {
+            repository.tasks.collect {
+                _tasks.value = it
+                // Si algú ha demanat una tasca abans que la base respongués, ara ja hi és.
+                resolvePendingOpen()
+            }
+        }
         viewModelScope.launch { repository.scopes.collect { _scopes.value = it } }
         viewModelScope.launch { repository.projects.collect { _projects.value = it } }
         viewModelScope.launch { repository.people.collect { _people.value = it } }

@@ -89,7 +89,9 @@ function AppShell() {
   /** Una tasca nova des de l'edició completa: quina columna, i si és per a la IA. */
   const [newTask, setNewTask] = useState<{ status: TaskStatus; forAi: boolean } | null>(null);
   const [aiBoard, setAiBoard] = useState(false);
-  const [flip, setFlip] = useState<{ transform: string; transition: string } | undefined>(undefined);
+  const [flip, setFlip] = useState<{ transform: string; transition: string } | undefined>(
+    undefined,
+  );
   const [sharingTask, setSharingTask] = useState<string | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);

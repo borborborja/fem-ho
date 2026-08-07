@@ -102,7 +102,12 @@ export async function createFirstAdmin(ctx: AuditContext, input: SetupInput): Pr
 
   const email = input.email.trim().toLowerCase();
   if (!email.includes('@') || email.startsWith('@') || email.endsWith('@')) {
-    throw new PolicyError('invalid-email', 'Invalid email', 422, 'That does not look like an email address.');
+    throw new PolicyError(
+      'invalid-email',
+      'Invalid email',
+      422,
+      'That does not look like an email address.',
+    );
   }
   if (input.name.trim() === '') {
     throw new PolicyError('name-required', 'Name required', 422, 'Falta el nom.');

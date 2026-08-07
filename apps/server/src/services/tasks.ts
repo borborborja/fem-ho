@@ -590,7 +590,8 @@ async function createNextOccurrence(
   if (rrule === null || rrule === '') return;
 
   const mode = current.recurrence_mode === 'completion' ? 'completion' : 'schedule';
-  const from = mode === 'completion' ? ctx.now.slice(0, 10) : (current.due_date ?? ctx.now.slice(0, 10));
+  const from =
+    mode === 'completion' ? ctx.now.slice(0, 10) : (current.due_date ?? ctx.now.slice(0, 10));
 
   const nextDate = nextDueDate(rrule, from);
   if (nextDate === null) return;
@@ -684,7 +685,10 @@ export function nextDueDate(rrule: string, from: string): string | null {
   // `UNTIL` acaba la sèrie: passat el límit no se'n genera cap més.
   const until = parts.UNTIL;
   const next = base.toISOString().slice(0, 10);
-  if (until !== undefined && next > until.slice(0, 10).replace(/(\d{4})(\d{2})(\d{2})/u, '$1-$2-$3')) {
+  if (
+    until !== undefined &&
+    next > until.slice(0, 10).replace(/(\d{4})(\d{2})(\d{2})/u, '$1-$2-$3')
+  ) {
     return null;
   }
 
@@ -837,7 +841,7 @@ export async function updateTask(
           'Project from another scope',
           422,
           `The ${found.name} project belongs to another scope. A task does not change scope by editing it.`,
-      { name: found.name },
+          { name: found.name },
         );
       }
     }
@@ -982,7 +986,7 @@ export async function setAssignee(
           'Not a member',
           422,
           `${user.rows[0].name} is not a member of ${scope.name}: they could not open the task.`,
-      { person: user.rows[0].name, scope: scope.name },
+          { person: user.rows[0].name, scope: scope.name },
         );
       }
     }

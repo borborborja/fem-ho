@@ -33,10 +33,19 @@ class PushReceiver : MessagingReceiver() {
         val title = payload.optString("title").ifEmpty { return }
         val body = payload.optString("body")
 
+        /**
+         * La notificació obre la tasca de què parla, si el servidor n'ha dit quina.
+         *
+         * **Avui no en diu cap**: el payload porta `title` i `body` i prou
+         * (`jobs/scheduler.ts`). Es llegeix igualment perquè el dia que n'hi posi, el
+         * telèfon ja hi anirà sense tornar a publicar l'APK — i mentrestant es comporta
+         * com abans, obrint el tauler.
+         */
+        val taskId = payload.optString("task_id").ifEmpty { null }
         val open = PendingIntent.getActivity(
             context,
             0,
-            Intent(context, MainActivity::class.java),
+            Route.intentTo(taskId = taskId).setClass(context, MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
 

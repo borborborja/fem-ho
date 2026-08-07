@@ -131,7 +131,5 @@ const problems = compare(
   Object.fromEntries(others.map((locale) => [locale, load(locale)])),
 );
 
-console.log(
-  `i18n-parity · ${String(others.length + 1)} idiomes (${SOURCE}, ${others.join(', ')})`,
-);
+console.log(`i18n-parity · ${String(others.length + 1)} idiomes (${SOURCE}, ${others.join(', ')})`);
 process.exit(report('i18n-parity', problems));

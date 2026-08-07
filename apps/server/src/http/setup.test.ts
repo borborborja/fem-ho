@@ -131,7 +131,9 @@ describe('AQUESTA és la que compta: la porta es tanca', () => {
     const segon = await setup({ ...ADMIN, email: 'altre@example.com' });
     expect(segon.statusCode).toBe(403);
 
-    const usuaris = await sql<{ n: number }>`SELECT COUNT(*) AS n FROM users WHERE kind = 'human'`.execute(conn.db);
+    const usuaris = await sql<{
+      n: number;
+    }>`SELECT COUNT(*) AS n FROM users WHERE kind = 'human'`.execute(conn.db);
     expect(Number(usuaris.rows[0]?.n)).toBe(1);
   });
 
@@ -160,7 +162,9 @@ describe('AQUESTA és la que compta: la porta es tanca', () => {
     await sql`DELETE FROM scopes`.execute(conn.db);
     await sql`DELETE FROM users WHERE kind = 'human'`.execute(conn.db);
 
-    const usuaris = await sql<{ n: number }>`SELECT COUNT(*) AS n FROM users WHERE kind = 'human'`.execute(conn.db);
+    const usuaris = await sql<{
+      n: number;
+    }>`SELECT COUNT(*) AS n FROM users WHERE kind = 'human'`.execute(conn.db);
     expect(Number(usuaris.rows[0]?.n)).toBe(0);
 
     // I tot i així: el rastre queda a `activity_log` encara que la fila desaparegui.
@@ -176,7 +180,9 @@ describe('AQUESTA és la que compta: la porta es tanca', () => {
     const codis = [a.statusCode, b.statusCode].sort();
     expect(codis).toEqual([201, 403]);
 
-    const usuaris = await sql<{ n: number }>`SELECT COUNT(*) AS n FROM users WHERE kind = 'human'`.execute(conn.db);
+    const usuaris = await sql<{
+      n: number;
+    }>`SELECT COUNT(*) AS n FROM users WHERE kind = 'human'`.execute(conn.db);
     expect(Number(usuaris.rows[0]?.n)).toBe(1);
   });
 });
