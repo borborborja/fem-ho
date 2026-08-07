@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Fem-ho
-  version: 0.2.0
+  version: 0.3.0
   description: |
     Contracte de l'API de Fem-ho. Aquest fitxer és la font de veritat (regla 5
     d'instruccions.md): els tipus de TypeScript i el client de Kotlin es generen des
