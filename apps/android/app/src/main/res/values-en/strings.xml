@@ -153,9 +153,13 @@
     <string name="error_window_required">A window is needed: without one, recurrences cannot be expanded.</string>
     <string name="error_wrong_component">“{name}” is for tasks and does not accept events.</string>
     <string name="error_wrong_password">The current password is not correct.</string>
+    <string name="inbox_mailbox">What the inbox shows</string>
     <string name="inbox_mailbox_all">All</string>
-    <string name="inbox_mailbox_own">Mine</string>
+    <string name="inbox_mailbox_allhint">The whole inbox: both individual and shared scopes</string>
+    <string name="inbox_mailbox_own">Individual</string>
+    <string name="inbox_mailbox_ownhint">Only what is in your individual scopes</string>
     <string name="inbox_mailbox_shared">Shared</string>
+    <string name="inbox_mailbox_sharedhint">Only what is in the scopes you share with someone</string>
     <string name="invite_done">You can now sign in with your email and this password.</string>
     <string name="invite_mismatch">The two passwords do not match.</string>
     <string name="invite_password">Password</string>

@@ -153,9 +153,13 @@
     <string name="error_window_required">Cal un període: sense ell no es poden expandir les repeticions.</string>
     <string name="error_wrong_component">«{name}» és de tasques i no accepta esdeveniments.</string>
     <string name="error_wrong_password">La contrasenya actual no és correcta.</string>
+    <string name="inbox_mailbox">Què es veu a la bústia</string>
     <string name="inbox_mailbox_all">Tot</string>
-    <string name="inbox_mailbox_own">Meva</string>
-    <string name="inbox_mailbox_shared">Compartida</string>
+    <string name="inbox_mailbox_allhint">Tota la bústia: els àmbits individuals i els compartits</string>
+    <string name="inbox_mailbox_own">Individuals</string>
+    <string name="inbox_mailbox_ownhint">Només el que hi ha als teus àmbits individuals</string>
+    <string name="inbox_mailbox_shared">Compartits</string>
+    <string name="inbox_mailbox_sharedhint">Només el que hi ha als àmbits que comparteixes amb algú</string>
     <string name="invite_done">Ja pots entrar amb el teu correu i aquesta contrasenya.</string>
     <string name="invite_mismatch">Les dues contrasenyes no coincideixen.</string>
     <string name="invite_password">Contrasenya</string>

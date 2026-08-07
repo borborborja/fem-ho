@@ -75,24 +75,73 @@ function toBoardTask(
  * La tria es desa al perfil, com `inbox_show_overdue`: és una preferència personal i ha
  * de sobreviure a una recàrrega i valdre a tots els dispositius.
  */
-function MailboxSwitch() {
-  const { scopes, settings } = useSessionData();
+function MailboxSwitch({
+  activeScopes,
+  tasks,
+}: {
+  activeScopes: { id: string; kind?: string }[];
+  tasks: { status: string; scope_id: string }[];
+}) {
+  const { settings } = useSessionData();
   const { reload } = useSession();
   const value = settings.inbox_origin ?? 'all';
 
-  if (!scopes.some((scope) => scope.kind === 'collective')) return null;
+  /**
+   * **Es mira la selecció activa, no tots els àmbits.**
+   *
+   * Abans n'hi havia prou de tenir un àmbit compartit en algun lloc. Però si aquell àmbit
+   * no és a la selecció del moment, les tres posicions ensenyen exactament el mateix: el
+   * commutador hi és, es clica, i no passa res. Qui decideix si surt és `potFiltrar`, a
+   * `BoardScreen`, que és el mateix que decideix si el filtre s'aplica.
+   */
+  const individuals = activeScopes.filter((scope) => scope.kind !== 'collective');
+
+  /**
+   * Els recomptes.
+   *
+   * **Veure el número és el que fa entendre el botó abans de clicar-lo.** Amb tres
+   * adjectius sols, l'única manera de saber què fan és provar-los d'un en un i comparar
+   * de memòria el que hi havia abans.
+   */
+  const inbox = tasks.filter((task) => task.status === 'inbox');
+  const esIndividual = (task: { scope_id: string }): boolean =>
+    individuals.some((scope) => scope.id === task.scope_id);
 
   return (
     <Chips
       testId="inbox-mailbox"
       value={value}
+      groupLabel={t('inbox.mailbox')}
       options={[
-        { key: 'all' as const, label: t('inbox.mailbox.all') },
-        { key: 'own' as const, label: t('inbox.mailbox.own') },
-        { key: 'shared' as const, label: t('inbox.mailbox.shared') },
+        {
+          key: 'all' as const,
+          label: t('inbox.mailbox.all'),
+          count: inbox.length,
+          hint: t('inbox.mailbox.allHint'),
+        },
+        {
+          key: 'own' as const,
+          label: t('inbox.mailbox.own'),
+          count: inbox.filter(esIndividual).length,
+          hint: t('inbox.mailbox.ownHint'),
+        },
+        {
+          key: 'shared' as const,
+          label: t('inbox.mailbox.shared'),
+          count: inbox.filter((task) => !esIndividual(task)).length,
+          hint: t('inbox.mailbox.sharedHint'),
+        },
       ]}
       onChange={(next) => {
-        void api.patch('/api/v1/me/settings', { inbox_origin: next }).then(() => reload());
+        /**
+         * **`/api/v1/auth/settings`, que és on viuen les preferències.**
+         *
+         * Aquí hi deia `/api/v1/me/settings`, que no existeix: cada clic responia 404 i
+         * el `.then()` no s'executava mai. Els tres botons es pintaven, es podien clicar,
+         * i no feien absolutament res —ni desaven, ni filtraven, ni es quedaven marcats—.
+         * Cap prova ho va veure perquè cap prova els clicava.
+         */
+        void api.patch('/api/v1/auth/settings', { inbox_origin: next }).then(() => reload());
       }}
     />
   );
@@ -174,6 +223,23 @@ export function BoardScreen({
   }, [board.data, optimistic, projectName, initialsOf, aiBoard, profile.id, scopes]);
 
   const activeScopes = scopes.filter((scope) => activeScopeIds.includes(scope.id));
+
+  /**
+   * El calaix que s'aplica de debò.
+   *
+   * **Una preferència desada no ha de filtrar quan no hi ha commutador per desfer-ho.**
+   * Qui deixés la bústia a "compartits" i després es quedés només amb àmbits individuals
+   * es trobava la columna buida, sense cap botó a la vista, i sense manera d'endevinar per
+   * què: el filtre seguia actiu i el control que el governa havia desaparegut.
+   *
+   * El criteri és el mateix que decideix si el commutador surt, i per això viu aquí i no
+   * dins seu: si es calculessin per separat, un dia divergirien i tornaríem a tenir una
+   * columna que amaga coses sense dir-ho.
+   */
+  const potFiltrar =
+    activeScopes.some((scope) => scope.kind === 'collective') &&
+    activeScopes.some((scope) => scope.kind !== 'collective');
+  const mailbox = potFiltrar ? (settings.inbox_origin ?? 'all') : 'all';
 
   const context = useMemo<QuickAddContext>(
     () => ({
@@ -299,8 +365,10 @@ export function BoardScreen({
       <KanbanBoard
         aiBoard={aiBoard}
         flip={flip}
-        inboxHeader={<MailboxSwitch />}
-        mailbox={settings.inbox_origin ?? 'all'}
+        inboxHeader={
+          potFiltrar ? <MailboxSwitch activeScopes={activeScopes} tasks={tasks} /> : null
+        }
+        mailbox={mailbox}
         renderFooter={(status) =>
           // L'Inbox conserva l'afegida ràpida als dos taulers: és l'entrada de tot, i al
           // tauler de la IA no hi ha cap columna d'inbox pròpia — és la mateixa.
