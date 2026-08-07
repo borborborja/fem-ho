@@ -17,7 +17,7 @@ test.describe.configure({ mode: 'serial' });
 
 /** El seu compte: aquest fitxer canvia `inbox_origin`, que és una preferència d'usuari. */
 const MEU = {
-  name: 'Bústia',
+  name: 'Mailbox',
   email: 'bustia@example.com',
   password: 'la-contrasenya-de-prova',
 };
