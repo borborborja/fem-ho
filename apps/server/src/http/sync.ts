@@ -242,7 +242,7 @@ async function applyOne(
   operation: BatchOperation,
 ): Promise<BatchResult> {
   // Idempotència: el mateix `op_id` reenviat torna el resultat d'abans.
-  const already = recallOp(operation.op_id);
+  const already = recallOp(principal, operation.op_id);
   if (already !== undefined) return already;
 
   const table = TABLES[operation.entity];
@@ -252,7 +252,7 @@ async function applyOne(
       status: 'rejected',
       error: { detail: `"${operation.entity}" no és una entitat que se sincronitzi.` },
     };
-    rememberOp(operation.op_id, rejected);
+    rememberOp(principal, operation.op_id, rejected);
     return rejected;
   }
 
@@ -265,6 +265,29 @@ async function applyOne(
           SELECT * FROM ${sql.raw(table)} WHERE id = ${operation.id}
         `.execute(ctx.tx);
         const server = found.rows[0] as Record<string, unknown> | undefined;
+
+        /**
+         * **L'àmbit es comprova AQUÍ, abans de qualsevol branca.**
+         *
+         * Estava trenta línies més avall, després del `return` de `delete` i del de
+         * `create` sobre una fila existent. El resultat era que **qualsevol autenticat
+         * podia esborrar per identificador una tasca d'un àmbit que no era seu**, i
+         * llegir-la amb `op: 'create'`. Comprovat contra el servidor amb dos comptes: la
+         * víctima passava a rebre 404 de la seva pròpia tasca.
+         *
+         * El `create` sobre una fila absent no hi passa a posta: allà encara no hi ha
+         * `scope_id` del servidor i qui comprova és el servei que la crea, amb el `scope_id`
+         * que porta la petició.
+         *
+         * Que no s'hagi vist abans té una explicació incòmoda: la guarda de la regla 4
+         * tapava la fuita de lectura —el `create` sobre una fila existent no registra res
+         * a l'historial i `auditedTransaction` llançava—, però l'esborrat sí que registra,
+         * i per tant passava net.
+         */
+        if (server !== undefined) {
+          const owner = server.scope_id as string | undefined;
+          if (owner !== undefined) await assertScopeAccess(ctx.tx, principal, owner);
+        }
 
         if (operation.op === 'delete') {
           if (server === undefined) throw notFound(operation.entity, operation.id);
@@ -307,7 +330,6 @@ async function applyOne(
         }
 
         const scopeId = server.scope_id as string | undefined;
-        if (scopeId !== undefined) await assertScopeAccess(ctx.tx, principal, scopeId);
 
         /**
          * Esborrat contra edició: **guanya l'esborrat** (docs/06 §5). L'edició es
@@ -378,7 +400,7 @@ async function applyOne(
       { engine: app.connection!.engine },
     );
 
-    rememberOp(operation.op_id, result);
+    rememberOp(principal, operation.op_id, result);
     return result;
   } catch (error) {
     const rejected: BatchResult = {
@@ -389,7 +411,7 @@ async function applyOne(
           ? error.toProblem()
           : { detail: "No s'ha pogut aplicar aquesta operació." },
     };
-    rememberOp(operation.op_id, rejected);
+    rememberOp(principal, operation.op_id, rejected);
     return rejected;
   }
 }

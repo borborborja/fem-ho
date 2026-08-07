@@ -220,6 +220,52 @@ describe('regla 8 · una sola capa de política', () => {
      */
     expect(escriptura.json<{ detail: string }>().detail).toContain('Personal');
   });
+
+  /**
+   * **El lot de sincronització també és l'API.**
+   *
+   * `assertScopeAccess` era trenta línies més avall dels `return` de `delete` i de
+   * `create`, o sigui que `POST /sync/batch` era una porta del darrere sense pany: amb
+   * un identificador, un token d'un àmbit podia esborrar una tasca d'un altre. Es va
+   * demostrar contra el servidor amb dos comptes abans d'arreglar-ho.
+   *
+   * La fuita de LECTURA la tapava per accident la guarda de la regla 4 —un `create`
+   * sobre una fila existent no registra res i la transacció llançava—, però l'esborrat
+   * sí que registra i passava net. Es prova l'esborrat, que és el camí que feia mal.
+   */
+  it("i el lot de sync tampoc: no s'esborra una tasca d'un àmbit que no es veu", async () => {
+    const victima = uuidv7();
+    const creada = await api('POST', '/api/v1/tasks', {
+      id: victima,
+      scope_id: collectiveId,
+      title: 'No em toquis',
+    });
+    expect(creada.statusCode).toBe(201);
+
+    const generated = generateApiToken();
+    await sql`
+      INSERT INTO api_tokens (id, user_id, name, token_prefix, token_hash, capabilities,
+                              scope_ids, created_at)
+      VALUES (${uuidv7()}, ${userId}, 'Només personal', ${generated.prefix}, ${generated.hash},
+              ${JSON.stringify(['tasks:read', 'tasks:write', 'scopes:read'])},
+              ${JSON.stringify([scopeId])}, ${NOW})
+    `.execute(conn.db);
+
+    const esborrat = await api(
+      'POST',
+      '/api/v1/sync/batch',
+      {
+        operations: [{ op_id: uuidv7(), entity: 'task', op: 'delete', id: victima }],
+      },
+      { authorization: `Bearer ${generated.token}` },
+    );
+
+    expect(esborrat.json<{ results: { status: string }[] }>().results[0]?.status).toBe('rejected');
+
+    // I la tasca segueix viva per a qui sí que la pot veure.
+    const encara = await api('GET', `/api/v1/tasks/${victima}`);
+    expect(encara.statusCode).toBe(200);
+  });
 });
 
 describe('regla 4 · tota escriptura deixa rastre', () => {

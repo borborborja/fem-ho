@@ -333,16 +333,30 @@ export function resolveConflict(options: ResolveOptions): Resolution {
 const appliedOps = new Map<string, BatchResult>();
 const MAX_REMEMBERED_OPS = 10_000;
 
-export function rememberOp(opId: string, result: BatchResult): void {
+/**
+ * La clau porta **qui pregunta**, no només l'`op_id`.
+ *
+ * Amb l'`op_id` sol, un client que n'encertés un d'un altre rebia el seu `BatchResult`
+ * —que porta l'entitat sencera— sense passar per cap comprovació d'àmbit. L'`op_id` el
+ * genera el client i no és cap secret: viatja al cos de cada lot.
+ *
+ * La idempotència que això ha de donar és "el MEU lot reenviat no es duplica", i per a
+ * això la clau correcta inclou el principal.
+ */
+function opKey(principal: Principal, opId: string): string {
+  return `${principal.kind}:${principal.userId}:${opId}`;
+}
+
+export function rememberOp(principal: Principal, opId: string, result: BatchResult): void {
   if (appliedOps.size >= MAX_REMEMBERED_OPS) {
     const oldest = appliedOps.keys().next().value;
     if (oldest !== undefined) appliedOps.delete(oldest);
   }
-  appliedOps.set(opId, result);
+  appliedOps.set(opKey(principal, opId), result);
 }
 
-export function recallOp(opId: string): BatchResult | undefined {
-  return appliedOps.get(opId);
+export function recallOp(principal: Principal, opId: string): BatchResult | undefined {
+  return appliedOps.get(opKey(principal, opId));
 }
 
 export function forgetAllOps(): void {
