@@ -227,7 +227,7 @@ describe('migrar una base que ja té dades', () => {
     rmSync(tmpDades, { recursive: true, force: true });
   });
 
-  it("arriba fins al final encara que hi hagi files que apuntin a `users`", async () => {
+  it('arriba fins al final encara que hi hagi files que apuntin a `users`', async () => {
     // Fins a la 008, que és on la base es queda a les instàncies ja desplegades.
     await ensureUpTo(conn, '008-shared-scopes');
 
