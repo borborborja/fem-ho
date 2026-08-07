@@ -201,3 +201,81 @@ describe('cobertura de motors', () => {
     }
   });
 });
+
+/**
+ * **Migrar amb dades a dins, que és el que passa de debò.**
+ *
+ * Totes les proves d'aquest fitxer migraven una base buida, i per això la 009 va passar
+ * en verd i va petar la primera vegada que es va desplegar: refà `users` —cal, per
+ * admetre-hi el `kind` `remote`— i `users` té una dotzena de taules que hi apunten, o
+ * sigui que el `DROP TABLE` viola les claus foranes en el moment que hi ha una fila que
+ * el referencia.
+ *
+ * El `PRAGMA foreign_keys = OFF` que hi havia dins de la migració **no feia res**: SQLite
+ * l'ignora en silenci dins d'una transacció. Ara el posa el migrador abans d'obrir-la.
+ */
+describe('migrar una base que ja té dades', () => {
+  const tmpDades = mkdtempSync(join(tmpdir(), 'femho-migdades-'));
+  let conn: Connection;
+
+  beforeAll(() => {
+    conn = connect(`sqlite://${join(tmpDades, 'amb-dades.db')}`);
+  });
+
+  afterAll(async () => {
+    await conn.close();
+    rmSync(tmpDades, { recursive: true, force: true });
+  });
+
+  it("arriba fins al final encara que hi hagi files que apuntin a `users`", async () => {
+    // Fins a la 008, que és on la base es queda a les instàncies ja desplegades.
+    await ensureUpTo(conn, '008-shared-scopes');
+
+    const ara = '2026-08-07T13:00:00.000Z';
+    await sql`
+      INSERT INTO users (id, email, name, password_hash, kind, role, created_at, updated_at)
+      VALUES ('u1', 'algu@e.com', 'Algú', 'x', 'human', 'admin', ${ara}, ${ara})
+    `.execute(conn.db);
+    // Una fila que apunta a l'usuari: sense això el `DROP TABLE users` no molesta ningú i
+    // la prova tornaria a passar sense provar res.
+    await sql`
+      INSERT INTO scopes (id, name, kind, color, owner_id, position, created_at, updated_at)
+      VALUES ('s1', 'Casa', 'individual', '--plou-blue', 'u1', 'a1', ${ara}, ${ara})
+    `.execute(conn.db);
+
+    await migrateToLatest(conn.db, { engine: 'sqlite' });
+
+    // Hi ha arribat i l'usuari hi és. (La 004 n'hi posa un altre, el de la IA.)
+    const qui = await sql<{ id: string }>`SELECT id FROM users WHERE id = 'u1'`.execute(conn.db);
+    expect(qui.rows).toHaveLength(1);
+
+    await sql`
+      INSERT INTO users (id, email, name, password_hash, kind, role, created_at, updated_at)
+      VALUES ('u2', ${null}, 'Una altra casa', ${null}, 'remote', 'member', ${ara}, ${ara})
+    `.execute(conn.db);
+
+    // I la referència que ja hi havia segueix sencera.
+    const ambit = await sql<{ owner_id: string }>`SELECT owner_id FROM scopes`.execute(conn.db);
+    expect(ambit.rows[0]?.owner_id).toBe('u1');
+
+    // Les claus foranes han quedat enceses: el pragma es restaura passi el que passi.
+    const pragma = await sql<{ foreign_keys: number }>`PRAGMA foreign_keys`.execute(conn.db);
+    expect(Number(pragma.rows[0]?.foreign_keys)).toBe(1);
+  });
+});
+
+/** Aplica les migracions fins a una concreta, per poder simular una base ja desplegada. */
+async function ensureUpTo(conn: Connection, last: string): Promise<void> {
+  const fins = MIGRATIONS.findIndex((m) => m.name === last);
+  await sql
+    .raw(
+      'CREATE TABLE IF NOT EXISTS schema_migrations (name TEXT PRIMARY KEY, applied_at TEXT NOT NULL)',
+    )
+    .execute(conn.db);
+  for (const migration of MIGRATIONS.slice(0, fins + 1)) {
+    await migration.up(conn.db, 'sqlite');
+    await sql`
+      INSERT INTO schema_migrations (name, applied_at) VALUES (${migration.name}, '2026-08-07')
+    `.execute(conn.db);
+  }
+}

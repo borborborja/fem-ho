@@ -32,6 +32,24 @@ export interface Migration {
   name: string;
   up: (db: MigrationDb, engine: Engine) => Promise<void>;
   down: (db: MigrationDb, engine: Engine) => Promise<void>;
+  /**
+   * Aquesta migració refà una taula **a la qual altres apunten**.
+   *
+   * A SQLite, canviar un `CHECK` vol dir crear la taula nova, copiar-hi, esborrar la
+   * vella i renombrar. Si la taula té claus foranes entrants, el `DROP TABLE` les viola i
+   * la migració peta.
+   *
+   * **`PRAGMA foreign_keys = OFF` no serveix de res dins d'una transacció**: SQLite
+   * l'ignora en silenci, que és exactament el pitjor comportament possible —la migració
+   * sembla que el desactiva i no el desactiva—. La 008 se'n va escapar perquè les taules
+   * que refeia no tenien ningú apuntant-hi; la 009 refà `users`, que en té una dotzena, i
+   * va petar la primera vegada que es va desplegar sobre una base amb dades.
+   *
+   * El procediment que la documentació de SQLite prescriu és posar el pragma **abans**
+   * d'obrir la transacció. Així no es perd l'atomicitat: si la migració falla, es desfà
+   * sencera igualment.
+   */
+  needsForeignKeysOff?: boolean;
 }
 
 /**
@@ -47,7 +65,7 @@ export const MIGRATIONS: Migration[] = [
   { name: '006-calendar-sources', up: calendarSources.up, down: calendarSources.down },
   { name: '007-week-start', up: weekStart.up, down: weekStart.down },
   { name: '008-shared-scopes', up: sharedScopes.up, down: sharedScopes.down },
-  { name: '009-federation', up: federation.up, down: federation.down },
+  { name: '009-federation', up: federation.up, down: federation.down, needsForeignKeysOff: true },
 ];
 
 const MIGRATIONS_TABLE = 'schema_migrations';
@@ -166,16 +184,28 @@ export async function migrateToLatest(
   const applied: string[] = [];
   for (const migration of pending) {
     const each = Date.now();
-    // Cada migració va dins de la seva pròpia transacció: si la tercera falla, les dues
-    // primeres queden aplicades i registrades, i el reintent continua des d'allà.
-    await db.transaction().execute(async (trx) => {
-      await migration.up(trx, options.engine);
-      await sql
-        .raw(
-          `INSERT INTO ${MIGRATIONS_TABLE} (name, applied_at) VALUES ('${migration.name}', '${now}')`,
-        )
-        .execute(trx);
-    });
+    /**
+     * El pragma va **fora** de la transacció, no a dins, i només per a qui ho demana: a
+     * la resta de migracions les claus foranes segueixen actives, que és el que fa que
+     * una migració que trenqui una referència es vegi el dia que es fa i no mesos després.
+     */
+    const relaxFks = options.engine === 'sqlite' && migration.needsForeignKeysOff === true;
+    if (relaxFks) await sql.raw('PRAGMA foreign_keys = OFF').execute(db);
+
+    try {
+      // Cada migració va dins de la seva pròpia transacció: si la tercera falla, les dues
+      // primeres queden aplicades i registrades, i el reintent continua des d'allà.
+      await db.transaction().execute(async (trx) => {
+        await migration.up(trx, options.engine);
+        await sql
+          .raw(
+            `INSERT INTO ${MIGRATIONS_TABLE} (name, applied_at) VALUES ('${migration.name}', '${now}')`,
+          )
+          .execute(trx);
+      });
+    } finally {
+      if (relaxFks) await sql.raw('PRAGMA foreign_keys = ON').execute(db);
+    }
     applied.push(migration.name);
     log(`migracions · ${migration.name} aplicada en ${Date.now() - each} ms`);
   }

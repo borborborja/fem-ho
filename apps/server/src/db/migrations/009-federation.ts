@@ -31,6 +31,13 @@ import type { MigrationDb } from '../migration-db.js';
  *
  * S'arregla **endavant i no tocant la 008**: hi ha bases que ja la porten aplicada, i una
  * migració que canvia després d'haver-se executat és una base que ningú pot reproduir.
+ *
+ * I `users` té una dotzena de taules que hi apunten, o sigui que el `DROP TABLE` només
+ * passa amb les claus foranes desactivades. **El pragma no es posa aquí**: dins d'una
+ * transacció SQLite l'ignora en silenci, i aquesta migració va dins de la seva. El posa el
+ * migrador abans d'obrir-la, perquè aquesta entrada porta `needsForeignKeysOff`. Aquí hi
+ * havia un `PRAGMA foreign_keys = OFF` que no feia res i que ho aparentava tot: la
+ * migració va petar la primera vegada que es va desplegar sobre una base amb dades.
  */
 async function widenUserKind(db: MigrationDb, t: ReturnType<typeof typeMap>): Promise<void> {
   const columns = [
@@ -53,11 +60,9 @@ async function widenUserKind(db: MigrationDb, t: ReturnType<typeof typeMap>): Pr
     'remote_user_id',
   ];
 
-  await sql.raw('PRAGMA foreign_keys = OFF').execute(db);
-  try {
-    await sql
-      .raw(
-        `CREATE TABLE users__new (
+  await sql
+    .raw(
+      `CREATE TABLE users__new (
           id               ${t.text} PRIMARY KEY NOT NULL,
           email            ${t.text} UNIQUE,
           name             ${t.text} NOT NULL,
@@ -80,19 +85,14 @@ async function widenUserKind(db: MigrationDb, t: ReturnType<typeof typeMap>): Pr
           instance_link_id ${t.text},
           remote_user_id   ${t.text}
         )`,
-      )
-      .execute(db);
+    )
+    .execute(db);
 
-    const cols = columns.join(', ');
-    await sql.raw(`INSERT INTO users__new (${cols}) SELECT ${cols} FROM users`).execute(db);
-    await sql.raw('DROP TABLE users').execute(db);
-    await sql.raw('ALTER TABLE users__new RENAME TO users').execute(db);
-    await sql
-      .raw('CREATE INDEX idx_users_kind ON users(kind) WHERE deleted_at IS NULL')
-      .execute(db);
-  } finally {
-    await sql.raw('PRAGMA foreign_keys = ON').execute(db);
-  }
+  const cols = columns.join(', ');
+  await sql.raw(`INSERT INTO users__new (${cols}) SELECT ${cols} FROM users`).execute(db);
+  await sql.raw('DROP TABLE users').execute(db);
+  await sql.raw('ALTER TABLE users__new RENAME TO users').execute(db);
+  await sql.raw('CREATE INDEX idx_users_kind ON users(kind) WHERE deleted_at IS NULL').execute(db);
 }
 
 export async function up(db: MigrationDb, engine: Engine): Promise<void> {
