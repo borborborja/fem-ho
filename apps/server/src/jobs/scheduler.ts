@@ -37,6 +37,8 @@ export interface SchedulerOptions {
   connection: Connection;
   secret: string;
   baseUrl: string | undefined;
+  /** On van els bytes dels `ATTACH` en base64 dels orígens subscrits. */
+  dataDir?: string | undefined;
   /** Injectables per a les proves: així no cal esperar mig minut ni piconar cap servei. */
   now?: () => string;
   send?: PushSender;
@@ -210,6 +212,7 @@ async function runRefreshes(
       await refreshSubscription(db, principal, subscription, {
         masterSecret: options.secret,
         engine: options.connection.engine,
+        dataDir: options.dataDir,
       });
       refreshed += 1;
       await sql`

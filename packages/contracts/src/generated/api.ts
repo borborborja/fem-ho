@@ -1526,10 +1526,114 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/tasks/{id}/attachments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Els adjunts d'una tasca */
+        get: operations["listTaskAttachments"];
+        put?: never;
+        /**
+         * Adjuntar un fitxer a una tasca
+         * @description **El cos va cru**, no en multipart: el nom a la consulta i els bytes al cos. Així el navegador pot enviar un `File` tal qual, i s'estalvia una dependència per analitzar un format que aquí no aporta res —només hi ha un fitxer per petició. El tipus s'infereix **del contingut** i no de l'extensió (docs/10 §8).
+         */
+        post: operations["uploadTaskAttachment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/events/{id}/attachments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Els adjunts d'un esdeveniment
+         * @description Un esdeveniment no té àmbit propi: el treu del calendari. Si el calendari **no s'ha compartit**, respon 404 encara que l'àmbit sí que ho estigui — i el mateix val per al nom del fitxer, que ja diu massa.
+         */
+        get: operations["listEventAttachments"];
+        put?: never;
+        /** Adjuntar un fitxer a un esdeveniment */
+        post: operations["uploadEventAttachment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/attachments/{id}/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Baixar el contingut d'un adjunt
+         * @description `docs/10` §8: el fitxer viu **fora de l'arrel web** i només surt d'aquest handler, que comprova permisos; no hi ha cap ruta endevinable. Sempre amb `Content-Disposition: attachment`, `X-Content-Type-Options: nosniff` i `Cache-Control: private, no-store`.
+         */
+        get: operations["downloadAttachment"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/attachments/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Esborrar un adjunt
+         * @description Esborrat **en suau**: la fila es marca i el fitxer es queda al disc, perquè la tombstone encara ha de viatjar pel sync fins als clients.
+         */
+        delete: operations["deleteAttachment"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @description Les metadades d'un adjunt. **`storage_path` no hi és**: és una ruta interna i el client demana el contingut per identificador. */
+        Attachment: {
+            id: string;
+            task_id?: string | null;
+            event_id?: string | null;
+            scope_id?: string | null;
+            filename: string;
+            /** @description Inferit del contingut, no de l'extensió. Mai `text/html`. */
+            mime_type: string;
+            size_bytes: number;
+            /** @enum {string} */
+            source: "upload" | "ical_attach";
+            /** @description Per a un `ATTACH` d'iCal que és un enllaç i no bytes: no es baixa mai per iniciativa pròpia, que seria seguir una URL de tercers des del servidor. */
+            external_url?: string | null;
+            is_ai_context?: boolean;
+            uploaded_by?: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            version: number;
+        };
         ScopeInvite: {
             id: string;
             role: string | null;
@@ -5687,6 +5791,197 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+        };
+    };
+    listTaskAttachments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Les metadades. El contingut es demana a part. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Attachment"][];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    uploadTaskAttachment: {
+        parameters: {
+            query: {
+                filename: string;
+                ai_context?: "true" | "false";
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/octet-stream": string;
+            };
+        };
+        responses: {
+            /** @description Adjuntat. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Attachment"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            /** @description Per damunt de `FEMHO_MAX_UPLOAD_MB`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listEventAttachments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Les metadades. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Attachment"][];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            /** @description No existeix, o el calendari no s'ha compartit. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    uploadEventAttachment: {
+        parameters: {
+            query: {
+                filename: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/octet-stream": string;
+            };
+        };
+        responses: {
+            /** @description Adjuntat. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Attachment"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            /** @description Per damunt de `FEMHO_MAX_UPLOAD_MB`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    downloadAttachment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Els bytes. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            /** @description No existeix, s'ha esborrat, o el calendari no s'ha compartit. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    deleteAttachment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Esborrat. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
         };
     };
 }

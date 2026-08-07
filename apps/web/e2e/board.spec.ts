@@ -117,40 +117,54 @@ test('captura del tauler als dos temes', async ({ page }) => {
   await expect(page).toHaveScreenshot('board.png', { fullPage: true });
 });
 
-test('arrossegar entre columnes persisteix', async ({ page }) => {
-  await page.goto('/proof/board');
-  const surface = page.locator('[data-testid="board-light"]');
+/**
+ * **Aquesta prova té reintents, i és a posta.**
+ *
+ * L'arrossegament amb ratolí depèn que el navegador no ajunti els `pointermove`, i això
+ * no és una propietat del producte sinó de la càrrega de la màquina: el mateix codi passa
+ * sol i falla quan hi ha vuit pestanyes més competint. La persistència del moviment ja
+ * està coberta de manera determinista per la prova de teclat d'aquí sota; aquesta hi és
+ * per cobrir el sensor de dnd-kit, i un fals negatiu seu no ha de tenyir la suite.
+ */
+test.describe(() => {
+  test.describe.configure({ retries: 2 });
 
-  const card = surface.locator('[data-testid="task-1"]');
-  const target = surface.locator('[data-column-status="doing"]');
+  test('arrossegar entre columnes persisteix', async ({ page }) => {
+    await page.goto('/proof/board');
+    const surface = page.locator('[data-testid="board-light"]');
 
-  await expect(
-    surface.locator('[data-column-status="inbox"] [data-testid="task-1"]'),
-  ).toBeVisible();
+    const card = surface.locator('[data-testid="task-1"]');
+    const target = surface.locator('[data-column-status="doing"]');
 
-  // Arrossegament amb ratolí en tres passos: dnd-kit necessita moviment intermedi per
-  // superar la restricció d'activació de 6px que evita que un clic compti com a drag.
-  const from = await card.boundingBox();
-  const to = await target.boundingBox();
-  if (from === null || to === null) throw new Error('no es poden mesurar els elements');
+    await expect(
+      surface.locator('[data-column-status="inbox"] [data-testid="task-1"]'),
+    ).toBeVisible();
 
-  await page.mouse.move(from.x + from.width / 2, from.y + 20);
-  await page.mouse.down();
-  // dnd-kit no considera que s'arrossegui fins que el cursor ha fet 6px, i sota càrrega
-  // el navegador pot ajuntar els moviments intermedis. Amb la pausa, el sensor rep el
-  // primer desplaçament sempre; sense, la prova falla una vegada de cada moltes.
-  await page.waitForTimeout(50);
-  await page.mouse.move(from.x + from.width / 2 + 40, from.y + 40, { steps: 10 });
-  await page.waitForTimeout(50);
-  await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 10 });
-  await page.mouse.up();
+    // Arrossegament amb ratolí en tres passos: dnd-kit necessita moviment intermedi per
+    // superar la restricció d'activació de 6px que evita que un clic compti com a drag.
+    const from = await card.boundingBox();
+    const to = await target.boundingBox();
+    if (from === null || to === null) throw new Error('no es poden mesurar els elements');
 
-  await expect(
-    surface.locator('[data-column-status="doing"] [data-testid="task-1"]'),
-  ).toBeVisible();
-  await expect(surface.locator('[data-column-status="inbox"] [data-testid="task-1"]')).toHaveCount(
-    0,
-  );
+    await page.mouse.move(from.x + from.width / 2, from.y + 20);
+    await page.mouse.down();
+
+    // dnd-kit no considera que s'arrossegui fins que el cursor ha fet 6px, i sota càrrega
+    // el navegador pot ajuntar els moviments intermedis. Amb la pausa, el sensor rep el
+    // primer desplaçament sempre; sense, la prova falla una vegada de cada moltes.
+    await page.waitForTimeout(50);
+    await page.mouse.move(from.x + from.width / 2 + 40, from.y + 40, { steps: 10 });
+    await page.waitForTimeout(50);
+    await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 10 });
+    await page.mouse.up();
+
+    await expect(
+      surface.locator('[data-column-status="doing"] [data-testid="task-1"]'),
+    ).toBeVisible();
+    await expect(
+      surface.locator('[data-column-status="inbox"] [data-testid="task-1"]'),
+    ).toHaveCount(0);
+  });
 });
 
 test('AQUESTA és la de docs/13: moure amb teclat també', async ({ page }) => {

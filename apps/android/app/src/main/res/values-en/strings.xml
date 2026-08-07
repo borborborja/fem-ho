@@ -382,9 +382,13 @@
     <string name="sync_synced">Synced</string>
     <string name="sync_title">Sync</string>
     <string name="task_activity">History</string>
+    <string name="task_addattachment">Attach a file</string>
     <string name="task_aiinstructions">Instructions for the AI</string>
     <string name="task_aimode">AI mode</string>
     <string name="task_assignees">Assigned to</string>
+    <string name="task_attachmentlink">External link</string>
+    <string name="task_attachments">Attachments</string>
+    <string name="task_attachmenttoobig">The file is over the {limit_mb} MB limit.</string>
     <string name="task_checklists">Simple lists</string>
     <string name="task_comments">Comments</string>
     <string name="task_deadline">Deadline</string>
@@ -394,6 +398,7 @@
     <string name="task_duetime">Time</string>
     <string name="task_edit">Edit task</string>
     <string name="task_empty_activity">Nothing has happened in this task yet.</string>
+    <string name="task_empty_attachments">No files attached.</string>
     <string name="task_empty_comments">No comments yet.</string>
     <string name="task_empty_subtasks">This task has no subtasks.</string>
     <string name="task_labels">Labels</string>
@@ -411,6 +416,7 @@
     <string name="task_recurrence_none">Does not repeat</string>
     <string name="task_recurrence_weekly">Every week</string>
     <string name="task_recurrence_yearly">Every year</string>
+    <string name="task_removeattachment">Remove</string>
     <string name="task_scope">Scope</string>
     <string name="task_send">Send</string>
     <string name="task_share">Share</string>

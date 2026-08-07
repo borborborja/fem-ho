@@ -2472,8 +2472,162 @@ paths:
           content: { application/json: { schema: { type: object, additionalProperties: true } } }
         '401': { $ref: '#/components/responses/Unauthenticated' }
 
+  /tasks/{id}/attachments:
+    get:
+      tags: [Tasques]
+      operationId: listTaskAttachments
+      summary: Els adjunts d'una tasca
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Les metadades. El contingut es demana a part.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/Attachment' } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Tasques]
+      operationId: uploadTaskAttachment
+      summary: Adjuntar un fitxer a una tasca
+      description: >-
+        **El cos va cru**, no en multipart: el nom a la consulta i els bytes al cos. Així
+        el navegador pot enviar un `File` tal qual, i s'estalvia una dependència per
+        analitzar un format que aquí no aporta res —només hi ha un fitxer per petició.
+        El tipus s'infereix **del contingut** i no de l'extensió (docs/10 §8).
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: filename, in: query, required: true, schema: { type: string } }
+        - { name: ai_context, in: query, schema: { type: string, enum: ['true', 'false'] } }
+      requestBody:
+        required: true
+        content:
+          application/octet-stream: { schema: { type: string, format: binary } }
+      responses:
+        '201':
+          description: Adjuntat.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Attachment' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '413':
+          description: Per damunt de `FEMHO_MAX_UPLOAD_MB`.
+          content:
+            { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+
+  /events/{id}/attachments:
+    get:
+      tags: [Calendari]
+      operationId: listEventAttachments
+      summary: Els adjunts d'un esdeveniment
+      description: >-
+        Un esdeveniment no té àmbit propi: el treu del calendari. Si el calendari **no
+        s'ha compartit**, respon 404 encara que l'àmbit sí que ho estigui — i el mateix
+        val per al nom del fitxer, que ja diu massa.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Les metadades.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/Attachment' } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404':
+          description: No existeix, o el calendari no s'ha compartit.
+          content:
+            { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+    post:
+      tags: [Calendari]
+      operationId: uploadEventAttachment
+      summary: Adjuntar un fitxer a un esdeveniment
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: filename, in: query, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/octet-stream: { schema: { type: string, format: binary } }
+      responses:
+        '201':
+          description: Adjuntat.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Attachment' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '413':
+          description: Per damunt de `FEMHO_MAX_UPLOAD_MB`.
+          content:
+            { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+
+  /attachments/{id}/content:
+    get:
+      tags: [Tasques]
+      operationId: downloadAttachment
+      summary: Baixar el contingut d'un adjunt
+      description: >-
+        `docs/10` §8: el fitxer viu **fora de l'arrel web** i només surt d'aquest handler,
+        que comprova permisos; no hi ha cap ruta endevinable. Sempre amb
+        `Content-Disposition: attachment`, `X-Content-Type-Options: nosniff` i
+        `Cache-Control: private, no-store`.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Els bytes.
+          content: { application/octet-stream: { schema: { type: string, format: binary } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404':
+          description: No existeix, s'ha esborrat, o el calendari no s'ha compartit.
+          content:
+            { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+
+  /attachments/{id}:
+    delete:
+      tags: [Tasques]
+      operationId: deleteAttachment
+      summary: Esborrar un adjunt
+      description: >-
+        Esborrat **en suau**: la fila es marca i el fitxer es queda al disc, perquè la
+        tombstone encara ha de viatjar pel sync fins als clients.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '204': { description: Esborrat. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
 components:
   schemas:
+    Attachment:
+      type: object
+      description: >-
+        Les metadades d'un adjunt. **`storage_path` no hi és**: és una ruta interna i el
+        client demana el contingut per identificador.
+      required: [id, filename, mime_type, size_bytes, source, created_at, updated_at, version]
+      properties:
+        id: { type: string }
+        task_id: { type: [string, 'null'] }
+        event_id: { type: [string, 'null'] }
+        scope_id: { type: [string, 'null'] }
+        filename: { type: string }
+        mime_type:
+          type: string
+          description: Inferit del contingut, no de l'extensió. Mai `text/html`.
+        size_bytes: { type: integer }
+        source: { type: string, enum: [upload, ical_attach] }
+        external_url:
+          type: [string, 'null']
+          description: >-
+            Per a un `ATTACH` d'iCal que és un enllaç i no bytes: no es baixa mai per
+            iniciativa pròpia, que seria seguir una URL de tercers des del servidor.
+        is_ai_context: { type: boolean }
+        uploaded_by: { type: [string, 'null'] }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        version: { type: integer }
+
     ScopeInvite:
       type: object
       required: [id, role, max_uses, use_count, expires_at, created_at]

@@ -382,9 +382,13 @@
     <string name="sync_synced">Sincronitzat</string>
     <string name="sync_title">Sincronització</string>
     <string name="task_activity">Historial</string>
+    <string name="task_addattachment">Adjuntar un fitxer</string>
     <string name="task_aiinstructions">Instruccions per a la IA</string>
     <string name="task_aimode">Mode d\'IA</string>
     <string name="task_assignees">Assignat a</string>
+    <string name="task_attachmentlink">Enllaç extern</string>
+    <string name="task_attachments">Adjunts</string>
+    <string name="task_attachmenttoobig">El fitxer passa del límit de {limit_mb} MB.</string>
     <string name="task_checklists">Llistes senzilles</string>
     <string name="task_comments">Comentaris</string>
     <string name="task_deadline">Data límit</string>
@@ -394,6 +398,7 @@
     <string name="task_duetime">Hora</string>
     <string name="task_edit">Editar tasca</string>
     <string name="task_empty_activity">Encara no ha passat res en aquesta tasca.</string>
+    <string name="task_empty_attachments">Cap fitxer adjunt.</string>
     <string name="task_empty_comments">Encara no hi ha cap comentari.</string>
     <string name="task_empty_subtasks">Aquesta tasca no té subtasques.</string>
     <string name="task_labels">Etiquetes</string>
@@ -411,6 +416,7 @@
     <string name="task_recurrence_none">No es repeteix</string>
     <string name="task_recurrence_weekly">Cada setmana</string>
     <string name="task_recurrence_yearly">Cada any</string>
+    <string name="task_removeattachment">Treure</string>
     <string name="task_scope">Àmbit</string>
     <string name="task_send">Envia</string>
     <string name="task_share">Compartir</string>

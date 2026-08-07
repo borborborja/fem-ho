@@ -199,4 +199,63 @@ export const api = {
   patch: <T>(path: string, body: unknown): Promise<T> =>
     request<T>(path, { method: 'PATCH', body }),
   delete: <T>(path: string): Promise<T> => request<T>(path, { method: 'DELETE' }),
+
+  /**
+   * Baixa el contingut d'un adjunt.
+   *
+   * **Per `fetch` i no per un `href` directe**: la sessió viu a `localStorage` i viatja a
+   * `Authorization`, o sigui que una navegació del navegador cap a la ruta del contingut
+   * no en porta res i rebria un 401. El fitxer s'agafa amb el token, se'n fa un `blob:` i
+   * és aquell el que es clica.
+   */
+  download: async (path: string): Promise<Blob> => {
+    const send = async (): Promise<Response> => {
+      const headers: Record<string, string> = {};
+      if (tokens !== null) headers.authorization = `Bearer ${tokens.access_token}`;
+      return fetch(path.startsWith('/') ? path : `/api/v1/${path}`, { headers });
+    };
+
+    let res = await send();
+    if (res.status === 401 && tokens !== null && (await refresh())) res = await send();
+    if (!res.ok) throw new ApiError(res.status, undefined, `HTTP ${String(res.status)}`);
+    return res.blob();
+  },
+
+  /**
+   * Puja un fitxer **tal qual**, sense `FormData`.
+   *
+   * El servidor espera `application/octet-stream` amb el nom a la consulta: un `File` ja
+   * és un `Blob` i `fetch` el sap enviar sense copiar-lo a memòria, cosa que amb un
+   * `FormData` construït a mà no passaria. Per això no va per `request()`, que serialitza
+   * el cos a JSON.
+   */
+  upload: async <T>(path: string, file: File): Promise<T> => {
+    const url = `${path}${path.includes('?') ? '&' : '?'}filename=${encodeURIComponent(file.name)}`;
+    const headers: Record<string, string> = { 'content-type': 'application/octet-stream' };
+
+    const send = async (): Promise<Response> => {
+      if (tokens !== null) headers.authorization = `Bearer ${tokens.access_token}`;
+      return fetch(url.startsWith('/') ? url : `/api/v1/${url}`, {
+        method: 'POST',
+        headers,
+        body: file,
+      });
+    };
+
+    // El mateix refresc d'una sola oportunitat que `request()`: una sessió que caduca
+    // just en pujar no ha de perdre el fitxer.
+    let res = await send();
+    if (res.status === 401 && tokens !== null && (await refresh())) res = await send();
+
+    if (!res.ok) {
+      let problem: Problem | undefined;
+      try {
+        problem = (await res.json()) as Problem;
+      } catch {
+        problem = undefined;
+      }
+      throw new ApiError(res.status, problem, `HTTP ${String(res.status)}`);
+    }
+    return (await res.json()) as T;
+  },
 };

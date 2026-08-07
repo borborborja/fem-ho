@@ -31,6 +31,7 @@
     "createSubtask": "apps/server/src/http/api-surface.test.ts · \"es creen i es llisten en ordre\"",
     "createTask": "apps/server/src/http/tasks.test.ts · \"a un àmbit individual s'assignen soles al propietari\"",
     "deleteAgent": "apps/server/src/http/api-surface.test.ts · \"esborrar-lo desdelega les tasques però no se les endú\"",
+    "deleteAttachment": "apps/server/src/services/attachments.test.ts · \"s'esborra en suau, perquè la tombstone pugui viatjar pel sync\"",
     "deleteCalendar": "apps/server/src/http/api-surface.test.ts · \"i un de buit sí\"",
     "deleteChecklist": "apps/server/src/http/api-surface.test.ts · \"i la llista sencera s'endú els seus ítems\"",
     "deleteChecklistItem": "apps/server/src/http/api-surface.test.ts · \"un ítem s'esborra i deixa rastre\"",
@@ -73,6 +74,8 @@
     "updateSubtask": "apps/server/src/http/api-surface.test.ts · \"marcar-la és `completed` i desmarcar-la `reopened`\"",
     "updateTask": "apps/server/src/http/api-surface.test.ts · \"es pot editar, i el canvi queda amb el valor anterior i el nou\"; la repetició, a \"amb `schedule`, la següent surt del VENCIMENT anterior\"",
     "updateUser": "apps/server/src/http/api-surface.test.ts · \"i un altre usuari sí, amb rastre\"",
+    "uploadEventAttachment": "apps/server/src/services/attachments.test.ts · \"d'un calendari compartit el membre el veu sencer\"",
+    "uploadTaskAttachment": "apps/server/src/services/attachments.test.ts · \"es puja amb el cos cru i torna les metadades sense la ruta d'emmagatzematge\"",
     "wipeInstance": "apps/server/src/http/api-surface.test.ts · \"i amb el nom exacte, buida i deixa constància\""
   },
   "exempt": {

@@ -170,7 +170,11 @@ export async function pull(
 
   const changes: SyncChange[] = [];
   for (const row of page) {
-    if (row.entity_type === 'event' || row.entity_type === 'calendar') {
+    if (
+      row.entity_type === 'event' ||
+      row.entity_type === 'calendar' ||
+      row.entity_type === 'attachment'
+    ) {
       const belongs = await calendarOf(db, row.entity_type, row.entity_id);
       if (belongs !== null && !visibleCalendars.has(belongs)) continue;
     }
@@ -238,6 +242,19 @@ async function calendarOf(
 ): Promise<string | null> {
   if (entityType === 'calendar') return entityId;
 
+  /**
+   * Un adjunt de tasca no penja de cap calendari i no s'ha de tallar; un d'esdeveniment
+   * hereta el calendari del seu, i el `LEFT JOIN` deixa el primer cas en `null`.
+   */
+  if (entityType === 'attachment') {
+    const seu = await sql<{ calendar_id: string | null }>`
+      SELECT e.calendar_id FROM attachments a
+      LEFT JOIN events e ON e.id = a.event_id
+      WHERE a.id = ${entityId}
+    `.execute(db);
+    return seu.rows[0]?.calendar_id ?? null;
+  }
+
   const found = await sql<{ calendar_id: string }>`
     SELECT calendar_id FROM events WHERE id = ${entityId}
   `.execute(db);
@@ -276,7 +293,10 @@ async function loadEntity(
   const table = TABLE_BY_ENTITY[entityType];
   if (table === undefined) return null;
 
-  const found = await sql`SELECT * FROM ${sql.raw(table)} WHERE id = ${id}`.execute(db);
+  const columns = COLUMNS_BY_ENTITY[entityType] ?? '*';
+  const found = await sql`
+    SELECT ${sql.raw(columns)} FROM ${sql.raw(table)} WHERE id = ${id}
+  `.execute(db);
   const row = found.rows[0] as Record<string, unknown> | undefined;
   if (row === undefined) return null;
   // Una fila amb `deleted_at` és una tombstone: no viatja com a dada.
@@ -287,8 +307,10 @@ async function loadEntity(
 /**
  * Les entitats que viatgen pel sync i la seva taula.
  *
- * NO hi són `activity_log` —es consulta a demanda quan s'obre l'historial— ni els
- * adjunts, dels quals només viatgen les metadades (docs/06 §9).
+ * NO hi és `activity_log`: es consulta a demanda quan s'obre l'historial. Dels adjunts
+ * **només hi viatgen les metadades** (`docs/06` §9); els bytes es demanen a
+ * `/attachments/{id}/content` quan calen, que és el que fa que un àlbum de fotos adjuntes
+ * no s'hagi de baixar sencer al mòbil.
  */
 const TABLE_BY_ENTITY: Record<string, string> = {
   task: 'tasks',
@@ -299,6 +321,22 @@ const TABLE_BY_ENTITY: Record<string, string> = {
   project: 'projects',
   event: 'events',
   comment: 'comments',
+  attachment: 'attachments',
+};
+
+/**
+ * Quines columnes en surten, quan no hi han de sortir totes.
+ *
+ * **Això no és neteja: és una fuita esperant.** `loadEntity` feia `SELECT *`, o sigui que
+ * qualsevol taula que entri al sync hi envia les seves columnes senceres, secrets inclosos
+ * —el dia que hi entrin els calendaris, `source_secret_enc` aniria a tots els membres de
+ * l'àmbit—. Als adjunts el que no ha de sortir és `storage_path`: és una ruta interna, i
+ * el client demana el contingut per identificador i no per camí.
+ */
+const COLUMNS_BY_ENTITY: Record<string, string> = {
+  attachment: `id, task_id, event_id, scope_id, filename, mime_type, size_bytes, source,
+               external_url, is_ai_context, uploaded_by, created_at, updated_at, deleted_at,
+               version`,
 };
 
 export type BatchOperation = {

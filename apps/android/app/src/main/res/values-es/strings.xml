@@ -382,9 +382,13 @@
     <string name="sync_synced">Sincronizado</string>
     <string name="sync_title">Sincronización</string>
     <string name="task_activity">Historial</string>
+    <string name="task_addattachment">Adjuntar un archivo</string>
     <string name="task_aiinstructions">Instrucciones para la IA</string>
     <string name="task_aimode">Modo de IA</string>
     <string name="task_assignees">Asignada a</string>
+    <string name="task_attachmentlink">Enlace externo</string>
+    <string name="task_attachments">Adjuntos</string>
+    <string name="task_attachmenttoobig">El archivo supera el límite de {limit_mb} MB.</string>
     <string name="task_checklists">Listas sencillas</string>
     <string name="task_comments">Comentarios</string>
     <string name="task_deadline">Fecha límite</string>
@@ -394,6 +398,7 @@
     <string name="task_duetime">Hora</string>
     <string name="task_edit">Editar tarea</string>
     <string name="task_empty_activity">Todavía no ha pasado nada en esta tarea.</string>
+    <string name="task_empty_attachments">Ningún archivo adjunto.</string>
     <string name="task_empty_comments">Todavía no hay ningún comentario.</string>
     <string name="task_empty_subtasks">Esta tarea no tiene subtareas.</string>
     <string name="task_labels">Etiquetas</string>
@@ -411,6 +416,7 @@
     <string name="task_recurrence_none">No se repite</string>
     <string name="task_recurrence_weekly">Cada semana</string>
     <string name="task_recurrence_yearly">Cada año</string>
+    <string name="task_removeattachment">Quitar</string>
     <string name="task_scope">Ámbito</string>
     <string name="task_send">Envía</string>
     <string name="task_share">Compartir</string>
