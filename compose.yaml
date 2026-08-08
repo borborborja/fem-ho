@@ -23,8 +23,6 @@ services:
       # generen URL incorrectes, que és la causa número u de problemes (docs/12 §3).
       FEMHO_BASE_URL: https://femho.example.com
       FEMHO_DATABASE_URL: sqlite:///data/femho.db
-      # El rang del proxy invers, perquè `X-Forwarded-For` es pugui creure.
-      FEMHO_TRUSTED_PROXIES: 172.16.0.0/12
       # Deixa que la gent es faci un compte, i **el primer que ho faci serà
       # administrador**. Per defecte no: les altes les fa l'administrador, que és el
       # correcte per a una instància familiar exposada a internet (docs/12 §7).

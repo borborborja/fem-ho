@@ -209,6 +209,29 @@ export interface SafeResponse {
  * plataforma només normalitzen els verbs estàndard: `method: 'propfind'` viatja en
  * minúscules i el servidor remot respon `501` (docs/07 §1).
  */
+/**
+ * Espera una promesa, però no per sempre.
+ *
+ * El `lookup` del sistema no accepta cap senyal d'avortament, o sigui que això no el
+ * cancel·la: deixa d'esperar-lo. Per a una petició que ja s'ha donat per perduda, és el
+ * que cal.
+ */
+async function withTimeout<T>(work: Promise<T>, ms: number, message: string): Promise<T> {
+  if (ms <= 0) throw new SsrfError("S'ha exhaurit el temps màxim.");
+
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      work,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new SsrfError(message)), ms);
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
 export async function safeFetch(
   rawUrl: string,
   options: SafeFetchOptions = {},
@@ -227,8 +250,22 @@ export async function safeFetch(
   const started = Date.now();
 
   for (let hop = 0; hop <= maxRedirects; hop += 1) {
-    // Mitigació 5: cada salt es torna a validar sencer, no només el primer.
-    const { address } = await (options.guard ?? resolveSafely)(url, options);
+    /**
+     * Mitigació 5: cada salt es torna a validar sencer, no només el primer.
+     *
+     * **I la resolució entra dins del temps màxim.** Abans el rellotge es posava en
+     * marxa aquí i el `lookup` quedava fora: un amfitrió el DNS del qual no respon
+     * —no que digui que no existeix, sinó que calla— aturava la crida el temps que
+     * el resolutor del sistema volgués. Al planificador, això vol dir un calendari
+     * subscrit trencat que **atura el tic sencer**: ni recordatoris, ni federació,
+     * ni res, i sense cap error a cap registre. La prova que ho hauria d'haver vist
+     * es diu "un origen extern caigut NO impedeix els recordatoris".
+     */
+    const { address } = await withTimeout(
+      (options.guard ?? resolveSafely)(url, options),
+      timeoutMs - (Date.now() - started),
+      `No s'ha pogut resoldre "${url.hostname}" a temps.`,
+    );
 
     const restant = timeoutMs - (Date.now() - started);
     if (restant <= 0) throw new SsrfError("S'ha exhaurit el temps màxim.");

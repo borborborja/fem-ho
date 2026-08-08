@@ -125,12 +125,21 @@ describe('cap feina en tomba una altra', () => {
   it('un origen extern caigut NO impedeix els recordatoris', async () => {
     await recordatoriVencut();
 
-    // Una subscripció que apunta a un lloc que no existeix: el refresc petarà.
+    /**
+     * Una subscripció que no es pot llegir: el refresc petarà.
+     *
+     * **L'adreça és una IP interna i no un nom inventat.** Amb `no-existeix.invalid`, la
+     * prova depenia del resolutor de DNS de la màquina: normalment respon a l'instant, i
+     * el dia que triga cinc segons —un resolutor lent, una xarxa rara— la prova cau amb
+     * un temps esgotat que no diu res del producte. Amb una IP literal, `safeFetch` la
+     * rebutja sense sortir a la xarxa i el que es prova segueix sent el mateix: que un
+     * origen trencat no s'endugui els recordatoris.
+     */
     await sql`
       INSERT INTO calendars (id, scope_id, name, kind, origin, source_url, strip_alarms,
                              created_at, updated_at)
       VALUES (${uuidv7()}, ${scopeId}, 'Festius', 'events', 'subscription',
-              'https://no-existeix.invalid/festius.ics', 1, ${NOW}, ${NOW})
+              'https://10.0.0.1/festius.ics', 1, ${NOW}, ${NOW})
     `.execute(conn.db);
 
     const send = vi.fn<PushSender>(async () => ({ statusCode: 201 }));

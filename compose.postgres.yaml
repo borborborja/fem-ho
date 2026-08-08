@@ -21,7 +21,6 @@ services:
     environment:
       FEMHO_BASE_URL: https://femho.example.com
       FEMHO_DATABASE_URL: postgres://femho:${POSTGRES_PASSWORD:?cal posar POSTGRES_PASSWORD}@postgres:5432/femho
-      FEMHO_TRUSTED_PROXIES: 172.16.0.0/12
       FEMHO_REGISTRATION: disabled
     healthcheck:
       test:

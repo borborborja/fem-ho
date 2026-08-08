@@ -38,7 +38,6 @@ services:
     environment:
       FEMHO_BASE_URL: https://femho.example.com
       FEMHO_DATABASE_URL: sqlite:///data/femho.db
-      FEMHO_TRUSTED_PROXIES: 172.16.0.0/12
     healthcheck:
       test: ["CMD", "/app/healthcheck"]
       interval: 30s
@@ -69,19 +68,21 @@ Variables d'entorn amb prefix `FEMHO_`. Els secrets accepten el sufix `_FILE` pe
 | `FEMHO_DAV_PORT` | `8081` | Superfície CalDAV |
 | `FEMHO_DATABASE_URL` | `sqlite:///data/femho.db` | |
 | `FEMHO_DATA_DIR` | `/data` | |
-| `FEMHO_TRUSTED_PROXIES` | — | Rangs dels quals s'accepten les capçaleres `X-Forwarded-*` |
-| `FEMHO_SECRET_KEY` | generat | Es persisteix al primer arrencament |
-| `FEMHO_SMTP_*` | — | Amfitrió, port, usuari, contrasenya, xifratge, remitent |
+| `FEMHO_TRUSTED_PROXIES` | — | Rangs dels quals s'accepten les capçaleres `X-Forwarded-*`. **Encara no** hi és: `trustProxy` és fals i res no necessita la IP del client, perquè el bloqueig per intents es compta per correu |
+| `FEMHO_SECRET` | generat | El pebre de tots els tokens. Es persisteix a `/data` al primer arrencament. **Aquí hi deia `FEMHO_SECRET_KEY`, que no ha existit mai** |
+| `FEMHO_SMTP_*` | — | Amfitrió, port, usuari, contrasenya, xifratge, remitent. **Encara no** hi són: no s'envia cap correu |
 | `FEMHO_ALLOW_REGISTRATION` | `false` | Qualsevol es pot fer un compte. **El primer serà administrador.** |
 | `FEMHO_GRAVATAR` | `false` | Les fotos de perfil surten de Gravatar. Veure l'avís de sota. |
 | `FEMHO_REGISTRATION` | `disabled` | La forma llarga: `disabled`, `invite`, `open` |
 | `FEMHO_MAX_UPLOAD_MB` | `25` | |
 | `FEMHO_LOG_LEVEL` | `info` | |
-| `FEMHO_CALDAV_ALLOWLIST` | — | Restricció opcional d'orígens externs |
+| `FEMHO_INSTANCE_NAME` | `Fem-ho` | El nom que veu qui s'hi connecta i el que publica el manifest de federació |
+| `FEMHO_SOURCE_URL` | aquest repositori | On és el codi d'aquesta instància (AGPL §13) |
+| `FEMHO_CALDAV_ALLOWLIST` | — | Restricció opcional d'orígens externs. **Encara no** hi és com a variable; `safeFetch` accepta `allowHosts` per paràmetre |
 
 **`FEMHO_BASE_URL` mal posada és la causa número u de problemes.** Un CalDAV darrere d'un proxy que no la sap genera `href` amb l'amfitrió intern, i cap client hi pot connectar. Al primer arrencament, el servidor l'ha de validar i escriure un avís clar al log si sembla incorrecta.
 
-Els secrets generats (`FEMHO_SECRET_KEY`, la clau VAPID) es guarden a `/data` **el primer cop i no es regeneren mai**. La conseqüència de perdre'ls: credencials de calendaris externs il·legibles i totes les subscripcions de push mortes.
+Els secrets generats (`FEMHO_SECRET`, la clau VAPID) es guarden a `/data` **el primer cop i no es regeneren mai**. La conseqüència de perdre'ls: credencials de calendaris externs il·legibles i totes les subscripcions de push mortes.
 
 ---
 
@@ -93,7 +94,7 @@ Requisits per a qualsevol proxy:
 
 1. **Permetre els verbs** `PROPFIND`, `PROPPATCH`, `REPORT`, `MKCALENDAR`, `MKCOL`, `COPY` i `MOVE`. nginx i molts WAF els rebutgen si no s'hi diu res.
 2. **No fer memòria intermèdia** de `/api/v1/stream` (SSE) ni de `/mcp`. Amb *buffering*, els esdeveniments arriben a bocins o no arriben.
-3. **Passar `X-Forwarded-Proto`, `-Host` i `-For`**, i que `FEMHO_TRUSTED_PROXIES` inclogui el rang del proxy.
+3. **Passar `X-Forwarded-Proto`, `-Host` i `-For`.** El servidor encara no se'ls creu —veure la taula—, però passar-los no costa res i el dia que calgui ja hi seran.
 4. **Permetre pujades grans** segons `FEMHO_MAX_UPLOAD_MB`.
 5. **Redirigir `/.well-known/caldav`** cap a la ruta del principal.
 6. **Temps d'espera llargs** a l'SSE — desenes de minuts, no segons.

@@ -23,6 +23,9 @@ compartida, amb tres idees que el distingeixen d'un gestor de tasques qualsevol:
 ## Com s'engega
 
 ```bash
+curl -O https://raw.githubusercontent.com/borborborja/fem-ho/main/compose.yaml
+curl -o .env https://raw.githubusercontent.com/borborborja/fem-ho/main/.env.example
+# Posa el teu domini a FEMHO_BASE_URL
 docker compose up -d
 ```
 
@@ -33,11 +36,57 @@ La imatge és multi-arquitectura (`amd64` i `arm64`), o sigui que va igual en un
 que en una Raspberry Pi:
 
 ```
-ghcr.io/borborborja/fem-ho:latest
+ghcr.io/borborborja/fem-ho:latest        # o :0.3.0 per fixar la versió
 ```
 
-Els detalls d'operació —proxy invers, còpies de seguretat, restauració— són a
-[`docs/DEPLOY.md`](docs/DEPLOY.md) i [`docs/BACKUP.md`](docs/BACKUP.md).
+### El `compose.yaml`
+
+Un sol contenidor i un sol volum. Per a una casa, això és tot el desplegament:
+
+```yaml
+services:
+  femho:
+    image: ghcr.io/borborborja/fem-ho:latest
+    restart: unless-stopped
+    ports:
+      - '8080:8080' # l'aplicació i l'API
+      - '8081:8081' # CalDAV, port propi dins del mateix procés
+    volumes:
+      - femho-data:/data
+    environment:
+      FEMHO_BASE_URL: https://femho.example.com
+      FEMHO_DATABASE_URL: sqlite:///data/femho.db
+
+volumes:
+  femho-data:
+```
+
+**El volum és tot el que hi ha per guardar**: la base, el secret de la instància, els
+adjunts i una còpia prèvia a cada migració. Una còpia del volum és una còpia de
+seguretat completa.
+
+### Les opcions
+
+Al `.env` del costat, que Compose llegeix sol. Les que es toquen més:
+
+| Variable                   | Per defecte               | Què fa                                                                                             |
+| -------------------------- | ------------------------- | -------------------------------------------------------------------------------------------------- |
+| `FEMHO_BASE_URL`           | —                         | **Obligatòria en producció.** Sense això, CalDAV i els enllaços compartits generen URL incorrectes |
+| `FEMHO_INSTANCE_NAME`      | `Fem-ho`                  | El nom que veu qui s'hi connecta                                                                   |
+| `FEMHO_DATABASE_URL`       | `sqlite:///data/femho.db` | SQLite o `postgres://…`                                                                            |
+| `FEMHO_ALLOW_REGISTRATION` | `false`                   | Qualsevol es pot fer un compte. **El primer serà administrador**                                   |
+| `FEMHO_GRAVATAR`           | `false`                   | Les fotos de perfil surten de Gravatar                                                             |
+| `FEMHO_MAX_UPLOAD_MB`      | `25`                      | Mida màxima d'un adjunt                                                                            |
+| `FEMHO_SECRET`             | es genera                 | El pebre de tots els tokens. Entra a la còpia de seguretat                                         |
+
+**[La llista sencera és a `docs/DEPLOY.md`](docs/DEPLOY.md)** —catorze variables, amb el
+que costa cadascuna— i no n'hi ha cap més: una comprovació permanent compara el que
+llegeix el codi amb el que diuen els documents i falla en les dues direccions. Si en veus
+una en un tutorial i no és allà, no existeix.
+
+Els detalls d'operació —proxy invers amb els verbs de CalDAV, còpies de seguretat,
+restauració, actualitzacions— són a [`docs/DEPLOY.md`](docs/DEPLOY.md) i
+[`docs/BACKUP.md`](docs/BACKUP.md).
 
 ## Com es desenvolupa
 
@@ -46,12 +95,12 @@ npm ci
 npm run build
 npm test                 # unitàries, SQLite
 npm run test:postgres    # les mateixes, contra Postgres
-npm run check            # les tretze comprovacions permanents
+npm run check            # les quinze comprovacions permanents
 npx playwright test      # navegador, contra un servidor real
 npm run test:android     # Kotlin pur, sense emulador
 ```
 
-### Les tretze comprovacions permanents
+### Les quinze comprovacions permanents
 
 No són linters de format: cadascuna impedeix **una manera concreta de trencar el producte
 sense que res falli**. Totes tenen autoprova, perquè una comprovació que diu "verd" sense
@@ -67,6 +116,8 @@ comprovar res és pitjor que no tenir-la.
 | `i18n-keys-exist`         | Una errata a `t('...')`, que compila i s'ensenya crua a la cara     |
 | `no-pinned-from-research` | Una versió de dependència sense procedència registrada              |
 | `no-ignored-sources`      | Codi font que `.gitignore` s'empassa i que qui cloni no tindrà      |
+| `env-documented`          | Una opció documentada que el codi no llegeix, o a l'inrevés         |
+| `scope-predicate`         | Una segona còpia de "qui pertany a un àmbit", que divergiria        |
 | `contrast-check`          | Contrast per sota de l'AA als vuit temes                            |
 | `audit-coverage`          | Un camí d'escriptura que no deixi rastre a l'historial              |
 | `parser-parity`           | Que el parser de la web i el d'Android divergeixin                  |
