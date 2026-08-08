@@ -42,14 +42,73 @@ fitxer, que és el que permet fer servir secrets de Docker.
 | Variable | Per defecte | Què fa |
 | --- | --- | --- |
 | `FEMHO_BASE_URL` | — | **Obligatòria en producció.** Sense això, CalDAV i els enllaços compartits generen URL incorrectes, i és la causa número u de problemes |
+| `FEMHO_INSTANCE_NAME` | `Fem-ho` | El nom que veu qui s'hi connecta, i el que publica el manifest de federació a `/.well-known/femho` |
 | `FEMHO_DATABASE_URL` | `sqlite:///data/femho.db` | SQLite o `postgres://…` |
-| `FEMHO_DATA_DIR` | `/data` | On viuen la base, el secret i els adjunts |
+| `FEMHO_DATA_DIR` | `/data` | On viuen la base, el secret, els adjunts i les còpies prèvies a cada migració |
 | `FEMHO_PORT` | `8080` | L'aplicació |
 | `FEMHO_DAV_PORT` | `8081` | El CalDAV. **Mateix procés, port propi** (D1) |
-| `FEMHO_REGISTRATION` | `disabled` | `disabled`, `invite` o `open` |
-| `FEMHO_TRUSTED_PROXIES` | — | El rang del proxy, per creure's `X-Forwarded-For` |
-| `FEMHO_SECRET` | es genera | El pebre. Si no es dona, es genera un cop a `/data/secret.key` |
-| `FEMHO_LOG_LEVEL` | `info` | |
+| `FEMHO_SECRET` | es genera | El pebre de tots els tokens. Si no es dona, se'n genera un el primer cop a `/data` |
+| `FEMHO_ALLOW_REGISTRATION` | `false` | Qualsevol es pot fer un compte. **El primer serà administrador** |
+| `FEMHO_REGISTRATION` | `disabled` | La forma llarga: `disabled`, `invite` o `open` |
+| `FEMHO_GRAVATAR` | `false` | Les fotos de perfil surten de Gravatar. Veure l'avís de sota |
+| `FEMHO_MAX_UPLOAD_MB` | `25` | Mida màxima d'un adjunt |
+| `FEMHO_LOG_LEVEL` | `info` | `fatal`, `error`, `warn`, `info`, `debug`, `trace` o `silent` |
+| `FEMHO_SOURCE_URL` | aquest repositori | **Canvia-la si publiques una versió modificada.** L'AGPL §13 diu que qui hi accedeix per xarxa té dret al codi que li estàs servint, i amb aquesta apuntant a l'original els teus usuaris no hi arribarien |
+
+**Aquesta taula és la llista sencera.** No hi ha cap altra variable: la comprovació
+permanent `env-documented` compara el que llegeix el codi amb el que diu aquest fitxer i
+falla en les dues direccions. Si en veus una en un tutorial i no és aquí, no existeix.
+
+### Les dues maneres de dir qui es pot registrar
+
+`FEMHO_ALLOW_REGISTRATION` és el booleà i `FEMHO_REGISTRATION` la forma llarga de tres
+estats. `true` vol dir `open` i `false` vol dir `disabled`; la llarga només cal per al
+mode `invite`.
+
+**Si en poses les dues dient coses diferents, el servidor no arrenca.** Dues variables que
+es contradiuen deixarien la instància oberta o tancada per accident, i triar-ne una per
+defecte seria decidir-ho per tu.
+
+Amb el registre obert i la base buida, **registrar-se és el primer arrencament**: qui hi
+arribi primer serà administrador i es trobarà els tres àmbits inicials, igual que si
+hagués passat per `/setup`.
+
+### Gravatar, i què costa
+
+`FEMHO_GRAVATAR=true` fa que les fotos de perfil surtin de Gravatar. Val la pena tenir-ho
+i **no és gratis**: Fem-ho és autoallotjat, i encendre-ho vol dir que el teu servidor
+comença a preguntar a un tercer —Automattic— per la cara de cadascú.
+
+El que se li envia és el hash SHA-256 del correu. Es llegeix sovint que "només s'envia un
+hash", i **no és cap protecció**: per a una adreça que algú ja sospita, comprovar-la és
+calcular-ne el hash i comparar.
+
+Si l'encens, hi ha tres coses fetes perquè costi el mínim:
+
+- **Les peticions les fa el servidor**, no el navegador de cadascú: Gravatar veu una
+  màquina i no la IP de tota la casa a cada càrrega de pàgina.
+- **La foto es guarda al volum** amb un dia de vida, o sigui que segueix sortint sense
+  connexió.
+- **Cada persona ho pot treure** des d'Ajustos ▸ Perfil. El correu és seu.
+
+### Els secrets, i el sufix `_FILE`
+
+Qualsevol variable accepta el sufix `_FILE` per llegir-ne el valor d'un fitxer, que és el
+que permet fer servir els secrets de Docker sense posar-los a l'entorn:
+
+```yaml
+environment:
+  FEMHO_SECRET_FILE: /run/secrets/femho_secret
+secrets:
+  - femho_secret
+```
+
+**`FEMHO_SECRET` es genera un sol cop a `/data` i no es regenera mai.** Perdre'l vol dir
+credencials de calendaris externs il·legibles, tokens de federació morts i totes les
+subscripcions de push inservibles. Entra a la còpia de seguretat: veure
+[`BACKUP.md`](BACKUP.md).
+
+---
 
 `FEMHO_REGISTRATION` és `disabled` per defecte a posta: les altes les fa
 l'administrador, que és el correcte per a una instància familiar exposada a internet.
@@ -75,8 +134,10 @@ Sigui quin sigui, calen aquestes sis coses:
    `MOVE`. nginx respon `405` si no s'hi diu res, i el client no explica per què.
 2. **Cap memòria intermèdia** a `/api/v1/stream` ni a `/mcp`. Amb buffering, els
    esdeveniments arriben a bocins o no arriben.
-3. **`X-Forwarded-Proto`, `-Host` i `-For`**, amb `FEMHO_TRUSTED_PROXIES` al rang del
-   proxy.
+3. **`X-Forwarded-Proto`, `-Host` i `-For`.** Passa'ls igualment: avui el servidor no
+   se'ls creu —`trustProxy` és fals i res no necessita la IP del client, perquè el
+   bloqueig per intents es compta **per correu i no per IP** a posta— però el dia que
+   calgui, ja hi seran. Si has vist `FEMHO_TRUSTED_PROXIES` en algun lloc: no existeix.
 4. **Pujades grans**, segons `FEMHO_MAX_UPLOAD_MB`.
 5. **`/.well-known/caldav` redirigit** cap a `/dav/`. Sense això els clients no troben
    res encara que la resta estigui perfecta.

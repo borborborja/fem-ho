@@ -47,6 +47,7 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "check:i18n-parity": "node tools/checks/i18n-parity.mjs",
     "check:i18n-keys-exist": "node tools/checks/i18n-keys-exist.mjs",
+    "check:env-documented": "node tools/checks/env-documented.mjs",
     "check:no-ignored-sources": "node tools/checks/no-ignored-sources.mjs",
     "check:scope-predicate": "node tools/checks/scope-predicate.mjs"
   },
