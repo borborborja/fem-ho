@@ -62,6 +62,7 @@
     "revokeScopeInvite": "apps/server/src/services/grants.test.ts · \"un convit inventat i un de gastat responen igual\"",
     "revokeShare": "apps/server/src/http/shares.test.ts · \"un enllaç revocat deixa de servir\"",
     "setAiMode": "apps/server/src/http/tokens.test.ts · \"els tres modes es poden posar, i queden a l'historial\"",
+    "setEventInboxVisibility": "apps/server/src/http/inbox-sources.test.ts · \"la marca NO viatja pel sync: és una preferència personal\"",
     "subscribePush": "apps/server/src/services/notifications.test.ts · \"el mateix endpoint actualitza, no duplica\"",
     "unpinChecklist": "apps/server/src/http/checklists.test.ts · \"es pot despinejar\"",
     "unsubscribePush": "apps/server/src/services/notifications.test.ts · \"desubscriure una cosa que no hi és no és un error\"",
