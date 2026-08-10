@@ -170,6 +170,20 @@ export function TopBar({
   const projectsOf = (scopeId: string) =>
     projects.filter((project) => project.scope_id === scopeId);
 
+  /**
+   * Quan té sentit oferir el filtre de projectes d'un àmbit.
+   *
+   * **Ha de tenir projectes i ha d'estar encès.** El segon no hi era: un àmbit apagat no
+   * té cap tasca al tauler, o sigui que el seu desplegable s'obria, es podia marcar el que
+   * fos i no canviava res. Un botó que no fa res ensenya a ignorar la barra sencera — que
+   * és exactament el motiu pel qual es va treure el desplegable global.
+   *
+   * Android ja ho feia així; la web no. Dues regles per al mateix control a dues
+   * superfícies que han de sentir-se la mateixa cosa.
+   */
+  const canFilter = (scopeId: string): boolean =>
+    activeScopeIds.includes(scopeId) && projectsOf(scopeId).length > 0;
+
   const toggleProject = (id: string): void => {
     onProjectsChange(
       projectIds.includes(id) ? projectIds.filter((other) => other !== id) : [...projectIds, id],
@@ -498,12 +512,12 @@ export function TopBar({
                   aria-label={t('nav.scopeToggle', { name: scope.name })}
                   onClick={() => toggleScope(scope.id)}
                   style={
-                    projectsOf(scope.id).length > 0
+                    canFilter(scope.id)
                       ? { borderTopRightRadius: 0, borderBottomRightRadius: 0, paddingRight: 10 }
                       : undefined
                   }
                 />
-                {projectsOf(scope.id).length > 0 ? projectButton(scope) : null}
+                {canFilter(scope.id) ? projectButton(scope) : null}
               </span>
             ))}
           </div>
