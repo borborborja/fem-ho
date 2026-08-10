@@ -205,6 +205,7 @@
   "nav.newChecklist": "+ Nueva lista",
   "nav.newChecklistFull": "Nueva lista de tareas sencillas",
   "nav.newProject": "+ Nuevo proyecto",
+  "nav.noPinned": "Ninguna lista fijada. Fija una lista sencilla desde una tarea.",
   "nav.openDashboard": "Abre la vista general",
   "nav.pinned": "Listas fijadas",
   "nav.pinnedProgress": "{done} de {total} hechos",

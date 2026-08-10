@@ -207,6 +207,7 @@
   "nav.newChecklist": "+ Nova llista",
   "nav.newChecklistFull": "Nova llista de tasques senzilles",
   "nav.newProject": "+ Nou projecte",
+  "nav.noPinned": "Cap llista pinejada. Pineja una llista senzilla des d'una tasca.",
   "nav.openDashboard": "Obre el tauler general",
   "nav.pinned": "Llistes pinejades",
   "nav.pinnedProgress": "{done} de {total} fets",

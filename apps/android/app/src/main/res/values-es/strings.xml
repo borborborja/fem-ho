@@ -200,6 +200,7 @@
     <string name="nav_newchecklist">+ Nueva lista</string>
     <string name="nav_newchecklistfull">Nueva lista de tareas sencillas</string>
     <string name="nav_newproject">+ Nuevo proyecto</string>
+    <string name="nav_nopinned">Ninguna lista fijada. Fija una lista sencilla desde una tarea.</string>
     <string name="nav_opendashboard">Abre la vista general</string>
     <string name="nav_pinned">Listas fijadas</string>
     <string name="nav_pinnedprogress">{done} de {total} hechos</string>

@@ -883,7 +883,7 @@ private fun TopBar(
             onAllProjects = onAllProjects,
         )
 
-        if (pinned.isNotEmpty()) PinnedRow(pinned = pinned, onOpenList = onOpenList)
+        PinnedRow(pinned = pinned, onOpenList = onOpenList)
     }
 }
 
@@ -986,6 +986,21 @@ private fun PinnedRow(pinned: List<Checklist>, onOpenList: (String) -> Unit) {
                 .then(Modifier.androidClickable { open = !open })
                 .padding(vertical = 6.dp),
         )
+
+        if (open && pinned.isEmpty()) {
+            /**
+             * **El buit diu on es pinegen** (`docs/14` P8).
+             *
+             * Sense això, pinejar una llista no es descobreix enlloc: el control que ho
+             * ensenyaria només apareixia quan ja sabies que existia.
+             */
+            Text(
+                text = stringResource(R.string.nav_nopinned),
+                color = Femho.colors.inkFaint,
+                fontSize = FemhoText.meta,
+                modifier = Modifier.testTag("pinned-empty").padding(vertical = 6.dp),
+            )
+        }
 
         if (open) {
             pinned.forEach { checklist ->

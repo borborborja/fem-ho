@@ -200,6 +200,7 @@
     <string name="nav_newchecklist">+ Nova llista</string>
     <string name="nav_newchecklistfull">Nova llista de tasques senzilles</string>
     <string name="nav_newproject">+ Nou projecte</string>
+    <string name="nav_nopinned">Cap llista pinejada. Pineja una llista senzilla des d\'una tasca.</string>
     <string name="nav_opendashboard">Obre el tauler general</string>
     <string name="nav_pinned">Llistes pinejades</string>
     <string name="nav_pinnedprogress">{done} de {total} fets</string>

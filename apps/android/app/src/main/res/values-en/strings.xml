@@ -200,6 +200,7 @@
     <string name="nav_newchecklist">+ New list</string>
     <string name="nav_newchecklistfull">New simple task list</string>
     <string name="nav_newproject">+ New project</string>
+    <string name="nav_nopinned">No pinned lists. Pin a simple list from a task.</string>
     <string name="nav_opendashboard">Open the overview</string>
     <string name="nav_pinned">Pinned lists</string>
     <string name="nav_pinnedprogress">{done} of {total} done</string>

@@ -52,7 +52,9 @@ D'esquerra a dreta:
 
 > El brief demana reanomenar "llista de tasques" a **"llista de tasques senzilles"** (línia 45). Al menú, per espai, "+ Nova llista"; al diàleg, el títol complet.
 
-**6. Botó de llistes pinejades** — *no és al prototip; el brief el demana (línia 45).* A la dreta del switch. Cercle de 38px amb icona de xinxeta i una pastilla amb el recompte si n'hi ha. Obre un desplegable amb les llistes pinejades de l'usuari. Si no n'hi ha cap, el botó no es mostra.
+**6. Botó de llistes pinejades** — *no és al prototip; el brief el demana (línia 45).* A la dreta del switch. Cercle de 38px amb icona de xinxeta i una pastilla amb el recompte si n'hi ha. Obre un desplegable amb les llistes pinejades de l'usuari, cadascuna amb el nom i **com va** ("3 de 7 fets").
+
+**El botó hi és sempre**, també sense cap llista pinejada: llavors el desplegable diu on es pinegen. Aquí deia el contrari —"si no n'hi ha cap, el botó no es mostra"— i el problema d'amagar-lo és que **pinejar no es descobreix enlloc**: qui no n'ha pinejat mai cap no sap que es pot fer, i el control que ho ensenyaria només apareixia quan ja ho sabies. Veure `docs/14` P8.
 
 **7. Espaiador flexible.**
 

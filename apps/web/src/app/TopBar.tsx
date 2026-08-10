@@ -550,16 +550,37 @@ export function TopBar({
             </button>
           ) : null}
 
-          {/* Si no n'hi ha cap, el botó no es mostra (docs/02 §3). */}
-          {/* Si no n'hi ha cap, el botó no es mostra (docs/02 §3). */}
-          {pinned.length > 0 ? (
-            <div style={{ position: 'relative' }}>
-              {round(t('nav.pinned'), 'pinned', <PinIcon />, pinned.length)}
-              {menu === 'pinned'
-                ? menuBox(<>{pinned.map((checklist) => pinnedItem(checklist))}</>)
-                : null}
-            </div>
-          ) : null}
+          {/*
+            **El botó hi és sempre, també sense cap llista pinejada** (`docs/14` P8).
+
+            Aquí deia el contrari, seguint `docs/02` §3. El problema d'amagar-lo és que
+            pinejar una llista **no es descobreix enlloc**: qui no n'ha pinejat mai cap no
+            sap que es pot fer, i el control que ho ensenyaria només apareix quan ja ho
+            saps. El prototip ho resol amb un buit que diu on es fa, i és el que hi ha.
+          */}
+          <div style={{ position: 'relative' }}>
+            {round(t('nav.pinned'), 'pinned', <PinIcon />, pinned.length)}
+            {menu === 'pinned'
+              ? menuBox(
+                  pinned.length === 0 ? (
+                    <p
+                      data-testid="pinned-empty"
+                      style={{
+                        margin: 0,
+                        padding: '12px 10px',
+                        fontSize: 12.5,
+                        color: 'var(--ink-faint)',
+                        lineHeight: 1.4,
+                      }}
+                    >
+                      {t('nav.noPinned')}
+                    </p>
+                  ) : (
+                    <>{pinned.map((checklist) => pinnedItem(checklist))}</>
+                  ),
+                )
+              : null}
+          </div>
 
           <div style={{ flex: 1 }} />
           {mobile ? null : profileButton()}

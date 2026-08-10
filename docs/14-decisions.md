@@ -305,6 +305,27 @@ d'identificadors a la URL (`?projects=a,b`), i la llista buida ja diu "tot": des
 val la pena tenir escrita: **una tasca sense projecte d'un àmbit amb tria no es veu.** Si
 has demanat "d'aquest àmbit, Obra", una tasca sense projecte no és Obra.
 
+### P8 · El botó de llistes pinejades, quan no n'hi ha cap
+
+**La resolució: hi és igualment, i el desplegable diu on es pinegen.**
+
+`docs/02` §3 deia "si no n'hi ha cap, el botó no es mostra", i el prototip fa el contrari:
+el botó hi és sempre i el menú ensenya *"Cap llista pinejada. Pineja una llista senzilla
+des d'una tasca."*
+
+Guanya el prototip, i no perquè sigui el prototip. Amagar-lo té un problema que no es veu
+mirant una instància ja feta servir: **pinejar no es descobreix enlloc**. L'acció viu dins
+d'una tasca, en una llista, darrere d'un botó petit; i el lloc que n'ensenyaria l'existència
+—la capçalera— només apareixia quan ja n'havies pinejat una. És un control que et premia
+per saber-ne l'existència i no te'n diu res si no en saps.
+
+La contrapartida és honesta i petita: una icona més a una capçalera que a mòbil ja va
+justa. Es paga perquè el buit **no és un carreró sense sortida**: diu la frase que
+converteix el descobriment en una acció.
+
+Val per a les dues superfícies. El recompte, en canvi, només surt quan n'hi ha: un `0` al
+costat de la xinxeta seria repetir amb un número el que el text ja diu.
+
 ---
 
 ## Part 3 — Fets sospitosos de `research/`

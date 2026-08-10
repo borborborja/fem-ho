@@ -229,3 +229,28 @@ test('un àmbit sense projectes no ensenya el botonet', async ({ page }) => {
   await expect(page.locator('[data-testid="topbar"]')).toBeVisible();
   await expect(page.locator(`[data-testid="scope-projects-${buit.id}"]`)).toHaveCount(0);
 });
+
+/**
+ * **El botó hi és sempre, i el buit diu on es pinegen** (`docs/14` P8).
+ *
+ * Amagar-lo quan no n'hi ha cap sembla net i té un problema: pinejar no es descobreix
+ * enlloc. Aquesta prova fa servir un compte acabat de fer, que és exactament qui es troba
+ * la funció per primera vegada.
+ */
+test('sense cap llista pinejada, el botó hi és i diu on es pinegen', async ({ page }) => {
+  await enterAsNew(page, {
+    name: 'Sense pinejar',
+    email: 'sensepinejar@example.com',
+    password: 'la-contrasenya-de-prova',
+  });
+
+  const boto = page.locator('[data-testid="topbar-pinned"]');
+  await expect(boto).toBeVisible({ timeout: 10_000 });
+  // El recompte NO hi és: un zero al costat de la xinxeta repetiria amb un número el que
+  // el text ja diu.
+  await expect(boto).not.toContainText('0');
+
+  await boto.click();
+  await expect(page.locator('[data-testid="pinned-empty"]')).toBeVisible();
+  await expect(page.locator('[data-testid="pinned-empty"]')).toContainText(/tasca/iu);
+});

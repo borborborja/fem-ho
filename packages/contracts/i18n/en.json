@@ -206,6 +206,7 @@
   "nav.newChecklist": "+ New list",
   "nav.newChecklistFull": "New simple task list",
   "nav.newProject": "+ New project",
+  "nav.noPinned": "No pinned lists. Pin a simple list from a task.",
   "nav.openDashboard": "Open the overview",
   "nav.pinned": "Pinned lists",
   "nav.pinnedProgress": "{done} of {total} done",
