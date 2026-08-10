@@ -322,6 +322,7 @@
     <string name="settings_sources_add">+ Añadir fuente</string>
     <string name="settings_sources_empty">Este ámbito no tiene ninguna fuente externa. Las que añadas se verán en el calendario.</string>
     <string name="settings_sources_failed">El último refresco falló: {reason}</string>
+    <string name="settings_sources_inbox">En la bandeja</string>
     <string name="settings_sources_kind_caldav">CalDAV</string>
     <string name="settings_sources_kind_ical">iCal</string>
     <string name="settings_sources_kind_rss">RSS</string>

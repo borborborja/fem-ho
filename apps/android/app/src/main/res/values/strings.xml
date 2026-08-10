@@ -322,6 +322,7 @@
     <string name="settings_sources_add">+ Afegir font</string>
     <string name="settings_sources_empty">Aquest àmbit no té cap font externa. Les que hi afegeixis es veuran al calendari.</string>
     <string name="settings_sources_failed">L\'últim refresc va fallar: {reason}</string>
+    <string name="settings_sources_inbox">A la bústia</string>
     <string name="settings_sources_kind_caldav">CalDAV</string>
     <string name="settings_sources_kind_ical">iCal</string>
     <string name="settings_sources_kind_rss">RSS</string>

@@ -322,6 +322,7 @@
     <string name="settings_sources_add">+ Add source</string>
     <string name="settings_sources_empty">This scope has no external sources. The ones you add will show up in the calendar.</string>
     <string name="settings_sources_failed">The last refresh failed: {reason}</string>
+    <string name="settings_sources_inbox">In the inbox</string>
     <string name="settings_sources_kind_caldav">CalDAV</string>
     <string name="settings_sources_kind_ical">iCal</string>
     <string name="settings_sources_kind_rss">RSS</string>
