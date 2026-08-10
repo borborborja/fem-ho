@@ -102,6 +102,9 @@ test('el menú de llistes pinejades ensenya el progrés de cadascuna', async ({ 
   const item = page.locator(`[data-testid="pinned-${list.id}"]`);
   await expect(item).toBeVisible();
   await expect(item).toContainText('La maleta');
+  // I el títol de la tasca, com als dos prototips: dues llistes que es diguin igual en
+  // tasques diferents serien indistingibles pel nom.
+  await expect(item).toContainText('Amb llista pinejada');
   // Zero de dos: el progrés hi és abans de marcar res.
   await expect(item).toContainText('2');
 });

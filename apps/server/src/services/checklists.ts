@@ -168,14 +168,20 @@ export async function listChecklists(
 export async function listPinnedChecklists(
   db: MigrationDb,
   principal: Principal,
-): Promise<ChecklistView[]> {
+): Promise<(ChecklistView & { task_title: string })[]> {
   if (!hasCapability(principal, 'checklists:read')) throw missingCapability('checklists:read');
 
-  // `pinned_by` fa que el rail sigui de cada persona: una llista que ha pinejat algú
-  // altre de la casa no surt al meu rail.
-  const rows = await sql<ChecklistRow>`
+  /**
+   * **El títol de la tasca ve amb la llista.**
+   *
+   * El menú de la xinxeta ensenya "Tasca · Llista", com els dos prototips: dues llistes
+   * que es diguin "Encàrrecs" en tasques diferents són indistingibles pel nom, i el menú
+   * existeix precisament per saltar a la que toca. El `JOIN` ja hi era per comprovar que
+   * la tasca no estigui esborrada; només calia demanar-ne el títol.
+   */
+  const rows = await sql<ChecklistRow & { task_title: string }>`
     SELECT c.id, c.task_id, c.subtask_id, c.name, c.pinned, c.pinned_by,
-           c.show_completed_inline, c.position, c.version
+           c.show_completed_inline, c.position, c.version, t.title AS task_title
     FROM checklists c
     JOIN tasks t ON t.id = c.task_id
     WHERE c.deleted_at IS NULL AND t.deleted_at IS NULL
@@ -187,7 +193,10 @@ export async function listPinnedChecklists(
     db,
     rows.rows.map((r) => r.id),
   );
-  return rows.rows.map((row) => toView(row, items.get(row.id) ?? [], principal));
+  return rows.rows.map((row) => ({
+    ...toView(row, items.get(row.id) ?? [], principal),
+    task_title: row.task_title,
+  }));
 }
 
 export async function createChecklist(

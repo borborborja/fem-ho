@@ -4384,13 +4384,21 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Llistes pinejades, amb el seu progrés. */
+            /**
+             * @description Llistes pinejades, amb el seu progrés i **el títol de la tasca que les conté**.
+             *
+             *     El menú de la xinxeta ensenya "Tasca · Llista": dues llistes que es diguin
+             *     "Encàrrecs" en tasques diferents són indistingibles pel nom, i el menú existeix
+             *     precisament per saltar a la que toca.
+             */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Checklist"][];
+                    "application/json": (components["schemas"]["Checklist"] & {
+                        task_title: string;
+                    })[];
                 };
             };
             401: components["responses"]["Unauthenticated"];

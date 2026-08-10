@@ -1459,13 +1459,23 @@ paths:
       summary: Les llistes pinejades de qui pregunta
       responses:
         '200':
-          description: Llistes pinejades, amb el seu progrés.
+          description: |
+            Llistes pinejades, amb el seu progrés i **el títol de la tasca que les conté**.
+
+            El menú de la xinxeta ensenya "Tasca · Llista": dues llistes que es diguin
+            "Encàrrecs" en tasques diferents són indistingibles pel nom, i el menú existeix
+            precisament per saltar a la que toca.
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/Checklist'
+                  allOf:
+                    - $ref: '#/components/schemas/Checklist'
+                    - type: object
+                      required: [task_title]
+                      properties:
+                        task_title: { type: string }
         '401':
           $ref: '#/components/responses/Unauthenticated'
 
