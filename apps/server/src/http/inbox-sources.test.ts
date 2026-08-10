@@ -267,6 +267,115 @@ describe("l'excepció mana sobre el defecte", () => {
   });
 });
 
+describe('marcar un esdeveniment des de la interfície', () => {
+  it('treure un de la bústia el treu, i tornar-lo el torna', async () => {
+    await sql`DELETE FROM event_inbox_marks`.execute(conn.db);
+    expect(await uids()).toEqual(['reunio-escola']);
+
+    const fora = await api('POST', '/api/v1/inbox/events', {
+      calendar_id: calendari,
+      uid: 'reunio-escola',
+      visible: false,
+    });
+    expect(fora.statusCode).toBe(200);
+    // Torna la resolució SENCERA, no només el que s'ha desat.
+    expect(fora.json()).toEqual({ visible: false, in_inbox: false });
+    expect(await uids()).toEqual([]);
+
+    const torna = await api('POST', '/api/v1/inbox/events', {
+      calendar_id: calendari,
+      uid: 'reunio-escola',
+      visible: null,
+    });
+    expect(torna.json()).toEqual({ visible: null, in_inbox: true });
+    expect(await uids()).toEqual(['reunio-escola']);
+  });
+
+  it("i encendre'n un d'un RSS també, que és el cas que més ho necessita", async () => {
+    /**
+     * Un canal RSS no és editable —és un document de fora— i per això la marca demana
+     * `events:read` i no `events:write`. Amb `events:write`, silenciar o rescatar un
+     * titular concret seria impossible precisament allà on fa més falta.
+     */
+    const res = await api('POST', '/api/v1/inbox/events', {
+      calendar_id: canal,
+      uid: 'titular-1',
+      visible: true,
+    });
+    expect(res.json()).toEqual({ visible: true, in_inbox: true });
+    expect(await uids()).toContain('titular-1');
+
+    await api('POST', '/api/v1/inbox/events', {
+      calendar_id: canal,
+      uid: 'titular-1',
+      visible: null,
+    });
+  });
+
+  it('reenviar el mateix no deixa cap rastre nou', async () => {
+    await api('POST', '/api/v1/inbox/events', {
+      calendar_id: canal,
+      uid: 'titular-1',
+      visible: true,
+    });
+    const abans = await sql<{ n: number }>`
+      SELECT COUNT(*) AS n FROM activity_log WHERE entity_type = 'event_inbox_mark'
+    `.execute(conn.db);
+
+    // La cua de sortida d'un client pot reenviar la mateixa cosa (regla 6).
+    await api('POST', '/api/v1/inbox/events', {
+      calendar_id: canal,
+      uid: 'titular-1',
+      visible: true,
+    });
+
+    const despres = await sql<{ n: number }>`
+      SELECT COUNT(*) AS n FROM activity_log WHERE entity_type = 'event_inbox_mark'
+    `.execute(conn.db);
+    expect(Number(despres.rows[0]?.n)).toBe(Number(abans.rows[0]?.n));
+
+    await api('POST', '/api/v1/inbox/events', {
+      calendar_id: canal,
+      uid: 'titular-1',
+      visible: null,
+    });
+  });
+
+  it('la marca NO viatja pel sync: és una preferència personal', async () => {
+    /**
+     * `change_log` es filtra per `scope_id`, i `NULL IN (...)` no és cert enlloc. Si
+     * s'hi posés l'àmbit del calendari, la meva marca personal arribaria a tothom de
+     * l'àmbit i els desapareixeria una cita de la bústia sense haver fet res.
+     */
+    await api('POST', '/api/v1/inbox/events', {
+      calendar_id: canal,
+      uid: 'titular-1',
+      visible: true,
+    });
+
+    const files = await sql<{ scope_id: string | null }>`
+      SELECT scope_id FROM change_log WHERE entity_type = 'event_inbox_mark'
+    `.execute(conn.db);
+    expect(files.rows.length).toBeGreaterThan(0);
+    for (const fila of files.rows) expect(fila.scope_id).toBeNull();
+
+    await api('POST', '/api/v1/inbox/events', {
+      calendar_id: canal,
+      uid: 'titular-1',
+      visible: null,
+    });
+  });
+
+  it('un uid que no existeix dona 404', async () => {
+    const res = await api('POST', '/api/v1/inbox/events', {
+      calendar_id: calendari,
+      uid: 'no-existeix',
+      visible: false,
+    });
+    expect(res.statusCode).toBe(404);
+  });
+});
+
 describe('una tasca viva treu el seu esdeveniment de la bústia', () => {
   it('i en esborrar-la torna sol, sense que ningú hagi escrit res', async () => {
     // Es parteix de l'estat net: es treuen les marques de les proves anteriors.

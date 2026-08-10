@@ -215,6 +215,16 @@ export function CalendarScreen({ activeScopeIds, onOpenTask }: CalendarScreenPro
       dayLabel={longDay(locale, new Date(`${selected}T12:00:00`))}
       onOpen={onOpenTask}
       events={inbox.data?.events}
+      onEventRemove={(event) => {
+        void api
+          .post('/api/v1/inbox/events', {
+            calendar_id: event.calendar_id,
+            uid: event.uid,
+            recurrence_id: event.recurrence_id,
+            visible: false,
+          })
+          .then(() => inbox.reload());
+      }}
       onChanged={inbox.reload}
       onMove={(taskId, status) => {
         void api.post(`/api/v1/tasks/${taskId}/move`, { status }).then(() => {

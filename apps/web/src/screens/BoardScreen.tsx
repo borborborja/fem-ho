@@ -513,6 +513,21 @@ export function BoardScreen({
         flip={flip}
         inbox={inboxCards}
         inboxEvents={inbox.data?.events}
+        onEventRemove={(event) => {
+          /*
+            Treure'l de la bústia **no l'esborra**: segueix al calendari, i des d'allà es
+            pot tornar a posar. És per això que el botó diu "Treure" i no "Esborrar": el
+            que ve d'una font no és nostre per esborrar-lo.
+          */
+          void api
+            .post('/api/v1/inbox/events', {
+              calendar_id: event.calendar_id,
+              uid: event.uid,
+              recurrence_id: event.recurrence_id,
+              visible: false,
+            })
+            .then(() => refresh());
+        }}
         inboxHeader={
           /*
             Dos controls a la mateixa capçalera, en dues files: el navegador de dia hi és

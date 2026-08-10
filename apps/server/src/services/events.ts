@@ -452,6 +452,157 @@ export async function listInboxEvents(
 }
 
 /**
+ * Posar, canviar o treure la marca d'un esdeveniment a la bústia d'algú.
+ *
+ * `visible: null` **treu la marca** i torna al defecte. No és el mateix que `false`: amb
+ * `false` dius "aquest no, encara que el calendari digui que sí"; amb `null` dius "oblida
+ * que en vaig dir res". Sense les dues coses no hi hauria manera de desdir-se'n.
+ *
+ * LA CAPACITAT ÉS `events:read`, I NO ÉS UN DESCUIT
+ * ------------------------------------------------
+ * Escriure aquí **no toca l'esdeveniment ni el calendari**: escriu una preferència teva
+ * sobre una cosa que ja pots llegir. Exigir `events:write` voldria dir que un calendari
+ * subscrit de només lectura no es pot silenciar mai — i és justament el cas que més ho
+ * necessita, perquè un canal RSS que inunda no és teu i no el pots editar.
+ *
+ * I si el calendari no és visible per a aquesta persona, **403 i no 404**: el 404 diria
+ * si aquell `uid` existeix o no, que és informació d'un calendari que no li han compartit.
+ */
+export async function setEventInboxVisibility(
+  ctx: AuditContext,
+  principal: Principal,
+  userId: string,
+  input: {
+    calendarId: string;
+    uid: string;
+    recurrenceId?: string | null | undefined;
+    visible: boolean | null;
+  },
+): Promise<{ visible: boolean | null; in_inbox: boolean }> {
+  if (!hasCapability(principal, 'events:read')) throw missingCapability('events:read');
+
+  const visibleCalendars = await visibleCalendarIds(ctx.tx, userId);
+  if (!visibleCalendars.has(input.calendarId)) {
+    throw new PolicyError(
+      'calendar-not-visible',
+      'Calendar not visible',
+      403,
+      'That calendar has not been shared with you.',
+    );
+  }
+
+  const calendar = await loadCalendar(ctx.tx, input.calendarId);
+
+  const recurrenceId = input.recurrenceId ?? null;
+  const found = await sql<{ n: number }>`
+    SELECT COUNT(*) AS n FROM events
+    WHERE deleted_at IS NULL AND calendar_id = ${input.calendarId} AND uid = ${input.uid}
+  `.execute(ctx.tx);
+  if (Number(found.rows[0]?.n ?? 0) === 0) throw notFound('event', input.uid);
+
+  const existing = await sql<{ id: string; visible: unknown }>`
+    SELECT id, visible FROM event_inbox_marks
+    WHERE deleted_at IS NULL AND user_id = ${userId} AND calendar_id = ${input.calendarId}
+      AND uid = ${input.uid}
+      AND ${recurrenceId === null ? sql`recurrence_id IS NULL` : sql`recurrence_id = ${recurrenceId}`}
+  `.execute(ctx.tx);
+  const row = existing.rows[0];
+  const abans = row === undefined ? null : isTrue(row.visible);
+
+  if (abans === input.visible) {
+    // Reenviar el mateix no és un canvi d'estat (regla 6).
+    ctx.noChange();
+  } else if (input.visible === null) {
+    await sql`
+      UPDATE event_inbox_marks SET deleted_at = ${ctx.now}, updated_at = ${ctx.now},
+                                   version = version + 1
+      WHERE id = ${row!.id}
+    `.execute(ctx.tx);
+    ctx.record({
+      entityType: 'event_inbox_mark',
+      entityId: row!.id,
+      // Sense àmbit **a posta**: el sync filtra per `change_log.scope_id`, i posar-hi
+      // l'àmbit del calendari enviaria una preferència personal a tot l'àmbit.
+      scopeId: null,
+      verb: 'deleted',
+    });
+  } else if (row === undefined) {
+    const id = uuidv7();
+    await sql`
+      INSERT INTO event_inbox_marks (id, user_id, calendar_id, uid, recurrence_id, visible,
+                                     created_at, updated_at)
+      VALUES (${id}, ${userId}, ${input.calendarId}, ${input.uid}, ${recurrenceId},
+              ${dbBool(input.visible)}, ${ctx.now}, ${ctx.now})
+    `.execute(ctx.tx);
+    ctx.record({
+      entityType: 'event_inbox_mark',
+      entityId: id,
+      scopeId: null,
+      verb: 'created',
+      changes: { visible: { from: null, to: input.visible } },
+    });
+  } else {
+    await sql`
+      UPDATE event_inbox_marks SET visible = ${dbBool(input.visible)}, updated_at = ${ctx.now},
+                                   version = version + 1
+      WHERE id = ${row.id}
+    `.execute(ctx.tx);
+    ctx.record({
+      entityType: 'event_inbox_mark',
+      entityId: row.id,
+      scopeId: null,
+      verb: 'updated',
+      changes: { visible: { from: abans, to: input.visible } },
+    });
+  }
+
+  /**
+   * I es torna **el resultat de la resolució sencera**, no només el que s'ha desat: el
+   * client no ha de recalcular mai si una cosa és a la bústia, perquè si ho fes hi
+   * hauria dues implementacions de la mateixa regla i un dia divergirien.
+   */
+  const derived = await sql<{ n: number }>`
+    SELECT COUNT(*) AS n FROM tasks
+    WHERE deleted_at IS NULL AND event_calendar_id = ${input.calendarId}
+      AND event_uid = ${input.uid}
+  `.execute(ctx.tx);
+
+  const seriesMark =
+    recurrenceId === null
+      ? input.visible
+      : await markValue(ctx.tx, userId, input.calendarId, input.uid, null);
+
+  return {
+    visible: input.visible,
+    in_inbox: isInInbox({
+      origin: calendar.origin,
+      sourceKind: calendar.source_kind,
+      calendarInboxVisible: maybeBool(calendar.inbox_visible),
+      seriesMark,
+      occurrenceMark: recurrenceId === null ? null : input.visible,
+      hasLiveTask: Number(derived.rows[0]?.n ?? 0) > 0,
+    }),
+  };
+}
+
+async function markValue(
+  tx: MigrationDb,
+  userId: string,
+  calendarId: string,
+  uid: string,
+  recurrenceId: string | null,
+): Promise<boolean | null> {
+  const found = await sql<{ visible: unknown }>`
+    SELECT visible FROM event_inbox_marks
+    WHERE deleted_at IS NULL AND user_id = ${userId} AND calendar_id = ${calendarId}
+      AND uid = ${uid}
+      AND ${recurrenceId === null ? sql`recurrence_id IS NULL` : sql`recurrence_id = ${recurrenceId}`}
+  `.execute(tx);
+  const row = found.rows[0];
+  return row === undefined ? null : isTrue(row.visible);
+}
+
+/**
  * La clau d'una marca.
  *
  * El separador és un `NUL` i no un guió perquè **l'uid d'un RSS ja porta un guió a dins**

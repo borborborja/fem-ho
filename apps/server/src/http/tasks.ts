@@ -34,6 +34,7 @@ import {
   getEvent,
   listCalendars,
   listEventOccurrences,
+  setEventInboxVisibility,
   updateCalendar,
   updateEvent,
   type CreateEventInput,
@@ -512,6 +513,30 @@ export function registerEventRoutes(app: FastifyInstance, secret: () => string):
         to: str(q.to) ?? '',
         scopeIds: ids(q.scope_ids),
       });
+    }),
+  );
+
+  /**
+   * Marcar un esdeveniment com a visible o amagat a la bústia de qui ho demana.
+   *
+   * **Amb cos i no amb l'uid al camí, i és deliberat.** L'uid d'un ítem d'RSS és
+   * `"<calendarId>-<itemId>"` i l'itemId pot ser una URL sencera amb barres i signes
+   * d'interrogació (`dav/rss.ts`). Posar-lo en un segment de ruta és doble descodificació
+   * i 404 que ningú entén — la lliçó que aquest repositori ja va pagar amb els `href` de
+   * DAV.
+   */
+  app.post('/api/v1/inbox/events', async (request, reply) =>
+    handle(app, request, reply, async (principal) => {
+      const input = (request.body ?? {}) as Record<string, unknown>;
+      return auditedTransaction(db().db, principal, (ctx) =>
+        setEventInboxVisibility(ctx, principal, principal.userId, {
+          calendarId: str(input.calendar_id) ?? '',
+          uid: str(input.uid) ?? '',
+          recurrenceId: str(input.recurrence_id) ?? null,
+          // Absent o nul volen dir el mateix aquí: treu la marca.
+          visible: typeof input.visible === 'boolean' ? input.visible : null,
+        }),
+      );
     }),
   );
 

@@ -136,3 +136,29 @@ test('es llegeix igual de bé que una tasca: no va difuminada', async ({ page })
   // I la forma que sí que la distingeix.
   expect(estil.vora).toBe('dashed');
 });
+
+test("treure una cita de la bústia la treu, i NO l'esborra del calendari", async ({ page }) => {
+  /**
+   * El botó diu «Treure» i no «Esborrar» a posta: el que ve d'una font no és nostre per
+   * esborrar-lo, i el que es desa és una preferència teva. Aquesta prova comprova les
+   * dues meitats — que marxa de la bústia i que segueix sent al calendari—, perquè si
+   * només es comprovés la primera, esborrar-lo de debò passaria igual.
+   */
+  await enterAsNew(page, MEU);
+  const scope = await escenari(page);
+  await page.goto(`/board?scopes=${scope}`);
+
+  const events = page.locator('[data-testid="inbox-events"]');
+  await expect(events).toContainText('Dentista', { timeout: 10_000 });
+
+  // Les proves d'aquest fitxer comparteixen compte i cadascuna hi deixa la seva cita:
+  // s'ha de mirar la targeta CONCRETA i no si la secció queda buida.
+  const primera = page.locator('[data-kind="event"]').first();
+  const quina = (await primera.getAttribute('data-testid'))!;
+  await page.locator(`[data-testid="${quina}"] [data-testid^="inbox-event-remove-"]`).click();
+  await expect(page.locator(`[data-testid="${quina}"]`)).toHaveCount(0);
+
+  // I al calendari hi és igualment.
+  await page.goto('/calendar');
+  await expect(page.locator('main')).toContainText('Dentista', { timeout: 10_000 });
+});

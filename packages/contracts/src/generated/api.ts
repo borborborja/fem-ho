@@ -1218,6 +1218,45 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/inbox/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Treure o tornar a posar un esdeveniment a la teva bústia
+         * @description **La marca és teva i de ningú més.** L'interruptor per font és del calendari i
+         *     val per a tot l'àmbit —"aquest RSS inunda" és un judici sobre la font—, però
+         *     "aquesta cita concreta no és feina meva" és personal.
+         *
+         *     `visible: null` **treu la marca** i torna al defecte, que no és el mateix que
+         *     `false`. Amb `false` dius "aquest no, encara que el calendari digui que sí"; amb
+         *     `null` dius "oblida que en vaig dir res". Sense les dues coses no hi hauria manera
+         *     de desdir-se'n.
+         *
+         *     Amb `recurrence_id` es marca **una ocurrència**; sense, **tota la sèrie**. La
+         *     d'ocurrència mana sobre la de sèrie, que és el que deixa amagar totes les reunions
+         *     i recuperar-ne una.
+         *
+         *     **L'uid va al cos i no al camí** perquè el d'un ítem d'RSS és
+         *     `"<calendar_id>-<item_id>"` i l'`item_id` pot ser una URL sencera.
+         *
+         *     Demana `events:read` i no `events:write`: no toca l'esdeveniment, escriu una
+         *     preferència sobre una cosa que ja pots llegir. Amb `events:write`, un calendari
+         *     subscrit de només lectura no es podria silenciar mai — i és el cas que més ho
+         *     necessita.
+         */
+        post: operations["setEventInboxVisibility"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/dashboard": {
         parameters: {
             query?: never;
@@ -5473,6 +5512,64 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+        };
+    };
+    setEventInboxVisibility: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: uuid */
+                    calendar_id: string;
+                    uid: string;
+                    recurrence_id?: string | null;
+                    /** @description `null` treu la marca i torna al defecte. */
+                    visible?: boolean | null;
+                };
+            };
+        };
+        responses: {
+            /** @description La marca, i si amb ella l'esdeveniment queda a la bústia. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        visible: boolean | null;
+                        /**
+                         * @description El resultat de la resolució **sencera**, no només el que s'ha desat:
+                         *     hi entren també l'ajust del calendari, el defecte de la mena de font
+                         *     i si ja n'hi ha una tasca viva. El client no ho ha de recalcular mai,
+                         *     o hi hauria dues implementacions de la mateixa regla.
+                         */
+                        in_inbox: boolean;
+                    };
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            /**
+             * @description El calendari no s'ha compartit amb tu. **403 i no 404**: un 404 diria si
+             *     aquell `uid` existeix, que és informació d'un calendari que no et pertoca.
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No hi ha cap esdeveniment amb aquell uid en aquell calendari. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     getDashboard: {
