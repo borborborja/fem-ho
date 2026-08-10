@@ -324,7 +324,11 @@ function AppShell() {
         )}
 
         {list !== null ? (
-          <ListScreen checklistId={list.id!} onOpenTask={setOpenTask} />
+          <ListScreen
+            checklistId={list.id!}
+            onOpenTask={setOpenTask}
+            onBack={() => navigate('/')}
+          />
         ) : route.path === '/search' ? (
           <SearchScreen onOpenTask={setOpenTask} />
         ) : route.path === '/dashboard' ? (

@@ -21,11 +21,13 @@ import { ErrorBanner } from './BoardScreen.js';
 export interface ListScreenProps {
   checklistId: string;
   onOpenTask: (id: string) => void;
+  /** Sortir de la llista i tornar al tauler, que és d'on s'hi arriba. */
+  onBack: () => void;
 }
 
 type View = Checklist & { task_title: string };
 
-export function ListScreen({ checklistId, onOpenTask }: ListScreenProps) {
+export function ListScreen({ checklistId, onOpenTask, onBack }: ListScreenProps) {
   const list = useApi<View>(`/api/v1/checklists/${checklistId}`);
   const [text, setText] = useState('');
   const [completedOpen, setCompletedOpen] = useState(false);
@@ -80,9 +82,45 @@ export function ListScreen({ checklistId, onOpenTask }: ListScreenProps) {
       {list.error !== undefined ? <ErrorBanner onRetry={list.reload} /> : null}
 
       <div>
-        <h1 style={{ margin: 0, fontSize: 21, fontWeight: 800, color: 'var(--ink)' }}>
-          {data?.name ?? ''}
-        </h1>
+        {/*
+          **El camí de tornada al tauler.**
+
+          Hi havia el rastre a la tasca que conté la llista, que obre el modal: serveix per
+          anar al pare, no per sortir. El prototip hi posa un "‹ Tornar" i té raó — a una
+          llista pinejada s'hi arriba des de la barra, i sense això l'única sortida és el
+          botó enrere del navegador, que a mòbil no és a la pantalla.
+        */}
+        <button
+          type="button"
+          data-testid="list-back"
+          onClick={onBack}
+          style={{
+            border: 'none',
+            background: 'transparent',
+            padding: '0 0 6px',
+            cursor: 'pointer',
+            font: 'inherit',
+            fontSize: 13,
+            color: 'var(--ink-soft)',
+          }}
+        >
+          {t('nav.backToBoard')}
+        </button>
+
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+          <h1 style={{ margin: 0, fontSize: 21, fontWeight: 800, color: 'var(--ink)' }}>
+            {data?.name ?? ''}
+          </h1>
+          {/* El mateix progrés que el menú de la xinxeta, perquè les dues coses coincideixin. */}
+          {data === undefined ? null : (
+            <span data-testid="list-progress" style={{ fontSize: 12, color: 'var(--ink-faint)' }}>
+              {t('nav.pinnedProgress', {
+                done: (data.items ?? []).filter((item) => item.done).length,
+                total: (data.items ?? []).length,
+              })}
+            </span>
+          )}
+        </div>
         {data === undefined ? null : (
           <button
             type="button"

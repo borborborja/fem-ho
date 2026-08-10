@@ -494,3 +494,49 @@ test('un àmbit apagat no ensenya el botonet de projectes', async ({ page }) => 
   await expect(page.locator('[data-testid="topbar"]')).toBeVisible();
   await expect(page.locator(`[data-testid="scope-projects-${scope.id}"]`)).toHaveCount(0);
 });
+
+/**
+ * La pantalla d'una llista pinejada, comparada amb el prototip.
+ *
+ * Hi faltaven dues coses que el disseny sí que té: **la sortida** i **el progrés**. El
+ * rastre a la tasca que la conté serveix per anar al pare, no per marxar; i sense un
+ * "Tornar", l'única sortida era el botó enrere del navegador, que a mòbil no és a la
+ * pantalla.
+ */
+test('la llista pinejada té sortida i diu com va', async ({ page }) => {
+  await enterAsNew(page, MEU);
+  const auth = await bearer(page);
+
+  const scopes = (await (await page.request.get('/api/v1/scopes', { headers: auth })).json()) as {
+    id: string;
+  }[];
+  const task = (await (
+    await page.request.post('/api/v1/tasks', {
+      headers: auth,
+      data: { scope_id: scopes[0]!.id, title: 'Amb llista per mirar' },
+    })
+  ).json()) as { id: string };
+  const list = (await (
+    await page.request.post(`/api/v1/tasks/${task.id}/checklists`, {
+      headers: auth,
+      data: { name: 'La compra' },
+    })
+  ).json()) as { id: string };
+  for (const text of ['Pa', 'Llet', 'Ous']) {
+    await page.request.post(`/api/v1/checklists/${list.id}/items`, {
+      headers: auth,
+      data: { text },
+    });
+  }
+
+  await page.goto(`/lists/${list.id}`);
+  await expect(page.locator('[data-testid="list-screen"]')).toBeVisible({ timeout: 10_000 });
+
+  // El progrés, el mateix que ensenya el menú de la xinxeta.
+  await expect(page.locator('[data-testid="list-progress"]')).toContainText('3');
+
+  // I la sortida porta al tauler, no a la tasca.
+  await page.locator('[data-testid="list-back"]').click();
+  await expect(page.locator('[data-testid="inbox-rail"]')).toBeVisible({ timeout: 10_000 });
+  await expect(page.locator('[data-testid="task-modal"]')).toHaveCount(0);
+});
