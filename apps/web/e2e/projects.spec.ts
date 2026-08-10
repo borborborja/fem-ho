@@ -353,3 +353,77 @@ test.describe('a mòbil', () => {
     );
   });
 });
+
+/**
+ * Esborrar un projecte **que està filtrant**.
+ *
+ * És el cas que deixa una interfície en un estat que ningú ha triat: la tria viu a la URL
+ * i el projecte deixa d'existir. Si el tauler seguís filtrant per un identificador mort,
+ * amagaria tasques sense cap control a la vista que ho expliqui — el mateix defecte que
+ * el commutador de la bústia va tenir.
+ */
+test('esborrar un projecte filtrat no deixa el tauler amagant tasques', async ({ page }) => {
+  await enterAsNew(page, MEU);
+  const auth = await bearer(page);
+
+  const scopes = (await (await page.request.get('/api/v1/scopes', { headers: auth })).json()) as {
+    id: string;
+  }[];
+  const scope = scopes[0]!;
+
+  const efimer = (await (
+    await page.request.post('/api/v1/projects', {
+      headers: auth,
+      data: { scope_id: scope.id, name: 'Efímer' },
+    })
+  ).json()) as { id: string };
+
+  await page.request.post('/api/v1/tasks', {
+    headers: auth,
+    data: { scope_id: scope.id, project_id: efimer.id, title: 'Dins del que marxa' },
+  });
+
+  await page.goto(`/board?scopes=${scope.id}&projects=${efimer.id}`);
+  const rail = page.locator('[data-testid="inbox-rail"]');
+  await expect(rail).toContainText('Dins del que marxa', { timeout: 10_000 });
+
+  // El projecte se'n va; les seves tasques es queden a l'àmbit, sense projecte.
+  await page.request.delete(`/api/v1/projects/${efimer.id}`, { headers: auth });
+  await page.reload();
+
+  // El tauler NO es queda buit filtrant per un identificador que ja no vol dir res.
+  await expect(rail).toContainText('Dins del que marxa', { timeout: 10_000 });
+  // I el botonet ja no compta el que no existeix.
+  const boto = page.locator(`[data-testid="scope-projects-${scope.id}"]`);
+  await expect(boto).not.toContainText('1');
+});
+
+/**
+ * **Del desplegable se n'ha de poder sortir sense triar res.**
+ *
+ * Els menús de la barra es tanquen amb `Escape` i amb clic a fora (`docs/02` §3), i el
+ * del xip és un menú més: si en quedés fora, seria l'únic de la barra que t'obliga a
+ * decidir alguna cosa per marxar.
+ */
+test('el desplegable del xip es tanca amb Escape i amb clic a fora', async ({ page }) => {
+  await enterAsNew(page, MEU);
+  const auth = await bearer(page);
+  const scopes = (await (await page.request.get('/api/v1/scopes', { headers: auth })).json()) as {
+    id: string;
+  }[];
+  const scope = scopes[0]!;
+
+  await page.goto(`/board?scopes=${scope.id}`);
+  const boto = page.locator(`[data-testid="scope-projects-${scope.id}"]`);
+  const menu = page.locator(`[data-testid="scope-projects-${scope.id}-all"]`);
+
+  await boto.click();
+  await expect(menu).toBeVisible({ timeout: 10_000 });
+  await page.keyboard.press('Escape');
+  await expect(menu).toHaveCount(0);
+
+  await boto.click();
+  await expect(menu).toBeVisible();
+  await page.locator('[data-testid="inbox-rail"]').click({ position: { x: 5, y: 5 } });
+  await expect(menu).toHaveCount(0);
+});
