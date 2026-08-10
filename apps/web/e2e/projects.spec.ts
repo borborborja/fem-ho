@@ -540,3 +540,50 @@ test('la llista pinejada té sortida i diu com va', async ({ page }) => {
   await expect(page.locator('[data-testid="inbox-rail"]')).toBeVisible({ timeout: 10_000 });
   await expect(page.locator('[data-testid="task-modal"]')).toHaveCount(0);
 });
+
+/**
+ * **Pinejar des d'on ja ets.**
+ *
+ * Fins ara només es podia des de la targeta del tauler, desplegant-ne les llistes: per
+ * pinejar-ne una calies tancar el modal, trobar la targeta i desplegar-la. El modal és on
+ * es gestiona la tasca a fons i les seves llistes hi surten llistades.
+ */
+test('una llista es pineja des del modal de la tasca', async ({ page }) => {
+  await enterAsNew(page, MEU);
+  const auth = await bearer(page);
+
+  const scopes = (await (await page.request.get('/api/v1/scopes', { headers: auth })).json()) as {
+    id: string;
+  }[];
+  const task = (await (
+    await page.request.post('/api/v1/tasks', {
+      headers: auth,
+      data: { scope_id: scopes[0]!.id, title: 'Per pinejar des del modal' },
+    })
+  ).json()) as { id: string };
+  const list = (await (
+    await page.request.post(`/api/v1/tasks/${task.id}/checklists`, {
+      headers: auth,
+      data: { name: 'Encàrrecs' },
+    })
+  ).json()) as { id: string };
+
+  await page.goto(`/board?scopes=${scopes[0]!.id}`);
+  await page
+    .locator('[data-testid="inbox-rail"]')
+    .getByText('Per pinejar des del modal')
+    .first()
+    .click();
+  await expect(page.locator('[data-testid="task-modal"]')).toBeVisible();
+
+  const boto = page.locator(`[data-testid="task-checklist-pin-${list.id}"]`);
+  await expect(boto).toHaveAttribute('aria-pressed', 'false');
+  await boto.click();
+  await expect(boto).toHaveAttribute('aria-pressed', 'true', { timeout: 10_000 });
+
+  // I la barra ho reflecteix sense recarregar res a mà.
+  await page.locator('[data-testid="task-cancel"]').click();
+  await page.reload();
+  await page.locator('[data-testid="topbar-pinned"]').click();
+  await expect(page.locator(`[data-testid="pinned-${list.id}"]`)).toBeVisible({ timeout: 10_000 });
+});
