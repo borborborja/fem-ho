@@ -254,3 +254,46 @@ test('sense cap llista pinejada, el botó hi és i diu on es pinegen', async ({ 
   await expect(page.locator('[data-testid="pinned-empty"]')).toBeVisible();
   await expect(page.locator('[data-testid="pinned-empty"]')).toContainText(/tasca/iu);
 });
+
+/**
+ * `#Àmbit/Projecte` a l'afegida ràpida, **a l'app de debò**.
+ *
+ * Ja hi havia una prova d'això, i va contra `/proof/quickadd`: una pàgina de mostra amb
+ * àmbits i projectes inventats. Allò comprova el parser i el component, que és el que ha
+ * de comprovar. El que no diu ningú és que **el tauler real hi passi els seus projectes**
+ * i que la tasca acabi de debò dins d'aquell projecte al servidor: entre les dues coses
+ * hi ha el context que munta `BoardScreen`, que és codi que es pot trencar sol.
+ */
+test("l'afegida ràpida encamina a #Àmbit/Projecte amb dades reals", async ({ page }) => {
+  await enterAsNew(page, MEU);
+  const auth = await bearer(page);
+
+  const scopes = (await (await page.request.get('/api/v1/scopes', { headers: auth })).json()) as {
+    id: string;
+    name: string;
+  }[];
+  const scope = scopes[0]!;
+  const projects = (await (
+    await page.request.get(`/api/v1/projects?scope_id=${scope.id}`, { headers: auth })
+  ).json()) as { id: string; name: string; scope_id: string }[];
+  const obra = projects.find((project) => project.name === 'Obra')!;
+
+  await page.goto(`/board?scopes=${scope.id}`);
+  const field = page.locator('[data-testid="quick-add-inbox"] input[role="combobox"]');
+  await field.fill(`#${scope.name}/Obra Canviar la caldera`);
+  // Escape tanca el desplegable de suggeriments sense esborrar el que s'ha escrit.
+  await field.press('Escape');
+  await field.press('Enter');
+
+  await expect(page.locator('[data-testid="inbox-rail"]')).toContainText('Canviar la caldera', {
+    timeout: 10_000,
+  });
+
+  // I al servidor hi és amb el projecte posat, no només amb el títol net.
+  // `GET /tasks` torna una pàgina (`data`, `next_cursor`, `has_more`), no una llista.
+  const page1 = (await (
+    await page.request.get(`/api/v1/tasks?scope_id=${scope.id}`, { headers: auth })
+  ).json()) as { data: { title: string; project_id: string | null }[] };
+  const creada = page1.data.find((task) => task.title === 'Canviar la caldera');
+  expect(creada?.project_id).toBe(obra.id);
+});
