@@ -40,15 +40,21 @@ D'esquerra a dreta:
 
 **3. Chips d'àmbit** — un per àmbit, multiselecció. Actiu: fons del color de l'àmbit, text blanc, pes 700. Inactiu: `var(--ghost-bg)`, `var(--ink-soft)`, pes 500. Píndola de 100px, padding `9px 16px`.
 
-**No es poden desactivar tots.** Si l'usuari desmarca l'últim, es rebutja el canvi (el prototip ja ho fa: comprova que quedi almenys un actiu). Canviar la selecció d'àmbits **reinicia el filtre de projecte a "Tots"**, perquè un projecte d'un àmbit desactivat no té sentit.
+**No es poden desactivar tots.** Si l'usuari desmarca l'últim, es rebutja el canvi (el prototip ja ho fa: comprova que quedi almenys un actiu). Canviar la selecció d'àmbits **buida els projectes triats**, perquè un projecte d'un àmbit desactivat filtraria el tauler sense que es vegi per què.
 
-**4. Desplegable de projecte** — píndola de mínim 170px amb el nom i un `▾`. El menú llista "Tots els projectes" i després els projectes dels àmbits actius. Màxim 260px d'alçada, amb scroll.
+**4. Filtre de projectes — a cada xip d'àmbit.** Els àmbits que tenen projectes porten un botonet enganxat al xip, amb un `▾` i el recompte dels triats si n'hi ha cap. Obre un menú amb "Tots els projectes" i després els projectes **d'aquell àmbit**, cadascun amb marca de selecció; se'n poden marcar diversos i el menú **no es tanca** en marcar-ne un. Màxim 260px d'alçada, amb scroll.
 
-**5. Botó `+`** — cercle de 38px. Obre un menú amb dues opcions: **"+ Nou projecte"** i **"+ Nova llista de tasques"**.
+**Aquí hi havia una píndola de 170px a la dreta de tots els xips**, que triava un sol projecte i sortia encara que no n'hi hagués cap enlloc. Es va treure per tres coses: filtrava lluny d'allò que filtra, obligava a triar-ne un de sol, i un desplegable buit és una promesa que no es compleix. Veure `docs/14` P7.
+
+**Un àmbit sense projectes no porta botonet.** I un àmbit del qual no s'ha triat res vol dir *tots els seus*: no hi ha manera de dir "cap projecte", que no voldria dir res.
+
+**5. Botó `+`** — cercle de 38px. Obre un menú amb dues opcions: **"+ Nou projecte"** i **"+ Nova llista de tasques"**. Totes dues porten a Ajustos, que és on es crea l'estructura: els projectes viuen amb els àmbits, agrupats per àmbit.
 
 > El brief demana reanomenar "llista de tasques" a **"llista de tasques senzilles"** (línia 45). Al menú, per espai, "+ Nova llista"; al diàleg, el títol complet.
 
-**6. Botó de llistes pinejades** — *no és al prototip; el brief el demana (línia 45).* A la dreta del switch. Cercle de 38px amb icona de xinxeta i una pastilla amb el recompte si n'hi ha. Obre un desplegable amb les llistes pinejades de l'usuari. Si no n'hi ha cap, el botó no es mostra.
+**6. Botó de llistes pinejades** — *no és al prototip; el brief el demana (línia 45).* A la dreta del switch. Cercle de 38px amb icona de xinxeta i una pastilla amb el recompte si n'hi ha. Obre un desplegable amb les llistes pinejades de l'usuari, cadascuna amb el nom i **com va** ("3 de 7 fets").
+
+**El botó hi és sempre**, també sense cap llista pinejada: llavors el desplegable diu on es pinegen. Aquí deia el contrari —"si no n'hi ha cap, el botó no es mostra"— i el problema d'amagar-lo és que **pinejar no es descobreix enlloc**: qui no n'ha pinejat mai cap no sap que es pot fer, i el control que ho ensenyaria només apareixia quan ja ho sabies. Veure `docs/14` P8.
 
 **7. Espaiador flexible.**
 
@@ -102,7 +108,7 @@ L'Inbox també té controls propis a la capçalera que les altres no tenen: nave
 
 ### Agrupació per àmbit
 
-Quan hi ha més d'un àmbit actiu **i** el filtre de projecte és "Tots", cada columna agrupa per àmbit amb un epígraf plegable: punt de 7px del color de l'àmbit, nom en majúscules a 11,5px pes 700 amb `letter-spacing:0.04em`, i un `▾`/`▸`.
+Quan hi ha més d'un àmbit actiu **i** no hi ha cap projecte triat, cada columna agrupa per àmbit amb un epígraf plegable: punt de 7px del color de l'àmbit, nom en majúscules a 11,5px pes 700 amb `letter-spacing:0.04em`, i un `▾`/`▸`.
 
 L'estat de plegat és per columna i àmbit, i persisteix a les preferències de l'usuari.
 
@@ -196,7 +202,7 @@ Arrossegar una tasca de "Sense dia" a un dia li posa `due_date`. Arrossegar-la a
 
 ## 6 · Vista de llista senzilla
 
-Quan al desplegable de projectes se selecciona una llista pinejada, **el kanban desapareix** i es mostra una llista simple (brief línia 45).
+Una llista pinejada s'obre **des del menú de la xinxeta** de la barra superior, i llavors el kanban desapareix i es mostra la llista simple (brief línia 45). Al menú, cada llista porta el nom i **com va** —"3 de 7 fets"—: amb quatre pinejades, els noms sols obliguen a entrar a cadascuna per saber quina té feina pendent.
 
 Columna única de màxim 720px, centrada. Títol de la llista, i sota la tasca d'origen com a molla de pa clicable.
 

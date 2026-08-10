@@ -25,7 +25,8 @@ import { DoneHeader } from '../board/DoneColumnView.js';
 
 export interface BoardScreenProps {
   activeScopeIds: string[];
-  projectId: string | null;
+  /** Els projectes que es veuen. **Buit vol dir tots** (docs/02 §2). */
+  projectIds: string[];
   onOpenTask: (id: string) => void;
   /** Obre l'edició completa per a una tasca NOVA en aquesta columna. */
   onNewTask: (status: TaskStatus, forAi: boolean) => void;
@@ -149,7 +150,7 @@ function MailboxSwitch({
 
 export function BoardScreen({
   activeScopeIds,
-  projectId,
+  projectIds,
   onOpenTask,
   onNewTask,
   aiBoard = false,
@@ -161,9 +162,16 @@ export function BoardScreen({
   const path = useMemo(() => {
     const query = new URLSearchParams();
     if (activeScopeIds.length > 0) query.set('scope_ids', activeScopeIds.join(','));
-    if (projectId !== null) query.set('project_id', projectId);
+    /**
+     * **El projecte no viatja a la consulta.**
+     *
+     * Se'n poden triar diversos alhora i el servidor n'accepta un de sol; però a més, el
+     * tauler ja té totes les tasques dels àmbits actius, i tornar-les a demanar a cada
+     * clic d'una casella seria una petició per canviar un filtre que ja es pot aplicar
+     * aquí. És el mateix criteri que el calaix de la bústia.
+     */
     return `/api/v1/board?${query.toString()}`;
-  }, [activeScopeIds, projectId]);
+  }, [activeScopeIds]);
 
   const board = useApi<Board>(path);
   const [optimistic, setOptimistic] = useState<Record<string, TaskStatus>>({});
@@ -207,6 +215,23 @@ export function BoardScreen({
           const delegated = task.ai_mode !== 'manual';
           return aiBoard ? delegated : !delegated;
         })
+        /**
+         * El filtre de projectes, **per àmbit i no global**.
+         *
+         * La tria es guarda com una llista plana d'identificadors, i un àmbit del qual no
+         * s'ha triat res vol dir "tots els seus". Per això no n'hi ha prou de mirar si
+         * l'identificador de la tasca és a la llista: una tasca d'un àmbit sense tria hi
+         * ha de ser encara que el seu projecte no estigui marcat —i una tasca **sense
+         * projecte** d'un àmbit amb tria, no.
+         */
+        .filter((task) => {
+          if (projectIds.length === 0) return true;
+          const triatsDelSeu = projects.some(
+            (project) => project.scope_id === task.scope_id && projectIds.includes(project.id),
+          );
+          if (!triatsDelSeu) return true;
+          return task.project_id != null && projectIds.includes(task.project_id);
+        })
         .map((task) => {
           const assignees = task.assignee_ids ?? [];
           const card = toBoardTask(
@@ -220,7 +245,17 @@ export function BoardScreen({
           return moved === undefined ? card : { ...card, status: moved };
         })
     );
-  }, [board.data, optimistic, projectName, initialsOf, aiBoard, profile.id, scopes]);
+  }, [
+    board.data,
+    optimistic,
+    projectName,
+    initialsOf,
+    aiBoard,
+    profile.id,
+    scopes,
+    projectIds,
+    projects,
+  ]);
 
   const activeScopes = scopes.filter((scope) => activeScopeIds.includes(scope.id));
 

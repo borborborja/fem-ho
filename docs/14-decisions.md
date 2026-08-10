@@ -281,6 +281,51 @@ esborrar l'esdeveniment no toca la tasca. L'alternativa —un enllaç viu— vol
 esborrar un esdeveniment d'un calendari compartit esborri en silenci la tasca que algú
 altre s'havia apuntat.
 
+### P7 · On viu el filtre de projectes
+
+**La resolució: a cada xip d'àmbit, i amb selecció múltiple.**
+
+Hi havia una píndola a la dreta de tots els xips que triava **un** projecte. Tres coses no
+hi anaven, i cap és de detall:
+
+- **Filtrava lluny del que filtra.** Els àmbits s'encenen als xips i els projectes es
+  triaven en un altre control, tres píxels més enllà però conceptualment a part. Amb dos
+  àmbits actius, aquell desplegable barrejava els projectes dels dos sense dir de qui era
+  cadascun.
+- **Un de sol.** "Veure Obra i Jardí però no la resta" no es podia demanar.
+- **Sortia sempre.** Amb una instància sense cap projecte —que és com comença tothom— hi
+  havia un desplegable permanent que només oferia "Tots els projectes".
+
+Ara el botonet va enganxat al xip, **només si aquell àmbit té projectes**, i el menú és de
+caselles: se'n marquen les que es vulguin i no es tanca a cada clic.
+
+**Un àmbit sense res triat vol dir "tots els seus".** La tria es desa com una llista plana
+d'identificadors a la URL (`?projects=a,b`), i la llista buida ja diu "tot": desar un
+"tots" explícit per àmbit seria un segon estat que vol dir el mateix. La conseqüència, que
+val la pena tenir escrita: **una tasca sense projecte d'un àmbit amb tria no es veu.** Si
+has demanat "d'aquest àmbit, Obra", una tasca sense projecte no és Obra.
+
+### P8 · El botó de llistes pinejades, quan no n'hi ha cap
+
+**La resolució: hi és igualment, i el desplegable diu on es pinegen.**
+
+`docs/02` §3 deia "si no n'hi ha cap, el botó no es mostra", i el prototip fa el contrari:
+el botó hi és sempre i el menú ensenya *"Cap llista pinejada. Pineja una llista senzilla
+des d'una tasca."*
+
+Guanya el prototip, i no perquè sigui el prototip. Amagar-lo té un problema que no es veu
+mirant una instància ja feta servir: **pinejar no es descobreix enlloc**. L'acció viu dins
+d'una tasca, en una llista, darrere d'un botó petit; i el lloc que n'ensenyaria l'existència
+—la capçalera— només apareixia quan ja n'havies pinejat una. És un control que et premia
+per saber-ne l'existència i no te'n diu res si no en saps.
+
+La contrapartida és honesta i petita: una icona més a una capçalera que a mòbil ja va
+justa. Es paga perquè el buit **no és un carreró sense sortida**: diu la frase que
+converteix el descobriment en una acció.
+
+Val per a les dues superfícies. El recompte, en canvi, només surt quan n'hi ha: un `0` al
+costat de la xinxeta seria repetir amb un número el que el text ja diu.
+
 ---
 
 ## Part 3 — Fets sospitosos de `research/`

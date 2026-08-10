@@ -255,6 +255,15 @@ class FemhoApi(
     suspend fun agents(): List<Agent> =
         runCatching { get<List<Agent>>("/api/v1/ai/agents") }.getOrDefault(emptyList())
 
+    /**
+     * Les llistes que aquest usuari té pinejades.
+     *
+     * **Buit si la crida falla**, com els agents: el menú de la xinxeta és una drecera, i
+     * una capçalera que peta perquè una drecera no ha respost seria pitjor que no tenir-la.
+     */
+    suspend fun pinnedChecklists(): List<Checklist> =
+        runCatching { get<List<Checklist>>("/api/v1/pinned-checklists") }.getOrDefault(emptyList())
+
     /** Pinejar és **per usuari** (P1): `POST` pineja, `DELETE` despineja. */
     suspend fun setChecklistPin(checklistId: String, pinned: Boolean): String =
         raw(if (pinned) "POST" else "DELETE", "/api/v1/checklists/$checklistId/pin", null, authenticated = true)

@@ -26,6 +26,7 @@ import type {
   Calendar,
   Info,
   Member,
+  Project,
   Scope,
   ShareSummary,
 } from '../app/types.js';
@@ -36,8 +37,20 @@ type Tab = (typeof TABS)[number];
 
 export function SettingsScreen() {
   const { profile } = useSessionData();
-  const { navigate } = useRouter();
-  const [tab, setTab] = useState<Tab>('general');
+  const { navigate, route } = useRouter();
+
+  /**
+   * La pestanya pot venir de la URL.
+   *
+   * **Perquè s'hi pugui enviar algú.** El menú `+` de la barra diu "Nou projecte" i
+   * portava a Ajustos i prou: la persona queia a "General" i havia de trobar sola que els
+   * projectes són a "Àmbits". Un menú que promet una acció i et deixa a la porta d'un
+   * edifici no ha fet la seva feina.
+   */
+  const fromQuery = route.query.get('tab');
+  const [tab, setTab] = useState<Tab>(
+    TABS.includes(fromQuery as Tab) ? (fromQuery as Tab) : 'general',
+  );
 
   // Admin només per a administradors: amagar-la no és seguretat —el servidor ja hi posa
   // `users:manage`— però ensenyar una pestanya que sempre dona 403 és una mala broma.
@@ -393,6 +406,99 @@ function ColorPicker({
   );
 }
 
+/**
+ * Els projectes d'un àmbit, i com se'n fa un de nou.
+ *
+ * **Agrupats per àmbit i no en una llista plana** perquè un projecte no existeix sol: la
+ * pregunta que es fa qui arriba aquí és "quins projectes té Feina", no "quins projectes
+ * hi ha". I és la mateixa forma que després té el desplegable del xip.
+ */
+function ProjectsOfScope({ scope }: { scope: Scope }) {
+  const projects = useApi<Project[]>(`/api/v1/projects?scope_id=${scope.id}`);
+  const [name, setName] = useState('');
+
+  const create = useMutation(async () => {
+    if (name.trim() === '') return;
+    await api.post('/api/v1/projects', { id: uuidv7(), scope_id: scope.id, name: name.trim() });
+    setName('');
+    projects.reload();
+  });
+
+  const rows = (projects.data ?? []).filter((project) => project.scope_id === scope.id);
+
+  return (
+    <div style={{ display: 'grid', gap: 6, paddingBottom: 4 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span
+          aria-hidden="true"
+          style={{
+            width: 9,
+            height: 9,
+            borderRadius: '50%',
+            background: `var(${scope.color})`,
+          }}
+        />
+        <span style={{ fontSize: 12.5, fontWeight: 700 }}>{scope.name}</span>
+      </div>
+
+      {rows.length === 0 ? (
+        <p style={{ ...HINT, paddingLeft: 17 }}>{t('settings.noProjects')}</p>
+      ) : (
+        rows.map((project) => (
+          <div
+            key={project.id}
+            data-testid={`project-row-${project.id}`}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              paddingLeft: 17,
+              fontSize: 12.5,
+            }}
+          >
+            <span style={{ flex: 1 }}>{project.name}</span>
+            <button
+              type="button"
+              className="plou-btn plou-btn-ghost"
+              aria-label={t('settings.projectDelete')}
+              style={{ color: 'var(--danger-text)' }}
+              onClick={() => {
+                void api.delete(`/api/v1/projects/${project.id}`).then(() => {
+                  projects.reload();
+                });
+              }}
+            >
+              ×
+            </button>
+          </div>
+        ))
+      )}
+
+      <div style={{ display: 'flex', gap: 8, paddingLeft: 17 }}>
+        <input
+          className="plou-input"
+          data-testid={`new-project-${scope.id}`}
+          value={name}
+          placeholder={t('settings.projectName')}
+          onChange={(event) => setName(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') void create.run();
+          }}
+        />
+        <button
+          type="button"
+          className="plou-btn"
+          data-testid={`new-project-create-${scope.id}`}
+          disabled={create.busy}
+          onClick={() => void create.run()}
+        >
+          {t('nav.create')}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function ScopeRow({ scope, onDone }: { scope: Scope; onDone: () => Promise<void> }) {
   const { profile } = useSessionData();
   // Qui mana a l'àmbit. `owner_id` mana sempre, hi hagi fila de membre o no.
@@ -584,6 +690,18 @@ function ScopesTab() {
       <Group title={t('settings.tab.scopes')}>
         {scopes.map((scope) => (
           <ScopeRow key={scope.id} scope={scope} onDone={reload} />
+        ))}
+      </Group>
+
+      {/*
+        **Els projectes viuen aquí, amb els àmbits.**
+        Fins ara només es podien crear des del `+` de la barra superior, que és el lloc on
+        es va a fer coses i no a configurar-les. Un projecte és estructura, com un àmbit.
+      */}
+      <Group title={t('settings.projects')}>
+        <p style={HINT}>{t('settings.projectsHelp')}</p>
+        {scopes.map((scope) => (
+          <ProjectsOfScope key={scope.id} scope={scope} />
         ))}
       </Group>
 
