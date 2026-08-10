@@ -427,3 +427,35 @@ test('el desplegable del xip es tanca amb Escape i amb clic a fora', async ({ pa
   await page.locator('[data-testid="inbox-rail"]').click({ position: { x: 5, y: 5 } });
   await expect(menu).toHaveCount(0);
 });
+
+/**
+ * **La sintaxi `#Àmbit/Projecte` s'ha de poder descobrir escrivint.**
+ *
+ * Que el parser l'entengui no serveix de res si ningú sap que existeix: qui escriu `#` ha
+ * de veure que després de l'àmbit hi pot anar una barra. El desplegable ho ensenya llistant
+ * els projectes amb el nom sencer, i filtrant-los quan escrius la barra.
+ */
+test("escrivint #Àmbit/ es veuen els projectes d'aquell àmbit", async ({ page }) => {
+  await enterAsNew(page, MEU);
+  const auth = await bearer(page);
+  const scopes = (await (await page.request.get('/api/v1/scopes', { headers: auth })).json()) as {
+    id: string;
+    name: string;
+  }[];
+  const scope = scopes[0]!;
+
+  await page.goto(`/board?scopes=${scope.id}`);
+  const field = page.locator('[data-testid="quick-add-inbox"] input[role="combobox"]');
+
+  // Amb el sigil sol, l'àmbit i els seus projectes hi són tots.
+  await field.fill('#');
+  const opcions = page.getByRole('option');
+  await expect(opcions.filter({ hasText: `${scope.name}/Obra` })).toBeVisible({ timeout: 10_000 });
+
+  // I amb la barra, només els projectes d'aquell àmbit.
+  await field.fill(`#${scope.name}/`);
+  await expect(opcions.filter({ hasText: `${scope.name}/Obra` })).toBeVisible();
+  await expect(opcions.filter({ hasText: `${scope.name}/Jardí` })).toBeVisible();
+  // L'àmbit sol ja no és una opció: la barra diu que vols un projecte.
+  await expect(opcions.filter({ hasText: new RegExp(`^${scope.name}$`, 'u') })).toHaveCount(0);
+});
