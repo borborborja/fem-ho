@@ -459,3 +459,38 @@ test("escrivint #Àmbit/ es veuen els projectes d'aquell àmbit", async ({ page 
   // L'àmbit sol ja no és una opció: la barra diu que vols un projecte.
   await expect(opcions.filter({ hasText: new RegExp(`^${scope.name}$`, 'u') })).toHaveCount(0);
 });
+
+/**
+ * **Un àmbit apagat no ofereix filtre de projectes.**
+ *
+ * Les seves tasques no són al tauler, o sigui que el desplegable s'obria, es podia marcar
+ * el que fos i no canviava res. Un botó que no fa res ensenya a ignorar la barra — que és
+ * el motiu pel qual es va treure el desplegable global. Android ja ho feia així i la web
+ * no: dues regles per al mateix control.
+ */
+test('un àmbit apagat no ensenya el botonet de projectes', async ({ page }) => {
+  await enterAsNew(page, MEU);
+  const auth = await bearer(page);
+  const scopes = (await (await page.request.get('/api/v1/scopes', { headers: auth })).json()) as {
+    id: string;
+  }[];
+  const scope = scopes[0]!;
+
+  // Amb l'àmbit encès, el botonet hi és.
+  await page.goto(`/board?scopes=${scope.id}`);
+  await expect(page.locator(`[data-testid="scope-projects-${scope.id}"]`)).toBeVisible({
+    timeout: 10_000,
+  });
+
+  // Un altre àmbit, sense projectes, actiu: el primer queda apagat i el botonet se'n va.
+  const altre = (await (
+    await page.request.post('/api/v1/scopes', {
+      headers: auth,
+      data: { name: 'Un altre', color: '--femho-scope-8' },
+    })
+  ).json()) as { id: string };
+
+  await page.goto(`/board?scopes=${altre.id}`);
+  await expect(page.locator('[data-testid="topbar"]')).toBeVisible();
+  await expect(page.locator(`[data-testid="scope-projects-${scope.id}"]`)).toHaveCount(0);
+});
