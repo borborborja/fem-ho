@@ -24,6 +24,32 @@ import type { Checklist } from './types.js';
 type Menu = 'project' | 'add' | 'pinned' | 'profile' | null;
 
 /** El robot del commutador de la IA, tal com el dibuixa el prototip validat. */
+/**
+ * La xinxeta de les llistes pinejades.
+ *
+ * És la del prototip i la que `docs/02` §3 demana —"cercle de 38px amb icona de
+ * xinxeta"—; aquí hi havia un emoji `📌`, que canvia de forma i de color a cada sistema
+ * operatiu i no segueix ni el tema ni l'accent com fa la resta de la barra.
+ */
+function PinIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M12 17v5" />
+      <path d="M8 3h8l1 6.2 3 2.8v2H4v-2l3-2.8z" />
+    </svg>
+  );
+}
+
 function RobotIcon() {
   return (
     <svg
@@ -214,6 +240,50 @@ export function TopBar({
       {children}
     </div>
   );
+
+  /**
+   * Una llista pinejada al menú: **el nom i com va**.
+   *
+   * El disseny hi posa una segona línia amb el progrés, i és el que fa que el menú
+   * serveixi de debò: amb quatre llistes pinejades, els noms sols obliguen a entrar a
+   * cadascuna per saber quina té feina pendent.
+   */
+  const pinnedItem = (checklist: Checklist): ReactNode => {
+    const items = checklist.items ?? [];
+    const done = items.filter((item) => item.done).length;
+
+    return (
+      <button
+        key={checklist.id}
+        type="button"
+        role="menuitem"
+        data-testid={`pinned-${checklist.id}`}
+        onClick={() => {
+          setMenu(null);
+          navigate(`/lists/${checklist.id}`);
+        }}
+        style={{
+          display: 'grid',
+          gap: 2,
+          width: '100%',
+          textAlign: 'left',
+          padding: '9px 11px',
+          minHeight: mobile ? 44 : undefined,
+          borderRadius: 10,
+          border: 'none',
+          background: 'transparent',
+          font: 'inherit',
+          cursor: 'pointer',
+          color: 'var(--ink)',
+        }}
+      >
+        <span style={{ fontSize: 12.5, fontWeight: 600 }}>{checklist.name}</span>
+        <span style={{ fontSize: 11, color: 'var(--ink-faint)' }}>
+          {t('nav.pinnedProgress', { done, total: items.length })}
+        </span>
+      </button>
+    );
+  };
 
   const menuItem = (label: string, onClick: () => void, danger = false): ReactNode => (
     <button
@@ -442,17 +512,12 @@ export function TopBar({
           ) : null}
 
           {/* Si no n'hi ha cap, el botó no es mostra (docs/02 §3). */}
+          {/* Si no n'hi ha cap, el botó no es mostra (docs/02 §3). */}
           {pinned.length > 0 ? (
             <div style={{ position: 'relative' }}>
-              {round(t('nav.pinned'), 'pinned', '📌', pinned.length)}
+              {round(t('nav.pinned'), 'pinned', <PinIcon />, pinned.length)}
               {menu === 'pinned'
-                ? menuBox(
-                    <>
-                      {pinned.map((checklist) =>
-                        menuItem(checklist.name, () => navigate(`/lists/${checklist.id}`)),
-                      )}
-                    </>,
-                  )
+                ? menuBox(<>{pinned.map((checklist) => pinnedItem(checklist))}</>)
                 : null}
             </div>
           ) : null}
