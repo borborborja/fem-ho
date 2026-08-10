@@ -3067,9 +3067,58 @@ components:
         body: { type: string }
         created_at: { type: string, format: date-time }
 
+    InboxEvent:
+      type: object
+      description: |
+        El que arriba d'una font i entra a la bústia d'un dia.
+
+        **No és una tasca i no en té res.** Sense `status`, sense `position`, sense
+        assignació: és la forma que pren la regla 7 —un esdeveniment no té mai estat de
+        kanban ni s'arrossega entre columnes—, i per això té esquema propi en comptes de
+        ser un `Task` amb camps buits. Cap identificador d'aquí pot arribar a
+        `POST /tasks/{id}/move`.
+
+        S'identifica per `calendar_id` + `uid` + `recurrence_id`, que és la identitat que
+        promet l'origen, i **no per l'`id` de la fila**: el refresc d'una font pot
+        reescriure-la o tornar-la a la vida, i la fila no és estable.
+      additionalProperties: false
+      required:
+        [
+          calendar_id,
+          scope_id,
+          uid,
+          recurrence_id,
+          summary,
+          location,
+          starts_at,
+          ends_at,
+          all_day,
+          source_kind,
+          calendar_name,
+          calendar_color,
+        ]
+      properties:
+        calendar_id: { type: string, format: uuid }
+        scope_id: { type: string, format: uuid }
+        uid: { type: string }
+        recurrence_id:
+          type: [string, 'null']
+          description: L'ocurrència concreta. `null` si no forma part de cap sèrie.
+        summary: { type: string }
+        location: { type: [string, 'null'] }
+        starts_at: { type: string, format: date-time }
+        ends_at: { type: string, format: date-time }
+        all_day: { type: boolean }
+        source_kind:
+          type: [string, 'null']
+          enum: [caldav, ical, rss, null]
+          description: De quina mena és la font. `null` si el calendari és d'aquesta casa.
+        calendar_name: { type: string }
+        calendar_color: { type: [string, 'null'] }
+
     Inbox:
       type: object
-      required: [date, dated, overdue, undated]
+      required: [date, dated, overdue, undated, events]
       properties:
         date: { type: string, format: date }
         dated:
@@ -3083,6 +3132,16 @@ components:
           type: array
           description: La secció "SENSE DIA" del rail (docs/02 §5).
           items: { $ref: '#/components/schemas/Task' }
+        events:
+          type: array
+          description: |
+            El que arriba de les fonts subscrites aquell dia, ja filtrat: hi són els que
+            aquesta persona ha de veure a la bústia i prou.
+
+            **Els calendaris hi entren per defecte i els RSS no.** Un canal actiu pot
+            publicar desenes de titulars al dia i la bústia és l'entrada de tot; qui en
+            vulgui un l'encén a Ajustos, o n'encén un titular concret des del calendari.
+          items: { $ref: '#/components/schemas/InboxEvent' }
 
     DashboardScope:
       type: object

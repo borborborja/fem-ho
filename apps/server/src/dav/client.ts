@@ -354,9 +354,25 @@ async function applyFetched(
   body: string,
   dataDir: string | undefined,
 ): Promise<RefreshResult> {
-  const existing = await sql<{ id: string; uid: string; etag: string | null }>`
-    SELECT id, uid, etag FROM events
-    WHERE calendar_id = ${subscription.id} AND deleted_at IS NULL
+  /**
+   * **També les esborrades, i és el que arregla el defecte de la finestra rodant.**
+   *
+   * Molts `.ics` publicats només serveixen «els propers 30 dies» i un canal RSS només els
+   * últims N titulars: un ítem que en surt i hi torna a entrar és el cas normal. Filtrant
+   * per `deleted_at IS NULL` no es veia la fila esborrada suaument, s'anava per la branca
+   * d'`INSERT`, i com que `idx_events_component` **no exclou les esborrades**, l'INSERT
+   * petava i s'enduia el refresc sencer: el calendari es quedava amb `last_error` per
+   * sempre i qui el mirés només veia que "no s'actualitza".
+   *
+   * Amb la fila a la mà, tornar-la a la vida és posar-li `deleted_at = NULL`.
+   */
+  const existing = await sql<{
+    id: string;
+    uid: string;
+    etag: string | null;
+    deleted_at: string | null;
+  }>`
+    SELECT id, uid, etag, deleted_at FROM events WHERE calendar_id = ${subscription.id}
   `.execute(ctx.tx);
 
   const byUid = new Map(existing.rows.map((row) => [row.uid, row]));
@@ -372,7 +388,12 @@ async function applyFetched(
      * `change_log` i faria que tots els clients de Fem-ho es rebaixessin el calendari
      * sencer cada hora sense que hagués canviat res.
      */
-    if (row !== undefined && row.etag === component.etag) continue;
+    /**
+     * L'etag igual vol dir "no ha canviat res", **però només si la fila és viva**: una
+     * que havia sortit de la finestra i ha tornat porta el mateix etag i s'ha de
+     * ressuscitar igualment.
+     */
+    if (row !== undefined && row.etag === component.etag && row.deleted_at === null) continue;
 
     if (row === undefined) {
       const eventId = uuidv7();
@@ -391,6 +412,8 @@ async function applyFetched(
                           ends_at = ${component.endsAt}, all_day = ${dbBool(component.allDay)},
                           timezone = ${component.timezone}, etag = ${component.etag},
                           raw_ical = ${component.raw}, updated_at = ${ctx.now},
+                          -- Si havia sortit de la finestra i ha tornat, torna a ser viva.
+                          deleted_at = NULL,
                           version = version + 1
         WHERE id = ${row.id}
       `.execute(ctx.tx);
@@ -399,8 +422,16 @@ async function applyFetched(
     }
   }
 
-  // El que queda al mapa ja no és a l'origen.
+  /**
+   * El que queda al mapa ja no és a l'origen.
+   *
+   * **Les que ja estaven esborrades se salten**: ara el mapa les porta totes, i tornar a
+   * esborrar una esborrada mouria el `change_log` a cada refresc i faria que tots els
+   * clients es rebaixessin el calendari cada hora sense que hagués canviat res, que és
+   * exactament el que la comparació d'etags existeix per evitar.
+   */
   for (const [, row] of byUid) {
+    if (row.deleted_at !== null) continue;
     await sql`
       UPDATE events SET deleted_at = ${ctx.now}, updated_at = ${ctx.now} WHERE id = ${row.id}
     `.execute(ctx.tx);

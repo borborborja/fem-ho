@@ -19,6 +19,8 @@ import type { Mailbox } from '../policy/mailbox.js';
 import { visibleScopesPredicate } from '../policy/scope-visibility.js';
 import { normalizeForSearch, normalizeQuery } from '../text/search-text.js';
 import { clampInt } from '../util/clamp.js';
+import { localDayBounds } from '../time/local-day.js';
+import { listInboxEvents, type InboxEvent } from './events.js';
 import { assertScopeAccess, listScopes } from './scopes.js';
 
 export interface TaskRow {
@@ -1037,6 +1039,15 @@ export interface InboxView {
   overdue: Task[];
   /** Sense data. És la secció "SENSE DIA" del rail (docs/02 §5). */
   undated: Task[];
+  /**
+   * El que arriba de fora: calendaris subscrits, `.ics` publicats i canals RSS.
+   *
+   * **Array a part i tipus a part, no barrejat amb les tasques**, i és el que fa que la
+   * regla 7 esmenada es pugui comprovar en comptes de discutir: un `InboxEvent` no té
+   * `status` ni `position`, no és un `Task` en cap tipus, i cap identificador d'aquí pot
+   * arribar mai a `POST /tasks/{id}/move`.
+   */
+  events: InboxEvent[];
 }
 
 /**
@@ -1061,6 +1072,14 @@ export async function getInbox(
      * dalt segueixen valent.
      */
     mailbox?: Mailbox | undefined;
+    /**
+     * El fus de qui pregunta, per tallar el dia on el talla ell.
+     *
+     * Les tasques no en necessitaven —`due_date` ja és una data local—, però els
+     * esdeveniments són instants i sí. Sense això, el dia es tallaria pel fus del
+     * servidor i les cites de la nit ballarien de dia.
+     */
+    timezone?: string | undefined;
   },
 ): Promise<InboxView> {
   if (!hasCapability(principal, 'tasks:read')) throw missingCapability('tasks:read');
@@ -1087,7 +1106,13 @@ export async function getInbox(
     .map((s) => s.id)
     .filter((id) => requested === undefined || requested.includes(id));
 
-  const empty: InboxView = { date: options.date, dated: [], overdue: [], undated: [] };
+  const empty: InboxView = {
+    date: options.date,
+    dated: [],
+    overdue: [],
+    undated: [],
+    events: [],
+  };
   if (allowed.length === 0) return empty;
 
   const rows = await sql<TaskRow>`
@@ -1097,6 +1122,24 @@ export async function getInbox(
   `.execute(db);
   const tasks = await withAssignees(db, rows.rows);
 
+  /**
+   * I el que arriba de fora.
+   *
+   * **El fus és de qui mira, no del servidor.** La bústia parla de dies i els
+   * esdeveniments d'instants; sense convertir-ho al fus de qui pregunta, una cita a les
+   * 23:30 cauria a la bústia de demà i ningú entendria per què. `localDayBounds` ja fa
+   * exactament aquesta conversió des de la fita del calendari.
+   *
+   * Els esdeveniments **no són d'un usuari abstracte sinó d'aquest**: les marques de
+   * visibilitat són personals, i per això cal el `userId` i no només el principal.
+   */
+  const bounds = localDayBounds(options.timezone ?? 'UTC', options.date);
+  const events = await listInboxEvents(db, principal, principal.userId, {
+    from: bounds.startUTC,
+    to: bounds.endUTC,
+    scopeIds: allowed,
+  });
+
   return {
     date: options.date,
     dated: tasks.filter((t) => t.due_date === options.date),
@@ -1105,6 +1148,7 @@ export async function getInbox(
         ? tasks.filter((t) => t.due_date !== null && t.due_date < options.date)
         : [],
     undated: tasks.filter((t) => t.due_date === null),
+    events,
   };
 }
 

@@ -1951,6 +1951,42 @@ export interface components {
             /** Format: date-time */
             created_at: string;
         };
+        /**
+         * @description El que arriba d'una font i entra a la bústia d'un dia.
+         *
+         *     **No és una tasca i no en té res.** Sense `status`, sense `position`, sense
+         *     assignació: és la forma que pren la regla 7 —un esdeveniment no té mai estat de
+         *     kanban ni s'arrossega entre columnes—, i per això té esquema propi en comptes de
+         *     ser un `Task` amb camps buits. Cap identificador d'aquí pot arribar a
+         *     `POST /tasks/{id}/move`.
+         *
+         *     S'identifica per `calendar_id` + `uid` + `recurrence_id`, que és la identitat que
+         *     promet l'origen, i **no per l'`id` de la fila**: el refresc d'una font pot
+         *     reescriure-la o tornar-la a la vida, i la fila no és estable.
+         */
+        InboxEvent: {
+            /** Format: uuid */
+            calendar_id: string;
+            /** Format: uuid */
+            scope_id: string;
+            uid: string;
+            /** @description L'ocurrència concreta. `null` si no forma part de cap sèrie. */
+            recurrence_id: string | null;
+            summary: string;
+            location: string | null;
+            /** Format: date-time */
+            starts_at: string;
+            /** Format: date-time */
+            ends_at: string;
+            all_day: boolean;
+            /**
+             * @description De quina mena és la font. `null` si el calendari és d'aquesta casa.
+             * @enum {string|null}
+             */
+            source_kind: "caldav" | "ical" | "rss" | null;
+            calendar_name: string;
+            calendar_color: string | null;
+        };
         Inbox: {
             /** Format: date */
             date: string;
@@ -1959,6 +1995,15 @@ export interface components {
             overdue: components["schemas"]["Task"][];
             /** @description La secció "SENSE DIA" del rail (docs/02 §5). */
             undated: components["schemas"]["Task"][];
+            /**
+             * @description El que arriba de les fonts subscrites aquell dia, ja filtrat: hi són els que
+             *     aquesta persona ha de veure a la bústia i prou.
+             *
+             *     **Els calendaris hi entren per defecte i els RSS no.** Un canal actiu pot
+             *     publicar desenes de titulars al dia i la bústia és l'entrada de tot; qui en
+             *     vulgui un l'encén a Ajustos, o n'encén un titular concret des del calendari.
+             */
+            events: components["schemas"]["InboxEvent"][];
         };
         DashboardScope: {
             scope_id: string;

@@ -11,13 +11,14 @@
 
 import { sql } from 'kysely';
 import { v7 as uuidv7 } from 'uuid';
-import { dbBool, isTrue } from '../db/bool.js';
+import { dbBool, isTrue, maybeBool } from '../db/bool.js';
 import type { AuditContext } from '../audit/audited-transaction.js';
 import type { MigrationDb } from '../db/migration-db.js';
 import { expandOccurrences, splitSeries } from '../events/recurrence.js';
 import { PolicyError, missingCapability, notFound } from '../policy/errors.js';
 import { hasCapability, type Principal } from '../policy/principal.js';
 import { visibleCalendarIds } from '../policy/calendar-visibility.js';
+import { isInInbox } from '../policy/inbox-visibility.js';
 import { assertScopeAccess, assertScopeRole, listScopes } from './scopes.js';
 
 export interface CalendarRow {
@@ -269,6 +270,170 @@ export async function listEventOccurrences(
 
   out.sort((a, b) => (a.starts_at < b.starts_at ? -1 : a.starts_at > b.starts_at ? 1 : 0));
   return out;
+}
+
+/**
+ * El que d'una font entra a la bústia d'un dia.
+ *
+ * **No és un `Task` i no ho ha de semblar mai.** No té `status`, no té `position`, i cap
+ * identificador d'aquí pot arribar a `POST /tasks/{id}/move`. És la forma que pren la
+ * regla 7 esmenada: un esdeveniment surt a la bústia com a font, mai com a targeta de
+ * tasca.
+ */
+export interface InboxEvent {
+  calendar_id: string;
+  scope_id: string;
+  uid: string;
+  recurrence_id: string | null;
+  summary: string;
+  location: string | null;
+  starts_at: string;
+  ends_at: string;
+  all_day: boolean;
+  source_kind: 'caldav' | 'ical' | 'rss' | null;
+  calendar_name: string;
+  calendar_color: string | null;
+}
+
+export interface ListInboxEventsOptions {
+  /** Els límits UTC del dia local de qui mira. Els dona `localDayBounds`. */
+  from: string;
+  to: string;
+  scopeIds?: string[] | undefined;
+}
+
+/**
+ * Els esdeveniments que li toquen a la bústia d'algú, un dia concret.
+ *
+ * **Es recolza sencera en `listEventOccurrences` i això no és mandra: és el punt.**
+ * Aquella funció ja comprova la capacitat, ja resol els àmbits, ja expandeix les
+ * recurrències amb les seves excepcions, i —el que més importa— **ja aplica
+ * `visibleCalendarIds`**, que és el tall que impedeix que un calendari no compartit
+ * s'escoli cap a algú altre de l'àmbit. Una segona consulta d'esdeveniments escrita a
+ * part hauria pogut oblidar-se'l, i el capçal de `policy/calendar-visibility.ts` descriu
+ * exactament aquell parany. Aquí no s'arriba a obrir.
+ *
+ * El que hi afegeix és només la decisió: quins d'aquells entren a la bústia, segons
+ * `isInInbox`.
+ */
+export async function listInboxEvents(
+  db: MigrationDb,
+  principal: Principal,
+  userId: string,
+  options: ListInboxEventsOptions,
+): Promise<InboxEvent[]> {
+  /**
+   * Sense `events:read` no hi ha esdeveniments, però **tampoc cap error**: la bústia és
+   * de tasques i un token amb abast només de tasques l'ha de poder demanar igual. La
+   * regla 9 diu que un abast més estret dona menys, no que peti.
+   */
+  if (!hasCapability(principal, 'events:read')) return [];
+
+  const occurrences = await listEventOccurrences(db, principal, {
+    from: options.from,
+    to: options.to,
+    scopeIds: options.scopeIds,
+  });
+  if (occurrences.length === 0) return [];
+
+  const calendarIds = [...new Set(occurrences.map((o) => o.calendar_id))];
+
+  const calendars = await sql<{
+    id: string;
+    name: string;
+    color: string | null;
+    origin: 'local' | 'subscription';
+    source_kind: 'caldav' | 'ical' | 'rss' | null;
+    inbox_visible: unknown;
+  }>`
+    SELECT id, name, color, origin, source_kind, inbox_visible
+    FROM calendars WHERE id IN (${sql.join(calendarIds)})
+  `.execute(db);
+  const byCalendar = new Map(calendars.rows.map((row) => [row.id, row]));
+
+  /**
+   * Les marques d'aquest usuari. Es demanen només dels calendaris que han sortit, que a
+   * la finestra d'un dia són pocs.
+   */
+  const marks = await sql<{
+    calendar_id: string;
+    uid: string;
+    recurrence_id: string | null;
+    visible: unknown;
+  }>`
+    SELECT calendar_id, uid, recurrence_id, visible
+    FROM event_inbox_marks
+    WHERE deleted_at IS NULL AND user_id = ${userId}
+      AND calendar_id IN (${sql.join(calendarIds)})
+  `.execute(db);
+  const markAt = new Map(
+    marks.rows.map((row) => [
+      markKey(row.calendar_id, row.uid, row.recurrence_id),
+      isTrue(row.visible),
+    ]),
+  );
+
+  /**
+   * De quins d'aquests esdeveniments ja se n'ha fet una tasca que segueix viva. És el
+   * nivell 0 de la resolució, i el que evita veure la mateixa obligació dues vegades.
+   */
+  const derived = await sql<{ event_calendar_id: string; event_uid: string }>`
+    SELECT DISTINCT event_calendar_id, event_uid FROM tasks
+    WHERE deleted_at IS NULL AND event_uid IS NOT NULL
+      AND event_calendar_id IN (${sql.join(calendarIds)})
+  `.execute(db);
+  const hasTask = new Set(
+    derived.rows.map((row) => `${row.event_calendar_id}\u0000${row.event_uid}`),
+  );
+
+  const out: InboxEvent[] = [];
+  for (const occurrence of occurrences) {
+    const calendar = byCalendar.get(occurrence.calendar_id);
+    if (calendar === undefined) continue;
+
+    const visible = isInInbox({
+      origin: calendar.origin,
+      sourceKind: calendar.source_kind,
+      calendarInboxVisible: maybeBool(calendar.inbox_visible),
+      seriesMark: markAt.get(markKey(occurrence.calendar_id, occurrence.uid, null)) ?? null,
+      occurrenceMark:
+        occurrence.recurrence_id === null
+          ? null
+          : (markAt.get(
+              markKey(occurrence.calendar_id, occurrence.uid, occurrence.recurrence_id),
+            ) ?? null),
+      hasLiveTask: hasTask.has(`${occurrence.calendar_id}\u0000${occurrence.uid}`),
+    });
+    if (!visible) continue;
+
+    out.push({
+      calendar_id: occurrence.calendar_id,
+      scope_id: occurrence.scope_id,
+      uid: occurrence.uid,
+      recurrence_id: occurrence.recurrence_id,
+      summary: occurrence.summary,
+      location: occurrence.location,
+      starts_at: occurrence.starts_at,
+      ends_at: occurrence.ends_at,
+      all_day: occurrence.all_day,
+      source_kind: calendar.source_kind,
+      calendar_name: calendar.name,
+      calendar_color: calendar.color,
+    });
+  }
+  return out;
+}
+
+/**
+ * La clau d'una marca.
+ *
+ * El separador és un `NUL` i no un guió perquè **l'uid d'un RSS ja porta un guió a dins**
+ * (`"<calendarId>-<itemId>"`, veure `dav/rss.ts`) i l'itemId pot ser una URL sencera. Amb
+ * un separador que pot sortir a les parts, dues identitats diferents poden donar la
+ * mateixa clau, i la marca d'un titular acabaria amagant-ne un altre.
+ */
+function markKey(calendarId: string, uid: string, recurrenceId: string | null): string {
+  return `${calendarId}\u0000${uid}\u0000${recurrenceId ?? ''}`;
 }
 
 function toView(

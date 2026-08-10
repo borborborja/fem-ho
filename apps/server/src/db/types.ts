@@ -55,14 +55,20 @@ export interface ApiTokens {
 export interface Attachments {
   created_at: string;
   deleted_at: string | null;
+  event_id: string | null;
+  external_url: string | null;
   filename: string;
   id: string;
   is_ai_context: Generated<number>;
   mime_type: string;
+  scope_id: string | null;
   size_bytes: number;
-  storage_path: string;
-  task_id: string;
-  uploaded_by: string;
+  source: Generated<string>;
+  storage_path: string | null;
+  task_id: string | null;
+  updated_at: string;
+  uploaded_by: string | null;
+  version: Generated<number>;
 }
 
 export interface Calendars {
@@ -70,19 +76,26 @@ export interface Calendars {
   created_at: string;
   deleted_at: string | null;
   id: string;
+  inbox_visible: number | null;
   kind: string;
+  last_error: string | null;
+  last_error_at: string | null;
   last_refreshed_at: string | null;
   name: string;
   origin: Generated<string>;
   project_id: string | null;
   refresh_interval: number | null;
   scope_id: string;
+  shared_with_scope: Generated<number>;
+  source_kind: string | null;
   source_secret_enc: string | null;
   source_url: string | null;
   source_username: string | null;
   strip_alarms: Generated<number>;
   sync_seq: Generated<number>;
   updated_at: string;
+  version: Generated<number>;
+  writable: Generated<number>;
 }
 
 export interface ChangeLog {
@@ -146,6 +159,19 @@ export interface EventAttendees {
   user_id: string | null;
 }
 
+export interface EventInboxMarks {
+  calendar_id: string;
+  created_at: string;
+  deleted_at: string | null;
+  id: string;
+  recurrence_id: string | null;
+  uid: string;
+  updated_at: string;
+  user_id: string;
+  version: Generated<number>;
+  visible: number;
+}
+
 export interface EventOccurrences {
   ends_at: string;
   event_id: string;
@@ -180,6 +206,50 @@ export interface Events {
   uid: string;
   updated_at: string;
   version: Generated<number>;
+}
+
+export interface Grants {
+  capabilities: string | null;
+  created_at: string;
+  expires_at: string | null;
+  first_used_at: string | null;
+  id: string;
+  issuer_user_id: string | null;
+  kind: string;
+  last_used_at: string | null;
+  max_uses: Generated<number>;
+  payload: string | null;
+  revoked_at: string | null;
+  role: string | null;
+  secret_version: Generated<number>;
+  subject_id: string | null;
+  subject_type: string;
+  token_hmac: string;
+  use_count: Generated<number>;
+}
+
+export interface InstanceLinks {
+  base_url: string;
+  created_at: string;
+  created_by: string | null;
+  cursor: string | null;
+  id: string | null;
+  last_error: string | null;
+  last_error_at: string | null;
+  last_sync_at: string | null;
+  local_seq: Generated<number>;
+  name: string | null;
+  remote_scope_id: string | null;
+  scope_id: string;
+  token_enc: string;
+  updated_at: string;
+}
+
+export interface InstanceSettings {
+  created_at: string;
+  key: string;
+  updated_at: string;
+  value: string;
 }
 
 export interface Labels {
@@ -232,6 +302,13 @@ export interface Reminders {
 export interface SchemaMigrations {
   applied_at: string;
   name: string | null;
+}
+
+export interface ScopeAccessRevocations {
+  id: string;
+  revoked_at: string;
+  scope_id: string;
+  user_id: string;
 }
 
 export interface ScopeMembers {
@@ -310,6 +387,13 @@ export interface Subtasks {
   version: Generated<number>;
 }
 
+export interface SyncOpIds {
+  created_at: string;
+  op_id: string;
+  principal_key: string;
+  result: string;
+}
+
 export interface TaskAssignees {
   assigned_at: string;
   task_id: string;
@@ -319,6 +403,14 @@ export interface TaskAssignees {
 export interface TaskLabels {
   label_id: string;
   task_id: string;
+}
+
+export interface TaskLeases {
+  acquired_at: string;
+  agent_id: string | null;
+  expires_at: string;
+  task_id: string;
+  user_id: string;
 }
 
 export interface Tasks {
@@ -336,6 +428,9 @@ export interface Tasks {
   description: string | null;
   due_date: string | null;
   due_time: string | null;
+  event_calendar_id: string | null;
+  event_recurrence_id: string | null;
+  event_uid: string | null;
   id: string;
   origin: Generated<string>;
   position: string;
@@ -352,6 +447,16 @@ export interface Tasks {
   view_mode: Generated<string>;
 }
 
+export interface UserInvites {
+  created_at: string;
+  created_by: string;
+  expires_at: string;
+  id: string;
+  token_hmac: string;
+  used_at: string | null;
+  user_id: string;
+}
+
 export interface Users {
   accent: Generated<string>;
   avatar_color: string | null;
@@ -359,10 +464,12 @@ export interface Users {
   deleted_at: string | null;
   email: string | null;
   id: string;
+  instance_link_id: string | null;
   kind: Generated<string>;
   locale: Generated<string>;
   name: string;
   password_hash: string | null;
+  remote_user_id: string | null;
   role: Generated<string>;
   theme: Generated<string>;
   timezone: Generated<string>;
@@ -374,6 +481,10 @@ export interface UserSettings {
   collapsed_groups: string | null;
   daily_digest_at: string | null;
   done_cleared_at: string | null;
+  event_task_deleted: Generated<string>;
+  gravatar: Generated<number>;
+  hidden_calendar_ids: string | null;
+  inbox_origin: Generated<string>;
   inbox_position: Generated<string>;
   inbox_show_overdue: Generated<number>;
   notify_prefs: Generated<string>;
@@ -383,6 +494,7 @@ export interface UserSettings {
   show_overdue_section: Generated<number>;
   updated_at: string;
   user_id: string;
+  week_start: Generated<string>;
 }
 
 export interface Webhooks {
@@ -412,22 +524,30 @@ export interface DB {
   checklists: Checklists;
   comments: Comments;
   event_attendees: EventAttendees;
+  event_inbox_marks: EventInboxMarks;
   event_occurrences: EventOccurrences;
   events: Events;
+  grants: Grants;
+  instance_links: InstanceLinks;
+  instance_settings: InstanceSettings;
   labels: Labels;
   projects: Projects;
   push_subscriptions: PushSubscriptions;
   reminders: Reminders;
   schema_migrations: SchemaMigrations;
+  scope_access_revocations: ScopeAccessRevocations;
   scope_members: ScopeMembers;
   scopes: Scopes;
   sessions: Sessions;
   share_accesses: ShareAccesses;
   shares: Shares;
   subtasks: Subtasks;
+  sync_op_ids: SyncOpIds;
   task_assignees: TaskAssignees;
   task_labels: TaskLabels;
+  task_leases: TaskLeases;
   tasks: Tasks;
+  user_invites: UserInvites;
   user_settings: UserSettings;
   users: Users;
   webhooks: Webhooks;

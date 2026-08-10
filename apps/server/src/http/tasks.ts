@@ -324,6 +324,9 @@ export function registerTaskRoutes(app: FastifyInstance): void {
         date: str(q.date) ?? today(profile.timezone),
         includeOverdue: bool(q.include_overdue) ?? true,
         scopeIds: ids(q.scope_ids),
+        // I el mateix fus serveix per tallar el dia dels esdeveniments, que són instants
+        // i no dates.
+        timezone: profile.timezone,
         // Sense paràmetre, el calaix és la preferència de l'usuari. Un valor inventat
         // cau a `all`, que és el comportament de sempre.
         mailbox:
