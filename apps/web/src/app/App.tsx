@@ -110,7 +110,16 @@ function AppShell() {
       ? scopes.map((scope) => scope.id)
       : fromQuery.split(',').filter((id) => scopes.some((scope) => scope.id === id));
 
-  const projectId = route.query.get('project');
+  /**
+   * Els projectes que es veuen, **buit vol dir tots**.
+   *
+   * Abans era un de sol (`?project=`) i vivia en un desplegable a la dreta dels àmbits,
+   * lluny del que filtra. Ara la tria és per àmbit i es poden marcar diversos alhora, o
+   * sigui que el que viatja a la URL és una llista. Buit i "tots" són el mateix estat a
+   * posta: no hi ha cap manera de dir "cap projecte", que no voldria dir res.
+   */
+  const projectsQuery = route.query.get('projects');
+  const projectIds = projectsQuery === null || projectsQuery === '' ? [] : projectsQuery.split(',');
   const [warning, setWarning] = useState<string | null>(null);
   const [openTask, setOpenTask] = useState<string | null>(null);
   /** Una tasca nova des de l'edició completa: quina columna, i si és per a la IA. */
@@ -244,9 +253,13 @@ function AppShell() {
       <TopBar
         view={view}
         activeScopeIds={activeScopeIds}
-        onActiveScopesChange={(ids) => setQuery({ scopes: ids.join(','), project: null })}
-        projectId={projectId}
-        onProjectChange={(id) => setQuery({ project: id })}
+        /**
+         * Canviar d'àmbits **buida els projectes triats** (docs/02 §2): un projecte d'un
+         * àmbit que s'acaba d'apagar filtraria el tauler sense que es vegi per què.
+         */
+        onActiveScopesChange={(ids) => setQuery({ scopes: ids.join(','), projects: null })}
+        projectIds={projectIds}
+        onProjectsChange={(ids) => setQuery({ projects: ids.length === 0 ? null : ids.join(',') })}
         pinned={pinned.data ?? []}
         onNewProject={() => navigate('/settings')}
         onNewChecklist={() => navigate('/settings')}
@@ -327,7 +340,7 @@ function AppShell() {
           <BoardScreen
             key={reloadKey}
             activeScopeIds={activeScopeIds}
-            projectId={projectId}
+            projectIds={projectIds}
             onOpenTask={setOpenTask}
             onNewTask={(status, forAi) => setNewTask({ status, forAi })}
             aiBoard={aiBoard}

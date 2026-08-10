@@ -281,6 +281,30 @@ esborrar l'esdeveniment no toca la tasca. L'alternativa —un enllaç viu— vol
 esborrar un esdeveniment d'un calendari compartit esborri en silenci la tasca que algú
 altre s'havia apuntat.
 
+### P7 · On viu el filtre de projectes
+
+**La resolució: a cada xip d'àmbit, i amb selecció múltiple.**
+
+Hi havia una píndola a la dreta de tots els xips que triava **un** projecte. Tres coses no
+hi anaven, i cap és de detall:
+
+- **Filtrava lluny del que filtra.** Els àmbits s'encenen als xips i els projectes es
+  triaven en un altre control, tres píxels més enllà però conceptualment a part. Amb dos
+  àmbits actius, aquell desplegable barrejava els projectes dels dos sense dir de qui era
+  cadascun.
+- **Un de sol.** "Veure Obra i Jardí però no la resta" no es podia demanar.
+- **Sortia sempre.** Amb una instància sense cap projecte —que és com comença tothom— hi
+  havia un desplegable permanent que només oferia "Tots els projectes".
+
+Ara el botonet va enganxat al xip, **només si aquell àmbit té projectes**, i el menú és de
+caselles: se'n marquen les que es vulguin i no es tanca a cada clic.
+
+**Un àmbit sense res triat vol dir "tots els seus".** La tria es desa com una llista plana
+d'identificadors a la URL (`?projects=a,b`), i la llista buida ja diu "tot": desar un
+"tots" explícit per àmbit seria un segon estat que vol dir el mateix. La conseqüència, que
+val la pena tenir escrita: **una tasca sense projecte d'un àmbit amb tria no es veu.** Si
+has demanat "d'aquest àmbit, Obra", una tasca sense projecte no és Obra.
+
 ---
 
 ## Part 3 — Fets sospitosos de `research/`

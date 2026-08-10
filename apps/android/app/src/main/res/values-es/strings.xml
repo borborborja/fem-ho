@@ -207,6 +207,7 @@
     <string name="nav_rename">Renombrar</string>
     <string name="nav_retry">Reintentar</string>
     <string name="nav_save">Guardar</string>
+    <string name="nav_scopeprojects">Proyectos del ámbito {name}</string>
     <string name="nav_scopetoggle">Muestra u oculta el ámbito {name}</string>
     <string name="nav_search">Buscar</string>
     <string name="nav_settings">Ajustes</string>

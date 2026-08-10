@@ -207,6 +207,7 @@
     <string name="nav_rename">Rename</string>
     <string name="nav_retry">Try again</string>
     <string name="nav_save">Save</string>
+    <string name="nav_scopeprojects">Projects in the {name} scope</string>
     <string name="nav_scopetoggle">Show or hide the {name} scope</string>
     <string name="nav_search">Search</string>
     <string name="nav_settings">Settings</string>

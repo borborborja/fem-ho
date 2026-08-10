@@ -214,6 +214,7 @@
   "nav.rename": "Reanomena",
   "nav.retry": "Reintentar",
   "nav.save": "Desa",
+  "nav.scopeProjects": "Projectes de l'àmbit {name}",
   "nav.scopeToggle": "Mostra o amaga l'àmbit {name}",
   "nav.search": "Cercar",
   "nav.settings": "Ajustos",

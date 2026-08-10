@@ -213,6 +213,7 @@
   "nav.rename": "Rename",
   "nav.retry": "Try again",
   "nav.save": "Save",
+  "nav.scopeProjects": "Projects in the {name} scope",
   "nav.scopeToggle": "Show or hide the {name} scope",
   "nav.search": "Search",
   "nav.settings": "Settings",

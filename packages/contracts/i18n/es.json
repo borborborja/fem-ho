@@ -212,6 +212,7 @@
   "nav.rename": "Renombrar",
   "nav.retry": "Reintentar",
   "nav.save": "Guardar",
+  "nav.scopeProjects": "Proyectos del ámbito {name}",
   "nav.scopeToggle": "Muestra u oculta el ámbito {name}",
   "nav.search": "Buscar",
   "nav.settings": "Ajustes",
