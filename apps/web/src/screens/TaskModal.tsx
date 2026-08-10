@@ -621,29 +621,73 @@ export function TaskModal({
             <section style={{ display: 'grid', gap: 6 }}>
               {label(t('task.checklists'))}
               {(checklists.data ?? []).map((checklist) => (
-                <button
+                <div
                   key={checklist.id}
-                  type="button"
-                  data-testid={`task-checklist-${checklist.id}`}
-                  onClick={() => onOpenList(checklist.id)}
                   style={{
-                    textAlign: 'left',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
                     padding: '8px 11px',
                     borderRadius: 10,
                     border: '1px solid var(--card-border)',
-                    background: 'transparent',
-                    cursor: 'pointer',
-                    font: 'inherit',
-                    fontSize: 12.5,
-                    color: 'var(--ink)',
                   }}
                 >
-                  {checklist.name} ·{' '}
-                  {t('checklist.count', {
-                    done: checklist.items.filter((item) => item.done).length,
-                    total: checklist.items.length,
-                  })}
-                </button>
+                  <button
+                    type="button"
+                    data-testid={`task-checklist-${checklist.id}`}
+                    onClick={() => onOpenList(checklist.id)}
+                    style={{
+                      flex: 1,
+                      textAlign: 'left',
+                      border: 'none',
+                      background: 'transparent',
+                      padding: 0,
+                      cursor: 'pointer',
+                      font: 'inherit',
+                      fontSize: 12.5,
+                      color: 'var(--ink)',
+                    }}
+                  >
+                    {checklist.name} ·{' '}
+                    {t('checklist.count', {
+                      done: checklist.items.filter((item) => item.done).length,
+                      total: checklist.items.length,
+                    })}
+                  </button>
+
+                  {/*
+                    **Pinejar també des d'aquí.**
+
+                    Fins ara només es podia des de la targeta del tauler, desplegant-ne les
+                    llistes: per pinejar-ne una calia **tancar el modal**, trobar la targeta
+                    i desplegar-la. El modal és on es gestiona la tasca a fons, i les seves
+                    llistes hi són llistades — deixar-hi l'acció fora obligava a sortir del
+                    lloc on ja eres.
+                  */}
+                  <button
+                    type="button"
+                    data-testid={`task-checklist-pin-${checklist.id}`}
+                    aria-pressed={checklist.pinned}
+                    onClick={() => {
+                      const call = checklist.pinned ? api.delete : api.post;
+                      void call(`/api/v1/checklists/${checklist.id}/pin`).then(() => {
+                        checklists.reload();
+                      });
+                    }}
+                    style={{
+                      border: 'none',
+                      background: 'transparent',
+                      padding: 0,
+                      cursor: 'pointer',
+                      font: 'inherit',
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: checklist.pinned ? 'var(--brand-ink)' : 'var(--ink-faint)',
+                    }}
+                  >
+                    {checklist.pinned ? t('checklist.unpinAction') : t('checklist.pin')}
+                  </button>
+                </div>
               ))}
               <button
                 type="button"
