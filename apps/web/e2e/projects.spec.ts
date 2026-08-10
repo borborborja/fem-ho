@@ -630,3 +630,64 @@ test.describe('la barra a mòbil', () => {
     expect(caixaMenu?.x ?? -1).toBeGreaterThanOrEqual(0);
   });
 });
+
+/**
+ * El xip i el botonet han de ser **una sola píndola**, no dos controls al costat.
+ *
+ * És el que fa que es llegeixi com "aquest àmbit, i els seus projectes" en comptes de dos
+ * botons independents. A l'ull, un pèl de separació passa desapercebut; mesurant-ho, o
+ * s'toquen o no.
+ */
+test('el botonet va enganxat al xip, sense escletxa', async ({ page }) => {
+  await enterAsNew(page, MEU);
+  const auth = await bearer(page);
+  const scopes = (await (await page.request.get('/api/v1/scopes', { headers: auth })).json()) as {
+    id: string;
+  }[];
+  const scope = scopes[0]!;
+
+  await page.goto(`/board?scopes=${scope.id}`);
+  const xip = page.locator(`[data-testid="scope-${scope.id}"]`);
+  const boto = page.locator(`[data-testid="scope-projects-${scope.id}"]`);
+  await expect(boto).toBeVisible({ timeout: 10_000 });
+
+  const a = await xip.boundingBox();
+  const b = await boto.boundingBox();
+  expect(a).not.toBeNull();
+  expect(b).not.toBeNull();
+
+  // Enganxats: la vora dreta del xip és la vora esquerra del botonet.
+  expect(Math.abs((a?.x ?? 0) + (a?.width ?? 0) - (b?.x ?? 0))).toBeLessThanOrEqual(1);
+  // I de la mateixa alçada, o la píndola queda escalonada.
+  expect(Math.abs((a?.height ?? 0) - (b?.height ?? 0))).toBeLessThanOrEqual(1);
+});
+
+/**
+ * El desplegable del xip a mòbil.
+ *
+ * És el mateix `menuBox` que el de la xinxeta, que sortia amb la vora esquerra a −140px;
+ * es va arreglar ancorant-lo a la pantalla. Això ho comprova **per al del xip**, que és el
+ * que cau més a l'esquerra de la fila i, per tant, el pitjor cas.
+ */
+test.describe('el desplegable del xip a mòbil', () => {
+  test.use({ viewport: { width: 380, height: 760 } });
+
+  test('queda dins de la pantalla', async ({ page }) => {
+    await enterAsNew(page, MEU);
+    const auth = await bearer(page);
+    const scopes = (await (await page.request.get('/api/v1/scopes', { headers: auth })).json()) as {
+      id: string;
+    }[];
+    const scope = scopes[0]!;
+
+    await page.goto(`/board?scopes=${scope.id}`);
+    await page.locator(`[data-testid="scope-projects-${scope.id}"]`).click();
+
+    const opcio = page.locator(`[data-testid="scope-projects-${scope.id}-all"]`);
+    await expect(opcio).toBeVisible({ timeout: 10_000 });
+
+    const caixa = await opcio.boundingBox();
+    expect(caixa?.x ?? -1).toBeGreaterThanOrEqual(0);
+    expect((caixa?.x ?? 0) + (caixa?.width ?? 0)).toBeLessThanOrEqual(380);
+  });
+});
