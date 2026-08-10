@@ -590,3 +590,43 @@ test('una llista es pineja des del modal de la tasca', async ({ page }) => {
   await page.locator('[data-testid="topbar-pinned"]').click();
   await expect(page.locator(`[data-testid="pinned-${list.id}"]`)).toBeVisible({ timeout: 10_000 });
 });
+
+/**
+ * La barra a 380px, amb les dues coses noves alhora.
+ *
+ * El prototip de mòbil posa el menú de pinejades com un botó compacte a la capçalera, no
+ * com una fila; i els xips emboliquen. Aquí es comprova el que decideix si això és usable
+ * en un telèfon: **que els dos controls hi siguin, siguin tocables, i el menú no se'n
+ * surti de la pantalla.**
+ */
+test.describe('la barra a mòbil', () => {
+  test.use({ viewport: { width: 380, height: 760 } });
+
+  test('el menú de pinejades hi és i no se surt de la pantalla', async ({ page }) => {
+    // Un compte propi: els d'aquest fitxer ja tenen llistes pinejades i el que es vol
+    // mesurar aquí és el desplegable, sigui quin sigui el seu contingut.
+    await enterAsNew(page, {
+      name: 'Barra mòbil',
+      email: 'barramobil@example.com',
+      password: 'la-contrasenya-de-prova',
+    });
+    await page.goto('/');
+
+    const boto = page.locator('[data-testid="topbar-pinned"]');
+    await expect(boto).toBeVisible({ timeout: 10_000 });
+
+    const caixaBoto = await boto.boundingBox();
+    expect(caixaBoto?.height ?? 0).toBeGreaterThanOrEqual(38);
+
+    await boto.click();
+    const menu = page.locator('[data-testid="pinned-empty"]');
+    await expect(menu).toBeVisible();
+
+    // El desplegable ha de quedar dins de l'amplada: a 380px, un menú ancorat a
+    // l'esquerra amb 240px d'ample se'n pot anar fora si el botó és a la dreta.
+    const caixaMenu = await menu.boundingBox();
+    expect(caixaMenu).not.toBeNull();
+    expect((caixaMenu?.x ?? 0) + (caixaMenu?.width ?? 0)).toBeLessThanOrEqual(380);
+    expect(caixaMenu?.x ?? -1).toBeGreaterThanOrEqual(0);
+  });
+});

@@ -255,14 +255,26 @@ export function TopBar({
     </div>
   );
 
+  /**
+   * El desplegable d'un menú de la barra.
+   *
+   * **A mòbil va ancorat a la pantalla i no al botó.** Amb `right: 0` i 200-240px d'ample,
+   * un botó que cau a la banda esquerra deixa el desplegable començant **fora de la
+   * pantalla**: a 380px, el de la xinxeta sortia amb la vora esquerra a −140px, o sigui
+   * amb la meitat inabastable. Es va veure mesurant-lo, no mirant-lo: a l'ull sembla un
+   * menú una mica escapçat.
+   *
+   * A partir de `mobile` s'ancora als dos costats amb 12px de marge, que és el patró
+   * normal en un telèfon i el que fa que no depengui d'on caigui el botó.
+   */
   const menuBox = (children: ReactNode): ReactNode => (
     <div
       role="menu"
       style={{
-        position: 'absolute',
-        top: 46,
-        right: 0,
-        minWidth: 200,
+        position: mobile ? 'fixed' : 'absolute',
+        top: mobile ? 96 : 46,
+        ...(mobile ? { left: 12, right: 12 } : { right: 0 }),
+        minWidth: mobile ? undefined : 200,
         maxHeight: 260,
         overflowY: 'auto',
         // Flota per damunt del contingut: ha de ser opac. `--card-bg` és translúcid en
