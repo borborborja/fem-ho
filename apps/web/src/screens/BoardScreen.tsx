@@ -512,6 +512,7 @@ export function BoardScreen({
         aiBoard={aiBoard}
         flip={flip}
         inbox={inboxCards}
+        inboxEvents={inbox.data?.events}
         inboxHeader={
           /*
             Dos controls a la mateixa capçalera, en dues files: el navegador de dia hi és

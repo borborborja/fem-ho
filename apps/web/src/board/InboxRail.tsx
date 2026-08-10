@@ -19,6 +19,8 @@ import type { ReactNode } from 'react';
 import { t } from '@fem-ho/contracts';
 import { EmptyState, KanbanColumn, ScopeGroupHeader } from '@fem-ho/design-system/femho';
 import { sharedMark } from './KanbanBoard.js';
+import { InboxEventCard, eventKey } from './InboxEventCard.js';
+import type { InboxEvent } from '../app/types.js';
 import { BoardCard } from './BoardCard.js';
 import type { BoardScope, BoardTask } from './KanbanBoard.js';
 
@@ -35,6 +37,19 @@ export interface InboxRailProps {
   undated?: BoardTask[] | undefined;
   /** L'epígraf del dia seleccionat. Sense ell, no es pinta cap epígraf. */
   dayLabel?: string | undefined;
+  /**
+   * El que arriba de les fonts aquell dia.
+   *
+   * **Secció pròpia i tipus propi, mai barrejats amb les tasques.** És la forma que pren
+   * la regla 7 esmenada: un esdeveniment pot sortir a la bústia com a font, i mai com a
+   * targeta de tasca. Si compartissin llista, un dia algú passaria un `InboxEvent` per on
+   * passa un `BoardTask` i la distinció s'evaporaria sense que res fallés.
+   */
+  events?: InboxEvent[] | undefined;
+  /** Fer una tasca a partir d'un esdeveniment. Sense això, el botó no surt. */
+  onEventToTask?: ((event: InboxEvent) => void) | undefined;
+  /** Treure un esdeveniment de la bústia. El mateix. */
+  onEventRemove?: ((event: InboxEvent) => void) | undefined;
   scopes: BoardScope[];
   /** `column` al kanban, `rail` al calendari. Només canvia la disposició, no el contingut. */
   placement?: 'column' | 'rail' | undefined;
@@ -56,6 +71,9 @@ export function InboxRail({
   tasks,
   undated,
   dayLabel,
+  events,
+  onEventToTask,
+  onEventRemove,
   scopes,
   placement = 'column',
   header,
@@ -144,12 +162,37 @@ export function InboxRail({
       data-column-status="inbox"
       data-placement={placement}
       label={t('board.column.inbox')}
-      count={tasks.length + (undated?.length ?? 0)}
+      count={tasks.length + (undated?.length ?? 0) + (events?.length ?? 0)}
       variant="inbox"
       headerExtra={header}
       footer={footer}
     >
       {section(dayLabel, body)}
+
+      {/*
+        Del calendari. Va DESPRÉS de les tasques del dia i abans de les sense data: el
+        que has decidit tu primer, el que t'arriba de fora després. L'ordre no és estètic,
+        és qui mana sobre el teu dia.
+      */}
+      {events === undefined || events.length === 0 ? null : (
+        <div data-testid="inbox-events" style={{ paddingTop: 14 }}>
+          {section(
+            t('inbox.section.events'),
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+              {events.map((event) => (
+                <InboxEventCard
+                  key={eventKey(event)}
+                  event={event}
+                  color={scopes.find((scope) => scope.id === event.scope_id)?.color}
+                  onToTask={onEventToTask === undefined ? undefined : () => onEventToTask(event)}
+                  onRemove={onEventRemove === undefined ? undefined : () => onEventRemove(event)}
+                />
+              ))}
+            </div>,
+          )}
+        </div>
+      )}
+
       {undated === undefined ? null : (
         <div data-testid="inbox-undated" style={{ paddingTop: 14 }}>
           {section(

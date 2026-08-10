@@ -214,6 +214,7 @@ export function CalendarScreen({ activeScopeIds, onOpenTask }: CalendarScreenPro
       placement="rail"
       dayLabel={longDay(locale, new Date(`${selected}T12:00:00`))}
       onOpen={onOpenTask}
+      events={inbox.data?.events}
       onChanged={inbox.reload}
       onMove={(taskId, status) => {
         void api.post(`/api/v1/tasks/${taskId}/move`, { status }).then(() => {

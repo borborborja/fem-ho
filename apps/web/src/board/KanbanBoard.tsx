@@ -20,6 +20,7 @@ import {
 import { BoardCard } from './BoardCard.js';
 import { BoardDnd, DraggableCard, DroppableColumn } from './dnd.js';
 import { InboxRail } from './InboxRail.js';
+import type { InboxEvent } from '../app/types.js';
 
 export interface BoardTask {
   id: string;
@@ -105,6 +106,8 @@ export interface KanbanBoardProps {
    * proves de components: no té servidor al darrere.
    */
   inbox?: BoardTask[];
+  /** El que arriba de les fonts aquell dia. Va a la seva secció, mai amb les tasques. */
+  inboxEvents?: InboxEvent[] | undefined;
   /** De quin calaix es veu la bústia. El mateix criteri que `/inbox` al servidor. */
   mailbox?: 'own' | 'shared' | 'all';
   onToggleGroup?: (status: TaskStatus, scopeId: string) => void;
@@ -175,6 +178,7 @@ export function KanbanBoard({
   scopes,
   inboxHeader,
   inbox,
+  inboxEvents,
   mailbox = 'all',
   collapsed = {},
   onToggleGroup,
@@ -440,6 +444,7 @@ export function KanbanBoard({
                 // no des de dins d'InboxRail perquè el rail també viu al calendari, on el
                 // peu és un altre.
                 footer={renderFooter?.('inbox')}
+                events={inboxEvents}
                 header={inboxHeader}
                 wrapCard={(task, card) => (
                   <DraggableCard key={task.id} id={task.id} testId={`task-${task.id}`}>

@@ -24,6 +24,8 @@ export type EventOccurrence = S['EventOccurrence'];
 export type Board = S['Board'];
 export type TaskPage = S['TaskPage'];
 export type Inbox = S['Inbox'];
+/** El que arriba d'una font a la bústia. **No és un `Task`**: no té estat ni posició. */
+export type InboxEvent = S['InboxEvent'];
 export type Dashboard = S['Dashboard'];
 export type ActivityEntry = S['ActivityEntry'];
 export type ApiTokenSummary = S['ApiTokenSummary'];
