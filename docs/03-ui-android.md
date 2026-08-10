@@ -50,7 +50,9 @@ La capçalera és una columna, no una fila, perquè hi cap menys:
 1. Wordmark "Fem-ho" a 20px (clicable → dashboard global) i, a la dreta, l'avatar.
 2. `SegmentedControl` Tasques/Calendari a amplada completa, mida `mobile`.
 3. Chips d'àmbit, que emboliquen.
-4. Fila amb el desplegable de projecte flexible, el botó `+` de 36px, i el de llistes pinejades quan n'hi ha.
+4. **Les llistes pinejades**, quan n'hi ha, sota els xips: el nom i **com va** cada una, com a la web. Toca-hi obre la tasca que la conté — a Android les llistes viuen dins de la tasca i no hi ha pantalla pròpia.
+
+El desplegable de projecte que hi havia aquí s'ha mogut **al xip de cada àmbit**, com a la web (`docs/14` P7). A Android encara no hi és: veure `docs/ESTAT.md`.
 
 Padding lateral de 16px.
 

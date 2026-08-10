@@ -79,6 +79,16 @@ class AppViewModel(private val container: Container) : ViewModel() {
     private val _openChecklists = MutableStateFlow<List<Checklist>>(emptyList())
     val openChecklists: StateFlow<List<Checklist>> = _openChecklists.asStateFlow()
 
+    /**
+     * Les llistes pinejades, per al menú de la xinxeta (`docs/03` §3).
+     *
+     * **No es repliquen a Room.** Pinejar és per usuari i el menú és una drecera a una
+     * pantalla que ja se sap obrir; guardar-les obligaria a decidir quan invalidar-les i
+     * el guany offline seria veure la llista de pinejades d'ahir.
+     */
+    private val _pinned = MutableStateFlow<List<Checklist>>(emptyList())
+    val pinned: StateFlow<List<Checklist>> = _pinned.asStateFlow()
+
     private var serverUrl: String? = null
 
     init {
@@ -187,6 +197,7 @@ class AppViewModel(private val container: Container) : ViewModel() {
             val active = container.settings.activeScopes.first()
             runCatching { container.repository(base).refresh(active, null) }
         }
+        viewModelScope.launch { _pinned.value = container.api(base).pinnedChecklists() }
     }
 
     /**
@@ -436,6 +447,8 @@ class AppViewModel(private val container: Container) : ViewModel() {
         val base = serverUrl ?: return
         viewModelScope.launch {
             runCatching { container.api(base).setChecklistPin(checklist.id, !checklist.pinned) }
+            // El menú de la xinxeta ha de dir la veritat de seguida, no al proper refresc.
+            _pinned.value = container.api(base).pinnedChecklists()
             loadCard(taskId)
         }
     }

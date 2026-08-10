@@ -49,6 +49,7 @@ import ho.fem.designsystem.FemhoText
 import ho.fem.designsystem.FemhoTheme
 import ho.fem.designsystem.ScopeChip
 import ho.fem.designsystem.scopeColor
+import ho.fem.model.Checklist
 import ho.fem.model.Scope
 import ho.fem.model.TaskStatus
 import ho.fem.calendar.CalendarLabels
@@ -330,6 +331,7 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: (
     val people by model.people.collectAsStateWithLifecycle()
     val openTask by model.openTask.collectAsStateWithLifecycle()
     val openChecklists by model.openChecklists.collectAsStateWithLifecycle()
+    val pinned by model.pinned.collectAsStateWithLifecycle()
     val expandedCards by model.expandedCards.collectAsStateWithLifecycle()
     val openCards by model.openCards.collectAsStateWithLifecycle()
     val cardLists by model.cardLists.collectAsStateWithLifecycle()
@@ -372,6 +374,15 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: (
 
     Column(Modifier.fillMaxSize()) {
         TopBar(
+            pinned = pinned,
+            /**
+             * **S'obre la tasca que la conté**, no una pantalla de llista.
+             *
+             * A Android les llistes viuen dins de la tasca —no hi ha `Screen.LIST`, i
+             * `docs/03` no en descriu cap—, o sigui que la drecera porta on la llista es
+             * pot llegir i marcar. A la web sí que hi ha pantalla pròpia i el menú hi va.
+             */
+            onOpenList = { id -> pinned.find { it.id == id }?.let { model.openById(it.taskId) } },
             scopes = scopes,
             active = active,
             pending = pending,
@@ -731,6 +742,15 @@ private fun TopBar(
     aiBoardActive: Boolean = false,
     onToggleAiBoard: () -> Unit = {},
     aiBoardLabel: String = "",
+    /**
+     * Les llistes pinejades i com s'obren.
+     *
+     * `docs/03` §3 les demana a la capçalera —"el de llistes pinejades quan n'hi ha"— i
+     * aquí no hi eren: a la web sí, i les dues superfícies s'han de sentir la mateixa
+     * cosa. Si la llista és buida, el botó no surt (`docs/02` §3).
+     */
+    pinned: List<Checklist> = emptyList(),
+    onOpenList: (String) -> Unit = {},
 ) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
         Row(
@@ -819,6 +839,62 @@ private fun TopBar(
                     active = active.isEmpty() || scope.id in active,
                     onClick = { onToggle(scope.id) },
                 )
+            }
+        }
+
+        if (pinned.isNotEmpty()) PinnedRow(pinned = pinned, onOpenList = onOpenList)
+    }
+}
+
+/**
+ * Les llistes pinejades, desplegables des de la capçalera.
+ *
+ * **Cada llista diu com va**, no només com es diu: amb quatre pinejades, els noms sols
+ * obliguen a entrar a cadascuna per saber quina té feina pendent. És el mateix que fa la
+ * web i el que ensenya el prototip.
+ */
+@Composable
+private fun PinnedRow(pinned: List<Checklist>, onOpenList: (String) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+
+    Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+        Text(
+            text = stringResource(R.string.nav_pinned) + "  (${pinned.size})",
+            color = Femho.colors.inkSoft,
+            fontSize = FemhoText.meta,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier
+                .testTag("pinned-toggle")
+                .then(Modifier.androidClickable { open = !open })
+                .padding(vertical = 6.dp),
+        )
+
+        if (open) {
+            pinned.forEach { checklist ->
+                val done = checklist.items.count { it.done }
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .testTag("pinned-${checklist.id}")
+                        .then(Modifier.androidClickable { onOpenList(checklist.id) })
+                        .padding(vertical = 6.dp),
+                ) {
+                    Text(
+                        text = checklist.name,
+                        color = Femho.colors.ink,
+                        fontSize = FemhoText.body,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        // Els marcadors del catàleg són `{done}` i `{total}`: es
+                        // substitueixen a mà, com la resta de plantilles d'aquesta app.
+                        text = stringResource(R.string.nav_pinnedprogress)
+                            .replace("{done}", done.toString())
+                            .replace("{total}", checklist.items.size.toString()),
+                        color = Femho.colors.inkFaint,
+                        fontSize = FemhoText.meta,
+                    )
+                }
             }
         }
     }

@@ -135,6 +135,18 @@ adjunts dels esdeveniments compartits— i es va decidir així:
 - **Els `ATTACH` d'un calendari subscrit** entren: els que porten bytes en base64 es
   desen; els que són una URI **no es baixen mai**, només se'n guarda l'enllaç.
 
+### Els projectes i les pinejades, per superfície
+
+| | Web | Android |
+| --- | --- | --- |
+| Crear projectes a Ajustos, per àmbit | sí | no |
+| Filtre de projectes al xip de l'àmbit | sí | **no** |
+| `#Àmbit/Projecte` a l'afegida ràpida | sí | sí (parser compartit) |
+| Menú de llistes pinejades amb progrés | sí | sí |
+
+El filtre de projectes al xip és el que falta a Android per tancar la paritat. La resta
+del que `docs/03` §3 demanava d'aquella fila —el botó de pinejades— ja hi és.
+
 ### El que dels adjunts encara NO hi és
 
 El servidor els té sencers —pujar, baixar, el tall dels calendaris compartits, el sync i
