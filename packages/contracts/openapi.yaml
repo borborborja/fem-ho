@@ -3265,6 +3265,16 @@ components:
         writable: { type: boolean }
         refresh_interval: { type: [integer, 'null'] }
         strip_alarms: { type: boolean }
+        inbox_visible:
+          type: [boolean, 'null']
+          description: |
+            Si la font entra a la bústia. **Absent vol dir "no ho toquis" i `null` vol dir
+            "treu l'excepció"**, que no és el mateix: sense el `null` no hi hauria manera
+            de desdir-se'n i el calendari es quedaria clavat al valor que se li va posar
+            encara que el defecte canviés.
+
+            Canvia el que veu tot l'àmbit, i per això demana el mateix rol que compartir
+            el calendari.
 
     UserSettings:
       type: object
@@ -3712,7 +3722,9 @@ components:
     Calendar:
       type: object
       additionalProperties: false
-      required: [id, scope_id, name, kind, origin, writable]
+      # `inbox_visible` hi és encara que pugui ser nul: el client ha de poder distingir
+      # "no s'hi ha dit res" d'un camp que el servidor no ha enviat.
+      required: [id, scope_id, name, kind, origin, writable, inbox_visible, inbox_visible_default]
       properties:
         id: { type: string }
         scope_id: { type: string }
@@ -3767,6 +3779,27 @@ components:
             Si la font porta usuari i contrasenya guardats. **El secret no surt mai** del
             servei; això només diu que n'hi ha, perquè la interfície pugui avisar abans
             de compartir el calendari.
+        inbox_visible:
+          type: [boolean, 'null']
+          description: |
+            Si aquesta font entra a la bústia diària.
+
+            **Tri-estat, i els tres valors diuen coses diferents.** `null` és "no s'hi ha
+            dit res i val el defecte"; `false` és "aquesta no, encara que el defecte digui
+            que sí". Es desa **l'excepció i no l'estat**, com `hidden_calendar_ids`: el dia
+            que el defecte canviï, qui no hagi tocat res segueix el defecte nou sense que
+            calgui migrar cap fila.
+
+            Llegir-lo com un booleà trauria de la bústia tots els calendaris on ningú ha
+            tocat res. Per ensenyar l'interruptor, `inbox_visible ?? inbox_visible_default`.
+        inbox_visible_default:
+          type: boolean
+          description: |
+            Què li tocaria si ningú digués res: **els calendaris sí i els canals RSS no**.
+            Un RSS pot publicar desenes de titulars al dia i la bústia és l'entrada de tot.
+
+            El calcula el servidor perquè la regla visqui en un sol lloc i cap client
+            l'hagi de duplicar.
 
     Event:
       type: object

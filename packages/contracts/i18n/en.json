@@ -328,6 +328,7 @@
   "settings.sources.add": "+ Add source",
   "settings.sources.empty": "This scope has no external sources. The ones you add will show up in the calendar.",
   "settings.sources.failed": "The last refresh failed: {reason}",
+  "settings.sources.inbox": "In the inbox",
   "settings.sources.kind.caldav": "CalDAV",
   "settings.sources.kind.ical": "iCal",
   "settings.sources.kind.rss": "RSS",

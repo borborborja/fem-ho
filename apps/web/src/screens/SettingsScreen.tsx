@@ -1120,6 +1120,25 @@ function SourcesForScope({
                       })}
               </div>
             </div>
+            {/*
+              A la bústia o només al calendari.
+              **Es desa l'excepció i no l'estat**: si el valor triat coincideix amb el que
+              el defecte ja diria, s'envia `null` i la base es queda buida. Així el dia
+              que el defecte canviï, qui no hagi tocat res el segueix. La casella, en
+              canvi, és un interruptor normal: ensenya `inbox_visible ?? el defecte`.
+            */}
+            <Toggle
+              checked={source.inbox_visible ?? source.inbox_visible_default}
+              label={t('settings.sources.inbox')}
+              testId={`source-inbox-${source.id}`}
+              onChange={(next) => {
+                void api
+                  .patch(`/api/v1/calendars/${source.id}`, {
+                    inbox_visible: next === source.inbox_visible_default ? null : next,
+                  })
+                  .then(() => calendars.reload());
+              }}
+            />
             <button
               type="button"
               className="plou-btn plou-btn-ghost"

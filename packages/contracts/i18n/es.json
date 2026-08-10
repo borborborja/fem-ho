@@ -327,6 +327,7 @@
   "settings.sources.add": "+ Añadir fuente",
   "settings.sources.empty": "Este ámbito no tiene ninguna fuente externa. Las que añadas se verán en el calendario.",
   "settings.sources.failed": "El último refresco falló: {reason}",
+  "settings.sources.inbox": "En la bandeja",
   "settings.sources.kind.caldav": "CalDAV",
   "settings.sources.kind.ical": "iCal",
   "settings.sources.kind.rss": "RSS",

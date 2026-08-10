@@ -18,7 +18,7 @@ import { expandOccurrences, splitSeries } from '../events/recurrence.js';
 import { PolicyError, missingCapability, notFound } from '../policy/errors.js';
 import { hasCapability, type Principal } from '../policy/principal.js';
 import { visibleCalendarIds } from '../policy/calendar-visibility.js';
-import { isInInbox } from '../policy/inbox-visibility.js';
+import { defaultInInbox, isInInbox } from '../policy/inbox-visibility.js';
 import { assertScopeAccess, assertScopeRole, listScopes } from './scopes.js';
 
 export interface CalendarRow {
@@ -47,6 +47,33 @@ export interface CalendarRow {
   /** Que la font porta credencials guardades. **Quines, no surt mai del servei.** */
   has_credentials: boolean;
   last_error_at: string | null;
+  /**
+   * Si aquesta font entra a la bústia. **Tri-estat**, i els tres valors volen dir coses
+   * diferents: `null` és "no s'hi ha dit res i val el defecte", i `false` és "aquesta no,
+   * encara que el defecte digui que sí". Llegir-lo com un booleà trauria de la bústia
+   * tots els calendaris on ningú ha tocat res.
+   */
+  inbox_visible: boolean | null;
+  /**
+   * Què li tocaria si ningú digués res. **El calcula el servidor i no el client**: la
+   * regla ("els calendaris sí, els RSS no") viu en un sol lloc, i així l'interruptor
+   * d'Ajustos pot ensenyar la posició correcta sense duplicar-la.
+   */
+  inbox_visible_default: boolean;
+}
+
+/**
+ * Un calendari tal com surt del servei.
+ *
+ * La base dona `inbox_visible` com a 0/1/NULL; aquí es torna un tri-estat de veritat i
+ * s'hi afegeix el defecte calculat.
+ */
+function toCalendarRow(row: CalendarRow): CalendarRow {
+  return {
+    ...row,
+    inbox_visible: maybeBool(row.inbox_visible),
+    inbox_visible_default: defaultInInbox(row.origin, row.source_kind),
+  };
 }
 
 /**
@@ -83,7 +110,7 @@ export function assertWritable(calendar: CalendarRow): void {
 const CALENDAR_COLUMNS = sql`
   id, scope_id, project_id, name, color, kind, origin, source_kind, source_url,
   source_username, writable, refresh_interval, last_refreshed_at, last_error, last_error_at,
-  shared_with_scope,
+  shared_with_scope, inbox_visible,
   -- Que n'hi ha, no quin és. **El secret no surt mai del servei**, i la interfície
   -- necessita saber-ho per avisar abans de compartir el calendari.
   (source_secret_enc IS NOT NULL) AS has_credentials
@@ -127,7 +154,7 @@ export async function listCalendars(db: MigrationDb, principal: Principal): Prom
    * calendari amb credencials d'un tercer no ha de sortir si el propietari no ho ha dit.
    */
   const visible = await visibleCalendarIds(db, principal.userId);
-  return rows.rows.filter((row) => visible.has(row.id));
+  return rows.rows.filter((row) => visible.has(row.id)).map(toCalendarRow);
 }
 
 export interface ListEventsOptions {
@@ -715,7 +742,7 @@ async function loadCalendar(tx: MigrationDb, id: string): Promise<CalendarRow & 
   `.execute(tx);
   const row = found.rows[0];
   if (row === undefined) throw notFound('calendar', id);
-  return row;
+  return toCalendarRow(row);
 }
 
 async function reload(tx: MigrationDb, id: string): Promise<EventRow> {
@@ -936,6 +963,15 @@ export async function updateCalendar(
     strip_alarms?: boolean | undefined;
     /** Si els membres de l'àmbit el veuen. **Només el propietari ho decideix.** */
     shared_with_scope?: boolean | undefined;
+    /**
+     * Si la font entra a la bústia.
+     *
+     * Tres valors i tots tres volen dir coses diferents: `undefined` és "no ho toquis",
+     * `null` és **"treu l'excepció i torna al defecte"**, i un booleà és una excepció
+     * explícita. Sense el `null` no hi hauria manera de desdir-se'n, i el calendari es
+     * quedaria clavat al valor que se li va posar encara que el defecte canviés.
+     */
+    inbox_visible?: boolean | null | undefined;
   },
 ): Promise<CalendarRow> {
   if (!hasCapability(principal, 'events:write')) throw missingCapability('events:write');
@@ -951,6 +987,17 @@ export async function updateCalendar(
    * —nom, color, interval— sí que és contingut.
    */
   if (input.shared_with_scope !== undefined) {
+    await assertScopeRole(ctx.tx, principal, calendar.scope_id, 'settings');
+  }
+
+  /**
+   * I treure una font de la bústia també, pel mateix motiu.
+   *
+   * L'interruptor és **del calendari i no de cada persona**: "aquest RSS inunda" és un
+   * judici sobre la font. Però això vol dir que qui l'apaga l'apaga per a tothom de
+   * l'àmbit, i per tant demana el mateix rol que compartir-lo.
+   */
+  if (input.inbox_visible !== undefined) {
     await assertScopeRole(ctx.tx, principal, calendar.scope_id, 'settings');
   }
 
@@ -977,6 +1024,14 @@ export async function updateCalendar(
       ${input.source_username === undefined ? sql`source_username = source_username` : sql`source_username = ${input.source_username}`},
       ${input.source_secret_enc === undefined ? sql`source_secret_enc = source_secret_enc` : sql`source_secret_enc = ${input.source_secret_enc}`},
       ${input.shared_with_scope === undefined ? sql`shared_with_scope = shared_with_scope` : sql`shared_with_scope = ${dbBool(input.shared_with_scope)}`},
+      ${
+        input.inbox_visible === undefined
+          ? sql`inbox_visible = inbox_visible`
+          : input.inbox_visible === null
+            ? // Treure l'excepció: torna a valer el defecte de la seva mena de font.
+              sql`inbox_visible = NULL`
+            : sql`inbox_visible = ${dbBool(input.inbox_visible)}`
+      },
       ${writable === undefined ? sql`writable = writable` : sql`writable = ${dbBool(writable)}`},
       ${input.refresh_interval === undefined ? sql`refresh_interval = refresh_interval` : sql`refresh_interval = ${input.refresh_interval}`},
       ${input.strip_alarms === undefined ? sql`strip_alarms = strip_alarms` : sql`strip_alarms = ${dbBool(input.strip_alarms)}`},

@@ -478,6 +478,17 @@ export function registerEventRoutes(app: FastifyInstance, secret: () => string):
           strip_alarms: typeof input.strip_alarms === 'boolean' ? input.strip_alarms : undefined,
           shared_with_scope:
             typeof input.shared_with_scope === 'boolean' ? input.shared_with_scope : undefined,
+          /**
+           * Tri-estat, i per això es mira si la clau **hi és** i no només el seu tipus:
+           * `{ inbox_visible: null }` vol dir "treu l'excepció" i s'ha de distingir de no
+           * enviar-la, que vol dir "no ho toquis". El mateix patró que `refresh_interval`.
+           */
+          inbox_visible:
+            'inbox_visible' in input
+              ? typeof input.inbox_visible === 'boolean'
+                ? input.inbox_visible
+                : null
+              : undefined,
         }),
       );
     }),

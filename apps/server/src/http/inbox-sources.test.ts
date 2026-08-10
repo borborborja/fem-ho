@@ -166,6 +166,65 @@ describe('el defecte per mena de font', () => {
   });
 });
 
+describe("l'interruptor per font, des d'Ajustos", () => {
+  it('encendre un RSS el fa entrar a la bústia', async () => {
+    const res = await api('PATCH', `/api/v1/calendars/${canal}`, { inbox_visible: true });
+    expect(res.statusCode).toBe(200);
+    expect(res.json<{ inbox_visible: boolean | null }>().inbox_visible).toBe(true);
+
+    expect(await uids()).toEqual(['reunio-escola', 'titular-1']);
+  });
+
+  it('i apagar un calendari el treu', async () => {
+    await api('PATCH', `/api/v1/calendars/${calendari}`, { inbox_visible: false });
+    expect(await uids()).toEqual(['titular-1']);
+  });
+
+  it('el defecte es publica perquè cap client hagi de duplicar la regla', async () => {
+    const tots = await (
+      await api('GET', '/api/v1/calendars')
+    ).json<{ id: string; inbox_visible_default: boolean }[]>();
+
+    expect(tots.find((c) => c.id === calendari)?.inbox_visible_default).toBe(true);
+    expect(tots.find((c) => c.id === canal)?.inbox_visible_default).toBe(false);
+  });
+
+  it("enviar `null` treu l'excepció i torna al defecte, no la fixa a fals", async () => {
+    /**
+     * És la diferència que justifica el tri-estat. Si `null` es guardés com un fals,
+     * "torna a com estava" i "no el vull" quedarien indistingibles, i el dia que el
+     * defecte canviés aquest calendari es quedaria clavat.
+     */
+    for (const id of [calendari, canal]) {
+      const res = await api('PATCH', `/api/v1/calendars/${id}`, { inbox_visible: null });
+      expect(res.json<{ inbox_visible: boolean | null }>().inbox_visible).toBeNull();
+    }
+
+    // I amb l'excepció treta, cadascú torna al seu defecte.
+    expect(await uids()).toEqual(['reunio-escola']);
+
+    const desat = await sql<{ inbox_visible: unknown }>`
+      SELECT inbox_visible FROM calendars WHERE id = ${canal}
+    `.execute(conn.db);
+    expect(desat.rows[0]?.inbox_visible).toBeNull();
+  });
+
+  it('no enviar el camp no toca res', async () => {
+    await api('PATCH', `/api/v1/calendars/${canal}`, { inbox_visible: true });
+    await api('PATCH', `/api/v1/calendars/${canal}`, { name: 'Notícies del poble' });
+
+    const res = await api('GET', '/api/v1/calendars');
+    const font = res
+      .json<{ id: string; name: string; inbox_visible: boolean | null }[]>()
+      .find((c) => c.id === canal);
+    expect(font?.name).toBe('Notícies del poble');
+    expect(font?.inbox_visible).toBe(true);
+
+    // I es deixa com estava per a les proves que vénen darrere.
+    await api('PATCH', `/api/v1/calendars/${canal}`, { inbox_visible: null });
+  });
+});
+
 describe("l'excepció mana sobre el defecte", () => {
   it('una marca fa sortir un titular concret', async () => {
     await sql`

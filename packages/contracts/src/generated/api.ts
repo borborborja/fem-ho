@@ -2098,6 +2098,16 @@ export interface components {
             writable?: boolean;
             refresh_interval?: number | null;
             strip_alarms?: boolean;
+            /**
+             * @description Si la font entra a la bústia. **Absent vol dir "no ho toquis" i `null` vol dir
+             *     "treu l'excepció"**, que no és el mateix: sense el `null` no hi hauria manera
+             *     de desdir-se'n i el calendari es quedaria clavat al valor que se li va posar
+             *     encara que el defecte canviés.
+             *
+             *     Canvia el que veu tot l'àmbit, i per això demana el mateix rol que compartir
+             *     el calendari.
+             */
+            inbox_visible?: boolean | null;
         };
         UserSettings: {
             /**
@@ -2491,6 +2501,27 @@ export interface components {
              *     de compartir el calendari.
              */
             has_credentials?: boolean;
+            /**
+             * @description Si aquesta font entra a la bústia diària.
+             *
+             *     **Tri-estat, i els tres valors diuen coses diferents.** `null` és "no s'hi ha
+             *     dit res i val el defecte"; `false` és "aquesta no, encara que el defecte digui
+             *     que sí". Es desa **l'excepció i no l'estat**, com `hidden_calendar_ids`: el dia
+             *     que el defecte canviï, qui no hagi tocat res segueix el defecte nou sense que
+             *     calgui migrar cap fila.
+             *
+             *     Llegir-lo com un booleà trauria de la bústia tots els calendaris on ningú ha
+             *     tocat res. Per ensenyar l'interruptor, `inbox_visible ?? inbox_visible_default`.
+             */
+            inbox_visible: boolean | null;
+            /**
+             * @description Què li tocaria si ningú digués res: **els calendaris sí i els canals RSS no**.
+             *     Un RSS pot publicar desenes de titulars al dia i la bústia és l'entrada de tot.
+             *
+             *     El calcula el servidor perquè la regla visqui en un sol lloc i cap client
+             *     l'hagi de duplicar.
+             */
+            inbox_visible_default: boolean;
         };
         Event: {
             id: string;
