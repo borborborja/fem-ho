@@ -153,6 +153,9 @@
     <string name="error_window_required">A window is needed: without one, recurrences cannot be expanded.</string>
     <string name="error_wrong_component">“{name}” is for tasks and does not accept events.</string>
     <string name="error_wrong_password">The current password is not correct.</string>
+    <string name="inbox_day_next">Next day</string>
+    <string name="inbox_day_prev">Previous day</string>
+    <string name="inbox_day_today">Today</string>
     <string name="inbox_mailbox">What the inbox shows</string>
     <string name="inbox_mailbox_all">All</string>
     <string name="inbox_mailbox_allhint">The whole inbox: both individual and shared scopes</string>
