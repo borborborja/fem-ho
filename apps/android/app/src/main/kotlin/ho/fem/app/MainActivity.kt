@@ -1013,7 +1013,12 @@ private fun PinnedRow(pinned: List<Checklist>, onOpenList: (String) -> Unit) {
                         .padding(vertical = 6.dp),
                 ) {
                     Text(
-                        text = checklist.name,
+                        // "Tasca · Llista", com als prototips: el nom sol no distingeix
+                        // dues llistes que es diguin igual en tasques diferents.
+                        text = checklist.taskTitle
+                            ?.takeIf { it.isNotEmpty() }
+                            ?.let { "${'$'}it · ${'$'}{checklist.name}" }
+                            ?: checklist.name,
                         color = Femho.colors.ink,
                         fontSize = FemhoText.body,
                         fontWeight = FontWeight.SemiBold,

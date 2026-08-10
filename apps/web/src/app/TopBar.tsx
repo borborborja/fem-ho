@@ -86,7 +86,8 @@ export interface TopBarProps {
   /** Els projectes que es veuen. **Buit vol dir tots.** */
   projectIds: string[];
   onProjectsChange: (ids: string[]) => void;
-  pinned: Checklist[];
+  /** Les pinejades porten el títol de la tasca: el menú ensenya "Tasca · Llista". */
+  pinned: (Checklist & { task_title?: string })[];
   onNewProject: () => void;
   onNewChecklist: () => void;
   onScopeWarning: (message: string) => void;
@@ -285,7 +286,7 @@ export function TopBar({
    * serveixi de debò: amb quatre llistes pinejades, els noms sols obliguen a entrar a
    * cadascuna per saber quina té feina pendent.
    */
-  const pinnedItem = (checklist: Checklist): ReactNode => {
+  const pinnedItem = (checklist: Checklist & { task_title?: string }): ReactNode => {
     const items = checklist.items ?? [];
     const done = items.filter((item) => item.done).length;
 
@@ -314,7 +315,17 @@ export function TopBar({
           color: 'var(--ink)',
         }}
       >
-        <span style={{ fontSize: 12.5, fontWeight: 600 }}>{checklist.name}</span>
+        {/*
+          **La tasca i la llista, com als dos prototips.**
+
+          Amb el nom de la llista sol, dues que es diguin "Encàrrecs" en tasques diferents
+          són indistingibles — i el menú existeix precisament per saltar a la que toca.
+        */}
+        <span style={{ fontSize: 12.5, fontWeight: 600 }}>
+          {checklist.task_title === undefined || checklist.task_title === ''
+            ? checklist.name
+            : `${checklist.task_title} · ${checklist.name}`}
+        </span>
         <span style={{ fontSize: 11, color: 'var(--ink-faint)' }}>
           {t('nav.pinnedProgress', { done, total: items.length })}
         </span>

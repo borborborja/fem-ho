@@ -130,6 +130,13 @@ data class Checklist(
     val position: String,
     val items: List<ChecklistItem> = emptyList(),
     val version: Int = 1,
+    /**
+     * El títol de la tasca que la conté.
+     *
+     * Només ve a `/pinned-checklists`, on el menú ensenya "Tasca · Llista": dues llistes
+     * que es diguin igual en tasques diferents són indistingibles pel nom.
+     */
+    @SerialName("task_title") val taskTitle: String? = null,
 )
 
 @Serializable
