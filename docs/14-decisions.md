@@ -299,6 +299,17 @@ hi anaven, i cap és de detall:
 Ara el botonet va enganxat al xip, **només si aquell àmbit té projectes**, i el menú és de
 caselles: se'n marquen les que es vulguin i no es tanca a cada clic.
 
+**Els dos prototips segueixen ensenyant el control vell, i és a posta.**
+
+`Fem-ho Web.dc.html` i `Fem-ho Mobile.dc.html` porten tots dos el desplegable global amb
+`projectFilter: 'all' | <projecte>` — un de sol, per a tots els àmbits. **No s'han
+actualitzat**: són el disseny d'origen i es conserven com és, com `instruccions.txt`.
+
+Es diu aquí perquè qui compari disseny i codi més endavant trobarà la diferència i pensarà
+que és un descuit. No ho és: la va demanar l'autor amb aquestes paraules —*"el selector de
+projectes que surt a la pàgina principal a la dreta d'àmbits me'l petaria"*— i els tres
+motius de sota són el que la sosté.
+
 **Un àmbit sense res triat vol dir "tots els seus".** La tria es desa com una llista plana
 d'identificadors a la URL (`?projects=a,b`), i la llista buida ja diu "tot": desar un
 "tots" explícit per àmbit seria un segon estat que vol dir el mateix. La conseqüència, que
