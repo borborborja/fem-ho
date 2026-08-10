@@ -131,3 +131,48 @@ test('al calendari, les fonts es poden apagar i encendre', async ({ page }) => {
     'false',
   );
 });
+
+test("l'interruptor de la bústia surt on toca i comença on toca", async ({ page }) => {
+  await enter(page);
+  const scope = await firstScope(page);
+
+  /**
+   * Es creen les dues menes per API perquè el que es prova aquí és **la posició inicial
+   * de la casella**, no el formulari d'alta, que ja té prova pròpia més amunt.
+   */
+  const fetes: Record<string, string> = {};
+  for (const [kind, name] of [
+    ['ical', 'Festius de la bústia'],
+    ['rss', 'Titulars de la bústia'],
+  ] as const) {
+    const { raw } = await apiCall(page, 'POST', '/api/v1/calendars', {
+      scope_id: scope,
+      name,
+      kind: 'events',
+      origin: 'subscription',
+      source_kind: kind,
+      source_url: `https://exemple.test/bustia.${kind}`,
+    });
+    fetes[kind] = (JSON.parse(raw) as { id: string }).id;
+  }
+
+  await page.goto('/settings?tab=calendars');
+
+  const ics = page.locator(`[data-testid="source-inbox-${fetes.ical!}"]`);
+  const rss = page.locator(`[data-testid="source-inbox-${fetes.rss!}"]`);
+
+  /**
+   * **Aquesta és la prova que val de debò.** Un `.ics` neix encès i un RSS apagat, i
+   * cap dels dos té res desat a la base: la casella ensenya el defecte que li dona el
+   * servidor. Si algú llegís el tri-estat com un booleà, totes dues sortirien apagades i
+   * ningú veuria res a la bústia.
+   */
+  await expect(ics).toBeChecked();
+  await expect(rss).not.toBeChecked();
+
+  // I es pot canviar d'opinió, en els dos sentits.
+  await rss.click();
+  await expect(rss).toBeChecked();
+  await page.reload();
+  await expect(page.locator(`[data-testid="source-inbox-${fetes.rss!}"]`)).toBeChecked();
+});
