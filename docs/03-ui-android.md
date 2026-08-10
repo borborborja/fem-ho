@@ -52,7 +52,7 @@ La capçalera és una columna, no una fila, perquè hi cap menys:
 3. Chips d'àmbit, que emboliquen.
 4. **Les llistes pinejades**, quan n'hi ha, sota els xips: el nom i **com va** cada una, com a la web. Toca-hi obre la tasca que la conté — a Android les llistes viuen dins de la tasca i no hi ha pantalla pròpia.
 
-El desplegable de projecte que hi havia aquí s'ha mogut **al xip de cada àmbit**, com a la web (`docs/14` P7). A Android encara no hi és: veure `docs/ESTAT.md`.
+5. **El filtre de projectes**, en una fila plegable sota els xips, amb un epígraf per àmbit i els seus projectes. A la web el botonet va enganxat al xip; aquí els xips emboliquen i fan scroll horitzontal, i un desplegable per sobre quedaria tallat, o sigui que la mateixa idea pren la forma que la pantalla permet. El criteri és el mateix (`docs/14` P7): **un àmbit sense res triat vol dir tots els seus**.
 
 Padding lateral de 16px.
 

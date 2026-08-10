@@ -93,12 +93,23 @@ private val Context.dataStore by preferencesDataStore(name = "femho")
 class Settings(private val context: Context) {
     private val serverKey = stringPreferencesKey("server_url")
     private val scopesKey = stringPreferencesKey("active_scopes")
+
+    /**
+     * Els projectes que es veuen. **Buit vol dir tots** (`docs/14` P7).
+     *
+     * A la web viu a la URL, que allà és l'estat compartible d'una pantalla. Aquí no hi
+     * ha URL: va a les preferències, com els àmbits actius, i per la mateixa raó —qui
+     * torna a obrir l'app es troba el tauler tal com el va deixar.
+     */
+    private val projectsKey = stringPreferencesKey("active_projects")
     private val themeKey = stringPreferencesKey("theme")
     private val accentKey = stringPreferencesKey("accent")
 
     val serverUrl: Flow<String?> = read(serverKey)
     val activeScopes: Flow<List<String>> =
         read(scopesKey).map { it?.split(",")?.filter(String::isNotEmpty) ?: emptyList() }
+    val activeProjects: Flow<List<String>> =
+        read(projectsKey).map { it?.split(",")?.filter(String::isNotEmpty) ?: emptyList() }
     val theme: Flow<String> = read(themeKey).map { it ?: "system" }
     val accent: Flow<String> = read(accentKey).map { it ?: "default" }
 
@@ -107,6 +118,7 @@ class Settings(private val context: Context) {
 
     suspend fun setServerUrl(value: String) = write(serverKey, value)
     suspend fun setActiveScopes(value: List<String>) = write(scopesKey, value.joinToString(","))
+    suspend fun setActiveProjects(value: List<String>) = write(projectsKey, value.joinToString(","))
     suspend fun setTheme(value: String) = write(themeKey, value)
     suspend fun setAccent(value: String) = write(accentKey, value)
 

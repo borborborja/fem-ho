@@ -86,6 +86,15 @@ class AppViewModel(private val container: Container) : ViewModel() {
      * pantalla que ja se sap obrir; guardar-les obligaria a decidir quan invalidar-les i
      * el guany offline seria veure la llista de pinejades d'ahir.
      */
+    /**
+     * Els projectes que es veuen al tauler. **Buit vol dir tots** (`docs/14` P7).
+     *
+     * La tria és per projecte i no per àmbit: un àmbit sense res triat vol dir "tots els
+     * seus", i la llista buida ja ho diu sense haver de desar cap "tots" a part.
+     */
+    private val _activeProjects = MutableStateFlow<List<String>>(emptyList())
+    val activeProjects: StateFlow<List<String>> = _activeProjects.asStateFlow()
+
     private val _pinned = MutableStateFlow<List<Checklist>>(emptyList())
     val pinned: StateFlow<List<Checklist>> = _pinned.asStateFlow()
 
@@ -181,6 +190,29 @@ class AppViewModel(private val container: Container) : ViewModel() {
         viewModelScope.launch {
             container.api(base).logout()
             _session.value = Session.NeedsLogin(base, "")
+        }
+    }
+
+    /**
+     * Marca o desmarca un projecte del filtre.
+     *
+     * No demana res al servidor: el tauler ja té les tasques dels àmbits actius i el
+     * filtre s'aplica sobre el que hi ha, com a la web.
+     */
+    fun toggleProject(id: String) {
+        viewModelScope.launch {
+            val ara = container.settings.activeProjects.first()
+            container.settings.setActiveProjects(if (id in ara) ara - id else ara + id)
+        }
+    }
+
+    /** Torna un àmbit a "tots els seus": treu del filtre els projectes que en són. */
+    fun clearProjectsOfScope(scopeId: String) {
+        viewModelScope.launch {
+            val seus = _projects.value.filter { it.scopeId == scopeId }.map { it.id }.toSet()
+            container.settings.setActiveProjects(
+                container.settings.activeProjects.first().filterNot { it in seus },
+            )
         }
     }
 
@@ -534,6 +566,9 @@ class AppViewModel(private val container: Container) : ViewModel() {
             }
         }
         viewModelScope.launch { repository.scopes.collect { _scopes.value = it } }
+        viewModelScope.launch {
+            container.settings.activeProjects.collect { _activeProjects.value = it }
+        }
         viewModelScope.launch { repository.projects.collect { _projects.value = it } }
         viewModelScope.launch { repository.people.collect { _people.value = it } }
         viewModelScope.launch { repository.pending.collect { _pending.value = it } }

@@ -140,12 +140,19 @@ adjunts dels esdeveniments compartits— i es va decidir així:
 | | Web | Android |
 | --- | --- | --- |
 | Crear projectes a Ajustos, per àmbit | sí | no |
-| Filtre de projectes al xip de l'àmbit | sí | **no** |
+| Filtre de projectes de l'àmbit | sí, al xip | sí, en una fila plegable sota els xips |
 | `#Àmbit/Projecte` a l'afegida ràpida | sí | sí (parser compartit) |
 | Menú de llistes pinejades amb progrés | sí | sí |
 
-El filtre de projectes al xip és el que falta a Android per tancar la paritat. La resta
-del que `docs/03` §3 demanava d'aquella fila —el botó de pinejades— ja hi és.
+**La forma canvia i el criteri no.** A la web el botonet va enganxat al xip; a Android els
+xips emboliquen i fan scroll horitzontal, i un desplegable per sobre d'aquella fila
+quedaria tallat. Per això allà és una fila plegable a sota, amb un epígraf per àmbit. El
+que és igual a les dues: **un àmbit sense res triat vol dir tots els seus**, i una tasca
+sense projecte d'un àmbit amb tria no es veu.
+
+El que **no** s'ha pogut comprovar engegat: després del reinici del 10 d'agost de 2026,
+l'usuari d'aquesta màquina ha perdut l'accés a `/dev/kvm` i l'emulador no arrenca. Hi ha
+compilació i proves de Kotlin, però ningú ha vist aquestes dues pantalles funcionant.
 
 ### El que dels adjunts encara NO hi és
 
