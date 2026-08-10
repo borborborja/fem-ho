@@ -261,7 +261,8 @@ function AppShell() {
         projectIds={projectIds}
         onProjectsChange={(ids) => setQuery({ projects: ids.length === 0 ? null : ids.join(',') })}
         pinned={pinned.data ?? []}
-        onNewProject={() => navigate('/settings')}
+        // Els projectes viuen amb els àmbits: s'hi va directament, no a la porta.
+        onNewProject={() => navigate('/settings?tab=scopes')}
         onNewChecklist={() => navigate('/settings')}
         onScopeWarning={setWarning}
         aiEnabled={aiEnabled}

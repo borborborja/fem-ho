@@ -297,3 +297,59 @@ test("l'afegida ràpida encamina a #Àmbit/Projecte amb dades reals", async ({ p
   const creada = page1.data.find((task) => task.title === 'Canviar la caldera');
   expect(creada?.project_id).toBe(obra.id);
 });
+
+/**
+ * **"Nou projecte" ha de portar on es fan els projectes.**
+ *
+ * El menú `+` deia això i portava a Ajustos i prou: la persona queia a "General" i havia
+ * de trobar sola que els projectes són a "Àmbits".
+ */
+test('el menú + porta directament on es creen els projectes', async ({ page }) => {
+  await enterAsNew(page, MEU);
+  await page.goto('/');
+
+  await page.locator('[data-testid="topbar-add"]').click();
+  await page.getByRole('menuitem').first().click();
+
+  // Hi som, i el camp de crear-ne un hi és sense haver de clicar res més.
+  await expect(page.locator('[data-testid="settings-tab-scopes"]')).toHaveAttribute(
+    'aria-current',
+    'true',
+  );
+  await expect(page.locator('[data-testid^="new-project-"]').first()).toBeVisible();
+});
+
+/**
+ * El grup de xip a mòbil.
+ *
+ * El botonet va **enganxat** al xip i tots dos han de continuar sent tocables: 44px de
+ * costat és el mínim que `docs/02` §10 demana, i un control de 20px al costat d'un de
+ * gran és el que fa que a mòbil s'acabi tocant el que no volies.
+ */
+test.describe('a mòbil', () => {
+  test.use({ viewport: { width: 380, height: 760 } });
+
+  test('el botonet de projectes segueix sent tocable', async ({ page }) => {
+    await enterAsNew(page, MEU);
+    const auth = await bearer(page);
+    const scopes = (await (await page.request.get('/api/v1/scopes', { headers: auth })).json()) as {
+      id: string;
+    }[];
+    const scope = scopes[0]!;
+
+    await page.goto(`/board?scopes=${scope.id}`);
+    const boto = page.locator(`[data-testid="scope-projects-${scope.id}"]`);
+    await expect(boto).toBeVisible({ timeout: 10_000 });
+
+    const caixa = await boto.boundingBox();
+    expect(caixa?.height ?? 0).toBeGreaterThanOrEqual(44);
+
+    // I obre el desplegable sense que el clic caigui al xip i apagui l'àmbit.
+    await boto.click();
+    await expect(page.locator(`[data-testid="scope-projects-${scope.id}-all"]`)).toBeVisible();
+    await expect(page.locator(`[data-testid="scope-${scope.id}"]`)).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+  });
+});

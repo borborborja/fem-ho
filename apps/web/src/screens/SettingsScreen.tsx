@@ -37,8 +37,20 @@ type Tab = (typeof TABS)[number];
 
 export function SettingsScreen() {
   const { profile } = useSessionData();
-  const { navigate } = useRouter();
-  const [tab, setTab] = useState<Tab>('general');
+  const { navigate, route } = useRouter();
+
+  /**
+   * La pestanya pot venir de la URL.
+   *
+   * **Perquè s'hi pugui enviar algú.** El menú `+` de la barra diu "Nou projecte" i
+   * portava a Ajustos i prou: la persona queia a "General" i havia de trobar sola que els
+   * projectes són a "Àmbits". Un menú que promet una acció i et deixa a la porta d'un
+   * edifici no ha fet la seva feina.
+   */
+  const fromQuery = route.query.get('tab');
+  const [tab, setTab] = useState<Tab>(
+    TABS.includes(fromQuery as Tab) ? (fromQuery as Tab) : 'general',
+  );
 
   // Admin només per a administradors: amagar-la no és seguretat —el servidor ja hi posa
   // `users:manage`— però ensenyar una pestanya que sempre dona 403 és una mala broma.
