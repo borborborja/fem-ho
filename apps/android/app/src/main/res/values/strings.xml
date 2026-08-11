@@ -59,6 +59,7 @@
     <string name="board_quickadd_revert">Tornar «{label}» a text</string>
     <string name="board_quickadd_scoperequired">Indica l\'àmbit amb #{scopes}</string>
     <string name="board_quickadd_scoperequiredprefix">Indica l\'àmbit amb #</string>
+    <string name="calendar_addonday">Afegir una tasca aquest dia</string>
     <string name="calendar_day">Diari</string>
     <string name="calendar_empty_day">Sense esdeveniments ni tasques aquest dia.</string>
     <string name="calendar_empty_week">Sense res</string>
@@ -224,6 +225,7 @@
     <string name="nav_search">Cercar</string>
     <string name="nav_settings">Ajustos</string>
     <string name="nav_tasks">Tasques</string>
+    <string name="nav_view">Vista</string>
     <string name="notify_reminder">Recordatori</string>
     <string name="palette_empty">Res que coincideixi.</string>
     <string name="palette_go">Anar a</string>

@@ -59,6 +59,7 @@
     <string name="board_quickadd_revert">Devolver «{label}» a texto</string>
     <string name="board_quickadd_scoperequired">Indica el ámbito con #{scopes}</string>
     <string name="board_quickadd_scoperequiredprefix">Indica el ámbito con #</string>
+    <string name="calendar_addonday">Añadir una tarea este día</string>
     <string name="calendar_day">Diario</string>
     <string name="calendar_empty_day">Sin eventos ni tareas este día.</string>
     <string name="calendar_empty_week">Sin nada</string>
@@ -224,6 +225,7 @@
     <string name="nav_search">Buscar</string>
     <string name="nav_settings">Ajustes</string>
     <string name="nav_tasks">Tareas</string>
+    <string name="nav_view">Vista</string>
     <string name="notify_reminder">Recordatorio</string>
     <string name="palette_empty">Nada que coincida.</string>
     <string name="palette_go">Ir a</string>

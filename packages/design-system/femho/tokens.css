@@ -28,6 +28,19 @@
   --drop-indicator: var(--gradient-brand-2stop);
 
   /**
+   * El contorn del dia que el ratolí té a sobre, al calendari.
+   *
+   * **Ha de ser distingible de les altres dues coses que ja diu una cel·la**: el dia
+   * seleccionat es pinta amb el gradient de marca i avui amb `--ghost-bg`. Un tercer estat
+   * que fos un altre farciment es confondria amb aquells dos, i per això és un **contorn**
+   * i no un fons: la forma diu "encara no és teu, però el pots agafar".
+   *
+   * No es fa amb `--card-border`, que és tan tènue que sobre una cel·la sense fons no es
+   * veu, ni amb el gradient de marca, que un `border` no sap pintar.
+   */
+  --day-hover-ring: rgba(20, 22, 30, 0.28);
+
+  /**
    * Els vuit colors dels àmbits que crea l'usuari (docs/04 §4, regla 5).
    *
    * "Els àmbits creats per l'usuari no fan servir la tríada. Reben color d'una paleta
@@ -60,6 +73,9 @@
   /* Sobre superfície fosca, la pastilla ha de ser un vel clar molt tènue, com la
      resta de `--tag-bg` del tema, i no un blanc al 50%. */
   --inbox-pill-bg: rgba(255, 255, 255, 0.12);
+
+  /* Sobre fons fosc, el contorn ha de ser clar; el mateix to invertit no es veuria. */
+  --day-hover-ring: rgba(255, 255, 255, 0.32);
 
   /* Els colors d'àmbit pugen una mica de lluminositat perquè mantinguin el contrast
      contra el fons fosc. */

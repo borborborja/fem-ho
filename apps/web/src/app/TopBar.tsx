@@ -481,7 +481,12 @@ export function TopBar({
         >
           <div
             role="tablist"
-            aria-label={t('nav.tasks')}
+            /*
+              Etiquetava la fila amb "Tasques", que és el nom d'una de les dues pestanyes:
+              un lector de pantalla anunciava "Tasques, pestanya Tasques". El grup es diu
+              què tries, no una de les opcions.
+            */
+            aria-label={t('nav.view')}
             data-testid="view-switch"
             style={{
               display: 'inline-flex',
@@ -492,8 +497,16 @@ export function TopBar({
           >
             {(
               [
-                { key: 'tasks', label: t('nav.tasks'), href: '/' },
+                /*
+                  **El calendari a l'esquerra i les tasques a la dreta.**
+
+                  L'ordre no és estètic: el calendari és el que ve **abans**. És el marc
+                  —què tens aquests dies— i les tasques són el que en fas. Llegint
+                  d'esquerra a dreta, primer el que ve i després la feina, que és el mateix
+                  ordre en què es pensa.
+                */
                 { key: 'calendar', label: t('nav.calendar'), href: '/calendar' },
+                { key: 'tasks', label: t('nav.tasks'), href: '/' },
               ] as const
             ).map((tab) => (
               <button

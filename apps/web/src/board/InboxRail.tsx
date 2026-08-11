@@ -56,6 +56,19 @@ export interface InboxRailProps {
   /** El navegador de dia `‹ 5 d'agost ›`, que la columna del kanban també té. */
   header?: ReactNode | undefined;
   footer?: ReactNode | undefined;
+  /**
+   * L'afegida ràpida **de cada secció**, al calendari.
+   *
+   * `docs/02` §5 en demana una per bloc: la del dia seleccionat crea amb aquella data, i
+   * la de "sense dia" crea sense. Al kanban n'hi ha una de sola al peu, perquè allà la
+   * columna JA és tot l'Inbox i no hi ha dos blocs on caure.
+   *
+   * Van a dins de cada secció i no al peu de la columna perquè **el que es crea depèn de
+   * sota quin epígraf hagis escrit**: un camp al peu, lluny dels dos blocs, no diria a
+   * quin dels dos va.
+   */
+  dayFooter?: ReactNode | undefined;
+  undatedFooter?: ReactNode | undefined;
   collapsed?: Record<string, boolean> | undefined;
   onToggleGroup?: ((scopeId: string) => void) | undefined;
   onMove?: ((taskId: string, status: 'todo' | 'doing') => void) | undefined;
@@ -78,6 +91,8 @@ export function InboxRail({
   placement = 'column',
   header,
   footer,
+  dayFooter,
+  undatedFooter,
   collapsed = {},
   onToggleGroup,
   onMove,
@@ -168,6 +183,7 @@ export function InboxRail({
       footer={footer}
     >
       {section(dayLabel, body)}
+      {dayFooter}
 
       {/*
         Del calendari. Va DESPRÉS de les tasques del dia i abans de les sense data: el
@@ -203,6 +219,7 @@ export function InboxRail({
               undated.map(cardFor)
             ),
           )}
+          {undatedFooter}
         </div>
       )}
     </KanbanColumn>

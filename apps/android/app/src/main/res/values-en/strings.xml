@@ -59,6 +59,7 @@
     <string name="board_quickadd_revert">Turn “{label}” back into text</string>
     <string name="board_quickadd_scoperequired">Name the scope with #{scopes}</string>
     <string name="board_quickadd_scoperequiredprefix">Name the scope with #</string>
+    <string name="calendar_addonday">Add a task on this day</string>
     <string name="calendar_day">Day</string>
     <string name="calendar_empty_day">No events or tasks on this day.</string>
     <string name="calendar_empty_week">Nothing</string>
@@ -224,6 +225,7 @@
     <string name="nav_search">Search</string>
     <string name="nav_settings">Settings</string>
     <string name="nav_tasks">Tasks</string>
+    <string name="nav_view">View</string>
     <string name="notify_reminder">Reminder</string>
     <string name="palette_empty">Nothing matches.</string>
     <string name="palette_go">Go to</string>
