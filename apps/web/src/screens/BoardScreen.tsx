@@ -69,6 +69,7 @@ function toBoardTask(
     title: task.title,
     status: task.status,
     scope_id: task.scope_id,
+    sourceKind: task.source_kind,
     project: projectName,
     /**
      * A la bústia d'un àmbit **col·lectiu**, sempre qui la té; fora, només si és d'algú

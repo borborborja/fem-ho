@@ -456,6 +456,8 @@ export function DayView({ label, items, emptyLabel, onSelectItem, onAdd, addLabe
                 flexShrink: 0,
               }}
             />
+            {/* D'on ve, ja feta: el design system no sap de menes de font ni de catàlegs. */}
+            {item.icon}
             <span style={{ flex: 1, fontSize: 14, fontWeight: 600 }}>{item.title}</span>
             {item.time ? (
               <span style={{ fontSize: 12, color: 'var(--ink-soft)' }}>{item.time}</span>

@@ -89,6 +89,8 @@ export interface DayItem {
    * comprovació permanent veuria.
    */
   muted?: boolean | undefined;
+  /** La icona de provinença, ja feta. Res si l'esdeveniment és d'aquesta casa. */
+  icon?: React.ReactNode;
 }
 
 export interface DayViewProps {

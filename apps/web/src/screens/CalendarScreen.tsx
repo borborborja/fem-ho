@@ -30,6 +30,7 @@ import type { Calendar, EventOccurrence, Inbox } from '../app/types.js';
 import { InboxRail } from '../board/InboxRail.js';
 import { ColumnQuickAdd } from '../board/ColumnQuickAdd.js';
 import { EventSheet } from './EventSheet.js';
+import { SourceIcon } from '../board/SourceIcon.js';
 import { ErrorBanner } from './BoardScreen.js';
 
 type Mode = 'month' | 'week' | 'day';
@@ -121,6 +122,12 @@ export function CalendarScreen({ activeScopeIds, onOpenTask }: CalendarScreenPro
     `/api/v1/inbox?date=${selected}&include_overdue=${String(settings.inbox_show_overdue ?? true)}${scopeQuery}`,
   );
 
+  /** De quina mena és la font d'un calendari. `null` si és d'aquesta casa. */
+  const menaDe = (calendarId: string | undefined): 'caldav' | 'ical' | 'rss' | null =>
+    calendarId === undefined
+      ? null
+      : (calendars.data?.find((calendar) => calendar.id === calendarId)?.source_kind ?? null);
+
   const colorOf = (scopeId: string): string => {
     const scope = scopes.find((candidate) => candidate.id === scopeId);
     return scope === undefined ? 'var(--ink-faint)' : `var(${scope.color})`;
@@ -195,6 +202,11 @@ export function CalendarScreen({ activeScopeIds, onOpenTask }: CalendarScreenPro
        * calendari i el que falta a la bústia deixarien de ser la mateixa cosa.
        */
       muted: !occurrence.in_inbox,
+      /**
+       * La mena surt de la llista de calendaris que aquesta pantalla ja té: no cal
+       * ampliar el contracte de `/events` per a una cosa que el client ja sap.
+       */
+      icon: <SourceIcon kind={menaDe(occurrence.calendar_id)} />,
     }));
 
   /** L'ocurrència oberta a la fitxa, per la clau que fa servir la graella. */

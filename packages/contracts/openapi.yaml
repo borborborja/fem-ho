@@ -4133,6 +4133,19 @@ components:
         recurrence_parent_id:
           type: [string, 'null']
           description: La instància de la qual ve, si n'és una repetició.
+        source_kind:
+          type: [string, 'null']
+          enum: [caldav, ical, rss, null]
+          description: |
+            De quina **mena de font** ve aquesta tasca, o nul si l'ha escrita una persona.
+
+            **No és `activity_log.source`**: aquell diu per quin canal ha entrat una
+            escriptura —web, Android, MCP— i aquest diu d'on ve el contingut.
+
+            És el que respon la pregunta que fa la icona de provinença, i el que fa que
+            afegir una font nova sigui **un valor més i no una columna més**: les
+            referències específiques de cada mena (`event_calendar_id`, `event_uid`…)
+            diuen *quin* origen concret, i això diu *quina mena*.
         progress:
           type: object
           required: [done, total, lists]

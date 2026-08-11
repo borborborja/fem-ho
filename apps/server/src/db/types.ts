@@ -440,6 +440,7 @@ export interface Tasks {
   rrule: string | null;
   scope_id: string;
   search_text: string | null;
+  source_kind: string | null;
   status: Generated<string>;
   title: string;
   updated_at: string;

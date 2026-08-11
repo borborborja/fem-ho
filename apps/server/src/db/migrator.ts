@@ -29,6 +29,7 @@ import * as sharedScopes from './migrations/008-shared-scopes.js';
 import * as federation from './migrations/009-federation.js';
 import * as gravatar from './migrations/010-gravatar.js';
 import * as inboxSources from './migrations/011-inbox-sources.js';
+import * as taskProvenance from './migrations/012-task-provenance.js';
 
 export interface Migration {
   name: string;
@@ -70,6 +71,7 @@ export const MIGRATIONS: Migration[] = [
   { name: '009-federation', up: federation.up, down: federation.down, needsForeignKeysOff: true },
   { name: '010-gravatar', up: gravatar.up, down: gravatar.down },
   { name: '011-inbox-sources', up: inboxSources.up, down: inboxSources.down },
+  { name: '012-task-provenance', up: taskProvenance.up, down: taskProvenance.down },
 ];
 
 const MIGRATIONS_TABLE = 'schema_migrations';

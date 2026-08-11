@@ -417,6 +417,9 @@
     <string name="shortcuts_settings">Ajustes</string>
     <string name="shortcuts_tasks">Tareas</string>
     <string name="shortcuts_title">Atajos de teclado</string>
+    <string name="source_caldav">De un calendario CalDAV</string>
+    <string name="source_ical">De un calendario suscrito</string>
+    <string name="source_rss">De un canal RSS</string>
     <string name="state_empty_pinned">No tienes ninguna lista fijada.</string>
     <string name="state_empty_projects">Este ámbito todavía no tiene ningún proyecto.</string>
     <string name="state_empty_scopes">Todavía no tienes ningún ámbito. Crea uno en Ajustes.</string>

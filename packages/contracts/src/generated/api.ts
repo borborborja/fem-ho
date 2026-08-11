@@ -2804,6 +2804,19 @@ export interface components {
             /** @description La instància de la qual ve, si n'és una repetició. */
             recurrence_parent_id?: string | null;
             /**
+             * @description De quina **mena de font** ve aquesta tasca, o nul si l'ha escrita una persona.
+             *
+             *     **No és `activity_log.source`**: aquell diu per quin canal ha entrat una
+             *     escriptura —web, Android, MCP— i aquest diu d'on ve el contingut.
+             *
+             *     És el que respon la pregunta que fa la icona de provinença, i el que fa que
+             *     afegir una font nova sigui **un valor més i no una columna més**: les
+             *     referències específiques de cada mena (`event_calendar_id`, `event_uid`…)
+             *     diuen *quin* origen concret, i això diu *quina mena*.
+             * @enum {string|null}
+             */
+            source_kind?: "caldav" | "ical" | "rss" | null;
+            /**
              * @description Subtasques i ítems de llista **comptats junts**. La targeta els ensenya sota
              *     un sol commutador ("3/7 fets") perquè per a qui mira el tauler són el mateix:
              *     coses que falten dins d'aquesta tasca. La distinció importa en obrir-la.

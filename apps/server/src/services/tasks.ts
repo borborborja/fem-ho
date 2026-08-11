@@ -9,7 +9,12 @@
 
 import { sql } from 'kysely';
 import { v7 as uuidv7 } from 'uuid';
-import { TASK_STATUSES, generatePosition, type TaskStatus } from '@fem-ho/contracts';
+import {
+  TASK_STATUSES,
+  generatePosition,
+  type SourceKind,
+  type TaskStatus,
+} from '@fem-ho/contracts';
 import { dbBool } from '../db/bool.js';
 import type { AuditContext } from '../audit/audited-transaction.js';
 import type { MigrationDb } from '../db/migration-db.js';
@@ -43,6 +48,15 @@ export interface TaskRow {
   /** `schedule` compta des del venciment; `completion`, des que es fa (docs/01 §4). */
   recurrence_mode: 'schedule' | 'completion' | null;
   recurrence_parent_id: string | null;
+  /**
+   * De quina mena de font ve, o `null` si l'has escrita tu.
+   *
+   * **Una sola pregunta i una sola resposta.** Les referències específiques —`event_*`,
+   * i demà les del correu— diuen *quin* origen concret; això diu *quina mena*, que és el
+   * que necessita qui pinta la icona i el que fa que afegir una font nova no obligui a
+   * mirar una columna més.
+   */
+  source_kind: SourceKind | null;
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -68,7 +82,7 @@ export interface Task extends TaskRow {
 const TASK_COLUMNS = sql`
   id, scope_id, project_id, title, description, status, position, due_date, due_time,
   deadline, completed_at, view_mode, ai_mode, delegate_agent_id,
-  rrule, recurrence_mode, recurrence_parent_id, created_by,
+  rrule, recurrence_mode, recurrence_parent_id, source_kind, created_by,
   created_at, updated_at, version
 `;
 
@@ -344,13 +358,20 @@ export async function createTask(
    * vives de la mateixa cita: si no, la cita marxaria de la bústia i tornaria segons
    * quina de les dues s'esborrés primer.
    */
+  let sourceKind: SourceKind | null = null;
   if (input.source_event !== undefined) {
-    const cal = await sql<{ scope_id: string }>`
-      SELECT scope_id FROM calendars
+    const cal = await sql<{ scope_id: string; source_kind: SourceKind | null }>`
+      SELECT scope_id, source_kind FROM calendars
       WHERE id = ${input.source_event.calendar_id} AND deleted_at IS NULL
     `.execute(ctx.tx);
     const calScope = cal.rows[0]?.scope_id;
     if (calScope === undefined) throw notFound('calendar', input.source_event.calendar_id);
+    /**
+     * La mena surt del calendari i no és una constant: una tasca feta des d'un `.ics`
+     * publicat i una feta des d'un CalDAV bidireccional no vénen del mateix lloc.
+     * D'un calendari d'aquesta casa no en surt cap: la cita l'has escrita tu.
+     */
+    sourceKind = cal.rows[0]?.source_kind ?? null;
     if (calScope !== input.scope_id) {
       throw new PolicyError(
         'event-scope-mismatch',
@@ -410,14 +431,14 @@ export async function createTask(
   const inserted = await sql`
     INSERT INTO tasks (id, scope_id, project_id, title, description, status, position,
                        due_date, due_time, view_mode, ai_mode, origin, search_text,
-                       event_calendar_id, event_uid, event_recurrence_id,
+                       event_calendar_id, event_uid, event_recurrence_id, source_kind,
                        created_by, created_at, updated_at, version)
     VALUES (${id}, ${input.scope_id}, ${input.project_id ?? null}, ${input.title.trim()},
             ${input.description ?? null}, ${status}, ${position}, ${input.due_date ?? null},
             ${input.due_time ?? null}, 'card', 'manual', 'native',
             ${normalizeForSearch(input.title, input.description)},
             ${input.source_event?.calendar_id ?? null}, ${input.source_event?.uid ?? null},
-            ${input.source_event?.recurrence_id ?? null},
+            ${input.source_event?.recurrence_id ?? null}, ${sourceKind},
             ${principal.userId}, ${ctx.now}, ${ctx.now}, 1)
     ON CONFLICT (id) DO NOTHING
   `.execute(ctx.tx);

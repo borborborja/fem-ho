@@ -8,7 +8,7 @@
  */
 
 import { useState, type ReactNode } from 'react';
-import { t } from '@fem-ho/contracts';
+import { t, type SourceKind } from '@fem-ho/contracts';
 import type { TaskStatus } from '@fem-ho/contracts';
 import {
   EmptyState,
@@ -25,6 +25,8 @@ import type { InboxEvent } from '../app/types.js';
 export interface BoardTask {
   id: string;
   title: string;
+  /** De quina mena de font ve, o `undefined` si l'ha escrita una persona. */
+  sourceKind?: SourceKind | null | undefined;
   status: TaskStatus;
   scope_id: string;
   project?: string | undefined;

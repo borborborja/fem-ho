@@ -666,3 +666,48 @@ describe("fer una tasca a partir d'una cita, i esborrar-la", () => {
     await netejar();
   });
 });
+
+describe('la provinença viatja', () => {
+  it('cada cita diu de quina mena de font ve', async () => {
+    const res = await api('GET', `/api/v1/inbox?date=${DIA}`);
+    const menes = Object.fromEntries(
+      res.json<InboxResposta>().events.map((e) => [e.uid, e.source_kind]),
+    );
+    expect(menes['reunio-escola']).toBe('caldav');
+  });
+
+  it('i la tasca que en surt la conserva', async () => {
+    /**
+     * **«S'ha creat a partir de» vol dir que la marca sobreviu a la conversió.** Si es
+     * perdés en fer-ne una tasca, la icona només serviria mentre no la fessis servir — que
+     * és justament quan deixa d'importar d'on venia.
+     */
+    await sql`DELETE FROM event_inbox_marks`.execute(conn.db);
+    await sql`UPDATE tasks SET deleted_at = ${NOW} WHERE event_uid IS NOT NULL AND deleted_at IS NULL`.execute(
+      conn.db,
+    );
+
+    const res = await api('POST', '/api/v1/tasks', {
+      id: uuidv7(),
+      scope_id: scopeId,
+      title: 'Anar-hi',
+      status: 'inbox',
+      position: 'd1',
+      source_event: { calendar_id: calendari, uid: 'reunio-escola' },
+    });
+    expect(res.statusCode).toBe(201);
+    // El calendari d'origen és un CalDAV, i és el que ha de dir la tasca.
+    expect(res.json<{ source_kind: string | null }>().source_kind).toBe('caldav');
+  });
+
+  it('i una que has escrit tu no en té cap', async () => {
+    const res = await api('POST', '/api/v1/tasks', {
+      id: uuidv7(),
+      scope_id: scopeId,
+      title: 'Escrita a mà',
+      status: 'inbox',
+      position: 'd2',
+    });
+    expect(res.json<{ source_kind: string | null }>().source_kind).toBeNull();
+  });
+});
