@@ -448,9 +448,10 @@ export function WeekView({ days, selectedDate, onSelect, emptyLabel, onAddOnDay,
                 {emptyLabel}
               </span>
             ) : (
-              day.items.slice(0, 3).map((item) => (
+              day.items.slice(0, 4).map((item) => (
                 <span
                   key={item.id}
+                  title={item.title}
                   style={{
                     fontSize: 10.5,
                     fontWeight: 600,
@@ -459,12 +460,29 @@ export function WeekView({ days, selectedDate, onSelect, emptyLabel, onAddOnDay,
                     background: 'var(--tag-bg)',
                     color: 'var(--tag-text)',
                     textAlign: 'center',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
                   }}
                 >
                   {item.title}
                 </span>
               ))
             )}
+            {/*
+              **El que no hi cap es diu.** Un dia amb vuit cites n'ensenyava tres i callava
+              les altres cinc: la setmana et deia que dimarts hi havia «Gimnàs, Reunió,
+              Dentista» i et deixava sortir de casa sense saber que hi havia el dentista a
+              les dotze i quatre coses més. Amagar és inevitable; **amagar en silenci, no**.
+            */}
+            {day.items.length > 4 ? (
+              <span
+                data-testid={`week-more-${day.iso}`}
+                style={{ fontSize: 10, color: 'var(--ink-soft)', textAlign: 'center' }}
+              >
+                +{day.items.length - 4}
+              </span>
+            ) : null}
           </span>
           {onAddOnDay && hovered === day.iso ? (
             <DayAdd label={addLabel} onClick={() => onAddOnDay(day.iso)} />

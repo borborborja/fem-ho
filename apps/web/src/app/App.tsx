@@ -236,7 +236,28 @@ function AppShell() {
   const view: 'tasks' | 'calendar' = route.path === '/calendar' ? 'calendar' : 'tasks';
   const list = match('/lists/:id', route.path);
 
-  const fullHeight = list === null && view === 'tasks' && route.path === '/';
+  /**
+   * **Alçada exacta quan el que es pinta és el tauler**, i no quan la ruta és `/`.
+   *
+   * Deia `route.path === '/'`, i el tauler també es pinta a qualsevol altra ruta que no
+   * sigui Ajustos, el cercador o el tauler general —`/board`, o el que sigui que algú
+   * escrigui—. Allà les columnes no es desplaçaven per dins: amb vint-i-cinc tasques, la
+   * pàgina creixia fins a **2.168 píxels** i el camp d'afegida ràpida quedava mil dos-cents
+   * per sota de la vista.
+   *
+   * No es notava perquè el commutador de dalt porta a `/`. **I les proves de navegador
+   * anaven a `/board`**, o sigui que comprovaven una disposició que ningú fa servir.
+   *
+   * Es deriva del que es pinta i no de la ruta: així una ruta nova no torna a obrir el
+   * forat.
+   */
+  const showsBoard =
+    list === null &&
+    view === 'tasks' &&
+    route.path !== '/search' &&
+    route.path !== '/dashboard' &&
+    route.path !== '/settings';
+  const fullHeight = showsBoard;
 
   return (
     <div
