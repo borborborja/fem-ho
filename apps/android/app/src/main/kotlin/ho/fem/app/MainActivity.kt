@@ -55,6 +55,8 @@ import ho.fem.model.Scope
 import ho.fem.model.TaskStatus
 import ho.fem.calendar.CalendarLabels
 import ho.fem.calendar.DayList
+import ho.fem.calendar.InboxLabels
+import ho.fem.calendar.InboxRail
 import ho.fem.calendar.MonthView
 import ho.fem.calendar.WeekList
 import ho.fem.settings.SettingsLabels
@@ -618,10 +620,19 @@ private fun CalendarHost(model: AppViewModel, onSettings: () -> Unit, onBoard: (
     val scopes by model.scopes.collectAsStateWithLifecycle()
     val pending by model.pending.collectAsStateWithLifecycle()
     val events by model.events.collectAsStateWithLifecycle()
+    val inbox by model.inbox.collectAsStateWithLifecycle()
     var active by remember { mutableStateOf<Set<String>>(emptySet()) }
     var selected by remember { mutableStateOf(java.time.LocalDate.now()) }
 
-    androidx.compose.runtime.LaunchedEffect(selected.month, selected.year) {
+    /**
+     * **La clau és `selected` sencer i no el mes i l'any.**
+     *
+     * Amb `selected.month, selected.year`, triar un altre dia del mateix mes no tornava a
+     * demanar res: la bústia que es carregava era la del dia en què s'havia obert el mes,
+     * i no canviava fins a passar de mes. Com que fins ara el resultat no es pintava
+     * enlloc, no ho havia vist ningú.
+     */
+    androidx.compose.runtime.LaunchedEffect(selected) {
         val first = selected.withDayOfMonth(1)
         model.loadCalendar(
             from = first.minusDays(7).toString(),
@@ -745,6 +756,31 @@ private fun CalendarHost(model: AppViewModel, onSettings: () -> Unit, onBoard: (
                 modifier = Modifier.weight(1f),
             )
         }
+
+        /**
+         * I el dipòsit del dia, que fins ara es demanava i es llençava.
+         *
+         * Va **sota** la graella i no al costat: a la web és un rail perquè hi ha amplada;
+         * en un telèfon, dues columnes de 180px no serveixen per a res. És el mateix
+         * contingut i les mateixes accions (docs/02 §10: la web en mòbil i l'app han de
+         * ser gairebé idèntiques).
+         */
+        InboxRail(
+            tasks = (inbox?.dated.orEmpty() + inbox?.overdue.orEmpty() + inbox?.undated.orEmpty()),
+            events = inbox?.events.orEmpty(),
+            colorOf = { colors[it] ?: fallback },
+            labels = InboxLabels(
+                title = stringResource(R.string.board_column_inbox),
+                empty = stringResource(R.string.board_empty_inbox),
+                fromCalendar = stringResource(R.string.inbox_section_events),
+                allDay = stringResource(R.string.inbox_event_allday),
+                toTask = stringResource(R.string.inbox_event_totask),
+                remove = stringResource(R.string.inbox_event_remove),
+            ),
+            onOpenTask = { model.open(it) },
+            onEventToTask = { model.eventToTask(it, selected.toString()) },
+            onEventRemove = { model.setEventInInbox(it, visible = false, day = selected.toString()) },
+        )
     }
 }
 

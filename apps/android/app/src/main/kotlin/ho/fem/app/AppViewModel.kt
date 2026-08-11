@@ -8,6 +8,7 @@ import ho.fem.model.AiMode
 import ho.fem.model.Checklist
 import ho.fem.model.EventOccurrence
 import ho.fem.model.Inbox
+import ho.fem.model.InboxEvent
 import ho.fem.model.Person
 import ho.fem.model.Project
 import ho.fem.model.Scope
@@ -258,6 +259,54 @@ class AppViewModel(private val container: Container) : ViewModel() {
      * repliquen perquè només es miren en obrir la tasca, i replicar-les faria la primera
      * sincronització llarga per a un contingut que la majoria de tasques no tenen.
      */
+    /**
+     * Treure o tornar a posar una cita a la bústia.
+     *
+     * Torna a demanar el dia en comptes de tocar l'estat local: **la decisió té cinc
+     * nivells i la pren el servidor**, i endevinar-la aquí voldria dir una segona
+     * implementació de la mateixa regla.
+     */
+    fun setEventInInbox(event: InboxEvent, visible: Boolean?, day: String) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            val active = container.settings.activeScopes.first()
+            val api = container.api(base)
+            runCatching {
+                api.setEventInInbox(event.calendarId, event.uid, event.recurrenceId, visible)
+            }.onSuccess {
+                runCatching { api.inbox(day, true, active) }.onSuccess { _inbox.value = it }
+            }
+        }
+    }
+
+    /**
+     * Fer una tasca a partir d'una cita.
+     *
+     * Neix amb el títol i la data de la cita: qui ho demana ja sap què és, i fer-l'hi
+     * reescriure seria demanar-li que copiés una cosa que té al davant. La cita marxa de
+     * la bústia sola, perquè ara hi ha una tasca viva que hi apunta.
+     */
+    fun eventToTask(event: InboxEvent, day: String) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            val active = container.settings.activeScopes.first()
+            val api = container.api(base)
+            runCatching {
+                api.createTask(
+                    id = java.util.UUID.randomUUID().toString(),
+                    scopeId = event.scopeId,
+                    title = event.summary,
+                    projectId = null,
+                    assigneeIds = emptyList(),
+                    sourceEvent = Triple(event.calendarId, event.uid, event.recurrenceId),
+                )
+            }.onSuccess {
+                runCatching { api.inbox(day, true, active) }.onSuccess { _inbox.value = it }
+                refresh()
+            }
+        }
+    }
+
     fun open(task: Task) {
         _openTask.value = task
         _openChecklists.value = emptyList()
