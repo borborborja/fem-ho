@@ -155,7 +155,7 @@ test("treure una cita de la bústia la treu, i NO l'esborra del calendari", asyn
   // s'ha de mirar la targeta CONCRETA i no si la secció queda buida.
   const primera = page.locator('[data-kind="event"]').first();
   const quina = (await primera.getAttribute('data-testid'))!;
-  await page.locator(`[data-testid="${quina}"] [data-testid^="inbox-event-remove-"]`).click();
+  await page.locator(`[data-testid="${quina}"] [data-testid^="inbox-event-eye-"]`).click();
   await expect(page.locator(`[data-testid="${quina}"]`)).toHaveCount(0);
 
   /**
@@ -189,7 +189,7 @@ test('al calendari, la cita treta es distingeix i es pot recuperar', async ({ pa
   await page.goto(`/board?scopes=${scope}`);
   const primera = page.locator('[data-kind="event"]').first();
   await expect(primera).toBeVisible({ timeout: 10_000 });
-  await primera.locator('[data-testid^="inbox-event-remove-"]').click();
+  await primera.locator('[data-testid^="inbox-event-eye-"]').click();
 
   // I al calendari, a la vista de dia, hi és amb la vora que ho diu.
   await page.goto('/calendar');

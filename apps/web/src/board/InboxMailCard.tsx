@@ -26,6 +26,7 @@
 import { t } from '@fem-ho/contracts';
 import type { InboxMail } from '../app/types.js';
 import { SourceIcon } from './SourceIcon.js';
+import { InboxEyeToggle } from './InboxEyeToggle.js';
 
 export interface InboxMailCardProps {
   mail: InboxMail;
@@ -107,15 +108,11 @@ export function InboxMailCard({ mail, color, onToTask, onToggleInbox }: InboxMai
           </button>
         )}
         {onToggleInbox === undefined ? null : (
-          <button
-            type="button"
-            className="plou-btn plou-btn-ghost"
-            data-testid={`inbox-mail-toggle-${mail.id}`}
-            onClick={onToggleInbox}
-            style={{ fontSize: 10.5, padding: '3px 9px' }}
-          >
-            {mail.in_inbox ? t('inbox.mail.fromInbox') : t('inbox.mail.toInbox')}
-          </button>
+          <InboxEyeToggle
+            visible={mail.in_inbox}
+            onToggle={onToggleInbox}
+            testId={`inbox-mail-eye-${mail.id}`}
+          />
         )}
       </div>
     </div>

@@ -111,7 +111,7 @@ export interface KanbanBoardProps {
   /** El que arriba de les fonts aquell dia. Va a la seva secció, mai amb les tasques. */
   inboxEvents?: InboxEvent[] | undefined;
   /** Treure un esdeveniment de la bústia. Sense això, el botó no surt. */
-  onEventRemove?: ((event: InboxEvent) => void) | undefined;
+  onEventToggle?: ((event: InboxEvent) => void) | undefined;
   /** Fer-ne una tasca. El mateix. */
   onEventToTask?: ((event: InboxEvent) => void) | undefined;
   /** El correu que ha entrat i encara no és tasca. */
@@ -196,7 +196,7 @@ export function KanbanBoard({
   inboxHeader,
   inbox,
   inboxEvents,
-  onEventRemove,
+  onEventToggle,
   onEventToTask,
   inboxMail,
   onMailToTask,
@@ -477,7 +477,7 @@ export function KanbanBoard({
                 mail={inboxMail}
                 onMailToTask={onMailToTask}
                 onMailToggle={onMailToggle}
-                onEventRemove={onEventRemove}
+                onEventToggle={onEventToggle}
                 onEventToTask={onEventToTask}
                 header={inboxHeader}
                 wrapCard={(task, card) => (

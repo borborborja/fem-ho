@@ -168,11 +168,10 @@
     <string name="inbox_day_prev">El dia abans</string>
     <string name="inbox_day_today">Avui</string>
     <string name="inbox_event_allday">Tot el dia</string>
-    <string name="inbox_event_remove">Treure</string>
     <string name="inbox_event_totask">Fer-ne una tasca</string>
-    <string name="inbox_mail_frominbox">Treure de l’inbox</string>
+    <string name="inbox_eye_hide">Treure de l’inbox de Tasques</string>
+    <string name="inbox_eye_show">Portar a l’inbox de Tasques</string>
     <string name="inbox_mail_nosubject">(sense assumpte)</string>
-    <string name="inbox_mail_toinbox">Portar a l’inbox</string>
     <string name="inbox_mail_unknownsender">Sense remitent</string>
     <string name="inbox_mailbox">Què es veu a la bústia</string>
     <string name="inbox_mailbox_all">Tot</string>

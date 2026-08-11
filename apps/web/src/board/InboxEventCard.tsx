@@ -31,6 +31,7 @@
 import { getLocale, shortTime, t } from '@fem-ho/contracts';
 import type { InboxEvent } from '../app/types.js';
 import { SourceIcon } from './SourceIcon.js';
+import { InboxEyeToggle } from './InboxEyeToggle.js';
 
 export interface InboxEventCardProps {
   event: InboxEvent;
@@ -38,8 +39,13 @@ export interface InboxEventCardProps {
   color?: string | undefined;
   /** Fer-ne una tasca. Arriba a la fase que la implementa; sense ella, el botó no surt. */
   onToTask?: (() => void) | undefined;
-  /** Treure'l de la bústia. El mateix. */
-  onRemove?: (() => void) | undefined;
+  /**
+   * Portar-lo a l'inbox de Tasques o treure-l'en.
+   *
+   * **Un sol control amb dos sentits**, i no un «Treure» que sortia igual quan ja estava
+   * tret: allò era una porta tancada que et deixava tornar-la a tancar.
+   */
+  onToggleInbox?: (() => void) | undefined;
 }
 
 /** La clau que identifica un esdeveniment de manera estable entre refrescos. */
@@ -47,7 +53,7 @@ export function eventKey(event: InboxEvent): string {
   return `${event.calendar_id}:${event.uid}:${event.recurrence_id ?? ''}`;
 }
 
-export function InboxEventCard({ event, color, onToTask, onRemove }: InboxEventCardProps) {
+export function InboxEventCard({ event, color, onToTask, onToggleInbox }: InboxEventCardProps) {
   const locale = getLocale();
   const hora = event.all_day
     ? t('inbox.event.allDay')
@@ -59,7 +65,6 @@ export function InboxEventCard({ event, color, onToTask, onRemove }: InboxEventC
       data-testid={`inbox-event-${eventKey(event)}`}
       style={{
         background: 'var(--tag-bg)',
-        // Discontínua: el senyal de "ve de fora i encara no és feina teva".
         border: '1px dashed var(--card-border)',
         borderRadius: 12,
         padding: '9px 11px',
@@ -124,16 +129,12 @@ export function InboxEventCard({ event, color, onToTask, onRemove }: InboxEventC
             {t('inbox.event.toTask')}
           </button>
         )}
-        {onRemove === undefined ? null : (
-          <button
-            type="button"
-            className="plou-btn plou-btn-ghost"
-            data-testid={`inbox-event-remove-${eventKey(event)}`}
-            onClick={onRemove}
-            style={{ fontSize: 10.5, padding: '3px 9px' }}
-          >
-            {t('inbox.event.remove')}
-          </button>
+        {onToggleInbox === undefined ? null : (
+          <InboxEyeToggle
+            visible={event.in_inbox}
+            onToggle={onToggleInbox}
+            testId={`inbox-event-eye-${eventKey(event)}`}
+          />
         )}
       </div>
     </div>

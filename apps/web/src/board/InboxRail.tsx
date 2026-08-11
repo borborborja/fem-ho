@@ -59,7 +59,7 @@ export interface InboxRailProps {
   /** Fer una tasca a partir d'un esdeveniment. Sense això, el botó no surt. */
   onEventToTask?: ((event: InboxEvent) => void) | undefined;
   /** Treure un esdeveniment de la bústia. El mateix. */
-  onEventRemove?: ((event: InboxEvent) => void) | undefined;
+  onEventToggle?: ((event: InboxEvent) => void) | undefined;
   scopes: BoardScope[];
   /** `column` al kanban, `rail` al calendari. Només canvia la disposició, no el contingut. */
   placement?: 'column' | 'rail' | undefined;
@@ -99,7 +99,7 @@ export function InboxRail({
   onMailToTask,
   onMailToggle,
   onEventToTask,
-  onEventRemove,
+  onEventToggle,
   scopes,
   placement = 'column',
   header,
@@ -214,7 +214,9 @@ export function InboxRail({
                   event={event}
                   color={scopes.find((scope) => scope.id === event.scope_id)?.color}
                   onToTask={onEventToTask === undefined ? undefined : () => onEventToTask(event)}
-                  onRemove={onEventRemove === undefined ? undefined : () => onEventRemove(event)}
+                  onToggleInbox={
+                    onEventToggle === undefined ? undefined : () => onEventToggle(event)
+                  }
                 />
               ))}
             </div>,
