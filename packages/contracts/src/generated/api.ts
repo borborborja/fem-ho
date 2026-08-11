@@ -2158,6 +2158,17 @@ export interface components {
             inbox_position?: "left" | "right" | "below";
             inbox_show_overdue?: boolean;
             /**
+             * @description Què li passa a la cita quan s'esborra la tasca que en va sortir.
+             *
+             *     `return_to_inbox` la torna a la bústia —esborrar es llegeix com a desfer— i
+             *     **no escriu res enlloc**: la cita havia marxat només perquè hi havia una tasca
+             *     viva, i en desaparèixer torna sola. `hide_from_inbox` deixa una marca: "d'això
+             *     ja me n'he ocupat". En tots dos casos segueix al calendari.
+             * @default return_to_inbox
+             * @enum {string}
+             */
+            event_task_deleted: "return_to_inbox" | "hide_from_inbox";
+            /**
              * @description El calaix de la bústia. Per usuari, com la resta de preferències.
              * @enum {string}
              */
@@ -2784,6 +2795,27 @@ export interface components {
             due_date?: string;
             due_time?: string;
             assignee_ids?: string[];
+            /**
+             * @description De quin esdeveniment surt aquesta tasca.
+             *
+             *     **És una referència morta, no un enllaç viu** (P6). Esborrar l'esdeveniment no
+             *     toca la tasca, i esborrar la tasca no toca l'esdeveniment: l'alternativa
+             *     voldria dir que treure una cita d'un calendari compartit esborrés en silenci
+             *     la tasca que algú altre s'havia apuntat.
+             *
+             *     S'identifica per `calendar_id` + `uid` + `recurrence_id` i **no per l'`id` de
+             *     la fila**: el refresc d'una font la reescriu i la pot tornar a la vida.
+             *
+             *     Mentre la tasca visqui, la cita **no surt a la bústia**: seria la mateixa
+             *     obligació dues vegades. Què passa en esborrar-la ho decideix
+             *     `UserSettings.event_task_deleted`.
+             */
+            source_event?: {
+                /** Format: uuid */
+                calendar_id: string;
+                uid: string;
+                recurrence_id?: string | null;
+            };
         };
         MoveInput: {
             /** @enum {string} */

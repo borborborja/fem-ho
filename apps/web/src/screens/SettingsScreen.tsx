@@ -266,6 +266,33 @@ function GeneralTab() {
       </Group>
 
       {/*
+        Què li passa a la cita quan s'esborra la tasca que en va sortir.
+
+        Viu aquí i no a la fitxa de cada esdeveniment perquè és **una manera de treballar**
+        i no una decisió per cas: qui esborra una tasca derivada vol sempre el mateix, i
+        preguntar-ho cada vegada seria un diàleg més al camí d'una acció que ja en té un.
+      */}
+      <Group title={t('settings.events.onDelete')}>
+        <Chips
+          testId="event-task-deleted"
+          value={settings.event_task_deleted ?? 'return_to_inbox'}
+          options={[
+            {
+              key: 'return_to_inbox' as const,
+              label: t('settings.events.onDelete.return'),
+              hint: t('settings.events.onDelete.returnHint'),
+            },
+            {
+              key: 'hide_from_inbox' as const,
+              label: t('settings.events.onDelete.hide'),
+              hint: t('settings.events.onDelete.hideHint'),
+            },
+          ]}
+          onChange={(value) => void updateSettings({ event_task_deleted: value })}
+        />
+      </Group>
+
+      {/*
         **Article 13 de l'AGPL, no un crèdit.**
 
         Qui fa servir aquesta instància per la xarxa té dret al codi de la versió que li

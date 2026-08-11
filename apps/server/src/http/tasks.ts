@@ -76,6 +76,24 @@ function parseSeriesMode(raw: unknown): SeriesMode {
   return raw === 'future' || raw === 'all' ? raw : 'single';
 }
 
+/**
+ * D'on ve una tasca feta a partir d'una cita.
+ *
+ * Les tres parts són **la identitat externa** de l'esdeveniment i no el seu `id`: el
+ * refresc d'una font reescriu les files i les pot tornar a la vida, o sigui que l'`id` no
+ * és estable.
+ */
+function sourceEvent(
+  raw: unknown,
+): { calendar_id: string; uid: string; recurrence_id?: string | null } | undefined {
+  if (typeof raw !== 'object' || raw === null) return undefined;
+  const value = raw as Record<string, unknown>;
+  const calendarId = str(value.calendar_id);
+  const uid = str(value.uid);
+  if (calendarId === undefined || uid === undefined) return undefined;
+  return { calendar_id: calendarId, uid, recurrence_id: str(value.recurrence_id) ?? null };
+}
+
 /** `caldav`, `ical` o `rss`; qualsevol altra cosa no és una font que sapiguem llegir. */
 function sourceKind(value: unknown): 'caldav' | 'ical' | 'rss' | undefined {
   return value === 'caldav' || value === 'ical' || value === 'rss' ? value : undefined;
@@ -118,6 +136,7 @@ export function registerTaskRoutes(app: FastifyInstance): void {
             assignee_ids: Array.isArray(input.assignee_ids)
               ? input.assignee_ids.filter((v): v is string => typeof v === 'string')
               : undefined,
+            source_event: sourceEvent(input.source_event),
           },
           db().engine,
         ),

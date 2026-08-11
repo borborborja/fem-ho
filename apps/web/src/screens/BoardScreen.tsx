@@ -513,6 +513,31 @@ export function BoardScreen({
         flip={flip}
         inbox={inboxCards}
         inboxEvents={inbox.data?.events}
+        onEventToTask={(event) => {
+          /*
+            **La tasca neix amb el títol de la cita i la seva data**, i no buida: qui fa
+            això ja sap què és, i obligar-lo a reescriure-ho seria demanar-li que copiés
+            una cosa que ja té al davant.
+
+            La cita marxa de la bústia sola, perquè ara hi ha una tasca viva que hi
+            apunta: no cal amagar res.
+          */
+          void api
+            .post('/api/v1/tasks', {
+              id: uuidv7(),
+              scope_id: event.scope_id,
+              title: event.summary,
+              status: 'inbox',
+              position: generatePosition(null, null),
+              due_date: event.starts_at.slice(0, 10),
+              source_event: {
+                calendar_id: event.calendar_id,
+                uid: event.uid,
+                recurrence_id: event.recurrence_id,
+              },
+            })
+            .then(() => refresh());
+        }}
         onEventRemove={(event) => {
           /*
             Treure'l de la bústia **no l'esborra**: segueix al calendari, i des d'allà es

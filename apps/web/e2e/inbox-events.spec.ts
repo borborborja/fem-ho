@@ -214,3 +214,43 @@ test('al calendari, la cita treta es distingeix i es pot recuperar', async ({ pa
     timeout: 10_000,
   });
 });
+
+test("d'una cita se'n fa una tasca, i esborrar-la la torna", async ({ page }) => {
+  /**
+   * El recorregut que va obrir tota aquesta funció: la pregunta era si l'esdeveniment
+   * perdura a la bústia després de fer-ne una tasca. La resposta ha de ser **no**, perquè
+   * seria la mateixa obligació dues vegades, i esborrar la tasca l'ha de tornar.
+   */
+  await enterAsNew(page, MEU);
+  const scope = await escenari(page);
+  await page.goto(`/board?scopes=${scope}`);
+
+  const primera = page.locator('[data-kind="event"]').first();
+  await expect(primera).toBeVisible({ timeout: 10_000 });
+  const quina = (await primera.getAttribute('data-testid'))!;
+
+  await page.locator(`[data-testid="${quina}"] [data-testid^="inbox-event-totask-"]`).click();
+
+  // La cita marxa de la secció de fonts...
+  await expect(page.locator(`[data-testid="${quina}"]`)).toHaveCount(0);
+
+  // ...i al seu lloc hi ha una tasca de veritat: amb casella i amb fletxa per avançar,
+  // que és exactament el que una cita no té.
+  const rail = page.locator('[data-testid="inbox-rail"]');
+  const tasca = rail.locator('[data-testid^="task-"]', { hasText: 'Dentista' }).first();
+  await expect(tasca).toBeVisible();
+  await expect(tasca.locator('[data-kind="event"]')).toHaveCount(0);
+
+  // I esborrant-la, la cita torna: és el defecte, i no ha calgut desar res per fer-ho.
+  // El llapis només es revela amb el ratolí a sobre: un clic forçat sobre un element amb
+  // `pointer-events: none` no obre res.
+  await tasca.hover();
+  await tasca.locator('[data-testid="card-edit"]').click();
+  await expect(page.locator('[data-testid="task-modal"]')).toBeVisible();
+  await page.locator('[data-testid="task-delete"]').click();
+  await page.locator('[data-testid="task-delete-confirm"]').click();
+
+  await expect(page.locator('[data-testid="inbox-events"]')).toContainText('Dentista', {
+    timeout: 10_000,
+  });
+});

@@ -499,3 +499,111 @@ describe('el calendari sap quines cites no són a la teva bústia', () => {
     expect((await llegir())['reunio-escola']).toBe(true);
   });
 });
+
+describe("fer una tasca a partir d'una cita, i esborrar-la", () => {
+  const netejar = async (): Promise<void> => {
+    await sql`DELETE FROM event_inbox_marks`.execute(conn.db);
+    // Esborrat suau, com fa el producte: un DELETE dur xoca amb les claus foranes del
+    // registre d'activitat, que és justament el que la regla 4 garanteix que hi ha.
+    await sql`UPDATE tasks SET deleted_at = ${NOW} WHERE event_uid IS NOT NULL AND deleted_at IS NULL`.execute(
+      conn.db,
+    );
+    await api('PATCH', '/api/v1/auth/settings', { event_task_deleted: 'return_to_inbox' });
+  };
+
+  const crear = async (): Promise<string> => {
+    const res = await api('POST', '/api/v1/tasks', {
+      id: uuidv7(),
+      scope_id: scopeId,
+      title: "Anar a la reunió de l'escola",
+      status: 'inbox',
+      position: 'b1',
+      source_event: { calendar_id: calendari, uid: 'reunio-escola' },
+    });
+    expect(res.statusCode).toBe(201);
+    return res.json<{ id: string }>().id;
+  };
+
+  it('la cita marxa de la bústia perquè ja és feina', async () => {
+    await netejar();
+    expect(await uids()).toEqual(['reunio-escola']);
+
+    await crear();
+
+    // La mateixa obligació no hi pot ser dues vegades.
+    expect(await uids()).toEqual([]);
+    const vista = await inbox();
+    expect(vista.undated.length + vista.dated.length).toBeGreaterThan(0);
+  });
+
+  it("no se'n pot fer una segona: seria la mateixa cita dues vegades", async () => {
+    const res = await api('POST', '/api/v1/tasks', {
+      id: uuidv7(),
+      scope_id: scopeId,
+      title: 'Una altra vegada',
+      status: 'inbox',
+      position: 'b2',
+      source_event: { calendar_id: calendari, uid: 'reunio-escola' },
+    });
+    expect(res.statusCode).toBe(409);
+  });
+
+  it('i ha de viure al mateix àmbit que el seu calendari', async () => {
+    await netejar();
+    const altre = uuidv7();
+    await sql`
+      INSERT INTO scopes (id, name, kind, color, owner_id, position, created_at, updated_at)
+      VALUES (${altre}, 'Feina', 'individual', '--plou-blue', ${userId}, 'a2', ${NOW}, ${NOW})
+    `.execute(conn.db);
+
+    const res = await api('POST', '/api/v1/tasks', {
+      id: uuidv7(),
+      scope_id: altre,
+      title: "D'un altre àmbit",
+      status: 'inbox',
+      position: 'b3',
+      source_event: { calendar_id: calendari, uid: 'reunio-escola' },
+    });
+    expect(res.statusCode).toBe(422);
+  });
+
+  it('esborrar-la la torna a la bústia, i NO escriu cap fila', async () => {
+    await netejar();
+    const taskId = await crear();
+    expect(await uids()).toEqual([]);
+
+    const abans = await sql<{ n: number }>`
+      SELECT COUNT(*) AS n FROM event_inbox_marks
+    `.execute(conn.db);
+
+    const res = await api('DELETE', `/api/v1/tasks/${taskId}`);
+    expect(res.statusCode).toBe(204);
+
+    expect(await uids()).toEqual(['reunio-escola']);
+    const despres = await sql<{ n: number }>`
+      SELECT COUNT(*) AS n FROM event_inbox_marks
+    `.execute(conn.db);
+    // El comportament per defecte no té representació a la base.
+    expect(Number(despres.rows[0]?.n)).toBe(Number(abans.rows[0]?.n));
+  });
+
+  it("amb l'altra preferència, no torna — però segueix al calendari", async () => {
+    await netejar();
+    await api('PATCH', '/api/v1/auth/settings', { event_task_deleted: 'hide_from_inbox' });
+    const taskId = await crear();
+
+    await api('DELETE', `/api/v1/tasks/${taskId}`);
+
+    expect(await uids()).toEqual([]);
+
+    // I això és el que la distingeix d'esborrar-la de debò.
+    const res = await api('GET', `/api/v1/events?from=${DIA}T00:00:00Z&to=${DIA}T23:59:59Z`);
+    const cita = res
+      .json<{ uid: string; in_inbox: boolean }[]>()
+      .find((e) => e.uid === 'reunio-escola');
+    expect(cita).toBeDefined();
+    expect(cita?.in_inbox).toBe(false);
+
+    await netejar();
+  });
+});

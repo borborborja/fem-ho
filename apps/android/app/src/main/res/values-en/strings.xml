@@ -261,6 +261,11 @@
     <string name="settings_empty_calendars">This scope has no calendars yet.</string>
     <string name="settings_empty_shares">You have not created any share link yet.</string>
     <string name="settings_enableai">Turn on the AI user</string>
+    <string name="settings_events_ondelete">When you delete a task made from an event</string>
+    <string name="settings_events_ondelete_hide">The event stays out</string>
+    <string name="settings_events_ondelete_hidehint">It remains on the calendar, but stops claiming your day.</string>
+    <string name="settings_events_ondelete_return">The event returns to the inbox</string>
+    <string name="settings_events_ondelete_returnhint">Deleting the task undoes the conversion.</string>
     <string name="settings_gravatar">Use Gravatar for my picture</string>
     <string name="settings_gravatarfill">Fill in from Gravatar</string>
     <string name="settings_gravatarhelp">The server asks gravatar.com for your picture using a hash of your email. The hash is not anonymous: anyone who already suspects your address can check it. Turn this off and your initials are shown instead.</string>

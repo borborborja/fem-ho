@@ -110,6 +110,8 @@ export interface KanbanBoardProps {
   inboxEvents?: InboxEvent[] | undefined;
   /** Treure un esdeveniment de la bústia. Sense això, el botó no surt. */
   onEventRemove?: ((event: InboxEvent) => void) | undefined;
+  /** Fer-ne una tasca. El mateix. */
+  onEventToTask?: ((event: InboxEvent) => void) | undefined;
   /** De quin calaix es veu la bústia. El mateix criteri que `/inbox` al servidor. */
   mailbox?: 'own' | 'shared' | 'all';
   onToggleGroup?: (status: TaskStatus, scopeId: string) => void;
@@ -182,6 +184,7 @@ export function KanbanBoard({
   inbox,
   inboxEvents,
   onEventRemove,
+  onEventToTask,
   mailbox = 'all',
   collapsed = {},
   onToggleGroup,
@@ -449,6 +452,7 @@ export function KanbanBoard({
                 footer={renderFooter?.('inbox')}
                 events={inboxEvents}
                 onEventRemove={onEventRemove}
+                onEventToTask={onEventToTask}
                 header={inboxHeader}
                 wrapCard={(task, card) => (
                   <DraggableCard key={task.id} id={task.id} testId={`task-${task.id}`}>

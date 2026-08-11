@@ -3350,6 +3350,17 @@ components:
           description: El botó de netejar la columna Fet. No esborra res (P2).
         inbox_position: { type: string, enum: [left, right, below] }
         inbox_show_overdue: { type: boolean }
+        event_task_deleted:
+          type: string
+          enum: [return_to_inbox, hide_from_inbox]
+          default: return_to_inbox
+          description: |
+            Què li passa a la cita quan s'esborra la tasca que en va sortir.
+
+            `return_to_inbox` la torna a la bústia —esborrar es llegeix com a desfer— i
+            **no escriu res enlloc**: la cita havia marxat només perquè hi havia una tasca
+            viva, i en desaparèixer torna sola. `hide_from_inbox` deixa una marca: "d'això
+            ja me n'he ocupat". En tots dos casos segueix al calendari.
         inbox_origin:
           type: string
           enum: [own, shared, all]
@@ -4122,6 +4133,28 @@ components:
         assignee_ids:
           type: array
           items: { type: string }
+        source_event:
+          type: object
+          additionalProperties: false
+          required: [calendar_id, uid]
+          description: |
+            De quin esdeveniment surt aquesta tasca.
+
+            **És una referència morta, no un enllaç viu** (P6). Esborrar l'esdeveniment no
+            toca la tasca, i esborrar la tasca no toca l'esdeveniment: l'alternativa
+            voldria dir que treure una cita d'un calendari compartit esborrés en silenci
+            la tasca que algú altre s'havia apuntat.
+
+            S'identifica per `calendar_id` + `uid` + `recurrence_id` i **no per l'`id` de
+            la fila**: el refresc d'una font la reescriu i la pot tornar a la vida.
+
+            Mentre la tasca visqui, la cita **no surt a la bústia**: seria la mateixa
+            obligació dues vegades. Què passa en esborrar-la ho decideix
+            `UserSettings.event_task_deleted`.
+          properties:
+            calendar_id: { type: string, format: uuid }
+            uid: { type: string }
+            recurrence_id: { type: [string, 'null'] }
 
     MoveInput:
       type: object

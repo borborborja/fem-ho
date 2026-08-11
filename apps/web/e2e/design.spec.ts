@@ -277,9 +277,19 @@ test('en tema fosc, el modal i la paleta són opacs', async ({ page }) => {
   await enter(page);
   await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
 
+  /**
+   * S'obre clicant **la targeta** i no el llapis.
+   *
+   * El que aquesta prova mira és l'opacitat del modal i de la paleta, no com s'obren. El
+   * llapis només existeix mentre el ratolí és a sobre, i mesurant-ho es va veure que en
+   * una passada sencera arribava a no estar revelat en el moment del clic: la targeta es
+   * refà i, com que el cursor ja hi és a dins, no torna a arribar cap `mouseenter`. Res
+   * no el tapava. La targeta sencera obre el mateix modal i no depèn de cap estat de
+   * ratolí. Qui vulgui provar el llapis, ja té la seva prova a "el llapis surt en
+   * passar-hi per sobre i obre el modal".
+   */
   const card = page.locator('[data-column-status] [data-testid^="task-"]').first();
-  await card.hover();
-  await card.locator('[data-testid="card-edit"]').click();
+  await card.click();
   await expect(page.locator('[data-testid="task-modal"]')).toBeVisible();
 
   // El panell és el fill del vel: el vel sí que ha de ser translúcid, el panell no.
