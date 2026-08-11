@@ -1827,10 +1827,250 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/mail/accounts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Els comptes de correu de qui pregunta
+         * @description **Només els seus.** Un compte de correu no es comparteix ni amb l'àmbit ni amb
+         *     l'administrador: `calendars` és per àmbit i això no, i barrejar-ho posaria una
+         *     contrasenya personal en una taula que veu tota la casa.
+         */
+        get: operations["listMailAccounts"];
+        put?: never;
+        /**
+         * Donar d'alta un compte
+         * @description No es connecta a res: desa. Per saber si les credencials van bé hi ha
+         *     `POST /mail/accounts/{id}/test`, que **no desa res**.
+         */
+        post: operations["createMailAccount"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/mail/accounts/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Treure un compte
+         * @description Se n'endú les regles. **El que ja va entrar a la bústia es queda**: una tasca feta
+         *     a partir d'un correu és teva, i esborrar el compte no ha de buidar-te el tauler.
+         */
+        delete: operations["deleteMailAccount"];
+        options?: never;
+        head?: never;
+        /** Editar un compte */
+        patch: operations["updateMailAccount"];
+        trace?: never;
+    };
+    "/mail/accounts/{id}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Provar la connexió, sense desar res
+         * @description Es connecta, autentica, llista les carpetes i tanca. **No desa res i no marca cap
+         *     correu**: `docs/11` ja reclama aquest botó per a l'SMTP pel mateix motiu —les
+         *     hores que s'hi perden quan l'única manera de saber si va bé és esperar el següent
+         *     cicle i mirar els registres.
+         *
+         *     La contrasenya es pot passar al cos per provar-la **abans** de desar-la. Si no
+         *     s'envia, es fa servir la que hi ha guardada.
+         */
+        post: operations["testMailAccount"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/mail/rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Les regles dels comptes de qui pregunta */
+        get: operations["listMailRules"];
+        put?: never;
+        /**
+         * Mapar una carpeta
+         * @description **La primera vegada que s'activa una regla no s'ingereix res**: el cursor comença
+         *     al final de la carpeta. Sense això, mapar una etiqueta amb dotze anys de correu
+         *     crearia desenes de milers de tasques, i no hi ha desfer massiu.
+         */
+        post: operations["createMailRule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/mail/rules/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Deixar de llegir una carpeta */
+        delete: operations["deleteMailRule"];
+        options?: never;
+        head?: never;
+        /** Editar una regla */
+        patch: operations["updateMailRule"];
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @description Un compte IMAP. **`secret_enc` no hi és i `password` tampoc**: la contrasenya es xifra en repòs i no torna a sortir del servidor en cap forma, ni emmascarada —una màscara filtra la longitud i el prefix—. */
+        MailAccount: {
+            id: string;
+            /** @description Com l'anomenes tu. Surt a la variable de plantilla {{account}}. */
+            name: string;
+            host: string;
+            /** @default 993 */
+            port: number;
+            /**
+             * @description **No hi ha `none`.** Oferir IMAP en clar vol dir que algú el triarà i les seves credencials viatjaran nues per la xarxa de casa.
+             * @enum {string}
+             */
+            security: "tls" | "starttls";
+            username: string;
+            /** @description Si hi ha contrasenya desada. És l'única cosa que se'n diu, i serveix perquè el formulari pugui dir «desada» sense ensenyar-ne res. */
+            has_secret: boolean;
+            /** @default true */
+            enabled: boolean;
+            /** @description Segons entre lectures. `null` fa servir el de la instància. */
+            poll_interval?: number | null;
+            /** Format: date-time */
+            last_polled_at?: string | null;
+            /** @description Per què va fallar l'última lectura. Va a la fila i no només al registre, pel mateix motiu que als calendaris: una font caiguda es veu igual que una buida. */
+            last_error?: string | null;
+            /** Format: date-time */
+            last_error_at?: string | null;
+            /** @description Quantes vegades seguides ha fallat. Mou la retirada exponencial: reintentar una contrasenya errònia cada cinc minuts contra un proveïdor gros és com es bloqueja un compte. */
+            consecutive_errors?: number;
+        };
+        MailAccountInput: {
+            id?: string;
+            name: string;
+            host: string;
+            port?: number;
+            /** @enum {string} */
+            security?: "tls" | "starttls";
+            username: string;
+            /** @description Es xifra en repòs i no torna a sortir mai. */
+            password?: string;
+            poll_interval?: number | null;
+            enabled?: boolean;
+        };
+        MailAccountPatch: {
+            name?: string;
+            host?: string;
+            port?: number;
+            /** @enum {string} */
+            security?: "tls" | "starttls";
+            username?: string;
+            /** @description Absent vol dir **«no la toquis»**, no «esborra-la»: el formulari no la torna a ensenyar mai, i canviar el nom del compte no ha de perdre'n les credencials. */
+            password?: string;
+            poll_interval?: number | null;
+            enabled?: boolean;
+        };
+        MailTestInput: {
+            /** @description Per provar-la **abans** de desar-la. Sense això, l'única manera de saber si una contrasenya va bé seria desar-la i esperar. */
+            password?: string;
+        };
+        MailTestResult: {
+            ok: boolean;
+            /** @description Què va passar, en text llegible. **No porta la resposta crua del servidor**: pot dur el nom d'usuari i acabaria en una captura de pantalla. */
+            error?: string | null;
+            /** @description Les carpetes que el servidor llista, per poder-les triar en comptes d'escriure-les. Buida si la prova ha fallat. */
+            folders: string[];
+            /** @description El separador de camins que ha dit el `LIST`: `.` a Dovecot, `/` a Gmail. És el que fa que «la regla més profunda guanya» es pugui calcular. */
+            delimiter?: string | null;
+        };
+        MailRule: {
+            id: string;
+            account_id: string;
+            folder: string;
+            scope_id: string;
+            /** @description `null` vol dir l'espai general de l'àmbit. */
+            project_id?: string | null;
+            /**
+             * @description Si el correu cau a la bústia del dia perquè hi decideixis, o si es converteix en tasca tot sol.
+             * @enum {string}
+             */
+            action: "inbox" | "task";
+            /** @default true */
+            inbox_visible: boolean;
+            /** @description Amb `{{subject}}`, `{{from}}`, `{{from_name}}`, `{{from_email}}`, `{{date}}`, `{{folder}}` i `{{account}}`. **Una sola passada**: un assumpte que sigui literalment `{{from_email}}` no s'expandeix. */
+            title_template: string;
+            /** @default true */
+            body_to_description: boolean;
+            /** @default true */
+            attachments_to_task: boolean;
+            position?: string;
+            /** @default true */
+            enabled: boolean;
+            /** Format: date-time */
+            last_seen_at?: string | null;
+            last_error?: string | null;
+            /** Format: date-time */
+            last_error_at?: string | null;
+        };
+        MailRuleInput: {
+            id?: string;
+            account_id: string;
+            folder: string;
+            scope_id: string;
+            project_id?: string | null;
+            /** @enum {string} */
+            action?: "inbox" | "task";
+            inbox_visible?: boolean;
+            title_template?: string;
+            body_to_description?: boolean;
+            attachments_to_task?: boolean;
+            position?: string;
+            enabled?: boolean;
+        };
+        MailRulePatch: {
+            folder?: string;
+            scope_id?: string;
+            project_id?: string | null;
+            /** @enum {string} */
+            action?: "inbox" | "task";
+            inbox_visible?: boolean;
+            title_template?: string;
+            body_to_description?: boolean;
+            attachments_to_task?: boolean;
+            position?: string;
+            enabled?: boolean;
+        };
         /** @description Un enllaç amb una altra instància. **`token_enc` no hi és**: és un secret xifrat amb clau derivada del secret d'aquesta instància i no surt de la base. */
         InstanceLink: {
             id: string;
@@ -6720,6 +6960,263 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
+        };
+    };
+    listMailAccounts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Els comptes. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MailAccount"][];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    createMailAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MailAccountInput"];
+            };
+        };
+        responses: {
+            /** @description Creat. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MailAccount"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            /** @description Falta el nom, l'amfitrió o l'usuari, o el port no s'admet. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    deleteMailAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Tret. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateMailAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MailAccountPatch"];
+            };
+        };
+        responses: {
+            /** @description Desat. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MailAccount"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    testMailAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MailTestInput"];
+            };
+        };
+        responses: {
+            /**
+             * @description El resultat. **Un `200` no vol dir que hagi anat bé**: vol dir que la prova
+             *     s'ha fet. El que va passar ho diu `ok`, i un error de credencials no és un
+             *     error de l'API.
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MailTestResult"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listMailRules: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Les regles. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MailRule"][];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    createMailRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MailRuleInput"];
+            };
+        };
+        responses: {
+            /** @description Creada. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MailRule"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            /** @description Aquesta carpeta ja té regla en aquest compte. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Falta la carpeta o l'àmbit, o la plantilla no és vàlida. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    deleteMailRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Treta. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateMailRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MailRulePatch"];
+            };
+        };
+        responses: {
+            /** @description Desada. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MailRule"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
 }

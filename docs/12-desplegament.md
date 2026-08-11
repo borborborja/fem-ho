@@ -76,6 +76,7 @@ Variables d'entorn amb prefix `FEMHO_`. Els secrets accepten el sufix `_FILE` pe
 | `FEMHO_UPDATE_CHECK` | `true` | Preguntar a GitHub si hi ha una versió més nova. Veure l'avís de sota. |
 | `FEMHO_REGISTRATION` | `disabled` | La forma llarga: `disabled`, `invite`, `open` |
 | `FEMHO_MAX_UPLOAD_MB` | `25` | |
+| `FEMHO_MAIL_ALLOW_HOSTS` | — | Els servidors IMAP als quals aquesta instància es pot connectar, separats per comes. Buida vol dir **qualsevol de públic**: el que sempre es rebutja són les adreces internes, i això només serveix per acotar-ho més |
 | `FEMHO_LOG_LEVEL` | `info` | |
 | `FEMHO_INSTANCE_NAME` | `Fem-ho` | El nom que veu qui s'hi connecta i el que publica el manifest de federació |
 | `FEMHO_SOURCE_URL` | aquest repositori | On és el codi d'aquesta instància (AGPL §13) |

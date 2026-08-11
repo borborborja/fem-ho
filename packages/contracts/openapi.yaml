@@ -39,6 +39,11 @@ tags:
     description: |
       Tasques i el tauler. La columna es diu `status` amb valors anglesos (D2), i
       l'ordre dins d'ella és `position`, un índex fraccional calculat al client (D3).
+  - name: mail
+    description: |
+      El correu com a font d'entrada. **Un compte és d'una persona, no d'un àmbit**: la
+      contrasenya del teu correu no és de la casa. Una regla diu què es fa amb el que
+      arriba a una carpeta, i **una carpeta sense regla no es llegeix mai**.
   - name: auth
     description: |
       Sessions i compte. docs/05 §1. Els tokens de refresc roten: cada refresc n'emet un
@@ -2929,8 +2934,347 @@ paths:
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Forbidden' }
 
+  /mail/accounts:
+    get:
+      tags: [mail]
+      operationId: listMailAccounts
+      summary: Els comptes de correu de qui pregunta
+      description: |
+        **Només els seus.** Un compte de correu no es comparteix ni amb l'àmbit ni amb
+        l'administrador: `calendars` és per àmbit i això no, i barrejar-ho posaria una
+        contrasenya personal en una taula que veu tota la casa.
+      responses:
+        '200':
+          description: Els comptes.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/MailAccount' } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+    post:
+      tags: [mail]
+      operationId: createMailAccount
+      summary: Donar d'alta un compte
+      description: |
+        No es connecta a res: desa. Per saber si les credencials van bé hi ha
+        `POST /mail/accounts/{id}/test`, que **no desa res**.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/MailAccountInput' } } }
+      responses:
+        '201':
+          description: Creat.
+          content: { application/json: { schema: { $ref: '#/components/schemas/MailAccount' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '422':
+          description: Falta el nom, l'amfitrió o l'usuari, o el port no s'admet.
+          content:
+            { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+
+  /mail/accounts/{id}:
+    patch:
+      tags: [mail]
+      operationId: updateMailAccount
+      summary: Editar un compte
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/MailAccountPatch' } } }
+      responses:
+        '200':
+          description: Desat.
+          content: { application/json: { schema: { $ref: '#/components/schemas/MailAccount' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [mail]
+      operationId: deleteMailAccount
+      summary: Treure un compte
+      description: |
+        Se n'endú les regles. **El que ja va entrar a la bústia es queda**: una tasca feta
+        a partir d'un correu és teva, i esborrar el compte no ha de buidar-te el tauler.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '204': { description: Tret. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /mail/accounts/{id}/test:
+    post:
+      tags: [mail]
+      operationId: testMailAccount
+      summary: Provar la connexió, sense desar res
+      description: |
+        Es connecta, autentica, llista les carpetes i tanca. **No desa res i no marca cap
+        correu**: `docs/11` ja reclama aquest botó per a l'SMTP pel mateix motiu —les
+        hores que s'hi perden quan l'única manera de saber si va bé és esperar el següent
+        cicle i mirar els registres.
+
+        La contrasenya es pot passar al cos per provar-la **abans** de desar-la. Si no
+        s'envia, es fa servir la que hi ha guardada.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content: { application/json: { schema: { $ref: '#/components/schemas/MailTestInput' } } }
+      responses:
+        '200':
+          description: |
+            El resultat. **Un `200` no vol dir que hagi anat bé**: vol dir que la prova
+            s'ha fet. El que va passar ho diu `ok`, i un error de credencials no és un
+            error de l'API.
+          content: { application/json: { schema: { $ref: '#/components/schemas/MailTestResult' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /mail/rules:
+    get:
+      tags: [mail]
+      operationId: listMailRules
+      summary: Les regles dels comptes de qui pregunta
+      responses:
+        '200':
+          description: Les regles.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/MailRule' } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+    post:
+      tags: [mail]
+      operationId: createMailRule
+      summary: Mapar una carpeta
+      description: |
+        **La primera vegada que s'activa una regla no s'ingereix res**: el cursor comença
+        al final de la carpeta. Sense això, mapar una etiqueta amb dotze anys de correu
+        crearia desenes de milers de tasques, i no hi ha desfer massiu.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/MailRuleInput' } } }
+      responses:
+        '201':
+          description: Creada.
+          content: { application/json: { schema: { $ref: '#/components/schemas/MailRule' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: Aquesta carpeta ja té regla en aquest compte.
+          content:
+            { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+        '422':
+          description: Falta la carpeta o l'àmbit, o la plantilla no és vàlida.
+          content:
+            { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+
+  /mail/rules/{id}:
+    patch:
+      tags: [mail]
+      operationId: updateMailRule
+      summary: Editar una regla
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/MailRulePatch' } } }
+      responses:
+        '200':
+          description: Desada.
+          content: { application/json: { schema: { $ref: '#/components/schemas/MailRule' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [mail]
+      operationId: deleteMailRule
+      summary: Deixar de llegir una carpeta
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '204': { description: Treta. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
 components:
   schemas:
+    MailAccount:
+      type: object
+      description: >-
+        Un compte IMAP. **`secret_enc` no hi és i `password` tampoc**: la contrasenya es
+        xifra en repòs i no torna a sortir del servidor en cap forma, ni emmascarada —una
+        màscara filtra la longitud i el prefix—.
+      required: [id, name, host, port, security, username, enabled, has_secret]
+      properties:
+        id: { type: string }
+        name:
+          type: string
+          description: "Com l'anomenes tu. Surt a la variable de plantilla {{account}}."
+
+        host: { type: string }
+        port: { type: integer, default: 993 }
+        security:
+          type: string
+          enum: [tls, starttls]
+          description: >-
+            **No hi ha `none`.** Oferir IMAP en clar vol dir que algú el triarà i les
+            seves credencials viatjaran nues per la xarxa de casa.
+        username: { type: string }
+        has_secret:
+          type: boolean
+          description: >-
+            Si hi ha contrasenya desada. És l'única cosa que se'n diu, i serveix perquè
+            el formulari pugui dir «desada» sense ensenyar-ne res.
+        enabled: { type: boolean, default: true }
+        poll_interval:
+          type: [integer, 'null']
+          description: Segons entre lectures. `null` fa servir el de la instància.
+        last_polled_at: { type: [string, 'null'], format: date-time }
+        last_error:
+          type: [string, 'null']
+          description: >-
+            Per què va fallar l'última lectura. Va a la fila i no només al registre, pel
+            mateix motiu que als calendaris: una font caiguda es veu igual que una buida.
+        last_error_at: { type: [string, 'null'], format: date-time }
+        consecutive_errors:
+          type: integer
+          description: >-
+            Quantes vegades seguides ha fallat. Mou la retirada exponencial: reintentar
+            una contrasenya errònia cada cinc minuts contra un proveïdor gros és com es
+            bloqueja un compte.
+
+    MailAccountInput:
+      type: object
+      required: [name, host, username]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        host: { type: string }
+        port: { type: integer }
+        security: { type: string, enum: [tls, starttls] }
+        username: { type: string }
+        password:
+          type: string
+          writeOnly: true
+          description: Es xifra en repòs i no torna a sortir mai.
+        poll_interval: { type: [integer, 'null'] }
+        enabled: { type: boolean }
+
+    MailAccountPatch:
+      type: object
+      properties:
+        name: { type: string }
+        host: { type: string }
+        port: { type: integer }
+        security: { type: string, enum: [tls, starttls] }
+        username: { type: string }
+        password:
+          type: string
+          writeOnly: true
+          description: >-
+            Absent vol dir **«no la toquis»**, no «esborra-la»: el formulari no la torna
+            a ensenyar mai, i canviar el nom del compte no ha de perdre'n les credencials.
+        poll_interval: { type: [integer, 'null'] }
+        enabled: { type: boolean }
+
+    MailTestInput:
+      type: object
+      properties:
+        password:
+          type: string
+          writeOnly: true
+          description: >-
+            Per provar-la **abans** de desar-la. Sense això, l'única manera de saber si
+            una contrasenya va bé seria desar-la i esperar.
+
+    MailTestResult:
+      type: object
+      required: [ok, folders]
+      properties:
+        ok: { type: boolean }
+        error:
+          type: [string, 'null']
+          description: >-
+            Què va passar, en text llegible. **No porta la resposta crua del servidor**:
+            pot dur el nom d'usuari i acabaria en una captura de pantalla.
+        folders:
+          type: array
+          items: { type: string }
+          description: >-
+            Les carpetes que el servidor llista, per poder-les triar en comptes
+            d'escriure-les. Buida si la prova ha fallat.
+        delimiter:
+          type: [string, 'null']
+          description: >-
+            El separador de camins que ha dit el `LIST`: `.` a Dovecot, `/` a Gmail. És el
+            que fa que «la regla més profunda guanya» es pugui calcular.
+
+    MailRule:
+      type: object
+      required:
+        [id, account_id, folder, scope_id, action, inbox_visible, title_template, enabled]
+      properties:
+        id: { type: string }
+        account_id: { type: string }
+        folder: { type: string }
+        scope_id: { type: string }
+        project_id:
+          type: [string, 'null']
+          description: '`null` vol dir l''espai general de l''àmbit.'
+        action:
+          type: string
+          enum: [inbox, task]
+          description: >-
+            Si el correu cau a la bústia del dia perquè hi decideixis, o si es converteix
+            en tasca tot sol.
+        inbox_visible: { type: boolean, default: true }
+        title_template:
+          type: string
+          description: >-
+            Amb `{{subject}}`, `{{from}}`, `{{from_name}}`, `{{from_email}}`, `{{date}}`,
+            `{{folder}}` i `{{account}}`. **Una sola passada**: un assumpte que sigui
+            literalment `{{from_email}}` no s'expandeix.
+        body_to_description: { type: boolean, default: true }
+        attachments_to_task: { type: boolean, default: true }
+        position: { type: string }
+        enabled: { type: boolean, default: true }
+        last_seen_at: { type: [string, 'null'], format: date-time }
+        last_error: { type: [string, 'null'] }
+        last_error_at: { type: [string, 'null'], format: date-time }
+
+    MailRuleInput:
+      type: object
+      required: [account_id, folder, scope_id]
+      properties:
+        id: { type: string }
+        account_id: { type: string }
+        folder: { type: string }
+        scope_id: { type: string }
+        project_id: { type: [string, 'null'] }
+        action: { type: string, enum: [inbox, task] }
+        inbox_visible: { type: boolean }
+        title_template: { type: string }
+        body_to_description: { type: boolean }
+        attachments_to_task: { type: boolean }
+        position: { type: string }
+        enabled: { type: boolean }
+
+    MailRulePatch:
+      type: object
+      properties:
+        folder: { type: string }
+        scope_id: { type: string }
+        project_id: { type: [string, 'null'] }
+        action: { type: string, enum: [inbox, task] }
+        inbox_visible: { type: boolean }
+        title_template: { type: string }
+        body_to_description: { type: boolean }
+        attachments_to_task: { type: boolean }
+        position: { type: string }
+        enabled: { type: boolean }
+
     InstanceLink:
       type: object
       description: >-

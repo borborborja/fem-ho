@@ -126,6 +126,15 @@ export interface Config {
    */
   gravatar: boolean;
   /**
+   * A quins servidors de correu es pot connectar aquesta instància.
+   *
+   * **Buida vol dir «a qualsevol de públic»**, no «a cap»: la defensa que sempre hi és no
+   * és aquesta llista sinó `isBlockedAddress`, que rebutja tot el que resolgui a una
+   * adreça interna. Això és per a qui vulgui acotar-ho encara més —una casa que només fa
+   * servir un proveïdor— i és `FEMHO_MAIL_ALLOW_HOSTS`, separada per comes.
+   */
+  mailAllowHosts: string[];
+  /**
    * Preguntar a GitHub si hi ha una versió més nova.
    *
    * **Encès per defecte, a diferència de Gravatar, i la diferència importa.** Allà el que
@@ -169,6 +178,10 @@ export function loadConfig(version: string): Config {
     databaseUrl: env('DATABASE_URL') ?? 'sqlite:///data/femho.db',
     registration: envRegistration(),
     gravatar: envBool('GRAVATAR') ?? false,
+    mailAllowHosts: (env('MAIL_ALLOW_HOSTS') ?? '')
+      .split(',')
+      .map((host) => host.trim().toLowerCase())
+      .filter((host) => host !== ''),
     updateCheck: envBool('UPDATE_CHECK') ?? true,
     secret: env('SECRET'),
     logLevel: env('LOG_LEVEL') ?? 'info',

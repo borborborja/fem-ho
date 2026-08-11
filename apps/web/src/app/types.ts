@@ -39,6 +39,10 @@ export type Me = S['Me'];
 export type Info = S['Info'];
 export type UpdateStatus = S['UpdateStatus'];
 export type QuickAddResult = S['QuickAddResult'];
+/** El correu com a font. Un compte és **d'una persona**, no d'un àmbit. */
+export type MailAccount = S['MailAccount'];
+export type MailRule = S['MailRule'];
+export type MailTestResult = S['MailTestResult'];
 
 export type Theme = UserProfile['theme'];
 export type Accent = UserProfile['accent'];

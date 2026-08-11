@@ -53,6 +53,7 @@ fitxer, que és el que permet fer servir secrets de Docker.
 | `FEMHO_GRAVATAR` | `false` | Les fotos de perfil surten de Gravatar. Veure l'avís de sota |
 | `FEMHO_UPDATE_CHECK` | `true` | Preguntar a GitHub si hi ha una versió més nova. Veure l'avís de sota |
 | `FEMHO_MAX_UPLOAD_MB` | `25` | Mida màxima d'un adjunt |
+| `FEMHO_MAIL_ALLOW_HOSTS` | — | Els servidors IMAP permesos, separats per comes (`imap.gmail.com,imap.fastmail.com`). Buida vol dir qualsevol de públic; les adreces internes es rebutgen sempre, amb llista o sense |
 | `FEMHO_LOG_LEVEL` | `info` | `fatal`, `error`, `warn`, `info`, `debug`, `trace` o `silent` |
 | `FEMHO_SOURCE_URL` | aquest repositori | **Canvia-la si publiques una versió modificada.** L'AGPL §13 diu que qui hi accedeix per xarxa té dret al codi que li estàs servint, i amb aquesta apuntant a l'original els teus usuaris no hi arribarien |
 
