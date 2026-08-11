@@ -54,6 +54,14 @@ fitxer, que és el que permet fer servir secrets de Docker.
 | `FEMHO_UPDATE_CHECK` | `true` | Preguntar a GitHub si hi ha una versió més nova. Veure l'avís de sota |
 | `FEMHO_MAX_UPLOAD_MB` | `25` | Mida màxima d'un adjunt |
 | `FEMHO_MAIL_ALLOW_HOSTS` | — | Els servidors IMAP permesos, separats per comes (`imap.gmail.com,imap.fastmail.com`). Buida vol dir qualsevol de públic; les adreces internes es rebutgen sempre, amb llista o sense |
+| `FEMHO_MAIL_POLL_SECONDS` | `300` | Cada quant es llegeix un compte de correu. Cinc minuts i no trenta segons: un `LOGIN` cada mig minut contra un proveïdor gros és com es bloqueja un compte |
+| `FEMHO_MAIL_MAX_MESSAGE_MB` | `25` | Un correu més gros que això no es baixa. Es desa igualment que hi era, perquè es pugui veure |
+| `FEMHO_MAIL_RETENTION_DAYS` | `0` | Dies que es guarda el cos d'un correu ingerit. `0` és per sempre. **Mai purga cap tasca**: la tasca és teva i la provinença hi sobreviu |
+| `FEMHO_AI_PROVIDER` | `none` | El terreny d'IA. **Res truca a res encara** (P10) |
+| `FEMHO_AI_BASE_URL` | — | L'URL del proveïdor. Amb un model local, això i prou |
+| `FEMHO_AI_API_KEY` | — | **No surt mai per l'API, ni emmascarada** |
+| `FEMHO_AI_MODEL` | — | **Sense defecte a posta**: un model per defecte és una versió que canvia sota teu i una factura que no has triat |
+| `FEMHO_AI_MAX_INPUT_TOKENS` | `8000` | Sostre del text que s'enviaria a un model |
 | `FEMHO_LOG_LEVEL` | `info` | `fatal`, `error`, `warn`, `info`, `debug`, `trace` o `silent` |
 | `FEMHO_SOURCE_URL` | aquest repositori | **Canvia-la si publiques una versió modificada.** L'AGPL §13 diu que qui hi accedeix per xarxa té dret al codi que li estàs servint, i amb aquesta apuntant a l'original els teus usuaris no hi arribarien |
 

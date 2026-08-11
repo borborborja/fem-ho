@@ -25,7 +25,7 @@ import { pullFromLink, type InstanceLinkRow } from '../services/federation.js';
 import { pruneOps } from '../services/sync.js';
 import { open } from '../crypto/secret-box.js';
 import { openImapClient } from '../net/imap-mail-client.js';
-import { pollMail } from './mail-poll.js';
+import { pollMail, pruneMail } from './mail-poll.js';
 import type { Principal } from '../policy/principal.js';
 import {
   ensureVapidKeys,
@@ -46,6 +46,8 @@ export interface SchedulerOptions {
   dataDir?: string | undefined;
   /** `FEMHO_MAIL_ALLOW_HOSTS`, si la instància n'ha posat. */
   mailAllowHosts?: string[] | undefined;
+  /** `FEMHO_MAIL_RETENTION_DAYS`. `0` vol dir per sempre. */
+  mailRetentionDays?: number | undefined;
   /** Injectables per a les proves: així no cal esperar mig minut ni piconar cap servei. */
   now?: () => string;
   send?: PushSender;
@@ -149,6 +151,7 @@ export async function tick(options: SchedulerOptions): Promise<TickResult> {
     });
     result.mail = mail.ingested;
     result.errors += mail.errors;
+    await pruneMail(options.connection.db, now, options.mailRetentionDays ?? 0);
   } catch (error) {
     result.errors += 1;
     log('La lectura del correu ha fallat', error);

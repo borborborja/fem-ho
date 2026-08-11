@@ -19,7 +19,7 @@ import { afterAll, beforeEach, beforeAll, describe, expect, it } from 'vitest';
 import { connect, type Connection } from '../db/connection.js';
 import { migrateToLatest } from '../db/migrator.js';
 import type { MailBody, MailClient, MailHeader, MailboxStatus } from '../net/mail-client.js';
-import { backoffSeconds, pollMail } from './mail-poll.js';
+import { backoffSeconds, pollMail, pruneMail } from './mail-poll.js';
 
 const tmp = mkdtempSync(join(tmpdir(), 'femho-mailpoll-'));
 const NOW = '2026-08-11T10:00:00.000Z';
@@ -550,5 +550,46 @@ describe('els adjunts', () => {
 
     const adjunts = await sql<{ n: number }>`SELECT COUNT(*) AS n FROM attachments`.execute(conn.db);
     expect(Number(adjunts.rows[0]?.n)).toBe(0);
+  });
+});
+
+describe('la retenció', () => {
+  it('purga el cos del correu i **mai la tasca**', async () => {
+    /**
+     * És el motiu pel qual `tasks.mail_thread_key` i `mail_message_key` són claus i no
+     * claus foranes: amb una clau forana, purgar obligaria a triar entre trencar-la i
+     * esborrar tasques d'algú. La tasca és teva; el correu és el que caduca.
+     */
+    await regla('INBOX', { action: 'task' });
+    servidor.status = { uidValidity: '1', uidNext: '1', exists: 0 };
+    await córrer();
+
+    servidor.status = { uidValidity: '1', uidNext: '2', exists: 1 };
+    servidor.headers = [sobre('1')];
+    servidor.bodies.set('1', { text: 'Un cos que caducarà.', html: null, attachments: [] });
+    await córrer('2026-08-11T11:00:00.000Z');
+
+    const purgats = await pruneMail(conn.db, '2026-12-31T00:00:00.000Z', 30);
+    expect(purgats).toBe(1);
+
+    const missatge = await sql<{ body_text: string | null; disposition: string }>`
+      SELECT body_text, disposition FROM mail_messages
+    `.execute(conn.db);
+    expect(missatge.rows[0]?.body_text).toBeNull();
+    /**
+     * **I la fila hi segueix.** Si s'esborrés, la pròxima reindexació del servidor tornaria
+     * a ingerir el mateix correu i en sortiria una segona tasca.
+     */
+    expect(missatge.rows).toHaveLength(1);
+
+    const tasca = await sql<{ title: string; source_kind: string | null }>`
+      SELECT title, source_kind FROM tasks
+    `.execute(conn.db);
+    expect(tasca.rows).toHaveLength(1);
+    expect(tasca.rows[0]?.source_kind).toBe('mail');
+  });
+
+  it('i amb 0 dies no purga res: 0 vol dir per sempre', async () => {
+    expect(await pruneMail(conn.db, '2026-12-31T00:00:00.000Z', 0)).toBe(0);
   });
 });

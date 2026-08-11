@@ -31,6 +31,8 @@
     <string name="ai_proof_opentask">Abre la tarea</string>
     <string name="ai_proof_tasktitle">Preparar la reunión del lunes</string>
     <string name="ai_proof_togglelease">Reserva</string>
+    <string name="ai_status_configuredbutunused">Hay credenciales de un modelo, y todavía no hay nada que las use.</string>
+    <string name="ai_status_credentialswithoutprovider">Hay una clave o un modelo configurados sin proveedor: no se usarán.</string>
     <string name="ai_unseen">Ha habido un cambio autónomo que no has visto</string>
     <string name="app_name">Fem-ho</string>
     <string name="board_card_advance">Mover a {column}</string>

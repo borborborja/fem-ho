@@ -29,6 +29,7 @@ const CHECKS = [
   { name: 'parser-parity', script: 'parser-parity.mjs' },
   { name: 'tokens-parity', script: 'tokens-parity.mjs' },
   { name: 'css-classes', script: 'css-classes.mjs', selfTest: true },
+  { name: 'mail-invariants', script: 'mail-invariants.mjs', selfTest: true },
 ];
 
 const results = [];

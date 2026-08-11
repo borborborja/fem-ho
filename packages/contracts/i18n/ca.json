@@ -38,6 +38,8 @@
   "ai.proof.openTask": "Obre la tasca",
   "ai.proof.taskTitle": "Preparar la reunió de dilluns",
   "ai.proof.toggleLease": "Reserva",
+  "ai.status.configuredButUnused": "Hi ha credencials d’un model, i encara no hi ha res que les faci servir.",
+  "ai.status.credentialsWithoutProvider": "Hi ha una clau o un model configurats sense proveïdor: no es faran servir.",
   "ai.unseen": "Hi ha hagut un canvi autònom que no has vist",
   "app.name": "Fem-ho",
   "board.card.advance": "Moure a {column}",

@@ -36,6 +36,8 @@
   "ai.proof.openTask": "Abre la tarea",
   "ai.proof.taskTitle": "Preparar la reunión del lunes",
   "ai.proof.toggleLease": "Reserva",
+  "ai.status.configuredButUnused": "Hay credenciales de un modelo, y todavía no hay nada que las use.",
+  "ai.status.credentialsWithoutProvider": "Hay una clave o un modelo configurados sin proveedor: no se usarán.",
   "ai.unseen": "Ha habido un cambio autónomo que no has visto",
   "app.name": "Fem-ho",
   "board.card.advance": "Mover a {column}",

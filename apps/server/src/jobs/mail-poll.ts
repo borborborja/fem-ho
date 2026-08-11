@@ -626,3 +626,33 @@ async function localeOf(db: MigrationDb, userId: string): Promise<Locale> {
   const raw = found.rows[0]?.locale ?? '';
   return isLocale(raw) ? raw : FALLBACK;
 }
+
+
+/**
+ * La purga per retenció.
+ *
+ * **Purga el correu, mai la tasca.** Es buida el cos i les metadades del missatge; la
+ * tasca que en va sortir es queda sencera i amb la provinença intacta —és per això que
+ * `tasks.mail_thread_key` i `mail_message_key` són claus i no claus foranes: amb una clau
+ * forana, purgar obligaria a triar entre trencar-la i esborrar tasques d'algú.
+ *
+ * I **no s'esborra la fila**: es buida. La fila és el que fa que el pròxim rescaneig no
+ * torni a ingerir el mateix correu, i esborrar-la el faria tornar la primera vegada que el
+ * servidor reindexés —que és exactament el dia que menys ho vols.
+ */
+export async function pruneMail(
+  db: MigrationDb,
+  now: string,
+  retentionDays: number,
+): Promise<number> {
+  if (retentionDays <= 0) return 0;
+
+  const limit = new Date(Date.parse(now) - retentionDays * 86_400_000).toISOString();
+  const result = await sql`
+    UPDATE mail_messages
+    SET body_text = NULL, subject = NULL, from_name = NULL, to_addresses = NULL,
+        raw_path = NULL, updated_at = ${now}
+    WHERE created_at < ${limit} AND body_text IS NOT NULL
+  `.execute(db);
+  return Number(result.numAffectedRows ?? 0);
+}

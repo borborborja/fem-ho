@@ -94,7 +94,7 @@ Casos reals, tots del mateix repositori:
 
 ---
 
-## 4 · Les tretze comprovacions permanents
+## 4 · Les setze comprovacions permanents
 
 `npm run check`. Cadascuna impedeix **una manera concreta de trencar el producte sense que
 res falli**, i totes tenen `--self-test`.
@@ -114,9 +114,12 @@ res falli**, i totes tenen `--self-test`.
 | `parser-parity`           | Que el parser de la web i el d'Android divergeixin                  |
 | `tokens-parity`           | Que els colors de Compose s'endarrereixin respecte del CSS          |
 | `css-classes`             | Una classe que no existeix — sense estil i sense error              |
+| `env-documented`          | Una opció documentada que el codi no llegeix, o a l'inrevés         |
+| `scope-predicate`         | Una segona còpia de «qui pertany a un àmbit», que divergiria        |
+| `mail-invariants`         | Apagar la verificació TLS, marcar el correu d'algú, o desduplicar per UID |
 
 **Si arregles un defecte que cap comprovació hauria vist, afegeix-ne una.** És el criteri
-que ha fet créixer la llista de vuit a tretze.
+que ha fet créixer la llista de vuit a setze.
 
 ---
 
@@ -157,7 +160,7 @@ apps/web         React + Vite, PWA amb cua de sortida
 apps/android     nou mòduls (§8)
 packages/contracts       openapi.yaml, catàlegs, parser, índex fraccional, dates
 packages/design-system   Plou vendoritzat + els components de Fem-ho
-tools/checks     les tretze comprovacions
+tools/checks     les setze comprovacions
 tools/gen        generació de tokens a Compose i a recursos
 tools/i18n       generació dels strings.xml
 docs/            quinze documents normatius + ESTAT.md

@@ -1995,10 +1995,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/ai/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Si aquesta instància té credencials d'un model
+         * @description **«Configurada» vol dir que hi ha credencials, no que res les faci servir encara.**
+         *     És la frase honesta i va tal qual a la pantalla: `docs/09` diu que Fem-ho no té
+         *     motor d'IA propi, i el que hi ha avui és el terreny (P10 a `docs/14`).
+         *
+         *     **La clau no surt mai, ni emmascarada** —una màscara filtra la longitud i el
+         *     prefix—, i de l'URL només l'amfitrió: una URL pot portar un testimoni a la cadena
+         *     de consulta.
+         */
+        get: operations["getAiStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AiStatus: {
+            /** @description Hi ha credencials. **No vol dir que res les faci servir**: avui no hi ha cap camí de codi que truqui a cap model. */
+            configured: boolean;
+            /** @description `none` si no s'ha configurat res. */
+            provider: string;
+            model?: string | null;
+            /** @description **Només l'amfitrió**, mai l'URL sencera: una URL pot portar un testimoni a la cadena de consulta i acabaria a la pantalla i als registres. */
+            base_url_host?: string | null;
+            max_input_tokens?: number;
+            /** @description Coses que no impedeixen arrencar i val la pena dir. */
+            warnings: string[];
+        };
         /** @description Un compte IMAP. **`secret_enc` no hi és i `password` tampoc**: la contrasenya es xifra en repòs i no torna a sortir del servidor en cap forma, ni emmascarada —una màscara filtra la longitud i el prefix—. */
         MailAccount: {
             id: string;
@@ -7359,6 +7397,27 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    getAiStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description L'estat. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiStatus"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
         };
     };
 }

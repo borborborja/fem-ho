@@ -44,6 +44,11 @@ tags:
       El correu com a font d'entrada. **Un compte és d'una persona, no d'un àmbit**: la
       contrasenya del teu correu no és de la casa. Una regla diu què es fa amb el que
       arriba a una carpeta, i **una carpeta sense regla no es llegeix mai**.
+  - name: ai
+    description: |
+      El terreny d'IA. **Fem-ho no té motor d'IA propi** (`docs/09`): la intel·ligència és
+      sempre externa i entra per MCP o per l'API. El que hi ha aquí diu si la instància té
+      credencials d'un model, i **res les fa servir encara** (P10).
   - name: auth
     description: |
       Sessions i compte. docs/05 §1. Els tokens de refresc roten: cada refresc n'emet un
@@ -3140,8 +3145,50 @@ paths:
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
 
+  /ai/status:
+    get:
+      tags: [ai]
+      operationId: getAiStatus
+      summary: Si aquesta instància té credencials d'un model
+      description: |
+        **«Configurada» vol dir que hi ha credencials, no que res les faci servir encara.**
+        És la frase honesta i va tal qual a la pantalla: `docs/09` diu que Fem-ho no té
+        motor d'IA propi, i el que hi ha avui és el terreny (P10 a `docs/14`).
+
+        **La clau no surt mai, ni emmascarada** —una màscara filtra la longitud i el
+        prefix—, i de l'URL només l'amfitrió: una URL pot portar un testimoni a la cadena
+        de consulta.
+      responses:
+        '200':
+          description: L'estat.
+          content: { application/json: { schema: { $ref: '#/components/schemas/AiStatus' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+
 components:
   schemas:
+    AiStatus:
+      type: object
+      additionalProperties: false
+      required: [configured, provider, warnings]
+      properties:
+        configured:
+          type: boolean
+          description: >-
+            Hi ha credencials. **No vol dir que res les faci servir**: avui no hi ha cap
+            camí de codi que truqui a cap model.
+        provider: { type: string, description: '`none` si no s''ha configurat res.' }
+        model: { type: [string, 'null'] }
+        base_url_host:
+          type: [string, 'null']
+          description: >-
+            **Només l'amfitrió**, mai l'URL sencera: una URL pot portar un testimoni a la
+            cadena de consulta i acabaria a la pantalla i als registres.
+        max_input_tokens: { type: integer }
+        warnings:
+          type: array
+          items: { type: string }
+          description: Coses que no impedeixen arrencar i val la pena dir.
+
     MailAccount:
       type: object
       description: >-
