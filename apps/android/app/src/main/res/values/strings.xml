@@ -169,7 +169,9 @@
     <string name="inbox_event_allday">Tot el dia</string>
     <string name="inbox_event_remove">Treure</string>
     <string name="inbox_event_totask">Fer-ne una tasca</string>
+    <string name="inbox_mail_frominbox">Treure de l’inbox</string>
     <string name="inbox_mail_nosubject">(sense assumpte)</string>
+    <string name="inbox_mail_toinbox">Portar a l’inbox</string>
     <string name="inbox_mail_unknownsender">Sense remitent</string>
     <string name="inbox_mailbox">Què es veu a la bústia</string>
     <string name="inbox_mailbox_all">Tot</string>

@@ -26,7 +26,7 @@ import { api } from '../app/api.js';
 import { v7 as uuidv7 } from 'uuid';
 import { useSession, useSessionData } from '../app/session.js';
 import { useApi } from '../app/useApi.js';
-import type { Calendar, EventOccurrence, Inbox } from '../app/types.js';
+import type { Calendar, EventOccurrence, Inbox, InboxMail } from '../app/types.js';
 import { InboxRail } from '../board/InboxRail.js';
 import { ColumnQuickAdd } from '../board/ColumnQuickAdd.js';
 import { EventSheet } from './EventSheet.js';
@@ -118,9 +118,25 @@ export function CalendarScreen({ activeScopeIds, onOpenTask }: CalendarScreenPro
 
   const scopeQuery = activeScopeIds.length > 0 ? `&scope_ids=${activeScopeIds.join(',')}` : '';
   const events = useApi<EventOccurrence[]>(`/api/v1/events?from=${from}&to=${to}${scopeQuery}`);
+  /**
+   * **`include_hidden` és la lent del calendari.**
+   *
+   * El tauler demana la mateixa bústia sense el paràmetre i hi veu el que has decidit que és
+   * feina. Aquí hi surt tot, cada cosa amb el seu `in_inbox`, perquè el calendari és
+   * l'organitzador: és des d'aquí que decideixes què puja a la llista.
+   */
   const inbox = useApi<Inbox>(
-    `/api/v1/inbox?date=${selected}&include_overdue=${String(settings.inbox_show_overdue ?? true)}${scopeQuery}`,
+    `/api/v1/inbox?date=${selected}&include_overdue=${String(settings.inbox_show_overdue ?? true)}&include_hidden=true${scopeQuery}`,
   );
+
+  /**
+   * Els correus de la finestra visible, **per pintar-los al dia que van arribar**.
+   *
+   * Va a part de `/inbox` perquè la pregunta és una altra: la bústia parla d'un dia i la
+   * graella d'un mes sencer. Un correu no té hora d'inici ni durada —és un instant, com un
+   * ítem d'RSS—, i per això surt com una cosa de tot el dia.
+   */
+  const mail = useApi<InboxMail[]>(`/api/v1/mail/messages?from=${from}&to=${to}${scopeQuery}`);
 
   /** De quina mena és la font d'un calendari. `null` si és d'aquesta casa. */
   const menaDe = (calendarId: string | undefined): 'caldav' | 'ical' | 'rss' | null =>
@@ -162,10 +178,25 @@ export function CalendarScreen({ activeScopeIds, onOpenTask }: CalendarScreenPro
     });
   };
 
+  /** El correu de la finestra, ja amb el dia calculat. */
+  const mailByDay = useMemo(
+    () =>
+      (mail.data ?? [])
+        .filter((item) => item.received_at !== null)
+        .map((item) => ({ item, day: item.received_at!.slice(0, 10) })),
+    [mail.data],
+  );
+
   const dotsByDate = useMemo<Record<string, string[]>>(() => {
     const map: Record<string, string[]> = {};
-    for (const occurrence of occurrences) {
-      const day = occurrence.starts_at.slice(0, 10);
+    const punts: { day: string; scope_id: string }[] = [
+      ...occurrences.map((o) => ({ day: o.starts_at.slice(0, 10), scope_id: o.scope_id })),
+      // El correu també hi posa punt: si no, un dia amb tres correus i cap cita es veuria
+      // buit al mes, i el calendari deixaria de ser un mapa del que hi ha.
+      ...mailByDay.map(({ item, day }) => ({ day, scope_id: item.scope_id })),
+    ];
+    for (const occurrence of punts) {
+      const day = occurrence.day;
       const color = colorOf(occurrence.scope_id);
       const list = map[day] ?? [];
       // Fins a 3 punts per dia (docs/02 §5), i sense repetir el color d'un mateix àmbit.
@@ -173,7 +204,7 @@ export function CalendarScreen({ activeScopeIds, onOpenTask }: CalendarScreenPro
       map[day] = list;
     }
     return map;
-  }, [occurrences, scopes]);
+  }, [occurrences, mailByDay, scopes]);
 
   /**
    * Els noms surten d'`Intl`, no del catàleg.
@@ -207,7 +238,27 @@ export function CalendarScreen({ activeScopeIds, onOpenTask }: CalendarScreenPro
        * ampliar el contracte de `/events` per a una cosa que el client ja sap.
        */
       icon: <SourceIcon kind={menaDe(occurrence.calendar_id)} />,
-    }));
+    }))
+    .concat(
+      /*
+        **I el correu del dia, amb la mateixa forma que una cita.** Sense hora, perquè un
+        correu és un instant i no una durada: donar-li mitja hora perquè es vegi millor
+        seria inventar-se una dada, que és el mateix criteri que ja segueix l'RSS.
+
+        El `muted` surt del mateix camp que a les cites (`in_inbox`, calculat al servidor):
+        un sol significat per a la vora discontínua, i una sola implementació de la regla.
+      */
+      mailByDay
+        .filter(({ day }) => day === selected)
+        .map(({ item }) => ({
+          id: `mail:${item.id}`,
+          title: `${item.from_name ?? item.from_address ?? ''} — ${item.subject ?? ''}`.trim(),
+          color: colorOf(item.scope_id),
+          time: undefined,
+          muted: !item.in_inbox,
+          icon: <SourceIcon kind="mail" />,
+        })),
+    );
 
   /** L'ocurrència oberta a la fitxa, per la clau que fa servir la graella. */
   const openItem =
@@ -336,6 +387,21 @@ export function CalendarScreen({ activeScopeIds, onOpenTask }: CalendarScreenPro
       onOpen={onOpenTask}
       events={inbox.data?.events}
       mail={inbox.data?.mail}
+      onMailToggle={(item) => {
+        /*
+          El mateix gest que amb una cita: portar-lo a la llista o treure'l. **No l'esborra**
+          —el correu es queda aquí, difuminat— i per això es pot desfer sempre.
+
+          `visible` explícit i no `null`: `null` diria «val el defecte de la carpeta», i com
+          que el defecte del correu és «no visible», tornar-hi no faria res.
+        */
+        void api
+          .post('/api/v1/inbox/mail', { message_id: item.id, visible: !item.in_inbox })
+          .then(() => {
+            inbox.reload();
+            mail.reload();
+          });
+      }}
       onEventRemove={(event) => {
         void api
           .post('/api/v1/inbox/events', {
@@ -466,7 +532,13 @@ export function CalendarScreen({ activeScopeIds, onOpenTask }: CalendarScreenPro
           <MonthView
             year={cursor.getFullYear()}
             month={cursor.getMonth()}
-            monthLabel={`${monthName(locale, cursor.getMonth())} ${String(cursor.getFullYear())}`}
+            /*
+              **Només el mes.** `CalendarGrid` pinta `{monthLabel} {year}` amb l'any que ja
+              rep a part: posar-l'hi també aquí donava «agost 2026 2026». Es va veure mirant
+              la pantalla, que és l'única manera de veure una cosa així —compila, passa les
+              proves, i el text el llegeix una persona.
+            */
+            monthLabel={monthName(locale, cursor.getMonth())}
             weekStart={start}
             weekdayLabels={{
               days: weekdays,

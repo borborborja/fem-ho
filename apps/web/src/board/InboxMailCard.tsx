@@ -33,11 +33,17 @@ export interface InboxMailCardProps {
   color?: string | undefined;
   /** Fer-ne una tasca. Sense la funció, el botó no surt. */
   onToTask?: (() => void) | undefined;
-  /** Descartar-lo. El mateix. */
-  onDismiss?: (() => void) | undefined;
+  /**
+   * Portar-lo a l'inbox de Tasques o treure-l'en.
+   *
+   * **Un sol botó amb dos sentits**, i el text el diu segons on és: el que es fa aquí no és
+   * esborrar res —el correu es queda sencer al servidor i a la vista de calendari—, és
+   * decidir si vols veure'l a la teva llista de feina.
+   */
+  onToggleInbox?: (() => void) | undefined;
 }
 
-export function InboxMailCard({ mail, color, onToTask, onDismiss }: InboxMailCardProps) {
+export function InboxMailCard({ mail, color, onToTask, onToggleInbox }: InboxMailCardProps) {
   const qui = mail.from_name ?? mail.from_address ?? t('inbox.mail.unknownSender');
 
   return (
@@ -49,6 +55,13 @@ export function InboxMailCard({ mail, color, onToTask, onDismiss }: InboxMailCar
         border: '1px solid var(--card-border)',
         // El regle: sòlid, del color de l'àmbit si n'hi ha.
         borderLeft: `3px solid ${color === undefined ? 'var(--card-border)' : `var(${color})`}`,
+        /*
+          **El que no és a la teva bústia es dibuixa amb la vora discontínua**, exactament
+          com una cita que no hi és: un sol significat per a un sol senyal. I la diferència
+          no va mai al contrast —`docs/04` §8 reserva `--ink-faint` per al que no cal
+          llegir, i un remitent cal llegir-lo per decidir.
+        */
+        borderStyle: mail.in_inbox ? 'solid' : 'dashed',
         borderRadius: 12,
         padding: '9px 11px',
         display: 'flex',
@@ -93,15 +106,15 @@ export function InboxMailCard({ mail, color, onToTask, onDismiss }: InboxMailCar
             {t('inbox.event.toTask')}
           </button>
         )}
-        {onDismiss === undefined ? null : (
+        {onToggleInbox === undefined ? null : (
           <button
             type="button"
             className="plou-btn plou-btn-ghost"
-            data-testid={`inbox-mail-dismiss-${mail.id}`}
-            onClick={onDismiss}
+            data-testid={`inbox-mail-toggle-${mail.id}`}
+            onClick={onToggleInbox}
             style={{ fontSize: 10.5, padding: '3px 9px' }}
           >
-            {t('inbox.event.remove')}
+            {mail.in_inbox ? t('inbox.mail.fromInbox') : t('inbox.mail.toInbox')}
           </button>
         )}
       </div>

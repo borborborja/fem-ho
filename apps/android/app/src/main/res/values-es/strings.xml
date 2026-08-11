@@ -169,7 +169,9 @@
     <string name="inbox_event_allday">Todo el día</string>
     <string name="inbox_event_remove">Quitar</string>
     <string name="inbox_event_totask">Hacer una tarea</string>
+    <string name="inbox_mail_frominbox">Quitar del inbox</string>
     <string name="inbox_mail_nosubject">(sin asunto)</string>
+    <string name="inbox_mail_toinbox">Llevar al inbox</string>
     <string name="inbox_mail_unknownsender">Sin remitente</string>
     <string name="inbox_mailbox">Qué se ve en la bandeja</string>
     <string name="inbox_mailbox_all">Todo</string>

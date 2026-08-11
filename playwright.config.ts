@@ -11,7 +11,20 @@ import { defineConfig, devices } from '@playwright/test';
  * nou, cada execució comença amb la instància buida, que és exactament l'escenari que
  * `fresh-install` ha de comprovar.
  */
-const DATA_DIR = mkdtempSync(join(tmpdir(), 'femho-e2e-'));
+/**
+ * **El volum es crea un sol cop i el nom viatja per l'entorn.**
+ *
+ * Aquest fitxer el llegeix el procés que orquestra i **també cada procés de treball**: amb
+ * un `mkdtempSync` a seques, cada treballador se'n fabricava un de propi i buit, i una
+ * prova que hi volgués sembrar res obria una base que no era la del servidor —sense error,
+ * amb una taula que no hi és—. Amb la variable, el primer el crea i la resta el troben.
+ *
+ * Serveix perquè una prova pugui sembrar **el que l'API no deixa crear**: el correu entra
+ * per IMAP i per enlloc més, i no hi ha d'haver cap ruta que creï un missatge —seria una
+ * porta d'escriptura a la bústia d'algú que existiria només per a les proves.
+ */
+const DATA_DIR = process.env.FEMHO_E2E_DATA_DIR ?? mkdtempSync(join(tmpdir(), 'femho-e2e-'));
+process.env.FEMHO_E2E_DATA_DIR = DATA_DIR;
 const API_PORT = 4174;
 
 export default defineConfig({

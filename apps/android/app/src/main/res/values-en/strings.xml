@@ -169,7 +169,9 @@
     <string name="inbox_event_allday">All day</string>
     <string name="inbox_event_remove">Remove</string>
     <string name="inbox_event_totask">Make it a task</string>
+    <string name="inbox_mail_frominbox">Remove from inbox</string>
     <string name="inbox_mail_nosubject">(no subject)</string>
+    <string name="inbox_mail_toinbox">Move to inbox</string>
     <string name="inbox_mail_unknownsender">No sender</string>
     <string name="inbox_mailbox">What the inbox shows</string>
     <string name="inbox_mailbox_all">All</string>
