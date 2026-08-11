@@ -1218,6 +1218,36 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/updates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Si hi ha una versió més nova
+         * @description **La consulta la fa el servidor, no el navegador.** És el mateix criteri que
+         *     governa Gravatar: si ho fes cada pestanya, GitHub veuria la IP de cada persona de
+         *     la casa cada vegada que algú obre Ajustos. La resposta es recorda sis hores.
+         *
+         *     **Encesa per defecte**, a diferència de Gravatar, i la diferència importa: allà
+         *     s'envia el hash del correu de cadascú i aquí una petició anònima a un llistat
+         *     públic, sense cap dada de ningú. `FEMHO_UPDATE_CHECK=false` l'apaga.
+         *
+         *     **Va autenticada i `/info` segueix sense dir-ho.** `/info` és públic i ja diu quina
+         *     versió corre, que no es pot evitar; el que no cal és que qualsevol que hi passi
+         *     sàpiga a més que aquesta instància va endarrerida.
+         */
+        get: operations["getUpdateStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/inbox/events": {
         parameters: {
             query?: never;
@@ -1989,6 +2019,27 @@ export interface components {
             body: string;
             /** Format: date-time */
             created_at: string;
+        };
+        UpdateStatus: {
+            /** @description La versió que corre aquesta instància. */
+            current: string;
+            /** @description L'última publicada, o nul si no s'ha pogut saber. */
+            latest: string | null;
+            available: boolean;
+            url: string | null;
+            /**
+             * @description Per què no se sap res, si no se'n sap.
+             *
+             *     **`unreachable` no és `ok`**, i distingir-ho és el punt: una instància sense
+             *     sortida a internet estaria dient "estàs al dia" sempre, i callaria justament el
+             *     dia que hi ha una actualització de seguretat.
+             *
+             *     `not-github` vol dir que `FEMHO_SOURCE_URL` no apunta a un repositori de
+             *     GitHub. Qui publiqui una versió modificada —cosa que l'AGPL §13 preveu— no ha
+             *     de rebre avisos de les versions d'un altre.
+             * @enum {string}
+             */
+            reason: "ok" | "disabled" | "not-github" | "unreachable";
         };
         /**
          * @description El que arriba d'una font i entra a la bústia d'un dia.
@@ -5551,6 +5602,27 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Inbox"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    getUpdateStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description L'estat de la versió. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpdateStatus"];
                 };
             };
             401: components["responses"]["Unauthenticated"];

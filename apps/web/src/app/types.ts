@@ -37,6 +37,7 @@ export type UserProfile = S['UserProfile'];
 export type UserSettings = S['UserSettings'];
 export type Me = S['Me'];
 export type Info = S['Info'];
+export type UpdateStatus = S['UpdateStatus'];
 export type QuickAddResult = S['QuickAddResult'];
 
 export type Theme = UserProfile['theme'];

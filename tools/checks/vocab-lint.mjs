@@ -51,7 +51,14 @@ const RULES = [
   },
   {
     name: 'mcp-sense-prefix',
-    re: /['"`]femho_(list|get|create|update|move|complete|add|search|next|release|whoami)/i,
+    /**
+     * **Sense `i`, i a posta.** Les tools d'MCP són en minúscules; en majúscules, `FEMHO_`
+     * és el prefix de les variables d'entorn, que no tenen res a veure. Amb la regla
+     * insensible, esmentar `FEMHO_UPDATE_CHECK` al contracte o a un document feia saltar
+     * una infracció d'MCP — i la sortida fàcil hauria estat deixar de nomenar la variable,
+     * que és justament el que `env-documented` exigeix que es faci.
+     */
+    re: /['"`]femho_(list|get|create|update|move|complete|add|search|next|release|whoami)/,
     message:
       "Les tools d'MCP van sense prefix i verb primer: `list_tasks`, no `femho_list_tasks` " +
       '(D6). Els clients ja fan namespace pel seu compte.',

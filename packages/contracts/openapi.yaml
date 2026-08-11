@@ -2120,6 +2120,31 @@ paths:
           content: { application/json: { schema: { $ref: '#/components/schemas/Inbox' } } }
         '401': { $ref: '#/components/responses/Unauthenticated' }
 
+  /updates:
+    get:
+      tags: [instance]
+      operationId: getUpdateStatus
+      summary: Si hi ha una versió més nova
+      description: |
+        **La consulta la fa el servidor, no el navegador.** És el mateix criteri que
+        governa Gravatar: si ho fes cada pestanya, GitHub veuria la IP de cada persona de
+        la casa cada vegada que algú obre Ajustos. La resposta es recorda sis hores.
+
+        **Encesa per defecte**, a diferència de Gravatar, i la diferència importa: allà
+        s'envia el hash del correu de cadascú i aquí una petició anònima a un llistat
+        públic, sense cap dada de ningú. `FEMHO_UPDATE_CHECK=false` l'apaga.
+
+        **Va autenticada i `/info` segueix sense dir-ho.** `/info` és públic i ja diu quina
+        versió corre, que no es pot evitar; el que no cal és que qualsevol que hi passi
+        sàpiga a més que aquesta instància va endarrerida.
+      responses:
+        '200':
+          description: L'estat de la versió.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UpdateStatus' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+
   /inbox/events:
     post:
       tags: [tasks]
@@ -3131,6 +3156,31 @@ components:
           description: Present quan el comentari ve d'un enllaç compartit.
         body: { type: string }
         created_at: { type: string, format: date-time }
+
+    UpdateStatus:
+      type: object
+      additionalProperties: false
+      required: [current, latest, available, url, reason]
+      properties:
+        current: { type: string, description: La versió que corre aquesta instància. }
+        latest:
+          type: [string, 'null']
+          description: L'última publicada, o nul si no s'ha pogut saber.
+        available: { type: boolean }
+        url: { type: [string, 'null'] }
+        reason:
+          type: string
+          enum: [ok, disabled, not-github, unreachable]
+          description: |
+            Per què no se sap res, si no se'n sap.
+
+            **`unreachable` no és `ok`**, i distingir-ho és el punt: una instància sense
+            sortida a internet estaria dient "estàs al dia" sempre, i callaria justament el
+            dia que hi ha una actualització de seguretat.
+
+            `not-github` vol dir que `FEMHO_SOURCE_URL` no apunta a un repositori de
+            GitHub. Qui publiqui una versió modificada —cosa que l'AGPL §13 preveu— no ha
+            de rebre avisos de les versions d'un altre.
 
     InboxEvent:
       type: object

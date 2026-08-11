@@ -29,6 +29,7 @@ import type {
   Project,
   Scope,
   ShareSummary,
+  UpdateStatus,
 } from '../app/types.js';
 import { ErrorBanner } from './BoardScreen.js';
 
@@ -204,6 +205,51 @@ function Toggle({
   );
 }
 
+/**
+ * Si hi ha una versió més nova.
+ *
+ * **Un error de xarxa no es dibuixa com un "estàs al dia".** Una instància sense sortida
+ * a internet ho estaria dient sempre, i callaria justament el dia que hi ha una
+ * actualització de seguretat: el servidor distingeix `unreachable` d'`ok` i aquí es diu.
+ *
+ * Quan no hi ha res a dir —vas al dia, o la comprovació està apagada— **no es pinta res**.
+ * Un "estàs al dia" permanent és una línia que la gent aprèn a no llegir, i llavors
+ * l'avís que sí que importa cau al mateix sac.
+ */
+function UpdateNotice() {
+  const update = useApi<UpdateStatus>('/api/v1/updates').data;
+  if (update === undefined) return null;
+
+  if (update.reason === 'unreachable') {
+    return (
+      <span data-testid="update-unreachable" style={{ fontSize: 11.5, color: 'var(--ink-soft)' }}>
+        {t('settings.update.unreachable')}
+      </span>
+    );
+  }
+  if (!update.available || update.latest === null) return null;
+
+  return (
+    <span
+      data-testid="update-available"
+      style={{
+        fontSize: 12,
+        color: 'var(--ink)',
+        background: 'var(--tag-bg)',
+        borderRadius: 10,
+        padding: '9px 11px',
+      }}
+    >
+      {t('settings.update.available', { version: update.latest })}{' '}
+      {update.url === null ? null : (
+        <a href={update.url} target="_blank" rel="noreferrer noopener">
+          {t('settings.update.see')}
+        </a>
+      )}
+    </span>
+  );
+}
+
 function GeneralTab() {
   const { profile, settings } = useSessionData();
   const weekStart = resolveWeekStart(settings.week_start, getLocale());
@@ -305,6 +351,20 @@ function GeneralTab() {
           <a href={info.source_url ?? ''} target="_blank" rel="noreferrer noopener">
             {t('settings.sourceLink')}
           </a>
+        </span>
+
+        <UpdateNotice />
+
+        {/*
+          Els crèdits.
+
+          **Plou hi surt amb nom propi i no com una dependència més**, perquè no ho és:
+          `NOTICE` diu que és el design system d'un producte a part, vendoritzat aquí tal
+          com ve i **amb condicions pròpies que no cobreix l'AGPL d'aquest repositori**.
+          Amagar-ho a una llista de llibreries seria fer passar per nostre el que no ho és.
+        */}
+        <span style={{ fontSize: 11.5, color: 'var(--ink-soft)', lineHeight: 1.6 }}>
+          {t('settings.credits')}
         </span>
       </Group>
 
