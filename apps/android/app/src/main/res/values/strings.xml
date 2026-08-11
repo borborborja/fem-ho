@@ -161,6 +161,7 @@
     <string name="error_wrong_component">«{name}» és de tasques i no accepta esdeveniments.</string>
     <string name="error_wrong_password">La contrasenya actual no és correcta.</string>
     <string name="inbox_day_next">El dia següent</string>
+    <string name="inbox_day_pick">Triar el dia</string>
     <string name="inbox_day_prev">El dia abans</string>
     <string name="inbox_day_today">Avui</string>
     <string name="inbox_event_allday">Tot el dia</string>

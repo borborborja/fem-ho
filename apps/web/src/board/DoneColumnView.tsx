@@ -10,37 +10,10 @@
  */
 
 import { useState } from 'react';
-
-/**
- * El calendari de la capçalera.
- *
- * Era l'emoji `📅`. Un emoji no és una icona: el dibuixa la font del sistema, canvia de
- * forma i de color a cada plataforma —a Windows és blau, a Android verd—, no hereta
- * `currentColor` i per tant no segueix el tema, i a algunes fonts surt amb el número 17 a
- * dins. Al costat de dos botons de text que sí que segueixen el tema, es veia com una
- * enganxina.
- */
-function CalendarIcon({ size = 14 }: { size?: number }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <rect x="3" y="5" width="18" height="16" rx="2" />
-      <path d="M8 3v4M16 3v4M3 10h18" />
-    </svg>
-  );
-}
 import { getLocale, monthName, resolveWeekStart, t, weekdayNames } from '@fem-ho/contracts';
 import { useSessionData } from '../app/session.js';
 import { MonthView } from '@fem-ho/design-system/femho';
+import { CalendarIcon } from './CalendarIcon.js';
 
 export interface DoneHeaderProps {
   clearedAt: string | null;

@@ -69,13 +69,18 @@ const inbox = async (): Promise<InboxResposta> =>
 const uids = async (): Promise<string[]> => (await inbox()).events.map((e) => e.uid).sort();
 
 /** Un esdeveniment d'una hora el dia de la prova, escrit directament com ho fa el refresc. */
-async function sembra(calendarId: string, uid: string, summary: string): Promise<string> {
+async function sembra(
+  calendarId: string,
+  uid: string,
+  summary: string,
+  dia: string = DIA,
+): Promise<string> {
   const id = uuidv7();
   await sql`
     INSERT INTO events (id, calendar_id, uid, summary, starts_at, ends_at, all_day,
                         status, transparency, sequence, etag, created_at, updated_at)
-    VALUES (${id}, ${calendarId}, ${uid}, ${summary}, ${`${DIA}T09:00:00.000Z`},
-            ${`${DIA}T10:00:00.000Z`}, 0, 'CONFIRMED', 'OPAQUE', 0, 'etag-1', ${NOW}, ${NOW})
+    VALUES (${id}, ${calendarId}, ${uid}, ${summary}, ${`${dia}T09:00:00.000Z`},
+            ${`${dia}T10:00:00.000Z`}, 0, 'CONFIRMED', 'OPAQUE', 0, 'etag-1', ${NOW}, ${NOW})
   `.execute(conn.db);
   return id;
 }
@@ -467,6 +472,60 @@ describe('la marca sobreviu el que la font li faci a sobre', () => {
 
     // I la marca, que no penja de cap `id`, segueix valent.
     expect(await uids()).toContain('titular-1');
+  });
+});
+
+describe("mirar enrere: la bústia d'un dia passat", () => {
+  /**
+   * **El passat no és un cas especial i s'ha de comprovar que no ho sigui.**
+   *
+   * La bústia es navega amunt i avall: endavant per avançar feina, enrere per veure què
+   * hi havia. Enrere, el que hi ha de quedar són les cites que **no vas amagar ni
+   * convertir en tasca** — les que vas resoldre ja no et reclamen res, i tornar-les a
+   * ensenyar seria fer semblar pendent el que no ho és.
+   */
+  const AHIR = '2026-08-09';
+
+  it('una cita de fa dies hi segueix sent', async () => {
+    await sql`DELETE FROM event_inbox_marks`.execute(conn.db);
+    await sql`UPDATE tasks SET deleted_at = ${NOW} WHERE event_uid IS NOT NULL AND deleted_at IS NULL`.execute(
+      conn.db,
+    );
+    await sembra(calendari, 'reunio-antiga', 'Una reunió de fa dies', AHIR);
+
+    const vista = await (await api('GET', `/api/v1/inbox?date=${AHIR}`)).json<InboxResposta>();
+    expect(vista.events.map((e) => e.uid)).toEqual(['reunio-antiga']);
+  });
+
+  it('però no la que vas amagar', async () => {
+    await api('POST', '/api/v1/inbox/events', {
+      calendar_id: calendari,
+      uid: 'reunio-antiga',
+      visible: false,
+    });
+    const vista = await (await api('GET', `/api/v1/inbox?date=${AHIR}`)).json<InboxResposta>();
+    expect(vista.events).toEqual([]);
+
+    await api('POST', '/api/v1/inbox/events', {
+      calendar_id: calendari,
+      uid: 'reunio-antiga',
+      visible: null,
+    });
+  });
+
+  it('ni la que vas convertir en tasca', async () => {
+    const res = await api('POST', '/api/v1/tasks', {
+      id: uuidv7(),
+      scope_id: scopeId,
+      title: 'La vaig fer',
+      status: 'inbox',
+      position: 'c1',
+      source_event: { calendar_id: calendari, uid: 'reunio-antiga' },
+    });
+    expect(res.statusCode).toBe(201);
+
+    const vista = await (await api('GET', `/api/v1/inbox?date=${AHIR}`)).json<InboxResposta>();
+    expect(vista.events).toEqual([]);
   });
 });
 

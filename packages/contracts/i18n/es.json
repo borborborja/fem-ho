@@ -166,6 +166,7 @@
   "error.wrong-component": "«{name}» es de tareas y no acepta eventos.",
   "error.wrong-password": "La contraseña actual no es correcta.",
   "inbox.day.next": "El día siguiente",
+  "inbox.day.pick": "Elegir el día",
   "inbox.day.prev": "El día anterior",
   "inbox.day.today": "Hoy",
   "inbox.event.allDay": "Todo el día",

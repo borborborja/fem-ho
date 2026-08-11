@@ -161,6 +161,7 @@
     <string name="error_wrong_component">«{name}» es de tareas y no acepta eventos.</string>
     <string name="error_wrong_password">La contraseña actual no es correcta.</string>
     <string name="inbox_day_next">El día siguiente</string>
+    <string name="inbox_day_pick">Elegir el día</string>
     <string name="inbox_day_prev">El día anterior</string>
     <string name="inbox_day_today">Hoy</string>
     <string name="inbox_event_allday">Todo el día</string>

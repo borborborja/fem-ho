@@ -168,6 +168,7 @@
   "error.wrong-component": "«{name}» és de tasques i no accepta esdeveniments.",
   "error.wrong-password": "La contrasenya actual no és correcta.",
   "inbox.day.next": "El dia següent",
+  "inbox.day.pick": "Triar el dia",
   "inbox.day.prev": "El dia abans",
   "inbox.day.today": "Avui",
   "inbox.event.allDay": "Tot el dia",
