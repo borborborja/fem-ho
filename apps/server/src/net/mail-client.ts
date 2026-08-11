@@ -89,8 +89,12 @@ export interface MailClient {
    * mida que ja porta el `bodyStructure`, i això és la segona porta —la primera és la mida
    * del missatge sencer.
    */
-  fetchAttachment: (path: string, uid: string, part: string, maxBytes: number) =>
-    Promise<Uint8Array | null>;
+  fetchAttachment: (
+    path: string,
+    uid: string,
+    part: string,
+    maxBytes: number,
+  ) => Promise<Uint8Array | null>;
   close: () => Promise<void>;
 }
 

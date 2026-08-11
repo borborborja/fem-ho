@@ -26,11 +26,7 @@
 
 import { sql } from 'kysely';
 import { v7 as uuidv7 } from 'uuid';
-import {
-  DEFAULT_MAIL_TEMPLATE,
-  MAIL_TEMPLATE_VARS,
-  unknownMailVars,
-} from '@fem-ho/contracts';
+import { DEFAULT_MAIL_TEMPLATE, MAIL_TEMPLATE_VARS, unknownMailVars } from '@fem-ho/contracts';
 import type { AuditContext } from '../audit/audited-transaction.js';
 import { dbBool } from '../db/bool.js';
 import type { MigrationDb } from '../db/migration-db.js';
@@ -432,7 +428,7 @@ export async function createMailRule(
   const scopeId = input.scope_id ?? '';
   if (accountId === '') throw requerit('account_id', 'La regla necessita un compte.');
   if (folder === '') throw requerit('folder', 'La regla necessita una carpeta.');
-  if (scopeId === '') throw requerit('scope_id', "La regla necessita un àmbit de destinació.");
+  if (scopeId === '') throw requerit('scope_id', 'La regla necessita un àmbit de destinació.');
 
   // Les dues comprovacions, i totes dues calen: el compte és teu **i** hi pots escriure.
   await assertOwnAccount(ctx.tx, principal, accountId);
@@ -487,11 +483,7 @@ export async function createMailRule(
   return { rule: toRule(created.rows[0]!), created: true };
 }
 
-async function assertOwnRule(
-  db: MigrationDb,
-  principal: Principal,
-  id: string,
-): Promise<RuleRow> {
+async function assertOwnRule(db: MigrationDb, principal: Principal, id: string): Promise<RuleRow> {
   const found = await sql<RuleRow>`
     SELECT ${RULE_COLUMNS} FROM mail_rules r
     WHERE r.id = ${id} AND r.deleted_at IS NULL

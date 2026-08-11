@@ -120,7 +120,7 @@ describe("el terreny d'IA", () => {
     expect(loadConfig('0.0.0-test').ai.provider).toBe('ollama');
   });
 
-  it("i FEMHO_AI_MODEL no té defecte", () => {
+  it('i FEMHO_AI_MODEL no té defecte', () => {
     /**
      * Un model per defecte és **una versió que canvia sota teu i una factura que no has
      * triat**. Que no n'hi hagi és el que fa que la línia de dalt hagi de petar.

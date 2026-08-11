@@ -381,12 +381,7 @@ export function startScheduler(options: SchedulerOptions): Scheduler {
     running = true;
     try {
       const result = await tick(options);
-      if (
-        result.reminders > 0 ||
-        result.refreshed > 0 ||
-        result.federated > 0 ||
-        result.mail > 0
-      ) {
+      if (result.reminders > 0 || result.refreshed > 0 || result.federated > 0 || result.mail > 0) {
         log(
           `planificador · ${String(result.reminders)} recordatoris, ` +
             `${String(result.refreshed)} orígens refrescats, ` +

@@ -217,7 +217,7 @@ describe('la segona passada', () => {
     expect(servidor.descarregues).toHaveLength(abans);
   });
 
-  it("i un UIDVALIDITY nou rescaneja sense duplicar res", async () => {
+  it('i un UIDVALIDITY nou rescaneja sense duplicar res', async () => {
     /**
      * Quan el servidor reindexa, el protocol diu «oblida tots els UID que t'he donat». Es
      * torna a mirar la carpeta sencera **amb UID nous**, i el que evita que cada tasca es
@@ -482,7 +482,7 @@ describe('la conversió', () => {
 });
 
 describe('els adjunts', () => {
-  it("un factura.pdf que és un executable rep el que diuen els bytes", async () => {
+  it('un factura.pdf que és un executable rep el que diuen els bytes', async () => {
     /**
      * **El `Content-Type` declarat es llença.** El que decideix el tipus són els bytes, i
      * el nom passa per `safeFilename`: les dues coses vénen d'un desconegut. Servir un
@@ -491,7 +491,12 @@ describe('els adjunts', () => {
     const dades = mkdtempSync(join(tmpdir(), 'femho-adjunts-'));
     await regla('INBOX', { action: 'task' });
     servidor.status = { uidValidity: '1', uidNext: '1', exists: 0 };
-    await pollMail({ db: conn.db, openClient: async () => servidor, now: () => NOW, dataDir: dades });
+    await pollMail({
+      db: conn.db,
+      openClient: async () => servidor,
+      now: () => NOW,
+      dataDir: dades,
+    });
 
     servidor.status = { uidValidity: '1', uidNext: '2', exists: 1 };
     servidor.headers = [sobre('1')];
@@ -499,7 +504,13 @@ describe('els adjunts', () => {
       text: 'La factura.',
       html: null,
       attachments: [
-        { filename: '../../factura.pdf', contentType: 'application/pdf', size: 4, inline: false, part: '2' },
+        {
+          filename: '../../factura.pdf',
+          contentType: 'application/pdf',
+          size: 4,
+          inline: false,
+          part: '2',
+        },
       ],
     });
     // `MZ` és la signatura d'un executable de Windows.
@@ -548,7 +559,9 @@ describe('els adjunts', () => {
     servidor.fitxers.set('1:2', new Uint8Array([1, 2, 3, 4]));
     await córrer('2026-08-11T11:00:00.000Z');
 
-    const adjunts = await sql<{ n: number }>`SELECT COUNT(*) AS n FROM attachments`.execute(conn.db);
+    const adjunts = await sql<{ n: number }>`SELECT COUNT(*) AS n FROM attachments`.execute(
+      conn.db,
+    );
     expect(Number(adjunts.rows[0]?.n)).toBe(0);
   });
 });

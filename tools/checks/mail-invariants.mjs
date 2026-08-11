@@ -54,7 +54,7 @@ const RULES = [
     pattern: /\b(setFlags|messageFlagsAdd|messageFlagsSet|messageFlagsRemove)\b|\\\\Seen/u,
     message:
       "Modificar els indicadors de la bústia d'algú. Res del que fem ha de marcar cap " +
-      'correu: les carpetes s\'obren amb `readOnly` (que en IMAP és `EXAMINE`).',
+      "correu: les carpetes s'obren amb `readOnly` (que en IMAP és `EXAMINE`).",
     everywhere: false,
   },
 ];

@@ -44,7 +44,11 @@ import { safeFilename, sniffMime, storeAttachment } from '../services/attachment
 import { auditedTransaction } from '../audit/audited-transaction.js';
 import { capabilitiesForRole } from '../policy/capabilities.js';
 import type { Principal } from '../policy/principal.js';
-import { convertMailToTask, type ConvertRule, type MailMessageRow } from '../services/mail-convert.js';
+import {
+  convertMailToTask,
+  type ConvertRule,
+  type MailMessageRow,
+} from '../services/mail-convert.js';
 import { catalogOf, isLocale, FALLBACK, type Locale } from '@fem-ho/contracts';
 
 /** Cada quant es llegeix un compte, per defecte. */
@@ -317,9 +321,7 @@ async function ingestOne(
   const body = massaGros ? null : await client.fetchBody(rule.folder, header.uid);
 
   const text =
-    body === null
-      ? null
-      : (body.text ?? (body.html === null ? null : htmlToText(body.html)));
+    body === null ? null : (body.text ?? (body.html === null ? null : htmlToText(body.html)));
 
   /**
    * `pending` vol dir «hi ha una decisió a aplicar», i s'hi posa tant si la regla diu
@@ -530,12 +532,7 @@ async function markOk(db: MigrationDb, id: string, now: string): Promise<void> {
   `.execute(db);
 }
 
-async function markError(
-  db: MigrationDb,
-  id: string,
-  now: string,
-  error: unknown,
-): Promise<void> {
+async function markError(db: MigrationDb, id: string, now: string, error: unknown): Promise<void> {
   /**
    * L'error va **a la fila** i no només al registre, com als calendaris: sense això, un
    * compte caigut es veu exactament igual que un que no rep correu.
@@ -548,7 +545,6 @@ async function markError(
     WHERE id = ${id}
   `.execute(db);
 }
-
 
 /**
  * El principal amb què s'escriu una tasca nascuda d'un correu.
@@ -626,7 +622,6 @@ async function localeOf(db: MigrationDb, userId: string): Promise<Locale> {
   const raw = found.rows[0]?.locale ?? '';
   return isLocale(raw) ? raw : FALLBACK;
 }
-
 
 /**
  * La purga per retenció.

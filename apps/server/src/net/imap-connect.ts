@@ -70,7 +70,10 @@ export async function resolveImapHost(
     throw new SsrfError(`El port ${String(port)} no és un port d'IMAP.`);
   }
 
-  const hostname = host.trim().replace(/^\[|\]$/gu, '').toLowerCase();
+  const hostname = host
+    .trim()
+    .replace(/^\[|\]$/gu, '')
+    .toLowerCase();
   if (hostname === '') throw new SsrfError("Falta l'amfitrió.");
 
   const { allowHosts } = options;
@@ -211,7 +214,7 @@ export function readableError(error: unknown): string {
   if (code === 'ETIMEDOUT' || /timeout/iu.test(raw)) return 'El servidor no ha contestat a temps.';
   if (/certificate|self.signed|CERT_/iu.test(raw)) {
     // I es diu la sortida bona, que no és desactivar la verificació.
-    return "El certificat del servidor no es pot verificar. Cal afegir-ne la CA a la instància.";
+    return 'El certificat del servidor no es pot verificar. Cal afegir-ne la CA a la instància.';
   }
   return "No s'ha pogut connectar amb el servidor de correu.";
 }

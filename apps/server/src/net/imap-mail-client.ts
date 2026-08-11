@@ -145,7 +145,9 @@ export async function openImapClient(
            * seu pare quedaria orfe per sempre.
            */
           const raw = message.headers?.toString('utf8') ?? '';
-          const references = (/^references:\s*(.*)$/imu.exec(raw.replace(/\r?\n[ \t]/gu, ' '))?.[1] ?? '')
+          const references = (
+            /^references:\s*(.*)$/imu.exec(raw.replace(/\r?\n[ \t]/gu, ' '))?.[1] ?? ''
+          )
             .split(/\s+/u)
             .map((r) => r.trim())
             .filter((r) => r !== '');

@@ -3176,7 +3176,7 @@ components:
           description: >-
             Hi ha credencials. **No vol dir que res les faci servir**: avui no hi ha cap
             camí de codi que truqui a cap model.
-        provider: { type: string, description: '`none` si no s''ha configurat res.' }
+        provider: { type: string, description: "`none` si no s'ha configurat res." }
         model: { type: [string, 'null'] }
         base_url_host:
           type: [string, 'null']
@@ -3302,8 +3302,7 @@ components:
 
     MailRule:
       type: object
-      required:
-        [id, account_id, folder, scope_id, action, inbox_visible, title_template, enabled]
+      required: [id, account_id, folder, scope_id, action, inbox_visible, title_template, enabled]
       properties:
         id: { type: string }
         account_id: { type: string }
@@ -3311,7 +3310,7 @@ components:
         scope_id: { type: string }
         project_id:
           type: [string, 'null']
-          description: '`null` vol dir l''espai general de l''àmbit.'
+          description: "`null` vol dir l'espai general de l'àmbit."
         action:
           type: string
           enum: [inbox, task]
@@ -3677,8 +3676,18 @@ components:
         S'identifica per l'`id` de la fila **i** per `message_key`, que és la identitat de
         veritat: la del `Message-ID` i mai la de l'UID d'IMAP (P11).
       additionalProperties: false
-      required: [id, account_id, message_key, subject, from_name, from_address, received_at,
-                 scope_id, source_kind]
+      required:
+        [
+          id,
+          account_id,
+          message_key,
+          subject,
+          from_name,
+          from_address,
+          received_at,
+          scope_id,
+          source_kind,
+        ]
       properties:
         id: { type: string }
         account_id: { type: string }

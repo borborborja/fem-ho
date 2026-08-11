@@ -2106,7 +2106,9 @@ function MailAccountForm({ onDone }: { onDone: () => void }) {
             className="plou-input"
             data-testid="mail-new-security"
             value={security}
-            onChange={(event) => setSecurity(event.target.value === 'starttls' ? 'starttls' : 'tls')}
+            onChange={(event) =>
+              setSecurity(event.target.value === 'starttls' ? 'starttls' : 'tls')
+            }
           >
             <option value="tls">{t('settings.mail.security.tls')}</option>
             <option value="starttls">{t('settings.mail.security.starttls')}</option>

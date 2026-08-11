@@ -99,23 +99,23 @@ Casos reals, tots del mateix repositori:
 `npm run check`. Cadascuna impedeix **una manera concreta de trencar el producte sense que
 res falli**, i totes tenen `--self-test`.
 
-|                           | Què impedeix                                                        |
-| ------------------------- | ------------------------------------------------------------------- |
-| `openapi-diff`            | Tocar un handler sense actualitzar el contracte                     |
-| `vocab-lint`              | Que el vocabulari del prototip s'infiltri al codi (`column: 'fet'`) |
-| `no-hardcoded-colors`     | Un color literal, també als `.xml` de `apps/android`                |
-| `i18n-lint`               | Text escrit al codi en comptes del catàleg                          |
-| `i18n-parity`             | Una clau o un marcador `{x}` que falti en un idioma                 |
-| `i18n-keys-exist`         | Una errata a `t('...')`, que compila i s'ensenya crua               |
-| `no-pinned-from-research` | Una versió sense procedència registrada                             |
-| `no-ignored-sources`      | Codi que `.gitignore` s'empassa i que qui cloni no tindrà           |
-| `contrast-check`          | Contrast per sota de l'AA als vuit temes                            |
-| `audit-coverage`          | Un camí d'escriptura sense rastre a l'historial (regla 4)           |
-| `parser-parity`           | Que el parser de la web i el d'Android divergeixin                  |
-| `tokens-parity`           | Que els colors de Compose s'endarrereixin respecte del CSS          |
-| `css-classes`             | Una classe que no existeix — sense estil i sense error              |
-| `env-documented`          | Una opció documentada que el codi no llegeix, o a l'inrevés         |
-| `scope-predicate`         | Una segona còpia de «qui pertany a un àmbit», que divergiria        |
+|                           | Què impedeix                                                              |
+| ------------------------- | ------------------------------------------------------------------------- |
+| `openapi-diff`            | Tocar un handler sense actualitzar el contracte                           |
+| `vocab-lint`              | Que el vocabulari del prototip s'infiltri al codi (`column: 'fet'`)       |
+| `no-hardcoded-colors`     | Un color literal, també als `.xml` de `apps/android`                      |
+| `i18n-lint`               | Text escrit al codi en comptes del catàleg                                |
+| `i18n-parity`             | Una clau o un marcador `{x}` que falti en un idioma                       |
+| `i18n-keys-exist`         | Una errata a `t('...')`, que compila i s'ensenya crua                     |
+| `no-pinned-from-research` | Una versió sense procedència registrada                                   |
+| `no-ignored-sources`      | Codi que `.gitignore` s'empassa i que qui cloni no tindrà                 |
+| `contrast-check`          | Contrast per sota de l'AA als vuit temes                                  |
+| `audit-coverage`          | Un camí d'escriptura sense rastre a l'historial (regla 4)                 |
+| `parser-parity`           | Que el parser de la web i el d'Android divergeixin                        |
+| `tokens-parity`           | Que els colors de Compose s'endarrereixin respecte del CSS                |
+| `css-classes`             | Una classe que no existeix — sense estil i sense error                    |
+| `env-documented`          | Una opció documentada que el codi no llegeix, o a l'inrevés               |
+| `scope-predicate`         | Una segona còpia de «qui pertany a un àmbit», que divergiria              |
 | `mail-invariants`         | Apagar la verificació TLS, marcar el correu d'algú, o desduplicar per UID |
 
 **Si arregles un defecte que cap comprovació hauria vist, afegeix-ne una.** És el criteri

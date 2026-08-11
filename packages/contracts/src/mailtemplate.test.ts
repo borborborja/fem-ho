@@ -55,10 +55,7 @@ describe('una variable desconeguda es queda literal', () => {
   });
 
   it('i la pantalla les pot marcar', () => {
-    expect(unknownMailVars('{{remitent}} {{subject}} {{asunto}}')).toEqual([
-      'asunto',
-      'remitent',
-    ]);
+    expect(unknownMailVars('{{remitent}} {{subject}} {{asunto}}')).toEqual(['asunto', 'remitent']);
     expect(unknownMailVars('{{from}} - {{subject}}')).toEqual([]);
   });
 });

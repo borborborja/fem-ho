@@ -47,7 +47,7 @@ describe('a on es pot anar', () => {
     ).rejects.toThrow(/interna/u);
   });
 
-  it("**totes** les adreces han de passar, no només la primera", async () => {
+  it('**totes** les adreces han de passar, no només la primera', async () => {
     /**
      * El cas clàssic de reassignació: un nom que resol a una pública i una privada. Si
      * només es validés la primera, el sistema es podria acabar connectant a la segona.
@@ -109,7 +109,7 @@ describe('el que es diu quan falla', () => {
     );
   });
 
-  it("i la resposta crua del servidor no surt mai", () => {
+  it('i la resposta crua del servidor no surt mai', () => {
     /**
      * Una resposta d'IMAP pot dur el nom d'usuari i part de la comanda, i això acaba en
      * una captura de pantalla en un xat de suport.
@@ -118,7 +118,7 @@ describe('el que es diu quan falla', () => {
     expect(readableError(new Error(cru))).not.toContain('borja@example.test');
   });
 
-  it("i amb un certificat, es diu la sortida bona", () => {
+  it('i amb un certificat, es diu la sortida bona', () => {
     const missatge = readableError(new Error('self signed certificate in certificate chain'));
     expect(missatge).toContain('CA');
   });

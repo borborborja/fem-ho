@@ -299,7 +299,7 @@ describe('les regles', () => {
     expect(segona.json<{ detail: string }>().detail).toContain('INBOX/Escola');
   });
 
-  it("no es pot encaminar correu cap a un àmbit on no hi ets", async () => {
+  it('no es pot encaminar correu cap a un àmbit on no hi ets', async () => {
     /**
      * **Les dues comprovacions són diferents i totes dues hi són.** El compte és meu; el
      * que no és meu és l'àmbit. Amb només la primera, qualsevol podria fer arribar el que
@@ -360,7 +360,7 @@ describe('les regles', () => {
     expect(cursor.rows[0]?.last_uid).toBeNull();
   });
 
-  it("i editar-la sense tocar la carpeta no el toca", async () => {
+  it('i editar-la sense tocar la carpeta no el toca', async () => {
     const compte = await crearCompte({ name: 'Cursor intacte' });
     const regla = (
       await api('POST', '/api/v1/mail/rules', {
@@ -459,7 +459,7 @@ describe('provar la connexió', () => {
 });
 
 describe('el correu a la bústia', () => {
-  it("un correu ingerit surt a la bústia amb la seva provinença", async () => {
+  it('un correu ingerit surt a la bústia amb la seva provinença', async () => {
     /**
      * **Array a part de les tasques**, i és el que fa que la distinció de la regla 7
      * esmenada es pugui comprovar en comptes de discutir: un correu de la bústia no té
@@ -565,7 +565,7 @@ describe('convertir des de la bústia', () => {
     expect(vista.json<{ mail: { id: string }[] }>().mail.map((m) => m.id)).not.toContain(id);
   });
 
-  it("i descartar-lo el treu de la bústia sense esborrar-lo", async () => {
+  it('i descartar-lo el treu de la bústia sense esborrar-lo', async () => {
     const { id } = await correu('Publicitat', 'conv2');
 
     expect((await api('POST', `/api/v1/mail/messages/${id}/dismiss`)).statusCode).toBe(204);
