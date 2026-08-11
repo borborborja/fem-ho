@@ -56,6 +56,31 @@ test("amb més d'un àmbit actiu i sense #, es mostra l'error i NO es crea res",
   await expect(field).toHaveValue('Una tasca sense àmbit');
 });
 
+test("i l'àmbit es pot triar amb un clic, sense reescriure res", async ({ page }) => {
+  /**
+   * **La regla es queda i la fricció se'n va.** El brief (línia 19) diu que amb més d'un
+   * àmbit actiu no es crea res sense dir-ne un, i això no canvia: el que canvia és que
+   * dir-lo costa un clic i no tornar al camp, escriure una coixinet i encertar el nom.
+   */
+  const field = page.getByRole('combobox');
+  await field.fill('Una tasca sense àmbit');
+  await field.press('Enter');
+
+  const triador = page.locator('[data-testid="quick-add-scope-picker"]');
+  await expect(triador).toBeVisible();
+
+  await triador.locator('button').first().click();
+
+  // S'ha creat, amb l'àmbit que s'ha triat, i el camp queda net per a la següent.
+  await expect(page.locator('[data-testid="created"] li')).toHaveCount(1);
+  await expect(page.locator('[data-testid="created"] li').first()).toContainText(
+    'Una tasca sense àmbit',
+  );
+  await expect(field).toHaveValue('');
+  // I el triador desapareix: ja no hi ha res a triar.
+  await expect(triador).toHaveCount(0);
+});
+
 test("l'error desapareix en tornar a escriure", async ({ page }) => {
   const field = page.getByRole('combobox');
   await field.fill('Sense àmbit');

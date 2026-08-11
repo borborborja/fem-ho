@@ -151,14 +151,11 @@ export function QuickAdd({ context, columnLabel, scopeColors = {}, onCreate }: Q
     return false;
   };
 
-  const submit = (): void => {
-    setSubmitted(true);
-    // "Si hi ha més d'un àmbit actiu i no s'ha escrit #, NO ES CREA RES" (docs/02 §4).
-    if (parsed.error !== null || parsed.scopeId === null) return;
-
+  /** Crea i deixa el camp llest per a la següent. */
+  const crear = (scopeId: string): void => {
     onCreate({
       title: parsed.title,
-      scopeId: parsed.scopeId,
+      scopeId,
       projectId: parsed.projectId,
       assigneeIds: parsed.assigneeIds,
       aiMode: parsed.aiMode,
@@ -168,6 +165,13 @@ export function QuickAdd({ context, columnLabel, scopeColors = {}, onCreate }: Q
     setText('');
     setSubmitted(false);
     inputRef.current?.focus();
+  };
+
+  const submit = (): void => {
+    setSubmitted(true);
+    // "Si hi ha més d'un àmbit actiu i no s'ha escrit #, NO ES CREA RES" (docs/02 §4).
+    if (parsed.error !== null || parsed.scopeId === null) return;
+    crear(parsed.scopeId);
   };
 
   const errorMessage =
@@ -188,34 +192,85 @@ export function QuickAdd({ context, columnLabel, scopeColors = {}, onCreate }: Q
     revertLabel: t('board.quickAdd.revert', { label: token.label }),
   }));
 
+  /**
+   * Els àmbits per triar, quan la regla diu que en falta un.
+   *
+   * **Abans això era només una frase vermella** —«Indica l'àmbit amb #Personal, #Feina,
+   * #Família»— i la persona havia de tornar al camp, escriure una coixinet i encertar el
+   * nom. La regla del brief (línia 19) segueix igual: amb més d'un àmbit actiu **no es crea
+   * res** sense dir-ne un. El que canvia és que dir-lo costa un clic i no una relectura.
+   */
+  const perTriar =
+    errorMessage === undefined
+      ? []
+      : context.scopes.filter((scope) => context.activeScopeIds.includes(scope.id));
+
   return (
-    <QuickAddInput
-      inputRef={inputRef}
-      value={text}
-      onChange={(next) => {
-        setText(next);
-        setActive(0);
-        // Tornar a escriure reobre el desplegable: el descart val per a aquell moment,
-        // no per a la resta de la sessió.
-        setDismissed(false);
-        // L'error desapareix en tornar a escriure: no s'ha de quedar clavat.
-        if (submitted) setSubmitted(false);
-      }}
-      onSubmit={submit}
-      placeholder={t('board.quickAdd.placeholder', { column: columnLabel })}
-      tokens={chips}
-      onRevertToken={(chip) => {
-        const token = parsed.tokens.find(
-          (candidate) => candidate.start === chip.start && candidate.kind === chip.kind,
-        );
-        if (token !== undefined) setText(revertToken(text, token));
-        inputRef.current?.focus();
-      }}
-      error={errorMessage}
-      suggestions={suggestions}
-      activeSuggestion={active}
-      onSuggestionKeyDown={handleSuggestionKey}
-      onSuggestionPick={(suggestion) => pick(suggestion as Suggestion)}
-    />
+    <div style={{ display: 'grid', gap: 6, minWidth: 0 }}>
+      <QuickAddInput
+        inputRef={inputRef}
+        value={text}
+        onChange={(next) => {
+          setText(next);
+          setActive(0);
+          // Tornar a escriure reobre el desplegable: el descart val per a aquell moment,
+          // no per a la resta de la sessió.
+          setDismissed(false);
+          // L'error desapareix en tornar a escriure: no s'ha de quedar clavat.
+          if (submitted) setSubmitted(false);
+        }}
+        onSubmit={submit}
+        placeholder={t('board.quickAdd.placeholder', { column: columnLabel })}
+        tokens={chips}
+        onRevertToken={(chip) => {
+          const token = parsed.tokens.find(
+            (candidate) => candidate.start === chip.start && candidate.kind === chip.kind,
+          );
+          if (token !== undefined) setText(revertToken(text, token));
+          inputRef.current?.focus();
+        }}
+        error={errorMessage}
+        suggestions={suggestions}
+        activeSuggestion={active}
+        onSuggestionKeyDown={handleSuggestionKey}
+        onSuggestionPick={(suggestion) => pick(suggestion as Suggestion)}
+      />
+
+      {perTriar.length === 0 ? null : (
+        <div
+          data-testid="quick-add-scope-picker"
+          style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}
+        >
+          {perTriar.map((scope) => (
+            <button
+              key={scope.id}
+              type="button"
+              data-testid={`quick-add-scope-${scope.id}`}
+              onClick={() => crear(scope.id)}
+              className="plou-btn plou-btn-ghost"
+              style={{
+                fontSize: 11,
+                fontWeight: 700,
+                padding: '3px 10px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+              }}
+            >
+              <span
+                aria-hidden="true"
+                style={{
+                  width: 7,
+                  height: 7,
+                  borderRadius: '50%',
+                  background: scopeColors[scope.id] ?? 'var(--ink-faint)',
+                }}
+              />
+              {scope.name}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
