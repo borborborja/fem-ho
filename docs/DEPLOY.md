@@ -51,6 +51,7 @@ fitxer, que és el que permet fer servir secrets de Docker.
 | `FEMHO_ALLOW_REGISTRATION` | `false` | Qualsevol es pot fer un compte. **El primer serà administrador** |
 | `FEMHO_REGISTRATION` | `disabled` | La forma llarga: `disabled`, `invite` o `open` |
 | `FEMHO_GRAVATAR` | `false` | Les fotos de perfil surten de Gravatar. Veure l'avís de sota |
+| `FEMHO_UPDATE_CHECK` | `true` | Preguntar a GitHub si hi ha una versió més nova. Veure l'avís de sota |
 | `FEMHO_MAX_UPLOAD_MB` | `25` | Mida màxima d'un adjunt |
 | `FEMHO_LOG_LEVEL` | `info` | `fatal`, `error`, `warn`, `info`, `debug`, `trace` o `silent` |
 | `FEMHO_SOURCE_URL` | aquest repositori | **Canvia-la si publiques una versió modificada.** L'AGPL §13 diu que qui hi accedeix per xarxa té dret al codi que li estàs servint, i amb aquesta apuntant a l'original els teus usuaris no hi arribarien |
@@ -90,6 +91,28 @@ Si l'encens, hi ha tres coses fetes perquè costi el mínim:
 - **La foto es guarda al volum** amb un dia de vida, o sigui que segueix sortint sense
   connexió.
 - **Cada persona ho pot treure** des d'Ajustos ▸ Perfil. El correu és seu.
+
+
+### La comprovació de versió
+
+`FEMHO_UPDATE_CHECK=false` l'apaga. Ve **encesa**, i val la pena dir per què no segueix el
+criteri de Gravatar, que sí que ve apagada.
+
+El que s'envia no és el mateix. A Gravatar hi va **el hash del correu de cadascú**, i per
+a una adreça que algú ja sospita comprovar-la és calcular-ne el hash i comparar: encendre
+allò és dir a un tercer quines adreces hi ha en aquesta casa. Aquí és una petició anònima
+al llistat públic de versions, un cop cada sis hores, sense cap dada de ningú. El que s'hi
+guanya és assabentar-se d'una actualització de seguretat, i **qui no sap que existeix un
+avís no el va a buscar**.
+
+La fa **el servidor i no el navegador**, pel mateix motiu que Gravatar: si la fes cada
+pestanya, GitHub veuria la IP de cada persona de la casa cada vegada que algú obre
+Ajustos.
+
+I **s'apaga sola** si `FEMHO_SOURCE_URL` no apunta a un repositori de GitHub. Aquella
+variable existeix perquè l'AGPL §13 dona dret al codi *de la versió que t'estan servint*, i
+qui en publiqui una de modificada hi ha de posar la seva; avisar-lo de les versions d'un
+altre projecte seria dir-li que actualitzi a una cosa que no és la seva.
 
 ### Els secrets, i el sufix `_FILE`
 

@@ -255,6 +255,7 @@
     <string name="settings_calendarshared">Shared</string>
     <string name="settings_calendarsource">CalDAV source</string>
     <string name="settings_changepassword">Change the password</string>
+    <string name="settings_credits">Fem-ho © 2026 Borja Balsera · The design system is Plou, from a separate product and under its own terms · Roboto typeface (SIL Open Font License) · See the NOTICE file in the repository</string>
     <string name="settings_currentpassword">Current password</string>
     <string name="settings_dashboarditems">What shows in the overview</string>
     <string name="settings_empty_agents">You have not created any agent yet.</string>
@@ -365,6 +366,9 @@
     <string name="settings_theme_system">System</string>
     <string name="settings_timezone">Time zone</string>
     <string name="settings_title">Settings</string>
+    <string name="settings_update_available">Version {version} is out.</string>
+    <string name="settings_update_see">See what changed</string>
+    <string name="settings_update_unreachable">Could not check whether there is a newer version.</string>
     <string name="settings_users">Household members</string>
     <string name="settings_weekstart">First day of the week</string>
     <string name="settings_weekstart_auto">Follow the language ({day})</string>

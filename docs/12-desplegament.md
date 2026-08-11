@@ -73,6 +73,7 @@ Variables d'entorn amb prefix `FEMHO_`. Els secrets accepten el sufix `_FILE` pe
 | `FEMHO_SMTP_*` | — | Amfitrió, port, usuari, contrasenya, xifratge, remitent. **Encara no** hi són: no s'envia cap correu |
 | `FEMHO_ALLOW_REGISTRATION` | `false` | Qualsevol es pot fer un compte. **El primer serà administrador.** |
 | `FEMHO_GRAVATAR` | `false` | Les fotos de perfil surten de Gravatar. Veure l'avís de sota. |
+| `FEMHO_UPDATE_CHECK` | `true` | Preguntar a GitHub si hi ha una versió més nova. Veure l'avís de sota. |
 | `FEMHO_REGISTRATION` | `disabled` | La forma llarga: `disabled`, `invite`, `open` |
 | `FEMHO_MAX_UPLOAD_MB` | `25` | |
 | `FEMHO_LOG_LEVEL` | `info` | |
@@ -210,3 +211,25 @@ Si es decideix encendre, hi ha tres coses fetes perquè costi el mínim possible
 - **Cada persona ho pot treure** des d'Ajustos ▸ Perfil. El correu que viatja és el seu, no el de qui administra.
 
 Amb això apagat —el valor per defecte— els avatars són les inicials i no es pregunta res de ningú.
+
+
+### La comprovació de versió
+
+`FEMHO_UPDATE_CHECK=false` l'apaga. Ve **encesa**, i val la pena dir per què no segueix el
+criteri de Gravatar, que sí que ve apagada.
+
+El que s'envia no és el mateix. A Gravatar hi va **el hash del correu de cadascú**, i per
+a una adreça que algú ja sospita comprovar-la és calcular-ne el hash i comparar: encendre
+allò és dir a un tercer quines adreces hi ha en aquesta casa. Aquí és una petició anònima
+al llistat públic de versions, un cop cada sis hores, sense cap dada de ningú. El que s'hi
+guanya és assabentar-se d'una actualització de seguretat, i **qui no sap que existeix un
+avís no el va a buscar**.
+
+La fa **el servidor i no el navegador**, pel mateix motiu que Gravatar: si la fes cada
+pestanya, GitHub veuria la IP de cada persona de la casa cada vegada que algú obre
+Ajustos.
+
+I **s'apaga sola** si `FEMHO_SOURCE_URL` no apunta a un repositori de GitHub. Aquella
+variable existeix perquè l'AGPL §13 dona dret al codi *de la versió que t'estan servint*, i
+qui en publiqui una de modificada hi ha de posar la seva; avisar-lo de les versions d'un
+altre projecte seria dir-li que actualitzi a una cosa que no és la seva.

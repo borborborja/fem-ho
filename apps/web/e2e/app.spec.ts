@@ -34,15 +34,46 @@ async function login(page: import('@playwright/test').Page): Promise<void> {
 }
 
 test("el primer arrencament crea l'administrador i els seus tres àmbits", async ({ page }) => {
+  /**
+   * **No exigeix guanyar la cursa**, que és la mateixa regla que `entrar.ts` va haver
+   * d'aprendre. La suite va `fullyParallel` contra un sol servidor i la base comença
+   * buida: **tots els fitxers veuen la porta d'arrencada oberta alhora**. Aquesta prova
+   * donava per fet que l'obria ella, i quan un altre fitxer hi arribava primer es quedava
+   * esperant un login que no arribava mai per aquest camí.
+   *
+   * Era intermitent i cada fitxer nou la feia més probable; amb `about.spec` va passar a
+   * fallar sempre. El que es vol comprovar no és qui fa l'arrencada, sinó **la invariant**:
+   * que després només hi ha una porta, i és el login.
+   */
   await page.goto('/setup');
 
-  await page.locator('[data-testid="setup-name"]').fill(ADMIN.name);
-  await page.locator('[data-testid="setup-email"]').fill(ADMIN.email);
-  await page.locator('[data-testid="setup-password"]').fill(ADMIN.password);
-  await page.locator('[data-testid="setup-submit"]').click();
+  const formulari = page.locator('[data-testid="setup-name"]');
+  if ((await formulari.count()) > 0) {
+    await formulari.fill(ADMIN.name);
+    await page.locator('[data-testid="setup-email"]').fill(ADMIN.email);
+    await page.locator('[data-testid="setup-password"]').fill(ADMIN.password);
+    await page.locator('[data-testid="setup-submit"]').click();
+  }
 
-  // Acabat el setup, la porta es tanca per sempre: hi ha login, no un segon formulari.
+  /**
+   * **I no s'espera res del clic.**
+   *
+   * Mirar si el formulari hi és i llavors clicar segueix sent una cursa: entre les dues
+   * coses, un altre fitxer pot acabar l'arrencada i el nostre `submit` rep un 403 que
+   * deixa la pantalla igual. La invariant no és què ha fet aquest clic, sinó **què hi ha
+   * després**, i això es comprova anant-hi.
+   */
+  await page.goto('/');
   await expect(page.locator('[data-testid="login"]')).toBeVisible({ timeout: 15_000 });
+
+  /**
+   * *Nota del qui ho va arreglar*: aquí hi havia d'anar «i `/setup` ja no ofereix cap
+   * formulari». **No és cert avui**: `/setup` és una ruta de client que pinta la pantalla
+   * d'arrencada sense preguntar si encara cal, i qui hi torni per un marcador vell es
+   * troba un formulari que en enviar-lo rebrà un 403. La porta del servidor sí que està
+   * tancada —és el que compta per a la seguretat— i això és una aspresa de la interfície,
+   * no un forat. Es deixa dit aquí perquè es va veure i no s'arregla de passada.
+   */
 });
 
 test('entrar porta al tauler amb els tres àmbits inicials', async ({ page }) => {

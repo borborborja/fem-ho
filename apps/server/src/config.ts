@@ -125,6 +125,21 @@ export interface Config {
    * no una cosa que passi sola.
    */
   gravatar: boolean;
+  /**
+   * Preguntar a GitHub si hi ha una versió més nova.
+   *
+   * **Encès per defecte, a diferència de Gravatar, i la diferència importa.** Allà el que
+   * s'envia és el hash del correu de cadascú —una dada de les persones de la casa—; aquí
+   * és una petició anònima al llistat de versions, un cop cada sis hores, sense cap dada
+   * de ningú. El que hi guanyes és assabentar-te d'una actualització de seguretat, i qui
+   * no sap que existeix un avís no el va a buscar.
+   *
+   * Es pot apagar amb `FEMHO_UPDATE_CHECK=false`, i **s'apaga sola** si `FEMHO_SOURCE_URL`
+   * no apunta a GitHub: qui publiqui una versió modificada —cosa que l'AGPL §13 preveu i
+   * que aquella variable existeix per permetre— no ha de rebre avisos de la versió d'un
+   * altre.
+   */
+  updateCheck: boolean;
   logLevel: string;
   /**
    * El secret de la instància. Si no es dona, es genera un sol cop al volum de dades
@@ -154,6 +169,7 @@ export function loadConfig(version: string): Config {
     databaseUrl: env('DATABASE_URL') ?? 'sqlite:///data/femho.db',
     registration: envRegistration(),
     gravatar: envBool('GRAVATAR') ?? false,
+    updateCheck: envBool('UPDATE_CHECK') ?? true,
     secret: env('SECRET'),
     logLevel: env('LOG_LEVEL') ?? 'info',
   };

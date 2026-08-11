@@ -18,6 +18,7 @@ import {
   updateSettings,
 } from '../services/users.js';
 import { avatarFor, profileFor } from '../services/gravatar.js';
+import { checkForUpdate } from '../services/updates.js';
 import { body, handle, nullable, str } from './handle.js';
 
 /**
@@ -108,6 +109,25 @@ export function registerMeRoutes(app: FastifyInstance): void {
    * sol `PATCH` per a totes dues coses faria que netejar la columna passés pel camí que
    * valida fusos horaris.
    */
+  /**
+   * Si hi ha una versió més nova.
+   *
+   * **Autenticada, i `/info` segueix sense dir-ho.** `/info` és públic —l'AGPL §13 obliga
+   * a oferir el codi a qui hi accedeix per xarxa— i ja diu quina versió corre, que no es
+   * pot evitar. El que no cal és que qualsevol que passi per davant sàpiga a més que
+   * aquesta instància va endarrerida: això no ho necessita ningú de fora, i a dins ho
+   * necessita qui entra a Ajustos.
+   */
+  app.get('/api/v1/updates', async (request, reply) =>
+    handle(app, request, reply, async () =>
+      checkForUpdate({
+        enabled: app.config.updateCheck,
+        sourceUrl: app.config.sourceUrl,
+        currentVersion: app.config.version,
+      }),
+    ),
+  );
+
   app.get('/api/v1/auth/settings', async (request, reply) =>
     handle(app, request, reply, async (principal) => ({
       profile: await getProfile(db().db, principal.userId),
