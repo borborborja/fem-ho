@@ -30,6 +30,7 @@
 
 import { getLocale, shortTime, t } from '@fem-ho/contracts';
 import type { InboxEvent } from '../app/types.js';
+import { SourceIcon } from './SourceIcon.js';
 
 export interface InboxEventCardProps {
   event: InboxEvent;
@@ -94,7 +95,11 @@ export function InboxEventCard({ event, color, onToTask, onRemove }: InboxEventC
           D'on ve. Sense això, una cita d'un calendari de l'escola i una d'un titular
           d'RSS es veuen igual, i la primera pregunta de qualsevol és "d'on ha sortit
           això" — que és la que fa que la gent apagui les fonts en comptes d'ajustar-les.
+
+          La icona va al costat del nom i no a la primera línia: aquí la pregunta és
+          exactament aquesta, i posar-la amunt competiria amb l'hora.
         */}
+        <SourceIcon kind={event.source_kind} />
         <span
           style={{
             fontSize: 10,

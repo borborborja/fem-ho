@@ -20,7 +20,8 @@ import { t } from '@fem-ho/contracts';
 import { EmptyState, KanbanColumn, ScopeGroupHeader } from '@fem-ho/design-system/femho';
 import { sharedMark } from './KanbanBoard.js';
 import { InboxEventCard, eventKey } from './InboxEventCard.js';
-import type { InboxEvent } from '../app/types.js';
+import { InboxMailCard } from './InboxMailCard.js';
+import type { InboxEvent, InboxMail } from '../app/types.js';
 import { BoardCard } from './BoardCard.js';
 import type { BoardScope, BoardTask } from './KanbanBoard.js';
 
@@ -46,6 +47,15 @@ export interface InboxRailProps {
    * passa un `BoardTask` i la distinció s'evaporaria sense que res fallés.
    */
   events?: InboxEvent[] | undefined;
+  /**
+   * El que ha arribat per correu i encara no és una tasca.
+   *
+   * **Array a part i no barrejat**, igual que els esdeveniments: si compartissin llista,
+   * un dia algú passaria un correu per on passa una tasca.
+   */
+  mail?: InboxMail[] | undefined;
+  onMailToTask?: ((mail: InboxMail) => void) | undefined;
+  onMailDismiss?: ((mail: InboxMail) => void) | undefined;
   /** Fer una tasca a partir d'un esdeveniment. Sense això, el botó no surt. */
   onEventToTask?: ((event: InboxEvent) => void) | undefined;
   /** Treure un esdeveniment de la bústia. El mateix. */
@@ -85,6 +95,9 @@ export function InboxRail({
   undated,
   dayLabel,
   events,
+  mail,
+  onMailToTask,
+  onMailDismiss,
   onEventToTask,
   onEventRemove,
   scopes,
@@ -177,7 +190,7 @@ export function InboxRail({
       data-column-status="inbox"
       data-placement={placement}
       label={t('board.column.inbox')}
-      count={tasks.length + (undated?.length ?? 0) + (events?.length ?? 0)}
+      count={tasks.length + (undated?.length ?? 0) + (events?.length ?? 0) + (mail?.length ?? 0)}
       variant="inbox"
       headerExtra={header}
       footer={footer}
@@ -202,6 +215,29 @@ export function InboxRail({
                   color={scopes.find((scope) => scope.id === event.scope_id)?.color}
                   onToTask={onEventToTask === undefined ? undefined : () => onEventToTask(event)}
                   onRemove={onEventRemove === undefined ? undefined : () => onEventRemove(event)}
+                />
+              ))}
+            </div>,
+          )}
+        </div>
+      )}
+
+      {/*
+        I el correu, després de les cites. El mateix ordre i el mateix motiu: primer el que
+        has decidit tu, després el que t'arriba de fora.
+      */}
+      {mail === undefined || mail.length === 0 ? null : (
+        <div data-testid="inbox-mail" style={{ paddingTop: 14 }}>
+          {section(
+            t('inbox.section.mail'),
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+              {mail.map((item) => (
+                <InboxMailCard
+                  key={item.id}
+                  mail={item}
+                  color={scopes.find((scope) => scope.id === item.scope_id)?.color}
+                  onToTask={onMailToTask === undefined ? undefined : () => onMailToTask(item)}
+                  onDismiss={onMailDismiss === undefined ? undefined : () => onMailDismiss(item)}
                 />
               ))}
             </div>,

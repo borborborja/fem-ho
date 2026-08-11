@@ -14,6 +14,7 @@ import { useState } from 'react';
 import { t } from '@fem-ho/contracts';
 import { v7 as uuidv7 } from 'uuid';
 import { TaskCard, type CardList } from '@fem-ho/design-system/femho';
+import { SourceIcon } from './SourceIcon.js';
 import { api } from '../app/api.js';
 import { useApi } from '../app/useApi.js';
 import type { Checklist, Subtask } from '../app/types.js';
@@ -158,6 +159,7 @@ export function BoardCard({
       // Les d'algú altre, atenuades: es veuen, però es veu que no són teves.
       style={task.assignedToOther === true ? { opacity: 0.55 } : undefined}
       title={task.title}
+      sourceIcon={<SourceIcon kind={task.sourceKind} />}
       project={task.project}
       assigneeInitials={task.assigneeInitials}
       time={task.time}

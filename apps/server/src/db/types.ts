@@ -3,12 +3,11 @@
  * Please do not edit it manually.
  */
 
-import type { ColumnType } from 'kysely';
+import type { ColumnType } from "kysely";
 
-export type Generated<T> =
-  T extends ColumnType<infer S, infer I, infer U>
-    ? ColumnType<S, I | undefined, U>
-    : ColumnType<T, T | undefined, T>;
+export type Generated<T> = T extends ColumnType<infer S, infer I, infer U>
+  ? ColumnType<S, I | undefined, U>
+  : ColumnType<T, T | undefined, T>;
 
 export interface ActivityLog {
   actor_agent_id: string | null;
@@ -261,6 +260,97 @@ export interface Labels {
   scope_id: string;
 }
 
+export interface MailAccounts {
+  consecutive_errors: Generated<number>;
+  created_at: string;
+  deleted_at: string | null;
+  enabled: Generated<number>;
+  host: string;
+  id: string;
+  last_error: string | null;
+  last_error_at: string | null;
+  last_polled_at: string | null;
+  name: string;
+  poll_interval: number | null;
+  port: Generated<number>;
+  secret_enc: string | null;
+  security: Generated<string>;
+  updated_at: string;
+  user_id: string;
+  username: string;
+  version: Generated<number>;
+}
+
+export interface MailMessages {
+  account_id: string;
+  body_text: string | null;
+  created_at: string;
+  deleted_at: string | null;
+  disposition: Generated<string>;
+  error: string | null;
+  folder: string;
+  from_address: string | null;
+  from_name: string | null;
+  has_html: Generated<number>;
+  id: string;
+  in_reply_to: string | null;
+  internal_date: string | null;
+  message_id: string | null;
+  message_key: string;
+  raw_bytes: Generated<number>;
+  raw_path: string | null;
+  reference_ids: string | null;
+  rule_id: string | null;
+  sent_at: string | null;
+  subject: string | null;
+  task_id: string | null;
+  thread_id: string;
+  to_addresses: string | null;
+  uid: string;
+  uid_validity: string;
+  updated_at: string;
+  version: Generated<number>;
+}
+
+export interface MailRules {
+  account_id: string;
+  action: string;
+  attachments_to_task: Generated<number>;
+  body_to_description: Generated<number>;
+  created_at: string;
+  deleted_at: string | null;
+  enabled: Generated<number>;
+  folder: string;
+  id: string;
+  inbox_visible: Generated<number>;
+  last_error: string | null;
+  last_error_at: string | null;
+  last_seen_at: string | null;
+  last_uid: string | null;
+  position: string;
+  project_id: string | null;
+  scope_id: string;
+  title_template: Generated<string>;
+  uid_validity: string | null;
+  updated_at: string;
+  version: Generated<number>;
+}
+
+export interface MailThreads {
+  account_id: string;
+  created_at: string;
+  deleted_at: string | null;
+  first_at: string | null;
+  id: string;
+  last_at: string | null;
+  message_count: Generated<number>;
+  subject: string | null;
+  task_id: string | null;
+  thread_key: string;
+  updated_at: string;
+  version: Generated<number>;
+}
+
 export interface Projects {
   ai_description: string | null;
   ai_instructions: string | null;
@@ -432,6 +522,9 @@ export interface Tasks {
   event_recurrence_id: string | null;
   event_uid: string | null;
   id: string;
+  mail_account_id: string | null;
+  mail_message_key: string | null;
+  mail_thread_key: string | null;
   origin: Generated<string>;
   position: string;
   project_id: string | null;
@@ -440,6 +533,7 @@ export interface Tasks {
   rrule: string | null;
   scope_id: string;
   search_text: string | null;
+  source_kind: string | null;
   status: Generated<string>;
   title: string;
   updated_at: string;
@@ -531,6 +625,10 @@ export interface DB {
   instance_links: InstanceLinks;
   instance_settings: InstanceSettings;
   labels: Labels;
+  mail_accounts: MailAccounts;
+  mail_messages: MailMessages;
+  mail_rules: MailRules;
+  mail_threads: MailThreads;
   projects: Projects;
   push_subscriptions: PushSubscriptions;
   reminders: Reminders;

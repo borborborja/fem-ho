@@ -120,7 +120,7 @@ Al `.env` del costat, que Compose llegeix sol. Les que es toquen més:
 | `FEMHO_MAX_UPLOAD_MB`      | `25`                      | Mida màxima d'un adjunt                                                                            |
 | `FEMHO_SECRET`             | es genera                 | El pebre de tots els tokens. Entra a la còpia de seguretat                                         |
 
-**[La llista sencera és a `docs/DEPLOY.md`](docs/DEPLOY.md)** —catorze variables, amb el
+**[La llista sencera és a `docs/DEPLOY.md`](docs/DEPLOY.md)** —vint-i-quatre variables, amb el
 que costa cadascuna— i no n'hi ha cap més: una comprovació permanent compara el que
 llegeix el codi amb el que diuen els documents i falla en les dues direccions. Si en veus
 una en un tutorial i no és allà, no existeix.
@@ -136,12 +136,12 @@ npm ci
 npm run build
 npm test                 # unitàries, SQLite
 npm run test:postgres    # les mateixes, contra Postgres
-npm run check            # les quinze comprovacions permanents
+npm run check            # les setze comprovacions permanents
 npx playwright test      # navegador, contra un servidor real
 npm run test:android     # Kotlin pur, sense emulador
 ```
 
-### Les quinze comprovacions permanents
+### Les setze comprovacions permanents
 
 No són linters de format: cadascuna impedeix **una manera concreta de trencar el producte
 sense que res falli**. Totes tenen autoprova, perquè una comprovació que diu "verd" sense
@@ -164,6 +164,7 @@ comprovar res és pitjor que no tenir-la.
 | `parser-parity`           | Que el parser de la web i el d'Android divergeixin                  |
 | `tokens-parity`           | Que els colors de Compose s'endarrereixin respecte del CSS          |
 | `css-classes`             | Una classe que no existeix — es veu sense estil i res falla         |
+| `mail-invariants`         | Desactivar la verificació TLS, marcar el correu d'algú, o desduplicar per UID |
 
 ## Com està fet
 
@@ -175,7 +176,7 @@ apps/web         React + Vite, PWA amb cua de sortida
 apps/android     Kotlin + Compose, Room i UnifiedPush
 packages/contracts       openapi.yaml, catàlegs d'idioma, parser i índex fraccional
 packages/design-system   Plou vendoritzat + els components de Fem-ho
-tools/checks     les quinze comprovacions
+tools/checks     les setze comprovacions
 docs/            quinze documents normatius
 ```
 

@@ -61,8 +61,13 @@ attachments:read attachments:write
 projects:read   projects:write
 scopes:read     scopes:write
 shares:read     shares:write
+mail:read       mail:write
 tokens:manage   users:manage    instance:manage
 ```
+
+`mail:*` **no entra a cap dels dos predefinits** de la pantalla de tokens. Els predefinits
+es deriven pel sufix, i «només lectura» —el que es tria sense pensar— hauria donat la
+bústia sencera de qui l'emet. Es tria a «personalitzat», sabent què es dona.
 
 Un token porta capacitats **i** una llista d'àmbits:
 

@@ -8,7 +8,7 @@
  */
 
 import { useState, type ReactNode } from 'react';
-import { t } from '@fem-ho/contracts';
+import { t, type SourceKind } from '@fem-ho/contracts';
 import type { TaskStatus } from '@fem-ho/contracts';
 import {
   EmptyState,
@@ -20,11 +20,13 @@ import {
 import { BoardCard } from './BoardCard.js';
 import { BoardDnd, DraggableCard, DroppableColumn } from './dnd.js';
 import { InboxRail } from './InboxRail.js';
-import type { InboxEvent } from '../app/types.js';
+import type { InboxEvent, InboxMail } from '../app/types.js';
 
 export interface BoardTask {
   id: string;
   title: string;
+  /** De quina mena de font ve, o `undefined` si l'ha escrita una persona. */
+  sourceKind?: SourceKind | null | undefined;
   status: TaskStatus;
   scope_id: string;
   project?: string | undefined;
@@ -112,6 +114,10 @@ export interface KanbanBoardProps {
   onEventRemove?: ((event: InboxEvent) => void) | undefined;
   /** Fer-ne una tasca. El mateix. */
   onEventToTask?: ((event: InboxEvent) => void) | undefined;
+  /** El correu que ha entrat i encara no és tasca. */
+  inboxMail?: InboxMail[] | undefined;
+  onMailToTask?: ((mail: InboxMail) => void) | undefined;
+  onMailDismiss?: ((mail: InboxMail) => void) | undefined;
   /** De quin calaix es veu la bústia. El mateix criteri que `/inbox` al servidor. */
   mailbox?: 'own' | 'shared' | 'all';
   onToggleGroup?: (status: TaskStatus, scopeId: string) => void;
@@ -192,6 +198,9 @@ export function KanbanBoard({
   inboxEvents,
   onEventRemove,
   onEventToTask,
+  inboxMail,
+  onMailToTask,
+  onMailDismiss,
   mailbox = 'all',
   collapsed = {},
   onToggleGroup,
@@ -465,6 +474,9 @@ export function KanbanBoard({
                 // peu és un altre.
                 footer={renderFooter?.('inbox')}
                 events={inboxEvents}
+                mail={inboxMail}
+                onMailToTask={onMailToTask}
+                onMailDismiss={onMailDismiss}
                 onEventRemove={onEventRemove}
                 onEventToTask={onEventToTask}
                 header={inboxHeader}

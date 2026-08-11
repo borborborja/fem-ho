@@ -37,6 +37,8 @@ export interface TaskCardProps extends React.HTMLAttributes<HTMLDivElement> {
   title: string;
   /** Pastilla de projecte. Absent si la tasca és a l'espai general de l'àmbit. */
   project?: string | undefined;
+  /** La icona de provinença, ja feta. `undefined` si la tasca l'ha escrita una persona. */
+  sourceIcon?: React.ReactNode;
   /** Inicial de la persona assignada, en un cercle de 18px. */
   assigneeInitials?: string | undefined;
   /** Hora, si la tasca en té. Normalment no en té (docs/01 §4). */

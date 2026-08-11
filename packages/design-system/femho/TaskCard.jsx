@@ -122,6 +122,7 @@ function CardAction({ label, onClick, revealed, testId, color, children }) {
 export function TaskCard({
   title,
   project,
+  sourceIcon,
   assigneeInitials,
   time,
   aiMode = 'manual',
@@ -289,8 +290,17 @@ export function TaskCard({
                 fontWeight: 600,
                 lineHeight: 1.3,
                 color: 'var(--ink)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
               }}
             >
+              {/*
+                D'on ve, si ve d'algun lloc. Arriba **ja feta**: un component del design
+                system no sap ni de menes de font ni de catàlegs, igual que no sap
+                d'idiomes.
+              */}
+              {sourceIcon}
               {title}
             </span>
 

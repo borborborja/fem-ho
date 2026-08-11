@@ -105,6 +105,10 @@
       "version": "2.2.1",
       "checkedAt": "2026-08-05"
     },
+    "imapflow": {
+      "version": "1.6.6",
+      "checkedAt": "2026-08-11"
+    },
     "kysely": {
       "version": "0.29.4",
       "checkedAt": "2026-08-05"
@@ -112,6 +116,10 @@
     "kysely-codegen": {
       "version": "0.20.0",
       "checkedAt": "2026-08-05"
+    },
+    "mailparser": {
+      "version": "3.9.15",
+      "checkedAt": "2026-08-11"
     },
     "openapi-fetch": {
       "version": "0.17.0",

@@ -58,6 +58,14 @@ export type {
   QuickAddToken,
 } from './quickadd.js';
 export type { Locale, MessageKey, TranslateOptions } from './i18n.js';
+export {
+  DEFAULT_MAIL_TEMPLATE,
+  MAIL_TEMPLATE_VARS,
+  MAIL_TITLE_MAX,
+  renderMailTitle,
+  unknownMailVars,
+} from './mailtemplate.js';
+export type { MailTemplateVars } from './mailtemplate.js';
 
 /** Els valors canònics de `status`. `column` no existeix (D2). */
 export const TASK_STATUSES = ['inbox', 'todo', 'doing', 'done'] as const;
@@ -70,3 +78,25 @@ export type AiMode = (typeof AI_MODES)[number];
 /** El canal pel qual ha entrat una escriptura. Va a activity_log.source (regla 4). */
 export const SOURCES = ['web', 'android', 'api', 'mcp', 'caldav', 'share', 'system'] as const;
 export type Source = (typeof SOURCES)[number];
+
+/**
+ * De quina mena de font ve una cosa.
+ *
+ * **No és el mateix que `SOURCES`**, i val la pena no confondre-ho mai: aquell diu *per
+ * quin canal ha entrat una escriptura* —web, Android, MCP— i aquest diu *d'on ve el
+ * contingut*. Un correu ingerit pel planificador entra per `system` i ve de `mail`.
+ *
+ * **Un sol vocabulari, i és el que fa que això escali.** `calendars.source_kind` ja fa
+ * servir els tres primers valors des de la migració 006. La provinença d'una tasca
+ * viu en columnes específiques de cada mena —`event_calendar_id`, `event_uid`…— i
+ * afegir-ne una quarta en sumaria tres més, i una cinquena tres més. Amb un valor
+ * canònic, la pregunta que fa la icona —«d'on ve això?»— té **una sola resposta**, i
+ * afegir Slack o Telegram serà un valor més aquí, una icona més, i una ingesta més:
+ * mai una columna més a `tasks`.
+ */
+export const SOURCE_KINDS = ['caldav', 'ical', 'rss', 'mail'] as const;
+export type SourceKind = (typeof SOURCE_KINDS)[number];
+
+export function isSourceKind(value: unknown): value is SourceKind {
+  return typeof value === 'string' && (SOURCE_KINDS as readonly string[]).includes(value);
+}

@@ -10,7 +10,16 @@
  */
 
 import { useState } from 'react';
-import { dateTime, getLocale, resolveWeekStart, t, weekdayNames } from '@fem-ho/contracts';
+import {
+  DEFAULT_MAIL_TEMPLATE,
+  dateTime,
+  getLocale,
+  renderMailTitle,
+  resolveWeekStart,
+  t,
+  unknownMailVars,
+  weekdayNames,
+} from '@fem-ho/contracts';
 import { v7 as uuidv7 } from 'uuid';
 import { EmptyState } from '@fem-ho/design-system/femho';
 import { api, ApiError } from '../app/api.js';
@@ -25,6 +34,9 @@ import type {
   ApiTokenSummary,
   Calendar,
   Info,
+  MailAccount,
+  MailRule,
+  MailTestResult,
   Member,
   Project,
   Scope,
@@ -33,7 +45,24 @@ import type {
 } from '../app/types.js';
 import { ErrorBanner } from './BoardScreen.js';
 
-const TABS = ['general', 'scopes', 'calendars', 'mcp', 'ai', 'shares', 'profile', 'admin'] as const;
+/**
+ * **El correu va en pestanya pròpia i no dins de «Calendaris».**
+ *
+ * Aquelles fonts són **de l'àmbit** i aquestes són **teves**: un calendari subscrit el veu
+ * tot qui és a l'àmbit, i un compte de correu no el veu ningú més. Posar-los junts
+ * convidaria a pensar el contrari, que amb una contrasenya personal pel mig és car.
+ */
+const TABS = [
+  'general',
+  'scopes',
+  'calendars',
+  'mail',
+  'mcp',
+  'ai',
+  'shares',
+  'profile',
+  'admin',
+] as const;
 type Tab = (typeof TABS)[number];
 
 export function SettingsScreen() {
@@ -151,6 +180,7 @@ export function SettingsScreen() {
           {tab === 'general' ? <GeneralTab /> : null}
           {tab === 'scopes' ? <ScopesTab /> : null}
           {tab === 'calendars' ? <CalendarsTab /> : null}
+          {tab === 'mail' ? <MailTab /> : null}
           {tab === 'mcp' ? <McpTab /> : null}
           {tab === 'ai' ? <AiTab /> : null}
           {tab === 'shares' ? <SharesTab /> : null}
@@ -1806,5 +1836,496 @@ function AdminTab() {
         </button>
       </Group>
     </>
+  );
+}
+
+/**
+ * El correu com a font d'entrada.
+ *
+ * Tres coses d'aquesta pantalla no són decoració:
+ *
+ * - **La contrasenya no es torna a ensenyar mai.** El camp neix buit i enviar-lo buit vol
+ *   dir «no la toquis»: tornar-la a pintar la posaria al DOM de qualsevol pestanya oberta,
+ *   i desar el nom del compte no ha de perdre'n les credencials.
+ * - **«Prova la connexió» no desa res.** És el botó que estalvia les hores que es perden
+ *   quan l'única manera de saber si unes credencials van bé és desar-les i esperar el
+ *   cicle següent. Per això es pot provar una contrasenya **abans** de desar-la.
+ * - **La previsualització del títol és en viu i la fa la mateixa funció que el servidor**
+ *   (`renderMailTitle`, als contractes). Si fossin dues, un dia el que veus escrivint no
+ *   seria el que et surt al tauler.
+ *
+ * I dues frases que hi són perquè la gent ha de saber-ho sense preguntar: **la primera
+ * lectura d'una carpeta no ingereix res** i **res marca els teus correus com a llegits**.
+ */
+function MailTab() {
+  const accounts = useApi<MailAccount[]>('/api/v1/mail/accounts');
+  const rules = useApi<MailRule[]>('/api/v1/mail/rules');
+
+  return (
+    <>
+      <Group title={t('settings.mail.accounts')}>
+        <p style={{ margin: 0, fontSize: 12, color: 'var(--ink-soft)' }}>
+          {t('settings.mail.intro')}
+        </p>
+
+        {(accounts.data ?? []).length === 0 ? (
+          <EmptyState>{t('settings.mail.empty')}</EmptyState>
+        ) : (
+          (accounts.data ?? []).map((account) => (
+            <MailAccountRow
+              key={account.id}
+              account={account}
+              onDone={() => {
+                accounts.reload();
+                rules.reload();
+              }}
+            />
+          ))
+        )}
+
+        <MailAccountForm onDone={() => accounts.reload()} />
+      </Group>
+
+      <Group title={t('settings.mail.rules')}>
+        <p style={{ margin: 0, fontSize: 12, color: 'var(--ink-soft)' }}>
+          {t('settings.mail.firstRun')} {t('settings.mail.notTouched')}
+        </p>
+
+        {(rules.data ?? []).length === 0 ? (
+          <EmptyState>{t('settings.mail.rules.empty')}</EmptyState>
+        ) : (
+          (rules.data ?? []).map((rule) => (
+            <MailRuleRow key={rule.id} rule={rule} onDone={() => rules.reload()} />
+          ))
+        )}
+
+        {(accounts.data ?? []).length > 0 ? (
+          <MailRuleForm accounts={accounts.data ?? []} onDone={() => rules.reload()} />
+        ) : null}
+      </Group>
+    </>
+  );
+}
+
+const camp = { display: 'grid', gap: 3, fontSize: 11.5, color: 'var(--ink-soft)' } as const;
+
+/** Quan es va llegir per última vegada, o que encara no s'ha llegit mai. */
+function quan(last: string | null | undefined): string {
+  return last === null || last === undefined
+    ? t('settings.mail.neverPolled')
+    : t('settings.mail.lastPolled', { when: dateTime(getLocale(), new Date(last)) });
+}
+
+function Camp({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label style={camp}>
+      {label}
+      {children}
+    </label>
+  );
+}
+
+/** Un compte, amb el seu estat i el botó de provar. */
+function MailAccountRow({ account, onDone }: { account: MailAccount; onDone: () => void }) {
+  const [password, setPassword] = useState('');
+  const [result, setResult] = useState<MailTestResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const test = useMutation(async () => {
+    setError(null);
+    setResult(null);
+    try {
+      // **No desa res**, ni tan sols la contrasenya que s'hi escriu per provar.
+      setResult(
+        await api.post<MailTestResult>(`/api/v1/mail/accounts/${account.id}/test`, {
+          password: password === '' ? undefined : password,
+        }),
+      );
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : t('error.generic'));
+    }
+  });
+
+  const save = useMutation(async () => {
+    setError(null);
+    try {
+      await api.patch<MailAccount>(`/api/v1/mail/accounts/${account.id}`, {
+        // Buida vol dir «no la toquis».
+        password: password === '' ? undefined : password,
+        enabled: account.enabled,
+      });
+      setPassword('');
+      onDone();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : t('error.generic'));
+    }
+  });
+
+  const remove = useMutation(async () => {
+    await api.delete<void>(`/api/v1/mail/accounts/${account.id}`);
+    onDone();
+  });
+
+  return (
+    <div
+      data-testid={`mail-account-${account.id}`}
+      style={{
+        display: 'grid',
+        gap: 8,
+        padding: 12,
+        border: '1px solid var(--card-border)',
+        borderRadius: 'var(--radius-card)',
+      }}
+    >
+      <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
+        <strong style={{ fontSize: 13 }}>{account.name}</strong>
+        <span style={{ fontSize: 11.5, color: 'var(--ink-soft)' }}>
+          {account.username}@{account.host}:{account.port}
+        </span>
+      </div>
+
+      {/*
+        L'estat de l'últim refresc, amb el motiu si va fallar. Va a la fila i no només al
+        registre pel mateix motiu que als calendaris: una font caiguda es veu exactament
+        igual que una que no té res.
+      */}
+      <span
+        style={{
+          fontSize: 11.5,
+          color:
+            account.last_error === null || account.last_error === undefined
+              ? 'var(--ink-soft)'
+              : 'var(--danger-text)',
+        }}
+      >
+        {account.last_error ?? quan(account.last_polled_at)}
+      </span>
+
+      <div style={{ display: 'flex', gap: 8, alignItems: 'end', flexWrap: 'wrap' }}>
+        <Camp label={t('settings.mail.password')}>
+          <input
+            type="password"
+            className="plou-input"
+            data-testid={`mail-password-${account.id}`}
+            value={password}
+            placeholder={account.has_secret ? t('settings.mail.passwordKept') : ''}
+            onChange={(event) => setPassword(event.target.value)}
+          />
+        </Camp>
+        <button type="button" className="plou-btn" onClick={() => void test.run()}>
+          {test.busy ? t('settings.mail.testing') : t('settings.mail.test')}
+        </button>
+        <button type="button" className="plou-btn" onClick={() => void save.run()}>
+          {t('settings.mail.save')}
+        </button>
+        <button
+          type="button"
+          className="plou-btn plou-btn-ghost"
+          data-testid={`mail-remove-${account.id}`}
+          onClick={() => void remove.run()}
+        >
+          {t('settings.mail.remove')}
+        </button>
+      </div>
+
+      {result !== null ? (
+        <span
+          data-testid={`mail-test-${account.id}`}
+          style={{ fontSize: 11.5, color: result.ok ? 'var(--ink-soft)' : 'var(--danger-text)' }}
+        >
+          {result.ok
+            ? t('settings.mail.testOk', { count: String(result.folders.length) })
+            : t('settings.mail.testFail', { error: result.error ?? '' })}
+        </span>
+      ) : null}
+
+      {error !== null ? (
+        <p role="alert" style={{ fontSize: 11.5, color: 'var(--danger-text)', margin: 0 }}>
+          {error}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function MailAccountForm({ onDone }: { onDone: () => void }) {
+  const [name, setName] = useState('');
+  const [host, setHost] = useState('');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [security, setSecurity] = useState<'tls' | 'starttls'>('tls');
+  const [error, setError] = useState<string | null>(null);
+
+  const add = useMutation(async () => {
+    setError(null);
+    try {
+      await api.post<MailAccount>('/api/v1/mail/accounts', {
+        id: uuidv7(),
+        name: name.trim() === '' ? host.trim() : name.trim(),
+        host: host.trim(),
+        username: username.trim(),
+        security,
+        password: password === '' ? undefined : password,
+      });
+      setName('');
+      setHost('');
+      setUsername('');
+      setPassword('');
+      onDone();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : t('error.generic'));
+    }
+  });
+
+  return (
+    <div style={{ display: 'grid', gap: 8 }} data-testid="mail-account-form">
+      <div style={{ display: 'flex', gap: 8, alignItems: 'end', flexWrap: 'wrap' }}>
+        <Camp label={t('settings.mail.name')}>
+          <input
+            className="plou-input"
+            data-testid="mail-new-name"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+          />
+        </Camp>
+        <Camp label={t('settings.mail.host')}>
+          <input
+            className="plou-input"
+            data-testid="mail-new-host"
+            value={host}
+            onChange={(event) => setHost(event.target.value)}
+          />
+        </Camp>
+        <Camp label={t('settings.mail.security')}>
+          {/*
+            **No hi ha «cap».** Oferir IMAP en clar vol dir que algú ho triarà i les seves
+            credencials viatjaran nues per la xarxa de casa. El port el tria el servidor
+            segons això: 993 amb TLS, 143 amb STARTTLS.
+          */}
+          <select
+            className="plou-input"
+            data-testid="mail-new-security"
+            value={security}
+            onChange={(event) => setSecurity(event.target.value === 'starttls' ? 'starttls' : 'tls')}
+          >
+            <option value="tls">{t('settings.mail.security.tls')}</option>
+            <option value="starttls">{t('settings.mail.security.starttls')}</option>
+          </select>
+        </Camp>
+        <Camp label={t('settings.mail.username')}>
+          <input
+            className="plou-input"
+            data-testid="mail-new-username"
+            value={username}
+            onChange={(event) => setUsername(event.target.value)}
+          />
+        </Camp>
+        <Camp label={t('settings.mail.password')}>
+          <input
+            type="password"
+            className="plou-input"
+            data-testid="mail-new-password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+          />
+        </Camp>
+        <button
+          type="button"
+          className="plou-btn plou-btn-primary"
+          data-testid="mail-add-account"
+          onClick={() => void add.run()}
+        >
+          {t('settings.mail.add')}
+        </button>
+      </div>
+      {error !== null ? (
+        <p role="alert" style={{ fontSize: 11.5, color: 'var(--danger-text)', margin: 0 }}>
+          {error}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/** Els valors amb què es previsualitza una plantilla. Un correu creïble i prou. */
+const MOSTRA = {
+  subject: 'La factura de març',
+  from_name: 'Escola',
+  from_email: 'secretaria@escola.test',
+  from: 'Escola',
+  date: '11/08/2026',
+  folder: 'INBOX/Escola',
+  account: 'Personal',
+};
+
+function MailRuleRow({ rule, onDone }: { rule: MailRule; onDone: () => void }) {
+  const { scopes } = useSessionData();
+  const scope = scopes.find((s) => s.id === rule.scope_id);
+
+  const remove = useMutation(async () => {
+    await api.delete<void>(`/api/v1/mail/rules/${rule.id}`);
+    onDone();
+  });
+
+  return (
+    <div
+      data-testid={`mail-rule-${rule.id}`}
+      style={{ display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}
+    >
+      <strong style={{ fontSize: 12.5 }}>{rule.folder}</strong>
+      <span style={{ fontSize: 11.5, color: 'var(--ink-soft)' }}>
+        → {scope?.name ?? rule.scope_id} ·{' '}
+        {rule.action === 'task' ? t('settings.mail.action.task') : t('settings.mail.action.inbox')}
+      </span>
+      <span style={{ fontSize: 11.5, color: 'var(--ink-soft)' }}>
+        {renderMailTitle(rule.title_template, MOSTRA, MOSTRA.subject)}
+      </span>
+      <button
+        type="button"
+        className="plou-btn plou-btn-ghost"
+        data-testid={`mail-rule-remove-${rule.id}`}
+        onClick={() => void remove.run()}
+      >
+        {t('settings.mail.remove')}
+      </button>
+    </div>
+  );
+}
+
+function MailRuleForm({ accounts, onDone }: { accounts: MailAccount[]; onDone: () => void }) {
+  const { scopes } = useSessionData();
+  const [accountId, setAccountId] = useState(accounts[0]?.id ?? '');
+  const [folder, setFolder] = useState('');
+  const [scopeId, setScopeId] = useState(scopes[0]?.id ?? '');
+  const [action, setAction] = useState<'inbox' | 'task'>('inbox');
+  const [template, setTemplate] = useState(DEFAULT_MAIL_TEMPLATE);
+  const [error, setError] = useState<string | null>(null);
+
+  const desconegudes = unknownMailVars(template);
+
+  const add = useMutation(async () => {
+    setError(null);
+    try {
+      await api.post<MailRule>('/api/v1/mail/rules', {
+        id: uuidv7(),
+        account_id: accountId,
+        folder: folder.trim(),
+        scope_id: scopeId,
+        action,
+        title_template: template,
+      });
+      setFolder('');
+      onDone();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : t('error.generic'));
+    }
+  });
+
+  return (
+    <div style={{ display: 'grid', gap: 8 }} data-testid="mail-rule-form">
+      <div style={{ display: 'flex', gap: 8, alignItems: 'end', flexWrap: 'wrap' }}>
+        <Camp label={t('settings.mail.accounts')}>
+          <select
+            className="plou-input"
+            data-testid="mail-rule-account"
+            value={accountId}
+            onChange={(event) => setAccountId(event.target.value)}
+          >
+            {accounts.map((account) => (
+              <option key={account.id} value={account.id}>
+                {account.name}
+              </option>
+            ))}
+          </select>
+        </Camp>
+        <Camp label={t('settings.mail.folder')}>
+          {/*
+            Text lliure i no una llista tancada: les carpetes es poden llistar amb «Prova
+            la connexió», però una llista sense entrada lliure deixaria clavat qui té una
+            carpeta que el servidor no anuncia.
+          */}
+          <input
+            className="plou-input"
+            data-testid="mail-rule-folder"
+            value={folder}
+            onChange={(event) => setFolder(event.target.value)}
+          />
+        </Camp>
+        <Camp label={t('settings.mail.scope')}>
+          <select
+            className="plou-input"
+            data-testid="mail-rule-scope"
+            value={scopeId}
+            onChange={(event) => setScopeId(event.target.value)}
+          >
+            {scopes.map((scope) => (
+              <option key={scope.id} value={scope.id}>
+                {scope.name}
+              </option>
+            ))}
+          </select>
+        </Camp>
+        <Camp label={t('settings.mail.action')}>
+          <select
+            className="plou-input"
+            data-testid="mail-rule-action"
+            value={action}
+            onChange={(event) => setAction(event.target.value === 'task' ? 'task' : 'inbox')}
+          >
+            <option value="inbox">{t('settings.mail.action.inbox')}</option>
+            <option value="task">{t('settings.mail.action.task')}</option>
+          </select>
+        </Camp>
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, alignItems: 'end', flexWrap: 'wrap' }}>
+        <Camp label={t('settings.mail.template')}>
+          <input
+            className="plou-input"
+            data-testid="mail-rule-template"
+            value={template}
+            onChange={(event) => setTemplate(event.target.value)}
+          />
+        </Camp>
+        <button
+          type="button"
+          className="plou-btn plou-btn-ghost"
+          data-testid="mail-rule-preset"
+          onClick={() => setTemplate('{{from_name}} - {{subject}}')}
+        >
+          {t('settings.mail.templatePreset')}
+        </button>
+        <button
+          type="button"
+          className="plou-btn plou-btn-primary"
+          data-testid="mail-add-rule"
+          onClick={() => void add.run()}
+        >
+          {t('settings.mail.addRule')}
+        </button>
+      </div>
+
+      {/*
+        La previsualització la fa la MATEIXA funció que el servidor. I les variables mal
+        escrites s'avisen sense rebutjar-les: qui vulgui unes claus literals al títol està
+        en el seu dret, i el que no ha de passar és que una errata sembli un camp buit.
+      */}
+      <span data-testid="mail-rule-preview" style={{ fontSize: 11.5, color: 'var(--ink-soft)' }}>
+        {t('settings.mail.templatePreview', {
+          preview: renderMailTitle(template, MOSTRA, MOSTRA.subject),
+        })}
+      </span>
+      {desconegudes.length > 0 ? (
+        <span style={{ fontSize: 11.5, color: 'var(--warning-text)' }}>
+          {t('settings.mail.templateUnknown', { vars: desconegudes.join(', ') })}
+        </span>
+      ) : null}
+
+      {error !== null ? (
+        <p role="alert" style={{ fontSize: 11.5, color: 'var(--danger-text)', margin: 0 }}>
+          {error}
+        </p>
+      ) : null}
+    </div>
   );
 }

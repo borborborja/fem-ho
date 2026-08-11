@@ -29,6 +29,8 @@ import * as sharedScopes from './migrations/008-shared-scopes.js';
 import * as federation from './migrations/009-federation.js';
 import * as gravatar from './migrations/010-gravatar.js';
 import * as inboxSources from './migrations/011-inbox-sources.js';
+import * as taskProvenance from './migrations/012-task-provenance.js';
+import * as mailSources from './migrations/013-mail-sources.js';
 
 export interface Migration {
   name: string;
@@ -70,6 +72,17 @@ export const MIGRATIONS: Migration[] = [
   { name: '009-federation', up: federation.up, down: federation.down, needsForeignKeysOff: true },
   { name: '010-gravatar', up: gravatar.up, down: gravatar.down },
   { name: '011-inbox-sources', up: inboxSources.up, down: inboxSources.down },
+  { name: '012-task-provenance', up: taskProvenance.up, down: taskProvenance.down },
+  /**
+   * `needsForeignKeysOff`: refà `attachments`, a la qual no apunta ningú avui —però el
+   * pragma va al registre i no dins del refet, que és el defecte que la 009 va documentar.
+   */
+  {
+    name: '013-mail-sources',
+    up: mailSources.up,
+    down: mailSources.down,
+    needsForeignKeysOff: true,
+  },
 ];
 
 const MIGRATIONS_TABLE = 'schema_migrations';

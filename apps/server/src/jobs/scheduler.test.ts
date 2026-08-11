@@ -117,7 +117,7 @@ describe('el tic', () => {
 
   it('sense res a fer, no peta ni escriu', async () => {
     const result = await tick(options());
-    expect(result).toEqual({ reminders: 0, refreshed: 0, federated: 0, errors: 0 });
+    expect(result).toEqual({ reminders: 0, refreshed: 0, federated: 0, mail: 0, errors: 0 });
   });
 });
 
@@ -149,6 +149,47 @@ describe('cap feina en tomba una altra', () => {
     expect(result.reminders).toBe(1);
     expect(send).toHaveBeenCalledTimes(1);
     expect(result.refreshed).toBe(0);
+  });
+
+  it('un compte de correu caigut NO impedeix els recordatoris', async () => {
+    /**
+     * La germana de l'anterior, i la que el pla del correu demana pel seu nom. Un servidor
+     * IMAP que no contesta és **el cas normal**, no l'excepció: la casa apaga el NAS, el
+     * proveïdor talla la sessió, el portàtil canvia de xarxa. Si això s'endugués el tic,
+     * el símptoma seria que els recordatoris deixen d'arribar i ningú relacionaria les
+     * dues coses.
+     *
+     * L'amfitrió és una IP interna: la rebutgen abans de sortir a la xarxa, o sigui que la
+     * prova no depèn de cap DNS ni de cap temps d'espera.
+     */
+    await recordatoriVencut();
+
+    const compte = uuidv7();
+    await sql`
+      INSERT INTO mail_accounts (id, user_id, name, host, username, secret_enc,
+                                 created_at, updated_at)
+      VALUES (${compte}, ${userId}, 'Caigut', '10.0.0.1', 'algu', 'no-es-desxifrable',
+              ${NOW}, ${NOW})
+    `.execute(conn.db);
+    await sql`
+      INSERT INTO mail_rules (id, account_id, folder, scope_id, action, position,
+                              created_at, updated_at)
+      VALUES (${uuidv7()}, ${compte}, 'INBOX', ${scopeId}, 'inbox', 'a1', ${NOW}, ${NOW})
+    `.execute(conn.db);
+
+    const send = vi.fn<PushSender>(async () => ({ statusCode: 201 }));
+    const result = await tick(options({ send }));
+
+    expect(result.reminders).toBe(1);
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(result.mail).toBe(0);
+
+    // I l'error queda escrit a la fila del compte, que és on la persona el veurà.
+    const fila = await sql<{ last_error: string | null; consecutive_errors: number }>`
+      SELECT last_error, consecutive_errors FROM mail_accounts WHERE id = ${compte}
+    `.execute(conn.db);
+    expect(fila.rows[0]?.last_error).not.toBeNull();
+    expect(Number(fila.rows[0]?.consecutive_errors)).toBe(1);
   });
 
   it("i un error d'enviament no impedeix el refresc", async () => {

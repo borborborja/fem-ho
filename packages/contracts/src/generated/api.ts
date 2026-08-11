@@ -1827,10 +1827,340 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/mail/accounts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Els comptes de correu de qui pregunta
+         * @description **Només els seus.** Un compte de correu no es comparteix ni amb l'àmbit ni amb
+         *     l'administrador: `calendars` és per àmbit i això no, i barrejar-ho posaria una
+         *     contrasenya personal en una taula que veu tota la casa.
+         */
+        get: operations["listMailAccounts"];
+        put?: never;
+        /**
+         * Donar d'alta un compte
+         * @description No es connecta a res: desa. Per saber si les credencials van bé hi ha
+         *     `POST /mail/accounts/{id}/test`, que **no desa res**.
+         */
+        post: operations["createMailAccount"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/mail/accounts/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Treure un compte
+         * @description Se n'endú les regles. **El que ja va entrar a la bústia es queda**: una tasca feta
+         *     a partir d'un correu és teva, i esborrar el compte no ha de buidar-te el tauler.
+         */
+        delete: operations["deleteMailAccount"];
+        options?: never;
+        head?: never;
+        /** Editar un compte */
+        patch: operations["updateMailAccount"];
+        trace?: never;
+    };
+    "/mail/accounts/{id}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Provar la connexió, sense desar res
+         * @description Es connecta, autentica, llista les carpetes i tanca. **No desa res i no marca cap
+         *     correu**: `docs/11` ja reclama aquest botó per a l'SMTP pel mateix motiu —les
+         *     hores que s'hi perden quan l'única manera de saber si va bé és esperar el següent
+         *     cicle i mirar els registres.
+         *
+         *     La contrasenya es pot passar al cos per provar-la **abans** de desar-la. Si no
+         *     s'envia, es fa servir la que hi ha guardada.
+         */
+        post: operations["testMailAccount"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/mail/rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Les regles dels comptes de qui pregunta */
+        get: operations["listMailRules"];
+        put?: never;
+        /**
+         * Mapar una carpeta
+         * @description **La primera vegada que s'activa una regla no s'ingereix res**: el cursor comença
+         *     al final de la carpeta. Sense això, mapar una etiqueta amb dotze anys de correu
+         *     crearia desenes de milers de tasques, i no hi ha desfer massiu.
+         */
+        post: operations["createMailRule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/mail/rules/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Deixar de llegir una carpeta */
+        delete: operations["deleteMailRule"];
+        options?: never;
+        head?: never;
+        /** Editar una regla */
+        patch: operations["updateMailRule"];
+        trace?: never;
+    };
+    "/mail/messages/{id}/convert": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Fer una tasca d'un correu de la bústia
+         * @description **Idempotent per correu.** Dos clics, un reintent o un rescaneig donen la mateixa
+         *     tasca i no dues: la identitat és la del `Message-ID` (P11), i qui la té ja té la
+         *     tasca.
+         *
+         *     Si el fil ja té una tasca viva, això **hi deixa un comentari** en comptes d'obrir-ne
+         *     una segona: si no, respondre un correu partiria el fil en dues coses a fer amb el
+         *     mateix assumpte.
+         *
+         *     L'àmbit i el projecte els posa **la regla**, mai el correu. Un remitent pot escriure
+         *     el que vulgui a l'assumpte; el que no pot és triar on va a parar.
+         */
+        post: operations["convertMailMessage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/mail/messages/{id}/dismiss": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Treure un correu de la bústia
+         * @description **No l'esborra: deixa de sortir.** La fila es queda al llibre de comptes perquè el
+         *     pròxim rescaneig no el torni a ingerir —esborrar-la el faria tornar la primera
+         *     vegada que el servidor reindexés—, i el correu segueix sencer a la teva bústia de
+         *     veritat: aquí no s'hi ha tocat mai res.
+         */
+        post: operations["dismissMailMessage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ai/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Si aquesta instància té credencials d'un model
+         * @description **«Configurada» vol dir que hi ha credencials, no que res les faci servir encara.**
+         *     És la frase honesta i va tal qual a la pantalla: `docs/09` diu que Fem-ho no té
+         *     motor d'IA propi, i el que hi ha avui és el terreny (P10 a `docs/14`).
+         *
+         *     **La clau no surt mai, ni emmascarada** —una màscara filtra la longitud i el
+         *     prefix—, i de l'URL només l'amfitrió: una URL pot portar un testimoni a la cadena
+         *     de consulta.
+         */
+        get: operations["getAiStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AiStatus: {
+            /** @description Hi ha credencials. **No vol dir que res les faci servir**: avui no hi ha cap camí de codi que truqui a cap model. */
+            configured: boolean;
+            /** @description `none` si no s'ha configurat res. */
+            provider: string;
+            model?: string | null;
+            /** @description **Només l'amfitrió**, mai l'URL sencera: una URL pot portar un testimoni a la cadena de consulta i acabaria a la pantalla i als registres. */
+            base_url_host?: string | null;
+            max_input_tokens?: number;
+            /** @description Coses que no impedeixen arrencar i val la pena dir. */
+            warnings: string[];
+        };
+        /** @description Un compte IMAP. **`secret_enc` no hi és i `password` tampoc**: la contrasenya es xifra en repòs i no torna a sortir del servidor en cap forma, ni emmascarada —una màscara filtra la longitud i el prefix—. */
+        MailAccount: {
+            id: string;
+            /** @description Com l'anomenes tu. Surt a la variable de plantilla {{account}}. */
+            name: string;
+            host: string;
+            /** @default 993 */
+            port: number;
+            /**
+             * @description **No hi ha `none`.** Oferir IMAP en clar vol dir que algú el triarà i les seves credencials viatjaran nues per la xarxa de casa.
+             * @enum {string}
+             */
+            security: "tls" | "starttls";
+            username: string;
+            /** @description Si hi ha contrasenya desada. És l'única cosa que se'n diu, i serveix perquè el formulari pugui dir «desada» sense ensenyar-ne res. */
+            has_secret: boolean;
+            /** @default true */
+            enabled: boolean;
+            /** @description Segons entre lectures. `null` fa servir el de la instància. */
+            poll_interval?: number | null;
+            /** Format: date-time */
+            last_polled_at?: string | null;
+            /** @description Per què va fallar l'última lectura. Va a la fila i no només al registre, pel mateix motiu que als calendaris: una font caiguda es veu igual que una buida. */
+            last_error?: string | null;
+            /** Format: date-time */
+            last_error_at?: string | null;
+            /** @description Quantes vegades seguides ha fallat. Mou la retirada exponencial: reintentar una contrasenya errònia cada cinc minuts contra un proveïdor gros és com es bloqueja un compte. */
+            consecutive_errors?: number;
+        };
+        MailAccountInput: {
+            id?: string;
+            name: string;
+            host: string;
+            port?: number;
+            /** @enum {string} */
+            security?: "tls" | "starttls";
+            username: string;
+            /** @description Es xifra en repòs i no torna a sortir mai. */
+            password?: string;
+            poll_interval?: number | null;
+            enabled?: boolean;
+        };
+        MailAccountPatch: {
+            name?: string;
+            host?: string;
+            port?: number;
+            /** @enum {string} */
+            security?: "tls" | "starttls";
+            username?: string;
+            /** @description Absent vol dir **«no la toquis»**, no «esborra-la»: el formulari no la torna a ensenyar mai, i canviar el nom del compte no ha de perdre'n les credencials. */
+            password?: string;
+            poll_interval?: number | null;
+            enabled?: boolean;
+        };
+        MailTestInput: {
+            /** @description Per provar-la **abans** de desar-la. Sense això, l'única manera de saber si una contrasenya va bé seria desar-la i esperar. */
+            password?: string;
+        };
+        MailTestResult: {
+            ok: boolean;
+            /** @description Què va passar, en text llegible. **No porta la resposta crua del servidor**: pot dur el nom d'usuari i acabaria en una captura de pantalla. */
+            error?: string | null;
+            /** @description Les carpetes que el servidor llista, per poder-les triar en comptes d'escriure-les. Buida si la prova ha fallat. */
+            folders: string[];
+            /** @description El separador de camins que ha dit el `LIST`: `.` a Dovecot, `/` a Gmail. És el que fa que «la regla més profunda guanya» es pugui calcular. */
+            delimiter?: string | null;
+        };
+        MailRule: {
+            id: string;
+            account_id: string;
+            folder: string;
+            scope_id: string;
+            /** @description `null` vol dir l'espai general de l'àmbit. */
+            project_id?: string | null;
+            /**
+             * @description Si el correu cau a la bústia del dia perquè hi decideixis, o si es converteix en tasca tot sol.
+             * @enum {string}
+             */
+            action: "inbox" | "task";
+            /** @default true */
+            inbox_visible: boolean;
+            /** @description Amb `{{subject}}`, `{{from}}`, `{{from_name}}`, `{{from_email}}`, `{{date}}`, `{{folder}}` i `{{account}}`. **Una sola passada**: un assumpte que sigui literalment `{{from_email}}` no s'expandeix. */
+            title_template: string;
+            /** @default true */
+            body_to_description: boolean;
+            /** @default true */
+            attachments_to_task: boolean;
+            position?: string;
+            /** @default true */
+            enabled: boolean;
+            /** Format: date-time */
+            last_seen_at?: string | null;
+            last_error?: string | null;
+            /** Format: date-time */
+            last_error_at?: string | null;
+        };
+        MailRuleInput: {
+            id?: string;
+            account_id: string;
+            folder: string;
+            scope_id: string;
+            project_id?: string | null;
+            /** @enum {string} */
+            action?: "inbox" | "task";
+            inbox_visible?: boolean;
+            title_template?: string;
+            body_to_description?: boolean;
+            attachments_to_task?: boolean;
+            position?: string;
+            enabled?: boolean;
+        };
+        MailRulePatch: {
+            folder?: string;
+            scope_id?: string;
+            project_id?: string | null;
+            /** @enum {string} */
+            action?: "inbox" | "task";
+            inbox_visible?: boolean;
+            title_template?: string;
+            body_to_description?: boolean;
+            attachments_to_task?: boolean;
+            position?: string;
+            enabled?: boolean;
+        };
         /** @description Un enllaç amb una altra instància. **`token_enc` no hi és**: és un secret xifrat amb clau derivada del secret d'aquesta instància i no surt de la base. */
         InstanceLink: {
             id: string;
@@ -2077,6 +2407,42 @@ export interface components {
             calendar_name: string;
             calendar_color: string | null;
         };
+        /**
+         * @description Un correu que ha entrat a la bústia i **encara no és una tasca**.
+         *
+         *     Igual que `InboxEvent`, **no és un `Task` i no n'ha de semblar cap**: sense
+         *     `status`, sense `position`, i cap identificador d'aquí pot arribar a
+         *     `POST /tasks/{id}/move`. Un correu a la bústia és una cosa que has de mirar; que
+         *     sigui una cosa a fer ho decideixes tu, o ho decideix la regla.
+         *
+         *     S'identifica per l'`id` de la fila **i** per `message_key`, que és la identitat de
+         *     veritat: la del `Message-ID` i mai la de l'UID d'IMAP (P11).
+         */
+        InboxMail: {
+            id: string;
+            account_id: string;
+            message_key: string;
+            subject: string | null;
+            from_name: string | null;
+            from_address: string | null;
+            /**
+             * Format: date-time
+             * @description La que va posar el servidor que el va rebre, no la del remitent. La del remitent es desa però no ordena res: pot mentir.
+             */
+            received_at: string | null;
+            /** @description On aniria si es convertís. */
+            scope_id: string;
+            project_id?: string | null;
+            account_name?: string | null;
+            folder?: string | null;
+            /** @default false */
+            has_attachments: boolean;
+            /**
+             * @description Sempre `mail`. Hi és perquè la targeta dibuixi la icona de provinença amb el mateix component que la resta, sense que el client hagi d'endevinar-ho pel tipus de l'ítem.
+             * @enum {string}
+             */
+            source_kind: "mail";
+        };
         Inbox: {
             /** Format: date */
             date: string;
@@ -2094,6 +2460,14 @@ export interface components {
              *     vulgui un l'encén a Ajustos, o n'encén un titular concret des del calendari.
              */
             events: components["schemas"]["InboxEvent"][];
+            /**
+             * @description Els correus que han entrat i encara no són tasques.
+             *
+             *     **Array a part, com els esdeveniments.** Si compartissin llista amb les
+             *     tasques, un dia algú passaria un correu per on passa una tasca i la distinció
+             *     —la que sosté la regla 7 esmenada— s'evaporaria sense que res fallés.
+             */
+            mail: components["schemas"]["InboxMail"][];
         };
         DashboardScope: {
             scope_id: string;
@@ -2803,6 +3177,19 @@ export interface components {
             recurrence_mode?: "schedule" | "completion" | null;
             /** @description La instància de la qual ve, si n'és una repetició. */
             recurrence_parent_id?: string | null;
+            /**
+             * @description De quina **mena de font** ve aquesta tasca, o nul si l'ha escrita una persona.
+             *
+             *     **No és `activity_log.source`**: aquell diu per quin canal ha entrat una
+             *     escriptura —web, Android, MCP— i aquest diu d'on ve el contingut.
+             *
+             *     És el que respon la pregunta que fa la icona de provinença, i el que fa que
+             *     afegir una font nova sigui **un valor més i no una columna més**: les
+             *     referències específiques de cada mena (`event_calendar_id`, `event_uid`…)
+             *     diuen *quin* origen concret, i això diu *quina mena*.
+             * @enum {string|null}
+             */
+            source_kind?: "caldav" | "ical" | "rss" | null;
             /**
              * @description Subtasques i ítems de llista **comptats junts**. La targeta els ensenya sota
              *     un sol commutador ("3/7 fets") perquè per a qui mira el tauler són el mateix:
@@ -6707,6 +7094,330 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
+        };
+    };
+    listMailAccounts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Els comptes. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MailAccount"][];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    createMailAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MailAccountInput"];
+            };
+        };
+        responses: {
+            /** @description Creat. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MailAccount"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            /** @description Falta el nom, l'amfitrió o l'usuari, o el port no s'admet. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    deleteMailAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Tret. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateMailAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MailAccountPatch"];
+            };
+        };
+        responses: {
+            /** @description Desat. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MailAccount"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    testMailAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MailTestInput"];
+            };
+        };
+        responses: {
+            /**
+             * @description El resultat. **Un `200` no vol dir que hagi anat bé**: vol dir que la prova
+             *     s'ha fet. El que va passar ho diu `ok`, i un error de credencials no és un
+             *     error de l'API.
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MailTestResult"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listMailRules: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Les regles. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MailRule"][];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    createMailRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MailRuleInput"];
+            };
+        };
+        responses: {
+            /** @description Creada. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MailRule"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            /** @description Aquesta carpeta ja té regla en aquest compte. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Falta la carpeta o l'àmbit, o la plantilla no és vàlida. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    deleteMailRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Treta. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateMailRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MailRulePatch"];
+            };
+        };
+        responses: {
+            /** @description Desada. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MailRule"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    convertMailMessage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description La tasca. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Task"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    dismissMailMessage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Tret de la bústia. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getAiStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description L'estat. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiStatus"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
         };
     };
 }

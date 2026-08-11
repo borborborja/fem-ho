@@ -32,6 +32,10 @@ export const CAPABILITIES = [
   'scopes:share',
   'shares:read',
   'shares:write',
+  // El correu com a font d'entrada. Van al final i **fora dels dos predefinits**: veure
+  // el motiu a `CAPABILITY_PRESETS`.
+  'mail:read',
+  'mail:write',
   'tokens:manage',
   'users:manage',
   'instance:manage',
@@ -63,7 +67,24 @@ export function capabilitiesForRole(role: 'admin' | 'member'): Capability[] {
  * Grups predefinits per a la UI de tokens (docs/08 §5: "només lectura, lectura i
  * escriptura, o personalitzat").
  */
+/**
+ * **El correu no entra a cap predefinit, i s'exclou a mà.**
+ *
+ * Els predefinits es deriven filtrant pel sufix, o sigui que `mail:read` hi entraria sol
+ * i «només lectura» —el que la gent tria sense pensar— donaria **la bústia sencera de
+ * qui l'ha emès**. Un token de correu s'ha de triar a «personalitzat», sabent què es dona.
+ *
+ * És una llista i no un `endsWith` invertit perquè el dia que hi hagi Slack o Telegram,
+ * la pregunta «això és tan sensible com el correu?» s'ha de respondre escrivint-hi el nom.
+ */
+const FORA_DELS_PREDEFINITS: readonly string[] = ['mail:read', 'mail:write'];
+
+const perPredefinit = (sufixos: string[]): Capability[] =>
+  CAPABILITIES.filter(
+    (c) => sufixos.some((s) => c.endsWith(s)) && !FORA_DELS_PREDEFINITS.includes(c),
+  );
+
 export const CAPABILITY_PRESETS = {
-  read_only: CAPABILITIES.filter((c) => c.endsWith(':read')),
-  read_write: CAPABILITIES.filter((c) => c.endsWith(':read') || c.endsWith(':write')),
+  read_only: perPredefinit([':read']),
+  read_write: perPredefinit([':read', ':write']),
 } as const satisfies Record<string, readonly Capability[]>;

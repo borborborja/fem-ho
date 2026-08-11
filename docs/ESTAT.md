@@ -278,6 +278,50 @@ silenci és pitjor que una que no es deixa fer.
 
 ---
 
+## El correu com a font d'entrada
+
+Cada persona pot donar d'alta comptes IMAP a **Ajustos ▸ Correu** i mapar carpetes cap a un
+àmbit i un projecte. **Un compte és d'una persona i no de la casa**: ningú més el veu, ni
+l'administrador, i demanar-lo per identificador dona el mateix que si no existís.
+
+| Què | Estat |
+| --- | --- |
+| Comptes i regles, i «Prova la connexió» que no desa res | Fet, provat contra l'API i amb la pantalla oberta |
+| Lectura periòdica amb cursor i retirada exponencial | Fet, provat contra un client fals injectat |
+| Bústia: el correu hi surt amb la seva icona de provinença | Fet |
+| Conversió a tasca, amb plantilla de títol i cos a la descripció | Fet |
+| Adjunts del correu com a adjunts de la tasca | Fet |
+| Resposta a un fil que ja té tasca → comentari | Fet |
+| Retenció del cos dels correus ingerits | Fet, `0` (per sempre) per defecte |
+| **Contra un servidor IMAP de veritat** | **NO provat encara** |
+
+**Aquesta última línia és la que compta.** Tot el que hi ha a sobre passa contra un
+`MailClient` fals i contra la base de dades real, i això prova el cicle i les decisions —no
+prova que `imapflow` parli bé amb un Dovecot o amb Gmail. En aquest projecte ja sabem què
+vol dir «compila».
+
+Tres coses que val la pena saber abans de fer-lo servir:
+
+- **La primera lectura d'una carpeta no ingereix res.** El cursor comença al final: mapar
+  una etiqueta amb dotze anys de correu crearia desenes de milers de tasques i no hi ha
+  desfer massiu. La importació d'històric no existeix.
+- **Res marca els teus correus com a llegits.** Les carpetes s'obren amb `EXAMINE`, que en
+  IMAP vol dir que el servidor **no pot** posar `\Seen`.
+- **Una carpeta sense regla no es llegeix**: ni es baixa ni es desa res.
+
+### El terreny d'IA, que no és la funció
+
+`docs/09` diu que Fem-ho **no té motor d'IA propi**, i segueix sent literalment cert: **cap
+camí de codi truca a cap model**. El que existeix és el terreny —les variables `FEMHO_AI_*`
+validades entre elles, i `GET /api/v1/ai/status`—, i la frase que dona la pantalla és la
+honesta: *configurada vol dir que hi ha credencials, no que res les faci servir encara*.
+
+Amb el proveïdor posat i el model o la clau a faltar, **el servidor no arrenca**: una
+instància que sembla preparada i no ho està no dona cap símptoma fins al dia que algú
+espera que funcioni.
+
+---
+
 ## Idiomes
 
 Català, anglès i castellà. **Automàtic amb opció de canviar**: el navegador o el

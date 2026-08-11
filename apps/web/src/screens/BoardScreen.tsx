@@ -69,6 +69,7 @@ function toBoardTask(
     title: task.title,
     status: task.status,
     scope_id: task.scope_id,
+    sourceKind: task.source_kind,
     project: projectName,
     /**
      * A la bústia d'un àmbit **col·lectiu**, sempre qui la té; fora, només si és d'algú
@@ -565,6 +566,7 @@ export function BoardScreen({
         }
         inbox={inboxCards}
         inboxEvents={inbox.data?.events}
+        inboxMail={inbox.data?.mail}
         onEventToTask={(event) => {
           /*
             **La tasca neix amb el títol de la cita i la seva data**, i no buida: qui fa
@@ -604,6 +606,22 @@ export function BoardScreen({
               visible: false,
             })
             .then(() => refresh());
+        }}
+        onMailToTask={(mail) => {
+          /*
+            **La destinació no la tria aquesta pantalla.** El servidor la treu de la regla
+            que va fer entrar el correu, i per això aquí no s'envia ni àmbit ni títol: si
+            es poguessin triar des del client, la barrera entre un text d'un desconegut i
+            el tauler de la casa seria una decisió de la interfície.
+          */
+          void api.post(`/api/v1/mail/messages/${mail.id}/convert`).then(() => refresh());
+        }}
+        onMailDismiss={(mail) => {
+          /*
+            Descartar-lo **no l'esborra de la teva bústia de veritat**: el correu segueix
+            allà sencer, i el que passa aquí és que deixa de sortir.
+          */
+          void api.post(`/api/v1/mail/messages/${mail.id}/dismiss`).then(() => refresh());
         }}
         inboxHeader={
           /*

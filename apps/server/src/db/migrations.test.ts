@@ -20,8 +20,8 @@ import type { Engine } from './dialect.js';
 import { MIGRATIONS, migrateDown, migrateToLatest } from './migrator.js';
 
 /**
- * Les taules que docs/01 defineix, i push_subscriptions de docs/11 §1.
- * docs/13 M2: hi han de ser TOTES des del primer dia.
+ * Les taules que docs/01 defineix, push_subscriptions de docs/11 §1 i les quatre del
+ * correu (013). docs/13 M2: hi han de ser TOTES des del primer dia.
  */
 const TAULES_ESPERADES = [
   'activity_log',
@@ -37,6 +37,10 @@ const TAULES_ESPERADES = [
   'event_occurrences',
   'events',
   'labels',
+  'mail_accounts',
+  'mail_messages',
+  'mail_rules',
+  'mail_threads',
   'projects',
   'push_subscriptions',
   'reminders',

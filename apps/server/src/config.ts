@@ -92,6 +92,54 @@ function envAllowRegistration(): boolean | undefined {
   return envBool('ALLOW_REGISTRATION');
 }
 
+/** El que se sap del proveïdor d'IA, si n'hi ha. **La clau no surt d'aquí.** */
+export interface AiConfig {
+  provider: string;
+  baseUrl: string | undefined;
+  apiKey: string | undefined;
+  model: string | undefined;
+  maxInputTokens: number;
+}
+
+/**
+ * Les variables d'IA, **validades entre elles**.
+ *
+ * En l'esperit de la contradicció `REGISTRATION`/`ALLOW_REGISTRATION`: un proveïdor posat
+ * i el model o la clau a faltar **no arrenca**. La forma pitjor de fallar seria arrencar,
+ * semblar configurat i no fer res —perquè llavors el símptoma apareix el dia que algú
+ * espera que funcioni, i el que veu és silenci.
+ *
+ * `FEMHO_AI_MODEL` **no té defecte**, i és deliberat: un model per defecte és una versió
+ * que canvia sota teu i una factura que no has triat.
+ */
+function envAi(): AiConfig {
+  const provider = (env('AI_PROVIDER') ?? 'none').trim().toLowerCase();
+  const baseUrl = env('AI_BASE_URL');
+  const apiKey = env('AI_API_KEY');
+  const model = env('AI_MODEL');
+  const maxInputTokens = envInt('AI_MAX_INPUT_TOKENS', 8000);
+
+  if (provider === 'none' || provider === '') {
+    return { provider: 'none', baseUrl, apiKey, model, maxInputTokens };
+  }
+
+  const falten: string[] = [];
+  if (model === undefined || model.trim() === '') falten.push('FEMHO_AI_MODEL');
+  // Un proveïdor local —Ollama a la mateixa xarxa— no necessita clau, però sí URL.
+  if ((apiKey === undefined || apiKey.trim() === '') && (baseUrl === undefined || baseUrl === '')) {
+    falten.push('FEMHO_AI_API_KEY o FEMHO_AI_BASE_URL');
+  }
+  if (falten.length > 0) {
+    throw new Error(
+      `FEMHO_AI_PROVIDER="${provider}" i falta ${falten.join(' i ')}. ` +
+        'Amb la configuració a mitges el servidor semblaria preparat i no ho estaria: ' +
+        "posa el que falta, o treu FEMHO_AI_PROVIDER i deixa-ho en 'none'.",
+    );
+  }
+
+  return { provider, baseUrl, apiKey, model, maxInputTokens };
+}
+
 export interface Config {
   /** Nom de la instància, el que veu qui s'hi connecta. */
   instanceName: string;
@@ -125,6 +173,35 @@ export interface Config {
    * no una cosa que passi sola.
    */
   gravatar: boolean;
+  /**
+   * A quins servidors de correu es pot connectar aquesta instància.
+   *
+   * **Buida vol dir «a qualsevol de públic»**, no «a cap»: la defensa que sempre hi és no
+   * és aquesta llista sinó `isBlockedAddress`, que rebutja tot el que resolgui a una
+   * adreça interna. Això és per a qui vulgui acotar-ho encara més —una casa que només fa
+   * servir un proveïdor— i és `FEMHO_MAIL_ALLOW_HOSTS`, separada per comes.
+   */
+  mailAllowHosts: string[];
+  /** Cada quant es llegeix un compte de correu, en segons. */
+  mailPollSeconds: number;
+  /** Un correu més gros que això no es baixa. */
+  mailMaxMessageBytes: number;
+  /**
+   * Quants dies es guarda el cos d'un correu ingerit.
+   *
+   * `0` vol dir **per sempre**. El que es purga és el cos i les metadades del correu, mai
+   * la tasca que en va sortir: la tasca és teva i la provinença hi sobreviu.
+   */
+  mailRetentionDays: number;
+  /**
+   * El terreny d'IA. **Cap d'aquestes variables fa que res truqui a res encara** (P10).
+   *
+   * `docs/09` diu que Fem-ho no té motor d'IA propi i que la intel·ligència és sempre
+   * externa. Que el servidor porti ell un correu a un model seria el contrari, i per això
+   * el que hi ha aquí és el terreny i no el motor: hi ha credencials o no n'hi ha, i
+   * `GET /ai/status` ho diu amb aquestes paraules.
+   */
+  ai: AiConfig;
   /**
    * Preguntar a GitHub si hi ha una versió més nova.
    *
@@ -169,6 +246,14 @@ export function loadConfig(version: string): Config {
     databaseUrl: env('DATABASE_URL') ?? 'sqlite:///data/femho.db',
     registration: envRegistration(),
     gravatar: envBool('GRAVATAR') ?? false,
+    mailAllowHosts: (env('MAIL_ALLOW_HOSTS') ?? '')
+      .split(',')
+      .map((host) => host.trim().toLowerCase())
+      .filter((host) => host !== ''),
+    mailPollSeconds: envInt('MAIL_POLL_SECONDS', 300),
+    mailMaxMessageBytes: envInt('MAIL_MAX_MESSAGE_MB', 25) * 1_048_576,
+    mailRetentionDays: envInt('MAIL_RETENTION_DAYS', 0),
+    ai: envAi(),
     updateCheck: envBool('UPDATE_CHECK') ?? true,
     secret: env('SECRET'),
     logLevel: env('LOG_LEVEL') ?? 'info',
