@@ -310,6 +310,7 @@
   "settings.mail.action.task": "Becomes a task",
   "settings.mail.add": "Add the account",
   "settings.mail.addRule": "Map the folder",
+  "settings.mail.appPassword": "With Fastmail, Gmail or iCloud you need an app password, not your account one. Spaces at either end are stripped.",
   "settings.mail.attachmentsToTask": "The mail attachments, onto the task",
   "settings.mail.bodyToDescription": "The mail body, into the description",
   "settings.mail.empty": "No mail account yet.",

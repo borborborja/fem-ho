@@ -311,6 +311,7 @@
   "settings.mail.action.task": "Es converteix en tasca",
   "settings.mail.add": "Afegeix el compte",
   "settings.mail.addRule": "Mapa la carpeta",
+  "settings.mail.appPassword": "Amb Fastmail, Gmail o iCloud cal una contrasenya d’aplicació, no la del teu compte. Els espais dels extrems es treuen sols.",
   "settings.mail.attachmentsToTask": "Els adjunts del correu, a la tasca",
   "settings.mail.bodyToDescription": "El cos del correu, a la descripció",
   "settings.mail.empty": "Encara no hi ha cap compte de correu.",

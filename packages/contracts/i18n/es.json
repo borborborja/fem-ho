@@ -309,6 +309,7 @@
   "settings.mail.action.task": "Se convierte en tarea",
   "settings.mail.add": "Añadir la cuenta",
   "settings.mail.addRule": "Mapear la carpeta",
+  "settings.mail.appPassword": "Con Fastmail, Gmail o iCloud hace falta una contraseña de aplicación, no la de tu cuenta. Los espacios de los extremos se quitan solos.",
   "settings.mail.attachmentsToTask": "Los adjuntos del correo, en la tarea",
   "settings.mail.bodyToDescription": "El cuerpo del correo, en la descripción",
   "settings.mail.empty": "Todavía no hay ninguna cuenta de correo.",

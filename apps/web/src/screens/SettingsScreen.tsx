@@ -2039,6 +2039,21 @@ function MailAccountRow({ account, onDone }: { account: MailAccount; onDone: () 
         </span>
       ) : null}
 
+      {/*
+        **La pista que hauria estalviat una tarda.** «L'usuari o la contrasenya no són
+        correctes» és cert i no serveix de res quan la contrasenya que llegeixes a la
+        pantalla és la bona: el que falla és que el proveïdor no accepta la del compte, o
+        que el que vas enganxar portava un espai que el camp no dibuixa.
+      */}
+      {result !== null && !result.ok ? (
+        <span
+          data-testid={`mail-hint-${account.id}`}
+          style={{ fontSize: 11, color: 'var(--ink-soft)' }}
+        >
+          {t('settings.mail.appPassword')}
+        </span>
+      ) : null}
+
       {error !== null ? (
         <p role="alert" style={{ fontSize: 11.5, color: 'var(--danger-text)', margin: 0 }}>
           {error}

@@ -48,6 +48,30 @@ const action = (value: unknown): 'inbox' | 'task' | undefined =>
 /** El propòsit del segell. Una constant perquè crear i obrir no puguin divergir. */
 const purpose = (id: string): string => `mail_account:${id}`;
 
+/**
+ * La contrasenya que arriba, **sense els espais dels extrems**.
+ *
+ * EL DEFECTE QUE EXISTEIX PER ATURAR
+ * ----------------------------------
+ * Una contrasenya d'aplicació es copia i s'enganxa, i el que s'enganxa sovint porta un
+ * espai o un salt de línia al final: el navegador el fica al camp, el camp no el dibuixa, i
+ * el que veus és **exactament** el que hauries d'haver escrit. El servidor la desa sencera,
+ * el servidor de correu la rebutja, i el missatge que en surt és «l'usuari o la contrasenya
+ * no són correctes» —que és cert i no serveix de res, perquè la contrasenya que llegeixes a
+ * la pantalla ÉS la bona.
+ *
+ * Va passar el primer dia que es va configurar un compte de debò, amb Fastmail: la desada
+ * tenia disset caràcters i les d'aplicació de Fastmail en tenen setze.
+ *
+ * **Es retallen els dos extrems i es diu al contracte**, en comptes de fer-ho en silenci:
+ * una contrasenya amb un espai volgut a la punta existeix en teoria, i qui en tingui una ha
+ * de poder llegir per què no li funciona en comptes de descobrir-ho mai.
+ */
+function password(input: Record<string, unknown>): string | undefined {
+  const raw = str(input.password);
+  return raw === undefined ? undefined : raw.trim();
+}
+
 export function registerMailRoutes(app: FastifyInstance, secret: () => string): void {
   const db = (): NonNullable<FastifyInstance['connection']> => app.connection!;
 
@@ -59,7 +83,7 @@ export function registerMailRoutes(app: FastifyInstance, secret: () => string): 
     handle(app, request, reply, async (principal) => {
       const input = body(request);
       const id = str(input.id) ?? uuidv7();
-      const password = str(input.password);
+      const clau = password(input);
 
       const result = await auditedTransaction(db().db, principal, (ctx) =>
         createMailAccount(ctx, principal, {
@@ -70,9 +94,7 @@ export function registerMailRoutes(app: FastifyInstance, secret: () => string): 
           security: security(input.security),
           username: str(input.username),
           secret_enc:
-            password !== undefined && password !== ''
-              ? seal(secret(), purpose(id), password)
-              : undefined,
+            clau !== undefined && clau !== '' ? seal(secret(), purpose(id), clau) : undefined,
           poll_interval: 'poll_interval' in input ? (num(input.poll_interval) ?? null) : undefined,
           enabled: bool(input.enabled),
         }),
@@ -85,7 +107,7 @@ export function registerMailRoutes(app: FastifyInstance, secret: () => string): 
   app.patch<{ Params: { id: string } }>('/api/v1/mail/accounts/:id', async (request, reply) =>
     handle(app, request, reply, async (principal) => {
       const input = body(request);
-      const password = str(input.password);
+      const clau = password(input);
       return auditedTransaction(db().db, principal, (ctx) =>
         updateMailAccount(ctx, principal, request.params.id, {
           name: str(input.name),
@@ -96,8 +118,8 @@ export function registerMailRoutes(app: FastifyInstance, secret: () => string): 
           // Buida vol dir «no la toquis», no «esborra-la»: el formulari no la torna a
           // ensenyar mai, i canviar el nom del compte no ha de perdre'n les credencials.
           secret_enc:
-            password !== undefined && password !== ''
-              ? seal(secret(), purpose(request.params.id), password)
+            clau !== undefined && clau !== ''
+              ? seal(secret(), purpose(request.params.id), clau)
               : undefined,
           poll_interval: 'poll_interval' in input ? (num(input.poll_interval) ?? null) : undefined,
           enabled: bool(input.enabled),
@@ -148,9 +170,9 @@ export function registerMailRoutes(app: FastifyInstance, secret: () => string): 
         );
       }
 
-      const enviada = str(input.password);
-      let password = enviada ?? '';
-      if (password === '') {
+      const enviada = password(input);
+      let clau = enviada ?? '';
+      if (clau === '') {
         if (!account.has_secret) {
           throw new PolicyError(
             'mail-secret-required',
@@ -159,7 +181,7 @@ export function registerMailRoutes(app: FastifyInstance, secret: () => string): 
             'Aquest compte encara no té contrasenya desada: escriu-la per provar-la.',
           );
         }
-        password = await openStored(app, secret(), principal, account.id);
+        clau = await openStored(app, secret(), principal, account.id);
       }
 
       try {
@@ -169,7 +191,7 @@ export function registerMailRoutes(app: FastifyInstance, secret: () => string): 
             port: account.port,
             security: account.security,
             username: account.username,
-            password,
+            password: clau,
           },
           { allowHosts: app.config.mailAllowHosts },
         );

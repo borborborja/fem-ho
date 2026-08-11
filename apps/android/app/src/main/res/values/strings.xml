@@ -304,6 +304,7 @@
     <string name="settings_mail_action_task">Es converteix en tasca</string>
     <string name="settings_mail_add">Afegeix el compte</string>
     <string name="settings_mail_addrule">Mapa la carpeta</string>
+    <string name="settings_mail_apppassword">Amb Fastmail, Gmail o iCloud cal una contrasenya d’aplicació, no la del teu compte. Els espais dels extrems es treuen sols.</string>
     <string name="settings_mail_attachmentstotask">Els adjunts del correu, a la tasca</string>
     <string name="settings_mail_bodytodescription">El cos del correu, a la descripció</string>
     <string name="settings_mail_empty">Encara no hi ha cap compte de correu.</string>

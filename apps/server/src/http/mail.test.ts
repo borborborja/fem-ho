@@ -177,6 +177,40 @@ describe('els comptes', () => {
     expect(fila.rows[0]?.secret_enc).not.toContain('super-secreta');
   });
 
+  it("una contrasenya enganxada amb un espai al final es desa sense l'espai", async () => {
+    /**
+     * **El defecte que aquesta prova existeix per aturar**, i que va costar una tarda el
+     * primer dia que es va configurar un compte de debò.
+     *
+     * Una contrasenya d'aplicació es copia i s'enganxa, i el que s'enganxa sovint porta un
+     * espai o un salt de línia al final. El camp no el dibuixa: el que veus a la pantalla
+     * **és exactament** el que hauries d'haver escrit. El servidor la desava sencera, el
+     * servidor de correu la rebutjava, i el missatge que en sortia era «l'usuari o la
+     * contrasenya no són correctes» —cert, i inservible.
+     *
+     * Es comprova per la **llargada del segell**, que és el que es pot mirar sense llegir
+     * cap contrasenya: `aes-256-gcm` no infla el text, o sigui que dos textos plans de
+     * llargada diferent donen segells de llargada diferent.
+     */
+    const net = await crearCompte({ name: 'Sense espais', password: 'abcdefghijklmnop' });
+    const brut = await crearCompte({ name: 'Amb espais', password: '  abcdefghijklmnop\n' });
+
+    const mides = await sql<{ id: string; mida: number }>`
+      SELECT id, length(secret_enc) AS mida FROM mail_accounts
+      WHERE id IN (${net.id}, ${brut.id})
+    `.execute(conn.db);
+
+    const perId = new Map(mides.rows.map((r) => [r.id, Number(r.mida)]));
+    expect(perId.get(brut.id)).toBe(perId.get(net.id));
+  });
+
+  it('i una que és només espais compta com a cap contrasenya', async () => {
+    // Si no, quedaria un compte «amb contrasenya» que no en té cap de bona, i la pantalla
+    // diria «desada» sobre res.
+    const compte = await crearCompte({ name: 'Només espais', password: '   ' });
+    expect(compte.has_secret).toBe(false);
+  });
+
   it('un port que no és d’IMAP es refusa amb 422', async () => {
     // Sense això, un «compte de correu» a `localhost:6379` és una manera de fer que el
     // servidor parli amb el Redis de la casa.

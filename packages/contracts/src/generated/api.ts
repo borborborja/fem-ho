@@ -2074,7 +2074,7 @@ export interface components {
             /** @enum {string} */
             security?: "tls" | "starttls";
             username: string;
-            /** @description Es xifra en repòs i no torna a sortir mai. */
+            /** @description Es xifra en repòs i no torna a sortir mai. **Els espais dels dos extrems es retallen**: una contrasenya d'aplicació s'enganxa, i el que s'enganxa sovint porta un espai o un salt de línia que el camp no dibuixa —i llavors el que llegeixes a la pantalla és exactament el que hauries d'haver escrit, i el servidor de correu la rebutja igualment. */
             password?: string;
             poll_interval?: number | null;
             enabled?: boolean;
