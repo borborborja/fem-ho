@@ -82,6 +82,15 @@ export interface MailClient {
    * és una altra crida i només si la regla els vol.
    */
   fetchBody: (path: string, uid: string) => Promise<MailBody>;
+  /**
+   * Els bytes d'un adjunt, **d'un en un i amb sostre**.
+   *
+   * Torna `null` si passa del sostre: la decisió de no baixar-lo la pren qui crida, amb la
+   * mida que ja porta el `bodyStructure`, i això és la segona porta —la primera és la mida
+   * del missatge sencer.
+   */
+  fetchAttachment: (path: string, uid: string, part: string, maxBytes: number) =>
+    Promise<Uint8Array | null>;
   close: () => Promise<void>;
 }
 

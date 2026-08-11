@@ -17,6 +17,7 @@
     "addTaskLabel": "apps/server/src/http/api-surface.test.ts · \"es pot posar i treure d'una tasca\"",
     "claimTask": "apps/server/src/http/api-surface.test.ts · \"reservar deixa rastre, i alliberar sense motiu es rebutja\"",
     "completeTask": "apps/server/src/http/tasks.test.ts · \"marca la tasca i les seves subtasques\"",
+    "convertMailMessage": "apps/server/src/http/mail.test.ts · \"un correu de la bústia es fa tasca, i dues vegades dona la mateixa\"",
     "createAgent": "apps/server/src/http/api-surface.test.ts · \"se'n pot crear un, i queda registrat\"",
     "createApiToken": "apps/server/src/http/tokens.test.ts · \"la creació queda a activity_log sense el token a dins\"",
     "createCalendar": "apps/server/src/http/api-surface.test.ts · \"se'n pot crear un, i queda registrat\"",
@@ -94,6 +95,7 @@
     "changePassword": "Es registra com a `updated` de l'usuari, però el que compta aquí és el que NO s'hi escriu: ni la contrasenya vella ni la nova, ni cap pista sobre elles. La prova és apps/server/src/http/api-surface.test.ts · les preferències i el perfil; el canvi de contrasenya es cobreix a auth.test.ts. Es marca exempt perquè `audit-coverage` demana que la prova citada comprovi una entrada concreta, i aquí la propietat interessant és una absència.",
     "updateSettings": "Les preferències d'interfície no són un canvi d'estat del producte: la posició del rail d'Inbox o el plegat d'un grup no els ha de veure ningú més ni han d'arribar a cap altre client per l'historial. `done_cleared_at` es toca cada vegada que algú prem 'netejar' a la columna Fet, i registrar-ho ofegaria la taula amb soroll que amaga el que sí que importa. Sí que escriu a `activity_log` com a `user_settings`, però no s'hi exigeix prova d'auditoria.",
     "parseQuickAdd": "No escriu res. És POST perquè el text a analitzar va al cos —un `GET` amb el títol d'una tasca a la query acabaria als registres del proxy i a l'historial del navegador—, no perquè canviï cap estat.",
-    "testMailAccount": "Provar la connexio no canvia res: no desa, no marca cap correu i no toca cap fila. Registrar-ho ompliria l'historial d'una accio que consisteix precisament a no fer-ne cap. El que si que es cobreix, i a mail.test.ts, es que no desi: despres de provar amb una contrasenya enviada al cos, el compte segueix sense tenir-ne."
+    "testMailAccount": "Provar la connexio no canvia res: no desa, no marca cap correu i no toca cap fila. Registrar-ho ompliria l'historial d'una accio que consisteix precisament a no fer-ne cap. El que si que es cobreix, i a mail.test.ts, es que no desi: despres de provar amb una contrasenya enviada al cos, el compte segueix sense tenir-ne.",
+    "dismissMailMessage": "Descartar un correu de la bustia no es un canvi d'estat del producte: no toca cap tasca, cap ambit ni cap dada de ningu, i el correu segueix sencer a la bustia de veritat —aqui no s'hi ha tocat mai res. La fila nomes deixa de sortir. Es cobreix a mail.test.ts · 'i descartar-lo el treu de la bustia sense esborrar-lo', on el que importa es justament que la fila HI SEGUEIXI, perque si s'esborres el proxim rescaneig el tornaria a ingerir."
   }
 }

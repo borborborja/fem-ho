@@ -144,6 +144,8 @@ export async function tick(options: SchedulerOptions): Promise<TickResult> {
         ),
       now: () => now,
       log,
+      // Sense `dataDir` no es baixa cap adjunt: no hi hauria on posar-lo.
+      dataDir: options.dataDir,
     });
     result.mail = mail.ingested;
     result.errors += mail.errors;

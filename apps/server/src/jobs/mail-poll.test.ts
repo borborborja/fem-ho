@@ -55,6 +55,20 @@ class ServidorFals implements MailClient {
     return this.bodies.get(uid) ?? { text: 'un cos', html: null, attachments: [] };
   };
 
+  fitxers = new Map<string, Uint8Array>();
+  baixats: string[] = [];
+
+  fetchAttachment = async (
+    _path: string,
+    uid: string,
+    part: string,
+    maxBytes: number,
+  ): Promise<Uint8Array | null> => {
+    this.baixats.push(`${uid}:${part}`);
+    const data = this.fitxers.get(`${uid}:${part}`) ?? null;
+    return data !== null && data.length > maxBytes ? null : data;
+  };
+
   close = async (): Promise<void> => {
     this.tancat = true;
   };
@@ -120,7 +134,17 @@ beforeAll(async () => {
 beforeEach(async () => {
   servidor = new ServidorFals();
   // `tasks` primer: hi ha files que apunten a `mail_accounts` i la clau forana ho vigila.
-  for (const taula of ['mail_messages', 'mail_threads', 'mail_rules', 'tasks', 'mail_accounts']) {
+  for (const taula of [
+    'attachments',
+    'comments',
+    'activity_log',
+    'change_log',
+    'mail_messages',
+    'mail_threads',
+    'mail_rules',
+    'tasks',
+    'mail_accounts',
+  ]) {
     await sql.raw(`DELETE FROM ${taula}`).execute(conn.db);
   }
 
@@ -296,6 +320,7 @@ describe('quan falla', () => {
       },
       fetchHeaders: async () => [],
       fetchBody: async () => ({ text: null, html: null, attachments: [] }),
+      fetchAttachment: async () => null,
       close: async () => undefined,
     };
 
@@ -338,5 +363,192 @@ describe('la corba de la retirada', () => {
     expect(backoffSeconds(1)).toBe(600);
     expect(backoffSeconds(2)).toBe(1200);
     expect(backoffSeconds(20)).toBe(6 * 3600);
+  });
+});
+
+describe('la conversió', () => {
+  it("d'un correu en surt una tasca amb el títol demanat", async () => {
+    /**
+     * El títol el fa **la mateixa funció que la previsualització d'Ajustos**: si el
+     * servidor en tingués una còpia, un dia el que veus escrivint la plantilla no seria el
+     * que et surt al tauler.
+     */
+    const id = await regla('INBOX', { action: 'task' });
+    await sql`
+      UPDATE mail_rules SET title_template = '{{from_name}} - {{subject}}' WHERE id = ${id}
+    `.execute(conn.db);
+
+    servidor.status = { uidValidity: '1', uidNext: '1', exists: 0 };
+    await córrer();
+
+    servidor.status = { uidValidity: '1', uidNext: '2', exists: 1 };
+    servidor.headers = [sobre('1', { subject: 'La factura de març' })];
+    servidor.bodies.set('1', { text: 'Us adjuntem la factura.', html: null, attachments: [] });
+    await córrer('2026-08-11T11:00:00.000Z');
+
+    const tasques = await sql<{
+      title: string;
+      description: string | null;
+      source_kind: string | null;
+      mail_account_id: string | null;
+      mail_message_key: string | null;
+      scope_id: string;
+    }>`SELECT title, description, source_kind, mail_account_id, mail_message_key, scope_id
+       FROM tasks`.execute(conn.db);
+
+    expect(tasques.rows).toHaveLength(1);
+    expect(tasques.rows[0]).toMatchObject({
+      title: 'Escola - La factura de març',
+      description: 'Us adjuntem la factura.',
+      // **La provinença sobreviu a la conversió**: «s'ha creat a partir de» vol dir que la
+      // marca es queda, i és el que dibuixa la icona a la targeta.
+      source_kind: 'mail',
+      mail_account_id: accountId,
+      scope_id: scopeId,
+    });
+
+    const missatge = await missatges();
+    expect(missatge[0]?.disposition).toBe('task');
+  });
+
+  it('i la resposta comenta, sense duplicar la tasca', async () => {
+    await regla('INBOX', { action: 'task' });
+    servidor.status = { uidValidity: '1', uidNext: '1', exists: 0 };
+    await córrer();
+
+    servidor.status = { uidValidity: '1', uidNext: '2', exists: 1 };
+    servidor.headers = [sobre('1', { messageId: '<arrel@escola.test>' })];
+    await córrer('2026-08-11T11:00:00.000Z');
+
+    servidor.status = { uidValidity: '1', uidNext: '3', exists: 2 };
+    servidor.headers = [
+      ...servidor.headers,
+      sobre('2', {
+        messageId: '<resposta@escola.test>',
+        references: ['<arrel@escola.test>'],
+        subject: 'Re: Assumpte 1',
+      }),
+    ];
+    servidor.bodies.set('2', { text: 'Doncs ja està pagada.', html: null, attachments: [] });
+    await córrer('2026-08-11T12:00:00.000Z');
+
+    /**
+     * **Una tasca, no dues.** Si la resposta n'obrís una de nova, acabaries amb el fil
+     * partit en dues coses a fer amb el mateix assumpte, i això passa cada dia.
+     */
+    const tasques = await sql<{ n: number }>`SELECT COUNT(*) AS n FROM tasks`.execute(conn.db);
+    expect(Number(tasques.rows[0]?.n)).toBe(1);
+
+    const comentaris = await sql<{ body: string }>`SELECT body FROM comments`.execute(conn.db);
+    expect(comentaris.rows).toHaveLength(1);
+    // I porta **el remitent de debò**, el del correu i no el de cap plantilla.
+    expect(comentaris.rows[0]?.body).toContain('Escola');
+    expect(comentaris.rows[0]?.body).toContain('ja està pagada');
+  });
+
+  it('convertir dues vegades el mateix correu dona la mateixa tasca', async () => {
+    // Dos clics, un reintent, un rescaneig: la clau és la del Message-ID, i qui la té ja
+    // té la tasca.
+    await regla('INBOX', { action: 'task' });
+    servidor.status = { uidValidity: '1', uidNext: '1', exists: 0 };
+    await córrer();
+
+    servidor.status = { uidValidity: '1', uidNext: '2', exists: 1 };
+    servidor.headers = [sobre('1')];
+    await córrer('2026-08-11T11:00:00.000Z');
+
+    // Es torna a deixar pendent a mà: és el que passaria amb un reintent a mig camí.
+    await sql`UPDATE mail_messages SET disposition = 'pending'`.execute(conn.db);
+    await córrer('2026-08-11T13:00:00.000Z');
+
+    const tasques = await sql<{ n: number }>`SELECT COUNT(*) AS n FROM tasks`.execute(conn.db);
+    expect(Number(tasques.rows[0]?.n)).toBe(1);
+  });
+
+  it("i una regla 'inbox' NO crea cap tasca sola", async () => {
+    // La diferència entre els dos valors de `action` és exactament aquesta: qui decideix.
+    await regla();
+    servidor.status = { uidValidity: '1', uidNext: '1', exists: 0 };
+    await córrer();
+
+    servidor.status = { uidValidity: '1', uidNext: '2', exists: 1 };
+    servidor.headers = [sobre('1')];
+    await córrer('2026-08-11T11:00:00.000Z');
+
+    const tasques = await sql<{ n: number }>`SELECT COUNT(*) AS n FROM tasks`.execute(conn.db);
+    expect(Number(tasques.rows[0]?.n)).toBe(0);
+    expect((await missatges())[0]?.disposition).toBe('inbox');
+  });
+});
+
+describe('els adjunts', () => {
+  it("un factura.pdf que és un executable rep el que diuen els bytes", async () => {
+    /**
+     * **El `Content-Type` declarat es llença.** El que decideix el tipus són els bytes, i
+     * el nom passa per `safeFilename`: les dues coses vénen d'un desconegut. Servir un
+     * fitxer amb el tipus que ell diu és XSS emmagatzemat des del teu propi domini.
+     */
+    const dades = mkdtempSync(join(tmpdir(), 'femho-adjunts-'));
+    await regla('INBOX', { action: 'task' });
+    servidor.status = { uidValidity: '1', uidNext: '1', exists: 0 };
+    await pollMail({ db: conn.db, openClient: async () => servidor, now: () => NOW, dataDir: dades });
+
+    servidor.status = { uidValidity: '1', uidNext: '2', exists: 1 };
+    servidor.headers = [sobre('1')];
+    servidor.bodies.set('1', {
+      text: 'La factura.',
+      html: null,
+      attachments: [
+        { filename: '../../factura.pdf', contentType: 'application/pdf', size: 4, inline: false, part: '2' },
+      ],
+    });
+    // `MZ` és la signatura d'un executable de Windows.
+    servidor.fitxers.set('1:2', new Uint8Array([0x4d, 0x5a, 0x90, 0x00]));
+
+    await pollMail({
+      db: conn.db,
+      openClient: async () => servidor,
+      now: () => '2026-08-11T11:00:00.000Z',
+      dataDir: dades,
+    });
+
+    const adjunts = await sql<{
+      filename: string;
+      mime_type: string;
+      source: string;
+      is_ai_context: number;
+    }>`SELECT filename, mime_type, source, is_ai_context FROM attachments`.execute(conn.db);
+
+    expect(adjunts.rows).toHaveLength(1);
+    // El nom no pot sortir de la seva carpeta.
+    expect(adjunts.rows[0]?.filename).not.toContain('..');
+    // I el tipus no és el que deia el correu.
+    expect(adjunts.rows[0]?.mime_type).not.toBe('application/pdf');
+    expect(adjunts.rows[0]?.source).toBe('mail_attach');
+    // Un adjunt d'un desconegut no entra al context d'un model pel sol fet d'existir.
+    expect(Number(adjunts.rows[0]?.is_ai_context)).toBe(0);
+
+    rmSync(dades, { recursive: true, force: true });
+  });
+
+  it("i sense `dataDir` no se'n desa cap: no hi ha on posar-los", async () => {
+    await regla('INBOX', { action: 'task' });
+    servidor.status = { uidValidity: '1', uidNext: '1', exists: 0 };
+    await córrer();
+
+    servidor.status = { uidValidity: '1', uidNext: '2', exists: 1 };
+    servidor.headers = [sobre('1')];
+    servidor.bodies.set('1', {
+      text: 'Text',
+      html: null,
+      attachments: [
+        { filename: 'a.pdf', contentType: 'application/pdf', size: 4, inline: false, part: '2' },
+      ],
+    });
+    servidor.fitxers.set('1:2', new Uint8Array([1, 2, 3, 4]));
+    await córrer('2026-08-11T11:00:00.000Z');
+
+    const adjunts = await sql<{ n: number }>`SELECT COUNT(*) AS n FROM attachments`.execute(conn.db);
+    expect(Number(adjunts.rows[0]?.n)).toBe(0);
   });
 });

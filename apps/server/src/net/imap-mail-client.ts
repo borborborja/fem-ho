@@ -194,6 +194,31 @@ export async function openImapClient(
       };
     },
 
+    fetchAttachment: async (
+      path: string,
+      uid: string,
+      part: string,
+      maxBytes: number,
+    ): Promise<Uint8Array | null> => {
+      await client.mailboxOpen(path, { readOnly: true });
+      const { content, meta } = await client.download(uid, part, { uid: true });
+      if (content === undefined) return null;
+      // La porta, **abans** de llegir el flux: el servidor ja diu quant pesa.
+      if (meta.expectedSize > maxBytes) return null;
+
+      const trossos: Buffer[] = [];
+      let total = 0;
+      for await (const tros of content) {
+        const buf = Buffer.from(tros as Buffer);
+        total += buf.length;
+        // I una segona vegada mentre arriba: `expectedSize` és el que diu el servidor, i
+        // el que arriba és el que arriba.
+        if (total > maxBytes) return null;
+        trossos.push(buf);
+      }
+      return Buffer.concat(trossos);
+    },
+
     close: async (): Promise<void> => {
       try {
         await client.logout();

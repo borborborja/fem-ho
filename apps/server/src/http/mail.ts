@@ -22,6 +22,8 @@ import { SsrfError } from '../dav/fetch-safe.js';
 import { probeImap } from '../net/imap-connect.js';
 import { PolicyError } from '../policy/errors.js';
 import type { Principal } from '../policy/principal.js';
+import { convertOwnMail } from '../services/mail-convert-http.js';
+import { dismissMail } from '../services/mail-convert.js';
 import {
   createMailAccount,
   createMailRule,
@@ -178,6 +180,38 @@ export function registerMailRoutes(app: FastifyInstance, secret: () => string): 
         throw error;
       }
     }),
+  );
+
+  /**
+   * Fer una tasca d'un correu de la bústia.
+   *
+   * La destinació **surt de la regla que el va fer entrar**, no del cos de la petició: si
+   * es pogués triar aquí, el client podria enviar correu a un àmbit que la regla no vol i
+   * la barrera entre un text hostil i el sistema seria una decisió de la interfície.
+   */
+  app.post<{ Params: { id: string } }>(
+    '/api/v1/mail/messages/:id/convert',
+    async (request, reply) =>
+      handle(app, request, reply, async (principal) =>
+        auditedTransaction(db().db, principal, (ctx) =>
+          convertOwnMail(ctx, principal, request.params.id),
+        ),
+      ),
+  );
+
+  app.post<{ Params: { id: string } }>(
+    '/api/v1/mail/messages/:id/dismiss',
+    async (request, reply) =>
+      handle(app, request, reply, async (principal) => {
+        await auditedTransaction(db().db, principal, async (ctx) => {
+          await dismissMail(ctx, request.params.id, principal.userId);
+          // Descartar no és un canvi d'estat del producte: no toca cap tasca ni cap àmbit,
+          // i el correu segueix sencer a la bústia de veritat.
+          ctx.noChange();
+        });
+        void reply.code(204).send();
+        return undefined;
+      }),
   );
 
   app.get('/api/v1/mail/rules', async (request, reply) =>

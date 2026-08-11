@@ -1943,6 +1943,58 @@ export interface paths {
         patch: operations["updateMailRule"];
         trace?: never;
     };
+    "/mail/messages/{id}/convert": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Fer una tasca d'un correu de la bústia
+         * @description **Idempotent per correu.** Dos clics, un reintent o un rescaneig donen la mateixa
+         *     tasca i no dues: la identitat és la del `Message-ID` (P11), i qui la té ja té la
+         *     tasca.
+         *
+         *     Si el fil ja té una tasca viva, això **hi deixa un comentari** en comptes d'obrir-ne
+         *     una segona: si no, respondre un correu partiria el fil en dues coses a fer amb el
+         *     mateix assumpte.
+         *
+         *     L'àmbit i el projecte els posa **la regla**, mai el correu. Un remitent pot escriure
+         *     el que vulgui a l'assumpte; el que no pot és triar on va a parar.
+         */
+        post: operations["convertMailMessage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/mail/messages/{id}/dismiss": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Treure un correu de la bústia
+         * @description **No l'esborra: deixa de sortir.** La fila es queda al llibre de comptes perquè el
+         *     pròxim rescaneig no el torni a ingerir —esborrar-la el faria tornar la primera
+         *     vegada que el servidor reindexés—, i el correu segueix sencer a la teva bústia de
+         *     veritat: aquí no s'hi ha tocat mai res.
+         */
+        post: operations["dismissMailMessage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -7260,6 +7312,52 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    convertMailMessage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description La tasca. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Task"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    dismissMailMessage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Tret de la bústia. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
             404: components["responses"]["NotFound"];
         };
     };

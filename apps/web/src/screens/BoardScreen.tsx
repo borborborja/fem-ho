@@ -607,6 +607,22 @@ export function BoardScreen({
             })
             .then(() => refresh());
         }}
+        onMailToTask={(mail) => {
+          /*
+            **La destinació no la tria aquesta pantalla.** El servidor la treu de la regla
+            que va fer entrar el correu, i per això aquí no s'envia ni àmbit ni títol: si
+            es poguessin triar des del client, la barrera entre un text d'un desconegut i
+            el tauler de la casa seria una decisió de la interfície.
+          */
+          void api.post(`/api/v1/mail/messages/${mail.id}/convert`).then(() => refresh());
+        }}
+        onMailDismiss={(mail) => {
+          /*
+            Descartar-lo **no l'esborra de la teva bústia de veritat**: el correu segueix
+            allà sencer, i el que passa aquí és que deixa de sortir.
+          */
+          void api.post(`/api/v1/mail/messages/${mail.id}/dismiss`).then(() => refresh());
+        }}
         inboxHeader={
           /*
             Dos controls a la mateixa capçalera, en dues files: el navegador de dia hi és

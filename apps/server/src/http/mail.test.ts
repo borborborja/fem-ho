@@ -510,3 +510,83 @@ describe('el correu a la bústia', () => {
     expect(vista.json<{ mail: unknown[] }>().mail).toHaveLength(0);
   });
 });
+
+describe('convertir des de la bústia', () => {
+  /** Un correu a la bústia, amb la seva regla i el seu fil. */
+  async function correu(subject: string, key: string): Promise<{ id: string; compte: Compte }> {
+    const compte = await crearCompte({ name: `Conv ${key}` });
+    const regla = (
+      await api('POST', '/api/v1/mail/rules', {
+        account_id: compte.id,
+        folder: `INBOX/${key}`,
+        scope_id: scopeId,
+        title_template: '{{from_name}} - {{subject}}',
+      })
+    ).json<Regla>();
+
+    const fil = uuidv7();
+    const id = uuidv7();
+    await sql`
+      INSERT INTO mail_threads (id, account_id, thread_key, created_at, updated_at)
+      VALUES (${fil}, ${compte.id}, ${`mid:${key}@escola.test`}, ${NOW}, ${NOW})
+    `.execute(conn.db);
+    await sql`
+      INSERT INTO mail_messages (id, account_id, thread_id, message_key, folder, uid_validity,
+                                 uid, internal_date, from_name, from_address, subject,
+                                 body_text, disposition, rule_id, created_at, updated_at)
+      VALUES (${id}, ${compte.id}, ${fil}, ${`mid:${key}@escola.test`}, ${`INBOX/${key}`}, '1',
+              '1', ${NOW}, 'Escola', 'secretaria@escola.test', ${subject}, 'El cos del correu.',
+              'inbox', ${regla.id}, ${NOW}, ${NOW})
+    `.execute(conn.db);
+    return { id, compte };
+  }
+
+  it('un correu de la bústia es fa tasca, i dues vegades dona la mateixa', async () => {
+    const { id } = await correu('La factura de març', 'conv1');
+
+    const primera = await api('POST', `/api/v1/mail/messages/${id}/convert`);
+    expect(primera.statusCode).toBe(200);
+    const tasca = primera.json<{ id: string; title: string; description: string | null }>();
+
+    // El títol el fa la plantilla de la regla, amb la mateixa funció que la
+    // previsualització d'Ajustos.
+    expect(tasca.title).toBe('Escola - La factura de març');
+    expect(tasca.description).toBe('El cos del correu.');
+
+    /**
+     * **Idempotent.** Dos clics, un reintent o un rescaneig donen la mateixa tasca: la
+     * identitat és la del `Message-ID`, i qui la té ja té la tasca.
+     */
+    const segona = await api('POST', `/api/v1/mail/messages/${id}/convert`);
+    expect(segona.json<{ id: string }>().id).toBe(tasca.id);
+
+    // I ja no surt a la bústia: ara és una tasca.
+    const vista = await api('GET', '/api/v1/inbox?date=2026-08-11');
+    expect(vista.json<{ mail: { id: string }[] }>().mail.map((m) => m.id)).not.toContain(id);
+  });
+
+  it("i descartar-lo el treu de la bústia sense esborrar-lo", async () => {
+    const { id } = await correu('Publicitat', 'conv2');
+
+    expect((await api('POST', `/api/v1/mail/messages/${id}/dismiss`)).statusCode).toBe(204);
+
+    const vista = await api('GET', '/api/v1/inbox?date=2026-08-11');
+    expect(vista.json<{ mail: { id: string }[] }>().mail.map((m) => m.id)).not.toContain(id);
+
+    /**
+     * **La fila hi segueix, i això és el que importa.** Si s'esborrés, el pròxim rescaneig
+     * —una reindexació del servidor, per exemple— el tornaria a ingerir i tornaria a
+     * sortir a la bústia com si res.
+     */
+    const queda = await sql<{ disposition: string }>`
+      SELECT disposition FROM mail_messages WHERE id = ${id}
+    `.execute(conn.db);
+    expect(queda.rows[0]?.disposition).toBe('dismissed');
+  });
+
+  it("el correu d'un altre no es pot convertir", async () => {
+    const { id } = await correu('Seu', 'conv3');
+    const res = await api('POST', `/api/v1/mail/messages/${id}/convert`, {}, altreAuth);
+    expect(res.statusCode).toBe(404);
+  });
+});
