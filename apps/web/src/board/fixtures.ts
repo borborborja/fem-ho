@@ -69,3 +69,28 @@ export const SAMPLE_TASKS: BoardTask[] = [
     assignedToOther: true,
   },
 ];
+
+/**
+ * El que hi ha cada dia, per a la prova visual del calendari.
+ *
+ * Va aquí i no a la pantalla de prova pel mateix motiu que la resta: **són dades de mostra
+ * i no text del producte**. A `CalendarProof.tsx` el linter d'idiomes les llegiria com a
+ * cadenes que haurien de sortir del catàleg, i tindria raó si ho fossin.
+ */
+export const SAMPLE_DAY_ITEMS: Record<
+  string,
+  { id: string; title: string; color: string; muted?: boolean }[]
+> = {
+  '2026-08-05': [
+    { id: 'a', title: '9:00 Reunió de pares', color: 'var(--plou-pink)' },
+    { id: 'b', title: '17:30 Renovar el carnet', color: 'var(--plou-orange)' },
+  ],
+  '2026-08-12': [{ id: 'c', title: '12:00 Dentista', color: 'var(--plou-blue)' }],
+  '2026-08-19': [
+    { id: 'd', title: '8:30 Enviar proposta', color: 'var(--plou-orange)' },
+    { id: 'e', title: '13:00 Dinar amb la Marta', color: 'var(--plou-blue)' },
+    { id: 'f', title: '19:00 Partit', color: 'var(--plou-pink)' },
+    // El quart no es dibuixa: surt com a "+1", que és el que evita que la cel·la creixi.
+    { id: 'g', title: '21:00 Sopar', color: 'var(--plou-pink)', muted: true },
+  ],
+};

@@ -170,9 +170,13 @@ Graella de dues columnes: calendari flexible i rail de 340px. **La posició del 
 
 Targeta amb padding 22px. Capçalera amb `‹`, el mes i l'any, i `›`. Fila de dies `dl dt dc dj dv ds dg` a 11,5px `var(--ink-faint)`.
 
-Graella de 7 columnes, 6px de separació, cel·les quadrades de radi 14px. Cada cel·la: el número i, sota, fins a 3 punts de 5px amb els colors dels àmbits que hi tenen alguna cosa.
+Graella de 7 columnes, 6px de separació, cel·les de radi 14px i **alçada mínima de 78px**. Cada cel·la: el número a dalt a l'esquerra i, sota, **fins a 3 ítems escrits** —hora i títol, amb el punt del color de l'àmbit— i un `+N` per als que no hi caben. Els que no són a la bústia van difuminats, com a la llista.
 
-Dia seleccionat: fons `var(--gradient-brand-2stop)`, text blanc, pes 800. Avui: `var(--ghost-bg)`. Dies d'altres mesos: `opacity:0`.
+Dia seleccionat: `var(--ghost-bg)` amb un anell de `var(--day-hover-ring)`. Avui: `var(--ghost-bg)`. Dies d'altres mesos: `opacity:0`.
+
+> **Fins a l'agost del 2026 aquí hi deia «cel·les quadrades» i «fins a 3 punts de 5px», i el dia seleccionat s'omplia amb el gradient de marca.** Es va canviar mirant-ho: veure P13 a `docs/14`. En resum, `aspect-ratio: 1` lliga l'alçada a l'amplada i en una pantalla ampla donava cel·les de 137px —182 amb el rail a sota— per ensenyar-hi un punt; el mes ocupava 926px i a un portàtil les dues últimes setmanes queien sota la línia de flotació. I un punt diu que el dia té alguna cosa sense dir quina, que és l'única pregunta que la vista de mes ha de respondre.
+>
+> Els **selectors de dia dins d'un desplegable** —el de la columna Fet i el de la bústia— es queden quadrats i amb punts: allà dins només hi ha un número i el que es vol és compacitat.
 
 ### Setmanal
 

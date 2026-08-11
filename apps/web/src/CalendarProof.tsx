@@ -10,7 +10,7 @@ import { useState } from 'react';
 import { monthName, t, weekdayNames } from '@fem-ho/contracts';
 import { DayView, MonthView, WeekView } from '@fem-ho/design-system/femho';
 import { InboxRail } from './board/InboxRail.js';
-import { SAMPLE_SCOPES, SAMPLE_TASKS } from './board/fixtures.js';
+import { SAMPLE_DAY_ITEMS, SAMPLE_SCOPES, SAMPLE_TASKS } from './board/fixtures.js';
 
 // La pàgina de prova fixa el català i dilluns: comprova la graella, no l'idioma.
 const WEEK_START = 1;
@@ -20,13 +20,6 @@ const SCOPE_COLOR: Record<string, string> = {
   personal: 'var(--plou-blue)',
   feina: 'var(--plou-orange)',
   familia: 'var(--plou-pink)',
-};
-
-/** Punts d'àmbit per dia. Amb dades reals surten de `/events` i `/tasks`. */
-const DOTS: Record<string, string[]> = {
-  '2026-08-05': [SCOPE_COLOR.familia!, SCOPE_COLOR.feina!],
-  '2026-08-12': [SCOPE_COLOR.personal!],
-  '2026-08-19': [SCOPE_COLOR.feina!, SCOPE_COLOR.personal!, SCOPE_COLOR.familia!],
 };
 
 type View = 'month' | 'week' | 'day';
@@ -98,7 +91,8 @@ export function CalendarProof() {
               <MonthView
                 year={year}
                 month={month}
-                monthLabel={`${monthName('ca', month)} ${year}`}
+                // Només el mes: `MonthView` ja hi posa l'any que rep a part.
+                monthLabel={monthName('ca', month)}
                 weekdayLabels={{
                   days: WEEKDAYS,
                   prevLabel: t('calendar.prevMonth'),
@@ -106,7 +100,7 @@ export function CalendarProof() {
                 }}
                 selectedDate={selected}
                 today="2026-08-05"
-                dotsByDate={DOTS}
+                itemsByDate={SAMPLE_DAY_ITEMS}
                 onSelect={setSelected}
                 onPrev={() => {
                   if (month === 0) {

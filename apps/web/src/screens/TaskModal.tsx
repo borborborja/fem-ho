@@ -54,7 +54,17 @@ export interface TaskModalProps {
    * és l'única manera del disseny validat de crear feina per a la IA amb instruccions,
    * perquè un camp d'afegida ràpida no té on posar-les.
    */
-  create?: { status: TaskStatus; forAi: boolean };
+  create?: {
+    status: TaskStatus;
+    forAi: boolean;
+    /**
+     * El dia que ha de portar posat.
+     *
+     * El calendari obre aquest modal des del peu d'un dia concret: obrir-lo buit obligaria
+     * a tornar a triar el dia que acabes de mirar.
+     */
+    dueDate?: string | null;
+  };
   onClose: () => void;
   onChanged: () => void;
   onShare: (taskId: string) => void;
@@ -140,7 +150,7 @@ export function TaskModal({
       setDraft({
         title: '',
         description: '',
-        due_date: '',
+        due_date: create?.dueDate ?? '',
         due_time: '',
         deadline: '',
         rrule: '',

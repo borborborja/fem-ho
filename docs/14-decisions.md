@@ -533,6 +533,44 @@ Tres coses que se'n deriven i que no són òbvies:
 
 ---
 
+### P13 · La vista de mes ensenya el que hi ha, i deixa de ser quadrada
+
+**La resolució: `aspect-ratio: 1` fora, i els punts substituïts pel títol del que hi ha.**
+
+`docs/02` §5 demanava «cel·les quadrades» amb «fins a 3 punts de 5px». Les dues coses es van
+escriure mirant el prototip, i totes dues fallen a la pantalla de debò:
+
+| | Amb cel·la quadrada | Mesurat |
+| --- | --- | --- |
+| Alçada d'una cel·la a 1440px | lligada a l'amplada | **137px** |
+| Amb el rail a sota (amplada sencera) | igual | **182px** |
+| Alçada del mes | 6 files | **926px** |
+| A un portàtil de 700px | | **les dues últimes setmanes sota la línia de flotació** |
+
+I amb el rail a sota, la bústia quedava a mil quatre-cents píxels de la vista: el calendari
+**tapava** literalment el que hi havia a sota.
+
+**El punt és l'altra meitat del problema.** Diu que el dia té alguna cosa i no diu quina, que
+és exactament la pregunta que una vista de mes existeix per respondre. Amb punts, saber què
+tens la setmana que ve vol dir clicar set dies seguits — i llavors la vista de mes no serveix
+de res que la de setmana no faci millor.
+
+Ara: alçada mínima de 78px, el número a dalt a l'esquerra, i fins a tres ítems amb hora i
+títol; la resta, un `+N`. El mes sencer cap en una pantalla de portàtil.
+
+Tres coses que se'n deriven:
+
+- **El dia seleccionat perd el gradient de marca.** Amb text a dins, omplir la cel·la
+  obligaria cada títol a ser llegible sobre un degradat de tres parades i vuit accents, i
+  `docs/04` §8 diu que el que cal llegir no s'hi juga. Passa a fons fantasma amb anell.
+- **Els selectors de dia d'un desplegable es queden com eren.** El de la columna Fet i el de
+  la bústia són popovers on només hi ha un número, i allà la compacitat és el que es vol. Ho
+  decideix la presència d'`itemsByDate`: sense ítems, la cel·la segueix sent quadrada.
+- **L'ordre dins del dia és per instant i no per títol.** La primera versió ordenava el text
+  ja compost i posava «15:00 Dentista» abans de «9:00 Reunió»: en text, `1` va abans que `9`.
+
+---
+
 ## Part 3 — Fets sospitosos de `research/`
 
 El crític va marcar 7 afirmacions com a probablement inventades, obsoletes o internament incoherents. **Cap `docs/` en depèn.**

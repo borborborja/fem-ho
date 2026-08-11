@@ -123,7 +123,12 @@ function AppShell() {
   const [warning, setWarning] = useState<string | null>(null);
   const [openTask, setOpenTask] = useState<string | null>(null);
   /** Una tasca nova des de l'edició completa: quina columna, i si és per a la IA. */
-  const [newTask, setNewTask] = useState<{ status: TaskStatus; forAi: boolean } | null>(null);
+  const [newTask, setNewTask] = useState<{
+    status: TaskStatus;
+    forAi: boolean;
+    /** El dia que ha de portar posat, quan es crea des del peu d'un dia del calendari. */
+    dueDate?: string | null;
+  } | null>(null);
   const [aiBoard, setAiBoard] = useState(false);
   const [flip, setFlip] = useState<{ transform: string; transition: string } | undefined>(
     undefined,
@@ -340,7 +345,11 @@ function AppShell() {
             }}
           />
         ) : view === 'calendar' ? (
-          <CalendarScreen activeScopeIds={activeScopeIds} onOpenTask={setOpenTask} />
+          <CalendarScreen
+            activeScopeIds={activeScopeIds}
+            onOpenTask={setOpenTask}
+            onNewTask={(dueDate) => setNewTask({ status: 'inbox', forAi: false, dueDate })}
+          />
         ) : (
           <BoardScreen
             key={reloadKey}
