@@ -205,6 +205,14 @@ data class InboxEvent(
     @SerialName("source_kind") val sourceKind: String? = null,
     @SerialName("calendar_name") val calendarName: String = "",
     @SerialName("calendar_color") val calendarColor: String? = null,
+    /**
+     * Si surt a l'inbox de Tasques.
+     *
+     * **Amb valor per defecte, com tota la resta**: una app vella contra un servidor nou és
+     * el cas normal, i la bústia no pot quedar buida perquè hagi arribat un camp de més.
+     * El servidor sempre l'envia; el defecte és per a l'app que encara no el llegeix.
+     */
+    @SerialName("in_inbox") val inInbox: Boolean = true,
 ) {
     /** La identitat externa, que és estable entre refrescos de la font. */
     val key: String get() = "$calendarId|$uid|${recurrenceId ?: ""}"
