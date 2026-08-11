@@ -38,7 +38,9 @@
     <string name="board_column_done">Done</string>
     <string name="board_column_inbox">Inbox</string>
     <string name="board_column_todo">To do</string>
+    <string name="board_done_backtotoday">Back to today</string>
     <string name="board_done_clear">Clear</string>
+    <string name="board_done_emptyday">Nothing finished on {day}.</string>
     <string name="board_done_showalltoday">All of today</string>
     <string name="board_done_thisweek">This week</string>
     <string name="board_done_yesterday">Yesterday</string>

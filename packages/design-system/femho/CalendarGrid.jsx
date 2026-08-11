@@ -119,6 +119,7 @@ export function MonthView({
   onNext,
   onAddOnDay,
   addLabel,
+  maxDate,
 }) {
   const cells = monthCells(year, month, weekStart);
   const [hovered, setHovered] = React.useState(null);
@@ -203,6 +204,14 @@ export function MonthView({
           const selected = iso !== null && iso === selectedDate;
           const isToday = iso !== null && iso === today;
           const dots = iso === null ? [] : (dotsByDate[iso] ?? []);
+          /**
+           * **Un dia més enllà del límit no es pot triar.**
+           *
+           * Ho fa servir la columna Fet: "què vaig fer dijous que ve" no vol dir res, i un
+           * dia que es pot clicar i sempre surt buit és pitjor que un que no es pot clicar
+           * — el primer et fa dubtar de si has perdut una tasca.
+           */
+          const beyond = maxDate !== undefined && iso !== null && iso > maxDate;
 
           return (
             <button
@@ -219,7 +228,8 @@ export function MonthView({
               // passa el ratolí, o el `+` seria una acció que només existeix amb ratolí.
               onFocus={() => setHovered(iso)}
               onBlur={() => setHovered(null)}
-              disabled={iso === null}
+              disabled={iso === null || beyond}
+              data-beyond={beyond ? 'true' : undefined}
               style={{
                 position: 'relative',
                 // El contorn diu "el pots agafar" sense competir amb el farciment del dia
@@ -245,8 +255,10 @@ export function MonthView({
                     ? 'var(--ghost-bg)'
                     : 'transparent',
                 // Els dies d'altres mesos ocupen lloc i no es veuen: treure'ls
-                // desalinearia les columnes.
-                opacity: cell.inMonth ? 1 : 0,
+                // desalinearia les columnes. Els de més enllà del límit sí que es veuen,
+                // atenuats: han de dir "existeix, però aquí no".
+                opacity: cell.inMonth ? (beyond ? 0.35 : 1) : 0,
+                cursor: beyond ? 'not-allowed' : iso === null ? 'default' : 'pointer',
               }}
             >
               <span

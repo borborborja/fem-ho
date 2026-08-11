@@ -38,7 +38,9 @@
     <string name="board_column_done">Hecho</string>
     <string name="board_column_inbox">Inbox</string>
     <string name="board_column_todo">Por hacer</string>
+    <string name="board_done_backtotoday">Volver a hoy</string>
     <string name="board_done_clear">Limpiar</string>
+    <string name="board_done_emptyday">Ninguna tarea hecha el {day}.</string>
     <string name="board_done_showalltoday">Todo hoy</string>
     <string name="board_done_thisweek">Esta semana</string>
     <string name="board_done_yesterday">Ayer</string>

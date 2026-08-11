@@ -21,6 +21,11 @@ export interface WeekdayLabels {
 
 export interface MonthViewProps {
   /**
+   * L'últim dia que es pot triar, `YYYY-MM-DD`. Els posteriors surten atenuats i
+   * desactivats. Ho fa servir la columna Fet: no es pot mirar què vas fer demà.
+   */
+  maxDate?: string | undefined;
+  /**
    * Afegir una tasca a la bústia d'aquell dia, des del `+` que surt en passar-hi per
    * sobre. Sense això no es pinta cap botó.
    */

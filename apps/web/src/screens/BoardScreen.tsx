@@ -42,6 +42,13 @@ export interface BoardScreenProps {
  * No es fa amb `toISOString()`, que passa per UTC: a Madrid, a les onze de la nit, això
  * donaria el dia de demà i la bústia s'obriria al dia equivocat cada vespre.
  */
+/** La data local `YYYY-MM-DD` d'un instant. Mai per UTC. */
+function localDate(at: Date): string {
+  return `${String(at.getFullYear())}-${String(at.getMonth() + 1).padStart(2, '0')}-${String(
+    at.getDate(),
+  ).padStart(2, '0')}`;
+}
+
 function todayISO(): string {
   const now = new Date();
   return `${String(now.getFullYear())}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(
@@ -218,6 +225,16 @@ export function BoardScreen({
   const [day, setDay] = useState(() => todayISO());
 
   /**
+   * Quin dia ensenya la columna Fet.
+   *
+   * **La columna ensenyava tot l'històric**, pla i sense agrupar: `groupDone` existia amb
+   * les seves proves i no el cridava ningú, `done_cleared_at` s'escrivia i no el llegia
+   * ningú, i l'estat buit no s'arribava a veure mai perquè amb una sola tasca feta el mes
+   * passat la columna ja no era buida.
+   */
+  const [doneDay, setDoneDay] = useState(() => todayISO());
+
+  /**
    * I la bústia surt de `/inbox`, no de `/board`.
    *
    * Les altres tres columnes segueixen amb `/board`, que no sap de dies i que Android
@@ -320,6 +337,18 @@ export function BoardScreen({
           if (!triatsDelSeu) return true;
           return task.project_id != null && projectIds.includes(task.project_id);
         })
+        /**
+         * La columna Fet és **del dia que es mira**, i per defecte avui.
+         *
+         * `completed_at` es compara en data local i no restant mil·lisegons: els dies de
+         * canvi d'hora en tenen 23 o 25, i una resta d'instants els compta malament dos
+         * dies l'any sense donar cap error.
+         */
+        .filter((task) => {
+          if (task.status !== 'done') return true;
+          if (task.completed_at == null) return false;
+          return localDate(new Date(task.completed_at)) === doneDay;
+        })
         .map((task) => {
           const assignees = task.assignee_ids ?? [];
           const card = toBoardTask(
@@ -343,6 +372,7 @@ export function BoardScreen({
     scopes,
     projectIds,
     projects,
+    doneDay,
   ]);
 
   /**
@@ -366,6 +396,18 @@ export function BoardScreen({
           );
           if (!triatsDelSeu) return true;
           return task.project_id != null && projectIds.includes(task.project_id);
+        })
+        /**
+         * La columna Fet és **del dia que es mira**, i per defecte avui.
+         *
+         * `completed_at` es compara en data local i no restant mil·lisegons: els dies de
+         * canvi d'hora en tenen 23 o 25, i una resta d'instants els compta malament dos
+         * dies l'any sense donar cap error.
+         */
+        .filter((task) => {
+          if (task.status !== 'done') return true;
+          if (task.completed_at == null) return false;
+          return localDate(new Date(task.completed_at)) === doneDay;
         })
         .map((task) => {
           const assignees = task.assignee_ids ?? [];
@@ -511,6 +553,16 @@ export function BoardScreen({
       <KanbanBoard
         aiBoard={aiBoard}
         flip={flip}
+        doneEmptyLabel={
+          doneDay === todayISO()
+            ? t('board.empty.done')
+            : t('board.done.emptyDay', {
+                day: new Date(`${doneDay}T12:00:00`).toLocaleDateString(undefined, {
+                  day: 'numeric',
+                  month: 'long',
+                }),
+              })
+        }
         inbox={inboxCards}
         inboxEvents={inbox.data?.events}
         onEventToTask={(event) => {
@@ -628,6 +680,9 @@ export function BoardScreen({
             clearedAt={settings.done_cleared_at ?? null}
             onClear={() => void updateSettings({ done_cleared_at: new Date().toISOString() })}
             onShowAll={() => void updateSettings({ done_cleared_at: null })}
+            day={doneDay}
+            onPickDay={setDoneDay}
+            onBackToToday={() => setDoneDay(todayISO())}
           />
         }
       />

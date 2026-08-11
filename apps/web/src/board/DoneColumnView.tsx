@@ -10,6 +10,34 @@
  */
 
 import { useState } from 'react';
+
+/**
+ * El calendari de la capçalera.
+ *
+ * Era l'emoji `📅`. Un emoji no és una icona: el dibuixa la font del sistema, canvia de
+ * forma i de color a cada plataforma —a Windows és blau, a Android verd—, no hereta
+ * `currentColor` i per tant no segueix el tema, i a algunes fonts surt amb el número 17 a
+ * dins. Al costat de dos botons de text que sí que segueixen el tema, es veia com una
+ * enganxina.
+ */
+function CalendarIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="3" y="5" width="18" height="16" rx="2" />
+      <path d="M8 3v4M16 3v4M3 10h18" />
+    </svg>
+  );
+}
 import { getLocale, monthName, resolveWeekStart, t, weekdayNames } from '@fem-ho/contracts';
 import { useSessionData } from '../app/session.js';
 import { MonthView } from '@fem-ho/design-system/femho';
@@ -18,8 +46,18 @@ export interface DoneHeaderProps {
   clearedAt: string | null;
   onClear: () => void;
   onShowAll: () => void;
-  /** Dia seleccionat al mini-calendari, si se n'ha triat cap. */
+  /**
+   * Anar a un altre dia a veure què vas fer.
+   *
+   * **Existia i no es passava mai**: el mini-calendari s'obria, triaves un dia i no
+   * passava res. La columna ensenyava tot l'històric de tasques fetes, planes, i per això
+   * no s'arribava a veure mai ni l'estat buit ni l'efecte de "Netejar".
+   */
   onPickDay?: (date: string) => void;
+  /** El dia que s'està mirant. Amb `null`, avui. */
+  day?: string | null | undefined;
+  /** Tornar a avui. Només surt quan s'està mirant un altre dia. */
+  onBackToToday?: (() => void) | undefined;
 }
 
 function isToday(iso: string | null): boolean {
@@ -28,13 +66,22 @@ function isToday(iso: string | null): boolean {
   return iso.slice(0, 10) === today;
 }
 
-export function DoneHeader({ clearedAt, onClear, onShowAll, onPickDay }: DoneHeaderProps) {
+export function DoneHeader({
+  clearedAt,
+  onClear,
+  onShowAll,
+  onPickDay,
+  day,
+  onBackToToday,
+}: DoneHeaderProps) {
+  const avui = new Date().toISOString().slice(0, 10);
+  const mirantUnAltreDia = day != null && day !== avui;
   // El mini-calendari segueix la mateixa regla que el gran: idioma i preferència.
   const weekStart = resolveWeekStart(useSessionData().settings.week_start, getLocale());
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [month, setMonth] = useState(() => new Date());
 
-  const button = (label: string, onClick: () => void, testId: string) => (
+  const button = (label: React.ReactNode, onClick: () => void, testId: string) => (
     <button
       type="button"
       onClick={onClick}
@@ -57,9 +104,21 @@ export function DoneHeader({ clearedAt, onClear, onShowAll, onPickDay }: DoneHea
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 2, position: 'relative' }}>
-      {button('📅', () => setCalendarOpen(!calendarOpen), 'done-calendar')}
-      {button(t('board.done.clear'), onClear, 'done-clear')}
-      {isToday(clearedAt) ? button(t('board.done.showAllToday'), onShowAll, 'done-show-all') : null}
+      {button(<CalendarIcon />, () => setCalendarOpen(!calendarOpen), 'done-calendar')}
+      {/*
+        Mirant un altre dia, «Netejar» i «Tot avui» no hi són: totes dues parlen d'avui, i
+        un botó que no fa res on l'has clicat és pitjor que un que no hi és.
+      */}
+      {mirantUnAltreDia ? (
+        button(t('board.done.backToToday'), () => onBackToToday?.(), 'done-back-today')
+      ) : (
+        <>
+          {button(t('board.done.clear'), onClear, 'done-clear')}
+          {isToday(clearedAt)
+            ? button(t('board.done.showAllToday'), onShowAll, 'done-show-all')
+            : null}
+        </>
+      )}
 
       {calendarOpen ? (
         <div
@@ -86,7 +145,10 @@ export function DoneHeader({ clearedAt, onClear, onShowAll, onPickDay }: DoneHea
               prevLabel: t('calendar.prevMonth'),
               nextLabel: t('calendar.nextMonth'),
             }}
-            today={new Date().toISOString().slice(0, 10)}
+            today={avui}
+            selectedDate={day ?? avui}
+            // Què vas fer demà no vol dir res.
+            maxDate={avui}
             onPrev={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}
             onNext={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}
             onSelect={(date) => {

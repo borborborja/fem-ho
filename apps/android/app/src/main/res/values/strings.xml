@@ -38,7 +38,9 @@
     <string name="board_column_done">Fet</string>
     <string name="board_column_inbox">Inbox</string>
     <string name="board_column_todo">Per fer</string>
+    <string name="board_done_backtotoday">Tornar a avui</string>
     <string name="board_done_clear">Netejar</string>
+    <string name="board_done_emptyday">Cap tasca feta el {day}.</string>
     <string name="board_done_showalltoday">Tot avui</string>
     <string name="board_done_thisweek">Aquesta setmana</string>
     <string name="board_done_yesterday">Ahir</string>
