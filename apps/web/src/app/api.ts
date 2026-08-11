@@ -39,6 +39,32 @@ export function problemText(problem: Problem | undefined, fallback: string): str
   return text === key ? problem.detail : text;
 }
 
+/**
+ * Què ha fallat, dit amb les paraules que ho expliquen.
+ *
+ * **«Alguna cosa ha fallat» era literalment el que sortia** a la pantalla d'arrencada,
+ * passés el que passés: es menjava l'error i el substituïa per una frase que no distingeix
+ * «aquest correu ja existeix» de «el servidor no respon». Amb una instància nova darrere
+ * d'un proxy, aquesta diferència és la que et diu si has de mirar el formulari o el
+ * contenidor.
+ *
+ * Els tres casos, i per què cadascun:
+ *
+ * - **El servidor no contesta** —`fetch` rebutja, o el proxy dona 502/503/504—: no és culpa
+ *   del que has escrit. Dir-ho estalvia buscar una falta en un formulari que està bé.
+ * - **Un error de l'API**: ja porta el text bo. `ApiError.message` és el `detail` del
+ *   problema, traduït quan en tenim traducció.
+ * - **Qualsevol altra cosa**: la frase de sempre.
+ */
+export function failureText(cause: unknown): string {
+  if (cause instanceof ApiError) {
+    return cause.status >= 502 && cause.status <= 504 ? t('error.unreachable') : cause.message;
+  }
+  // `fetch` només rebutja quan no hi ha hagut resposta: xarxa caiguda, DNS, TLS.
+  if (cause instanceof TypeError) return t('error.unreachable');
+  return t('error.generic');
+}
+
 /** Un error de l'API que la interfície pot ensenyar tal com ve. */
 export class ApiError extends Error {
   readonly status: number;

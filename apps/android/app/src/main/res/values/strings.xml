@@ -156,6 +156,7 @@
     <string name="error_too_many_attempts">Massa intents. Torna-ho a provar d\'aquí a {seconds} segons.</string>
     <string name="error_unauthenticated">Cal tornar a entrar.</string>
     <string name="error_unknown_entity">Això no és una cosa que se sincronitzi.</string>
+    <string name="error_unreachable">El servidor no contesta. No és el que has escrit: mira si la instància està engegada.</string>
     <string name="error_version_conflict">Algú altre ho ha canviat mentrestant.</string>
     <string name="error_weak_share_password">La contrasenya de l\'enllaç necessita {min} caràcters com a mínim.</string>
     <string name="error_window_invalid">Les dates del període no són vàlides.</string>

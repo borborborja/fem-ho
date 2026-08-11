@@ -156,6 +156,7 @@
     <string name="error_too_many_attempts">Too many attempts. Try again in {seconds} seconds.</string>
     <string name="error_unauthenticated">You have to sign in again.</string>
     <string name="error_unknown_entity">This is not something that syncs.</string>
+    <string name="error_unreachable">The server is not answering. It is not what you typed: check whether the instance is running.</string>
     <string name="error_version_conflict">Someone else changed this in the meantime.</string>
     <string name="error_weak_share_password">The link password needs at least {min} characters.</string>
     <string name="error_window_invalid">The dates of the window are not valid.</string>

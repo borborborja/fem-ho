@@ -163,6 +163,7 @@
   "error.too-many-attempts": "Massa intents. Torna-ho a provar d'aquí a {seconds} segons.",
   "error.unauthenticated": "Cal tornar a entrar.",
   "error.unknown-entity": "Això no és una cosa que se sincronitzi.",
+  "error.unreachable": "El servidor no contesta. No és el que has escrit: mira si la instància està engegada.",
   "error.version-conflict": "Algú altre ho ha canviat mentrestant.",
   "error.weak-share-password": "La contrasenya de l'enllaç necessita {min} caràcters com a mínim.",
   "error.window-invalid": "Les dates del període no són vàlides.",

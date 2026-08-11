@@ -162,6 +162,7 @@
   "error.too-many-attempts": "Too many attempts. Try again in {seconds} seconds.",
   "error.unauthenticated": "You have to sign in again.",
   "error.unknown-entity": "This is not something that syncs.",
+  "error.unreachable": "The server is not answering. It is not what you typed: check whether the instance is running.",
   "error.version-conflict": "Someone else changed this in the meantime.",
   "error.weak-share-password": "The link password needs at least {min} characters.",
   "error.window-invalid": "The dates of the window are not valid.",

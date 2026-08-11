@@ -8,7 +8,7 @@
 
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { negotiate, t } from '@fem-ho/contracts';
-import { request } from '../app/api.js';
+import { failureText, request } from '../app/api.js';
 
 function Card({
   title,
@@ -146,12 +146,28 @@ export function SetupScreen({ onDone }: { onDone: () => void }) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   const submit = (event: FormEvent): void => {
     event.preventDefault();
     if (password.length < MIN_PASSWORD) {
       setError(t('invite.tooShort'));
+      return;
+    }
+    /**
+     * **La contrasenya dues vegades, i aquí més que enlloc.**
+     *
+     * Aquest és **el primer compte de la instància**, i una instància acabada d'arrencar no
+     * té cap manera de recuperar-lo: no hi ha ningú que et pugui reobrir la porta, i el
+     * correu de recuperació no existeix (`docs/11`: l'SMTP encara no hi és). Una lletra mal
+     * escrita en un camp que no es veu deixa la instància tancada per sempre i l'única
+     * sortida és esborrar el volum i tornar a començar.
+     *
+     * La pantalla de convit ja ho demanava dues vegades des del primer dia; aquesta, no.
+     */
+    if (password !== confirm) {
+      setError(t('invite.mismatch'));
       return;
     }
 
@@ -162,7 +178,7 @@ export function SetupScreen({ onDone }: { onDone: () => void }) {
       body: { name, email, password, locale: negotiate(navigator.languages) },
     })
       .then(onDone)
-      .catch(() => setError(t('error.generic')));
+      .catch((cause: unknown) => setError(failureText(cause)));
   };
 
   return (
@@ -192,6 +208,15 @@ export function SetupScreen({ onDone }: { onDone: () => void }) {
           value={password}
           placeholder={t('login.password')}
           onChange={(event) => setPassword(event.target.value)}
+        />
+        <input
+          className="plou-input"
+          type="password"
+          autoComplete="new-password"
+          data-testid="setup-password2"
+          value={confirm}
+          placeholder={t('invite.repeat')}
+          onChange={(event) => setConfirm(event.target.value)}
         />
         {error !== null ? (
           <p role="alert" style={{ margin: 0, fontSize: 12, color: 'var(--danger-text)' }}>
