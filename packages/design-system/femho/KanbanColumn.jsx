@@ -52,7 +52,17 @@ export function KanbanColumn({
         minHeight: 0,
         flex: 1,
         borderRadius: isInbox ? 22 : isGrouped ? 0 : 20,
-        padding: 14,
+        /**
+         * **La variant agrupada no repeteix el farciment del contenidor.**
+         *
+         * `KanbanGroup` ja posa 14 píxels al voltant de les tres; posar-n'hi 14 més a baix
+         * dins de cada columna deixava el camp d'afegida ràpida **catorze píxels més amunt
+         * que el de l'Inbox**, que va al costat i sí que és la seva pròpia targeta. Els
+         * quatre camps es veien desalineats i no hi havia cap raó, només una suma.
+         *
+         * Als costats sí que hi és: separa el contingut del separador vertical.
+         */
+        padding: isGrouped ? '14px 14px 0' : 14,
         minWidth: 0,
         background: isInbox
           ? 'var(--gradient-wash-warm)'

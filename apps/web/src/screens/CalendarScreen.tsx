@@ -63,9 +63,17 @@ function weekStartOf(date: Date, start: 0 | 1): Date {
 export interface CalendarScreenProps {
   activeScopeIds: string[];
   onOpenTask: (id: string) => void;
+  /**
+   * Obrir el modal per crear-ne una de nova, amb el dia si en toca.
+   *
+   * **Abans això era `onOpenTask('')`**: el modal s'obria demanant la tasca `''` al
+   * servidor, rebia un 404 i es quedava carregant per sempre. Un identificador buit no és
+   * "cap tasca", és una tasca que no existeix.
+   */
+  onNewTask: (dueDate: string | null) => void;
 }
 
-export function CalendarScreen({ activeScopeIds, onOpenTask }: CalendarScreenProps) {
+export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: CalendarScreenProps) {
   const { scopes, projects, people, settings } = useSessionData();
   const { updateSettings } = useSession();
   const mobile = useIsMobile();
@@ -186,6 +194,51 @@ export function CalendarScreen({ activeScopeIds, onOpenTask }: CalendarScreenPro
         .map((item) => ({ item, day: item.received_at!.slice(0, 10) })),
     [mail.data],
   );
+
+  /**
+   * El que hi ha cada dia de la finestra, per pintar-ho **escrit** a la vista de mes.
+   *
+   * Un punt de cinc píxels diu que el dia té alguna cosa i no diu quina, que és justament
+   * la pregunta que un mes ha de respondre. Amb els títols, la vista serveix d'una ullada.
+   */
+  const itemsByDate = useMemo<
+    Record<string, { id: string; title: string; color: string; muted?: boolean }[]>
+  >(() => {
+    /** `quan` és l'instant de debò, no el text: ordenar títols posa les 15:00 abans de les 9:00. */
+    type Item = { id: string; title: string; color: string; muted?: boolean; quan: string };
+    const map: Record<string, Item[]> = {};
+    const posa = (day: string, item: Item): void => {
+      const list = map[day] ?? [];
+      list.push(item);
+      map[day] = list;
+    };
+
+    for (const occurrence of occurrences) {
+      posa(occurrence.starts_at.slice(0, 10), {
+        quan: occurrence.starts_at,
+        id: `${occurrence.event_id}@${occurrence.starts_at}`,
+        title: occurrence.all_day
+          ? occurrence.summary
+          : `${shortTime(locale, new Date(occurrence.starts_at))} ${occurrence.summary}`,
+        color: colorOf(occurrence.scope_id),
+        muted: !occurrence.in_inbox,
+      });
+    }
+    for (const { item, day } of mailByDay) {
+      posa(day, {
+        // Un correu no té hora d'inici: va al final del dia, després del que sí que en té.
+        quan: item.received_at ?? `${day}T23:59:59.999Z`,
+        id: `mail:${item.id}`,
+        title: `${item.from_name ?? item.from_address ?? ''} — ${item.subject ?? ''}`.trim(),
+        color: colorOf(item.scope_id),
+        muted: !item.in_inbox,
+      });
+    }
+
+    // Per hora dins del dia: és l'ordre en què passaran les coses.
+    for (const day of Object.keys(map)) map[day]!.sort((a, b) => a.quan.localeCompare(b.quan));
+    return map;
+  }, [occurrences, mailByDay, scopes, locale]);
 
   const dotsByDate = useMemo<Record<string, string[]>>(() => {
     const map: Record<string, string[]> = {};
@@ -372,7 +425,9 @@ export function CalendarScreen({ activeScopeIds, onOpenTask }: CalendarScreenPro
           context={contextRapid}
           scopes={scopes.map((scope) => ({ id: scope.id, color: scope.color }))}
           onCreate={(task) => crear(selected, task)}
-          onFullEdit={() => onOpenTask('')}
+          // Amb el dia posat: el botó és al peu de "11 D'AGOST" i el que s'espera d'ell és
+          // una tasca d'aquell dia, no una de solta.
+          onFullEdit={() => onNewTask(selected)}
         />
       }
       undatedFooter={
@@ -381,7 +436,7 @@ export function CalendarScreen({ activeScopeIds, onOpenTask }: CalendarScreenPro
           context={contextRapid}
           scopes={scopes.map((scope) => ({ id: scope.id, color: scope.color }))}
           onCreate={(task) => crear(null, task)}
-          onFullEdit={() => onOpenTask('')}
+          onFullEdit={() => onNewTask(null)}
         />
       }
       onOpen={onOpenTask}
@@ -553,6 +608,7 @@ export function CalendarScreen({ activeScopeIds, onOpenTask }: CalendarScreenPro
             selectedDate={selected}
             today={iso(new Date())}
             dotsByDate={dotsByDate}
+            itemsByDate={itemsByDate}
             onPrev={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1))}
             onNext={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1))}
             onSelect={setSelected}

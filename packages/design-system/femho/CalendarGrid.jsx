@@ -113,6 +113,7 @@ export function MonthView({
   selectedDate,
   today,
   dotsByDate = {},
+  itemsByDate,
   weekStart = 1,
   onSelect,
   onPrev,
@@ -204,6 +205,7 @@ export function MonthView({
           const selected = iso !== null && iso === selectedDate;
           const isToday = iso !== null && iso === today;
           const dots = iso === null ? [] : (dotsByDate[iso] ?? []);
+          const items = iso === null || itemsByDate === undefined ? [] : (itemsByDate[iso] ?? []);
           /**
            * **Un dia més enllà del límit no es pot triar.**
            *
@@ -238,22 +240,51 @@ export function MonthView({
                   hovered !== null && hovered === iso && !selected
                     ? 'inset 0 0 0 2px var(--day-hover-ring)'
                     : 'none',
-                aspectRatio: '1',
+                /**
+                 * **Amb contingut, la cel·la deixa de ser quadrada.**
+                 *
+                 * `aspectRatio: 1` lliga l'alçada a l'amplada, i en una pantalla ampla això
+                 * dona cel·les de 137 píxels —182 amb el rail a sota— per ensenyar-hi un
+                 * punt de cinc. El mes ocupava 926 píxels d'alçada: a un portàtil les dues
+                 * últimes setmanes queien sota la línia de flotació, i amb el rail a sota
+                 * la bústia quedava a mil quatre-cents píxels de la vista.
+                 *
+                 * Es queda quadrada quan no hi ha ítems —els selectors de dia d'un desplegable
+                 * la volen compacta— i passa a **alçada mínima** quan n'hi ha: 78 píxels són
+                 * el número i tres línies, i fan que el mes sencer càpiga en una pantalla de
+                 * portàtil sense haver de desplaçar-se.
+                 */
+                ...(itemsByDate === undefined
+                  ? { aspectRatio: '1', alignItems: 'center', justifyContent: 'center' }
+                  : { minHeight: 78, alignItems: 'stretch', justifyContent: 'flex-start' }),
                 borderRadius: 14,
                 display: 'flex',
                 flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
                 gap: 3,
+                padding: itemsByDate === undefined ? 0 : '6px 6px 5px',
+                textAlign: itemsByDate === undefined ? 'center' : 'left',
+                overflow: 'hidden',
                 border: 'none',
                 cursor: iso === null ? 'default' : 'pointer',
                 fontFamily: 'var(--font-sans)',
-                // Dia seleccionat amb el gradient; avui amb el fons fantasma.
-                background: selected
-                  ? 'var(--gradient-brand-2stop)'
-                  : isToday
-                    ? 'var(--ghost-bg)'
-                    : 'transparent',
+                /**
+                 * **Amb contingut, el gradient passa al número i la cel·la es queda amb un
+                 * anell.** Omplir-la sencera obligaria cada títol a ser llegible sobre un
+                 * degradat de marca —tres parades i vuit accents—, i `docs/04` §8 ja diu que
+                 * el que cal llegir no s'hi juga. Sense contingut, el gradient és el de
+                 * sempre: allà dins només hi ha un número.
+                 */
+                background:
+                  selected && itemsByDate === undefined
+                    ? 'var(--gradient-brand-2stop)'
+                    : isToday || selected
+                      ? 'var(--ghost-bg)'
+                      : 'transparent',
+                outline:
+                  selected && itemsByDate !== undefined
+                    ? '2px solid var(--day-hover-ring)'
+                    : 'none',
+                outlineOffset: -2,
                 // Els dies d'altres mesos ocupen lloc i no es veuen: treure'ls
                 // desalinearia les columnes. Els de més enllà del límit sí que es veuen,
                 // atenuats: han de dir "existeix, però aquí no".
@@ -265,7 +296,8 @@ export function MonthView({
                 style={{
                   fontSize: 13,
                   fontWeight: selected ? 800 : 500,
-                  color: selected ? 'var(--on-brand)' : 'var(--ink)',
+                  color: selected && itemsByDate === undefined ? 'var(--on-brand)' : 'var(--ink)',
+                  flexShrink: 0,
                 }}
               >
                 {cell.date === null ? '' : cell.date.getDate()}
@@ -273,16 +305,77 @@ export function MonthView({
               {onAddOnDay && iso !== null && hovered === iso ? (
                 <DayAdd label={addLabel} onClick={() => onAddOnDay(iso)} />
               ) : null}
-              <span style={{ display: 'flex', gap: 3, height: 5 }}>
-                {/* Fins a 3 punts de 5px amb els colors dels àmbits que hi tenen res. */}
-                {dots.slice(0, 3).map((color, dotIndex) => (
-                  <span
-                    key={dotIndex}
-                    aria-hidden="true"
-                    style={{ width: 5, height: 5, borderRadius: '50%', background: color }}
-                  />
-                ))}
-              </span>
+
+              {itemsByDate === undefined ? (
+                <span style={{ display: 'flex', gap: 3, height: 5 }}>
+                  {/* Fins a 3 punts de 5px amb els colors dels àmbits que hi tenen res. */}
+                  {dots.slice(0, 3).map((color, dotIndex) => (
+                    <span
+                      key={dotIndex}
+                      aria-hidden="true"
+                      style={{ width: 5, height: 5, borderRadius: '50%', background: color }}
+                    />
+                  ))}
+                </span>
+              ) : (
+                /**
+                 * **El que hi ha, escrit.** Un punt de cinc píxels diu que el dia té alguna
+                 * cosa i **no diu quina**, que és l'única pregunta que la vista de mes ha de
+                 * respondre: si has de clicar cada dia per saber-ho, la vista no serveix.
+                 *
+                 * Tres com a màxim i un recompte per a la resta: amb quatre files de text la
+                 * cel·la creix i el mes torna a no cabre-hi.
+                 */
+                <span
+                  style={{ display: 'grid', gap: 2, minWidth: 0 }}
+                  data-testid={iso === null ? undefined : `day-items-${iso}`}
+                >
+                  {items.slice(0, 3).map((item) => (
+                    <span
+                      key={item.id}
+                      title={item.title}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 4,
+                        minWidth: 0,
+                        fontSize: 10.5,
+                        lineHeight: 1.25,
+                        // La cita que no és a la teva bústia va difuminada aquí igual que a
+                        // la llista: un sol significat per a un sol senyal.
+                        opacity: item.muted === true ? 0.55 : 1,
+                        color: 'var(--ink)',
+                      }}
+                    >
+                      <span
+                        aria-hidden="true"
+                        style={{
+                          width: 5,
+                          height: 5,
+                          borderRadius: '50%',
+                          background: item.color,
+                          flexShrink: 0,
+                        }}
+                      />
+                      <span
+                        style={{
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          minWidth: 0,
+                        }}
+                      >
+                        {item.title}
+                      </span>
+                    </span>
+                  ))}
+                  {items.length > 3 ? (
+                    <span style={{ fontSize: 10, color: 'var(--ink-soft)' }}>
+                      +{items.length - 3}
+                    </span>
+                  ) : null}
+                </span>
+              )}
             </button>
           );
         })}

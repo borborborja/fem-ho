@@ -42,6 +42,15 @@ export interface MonthViewProps {
   /** Fins a 3 punts per dia, amb els colors dels àmbits que hi tenen res. */
   dotsByDate?: Record<string, string[]> | undefined;
   /**
+   * El que hi ha cada dia, escrit.
+   *
+   * **Amb aquesta propietat la cel·la canvia de forma**: deixa de ser quadrada, agafa alçada
+   * mínima i ensenya fins a tres títols amb un recompte per a la resta. Sense, es queda com
+   * era —quadrada i amb punts—, que és el que volen els selectors de dia d'un desplegable.
+   */
+  itemsByDate?:
+    Record<string, { id: string; title: string; color: string; muted?: boolean }[]> | undefined;
+  /**
    * Amb quin dia comença la setmana: 0 diumenge, 1 dilluns.
    *
    * El resol `resolveWeekStart` de `@fem-ho/contracts` a partir de l'idioma i de la
