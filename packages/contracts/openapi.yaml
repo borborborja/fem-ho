@@ -3830,6 +3830,7 @@ components:
           received_at,
           scope_id,
           source_kind,
+          in_inbox,
         ]
       properties:
         id: { type: string }

@@ -59,7 +59,7 @@ fun InboxRail(
     modifier: Modifier = Modifier,
     onOpenTask: (Task) -> Unit = {},
     onEventToTask: (InboxEvent) -> Unit = {},
-    onEventRemove: (InboxEvent) -> Unit = {},
+    onEventToggle: (InboxEvent) -> Unit = {},
 ) {
     Column(
         modifier = modifier.fillMaxWidth().padding(12.dp).testTag("inbox-rail"),
@@ -163,14 +163,23 @@ fun InboxRail(
                             .clickable { onEventToTask(event) }
                             .testTag("inbox-event-totask-${event.key}"),
                     )
+                    /*
+                     * **El text diu l'acció i canvia amb l'estat.**
+                     *
+                     * Abans deia sempre "Treure", també quan la cita ja estava treta: una
+                     * porta tancada que et deixava tornar-la a tancar. El web ho ha resolt
+                     * amb un ull —obert o tatxat— i aquí es queda amb text: **una icona que
+                     * no puc veure córrer és pitjor que una paraula que sé què diu**, i
+                     * l'app no s'ha pogut engegar mai en aquest entorn.
+                     */
                     Text(
-                        text = labels.remove,
+                        text = if (event.inInbox) labels.hide else labels.show,
                         color = Femho.colors.inkSoft,
                         fontSize = FemhoText.meta,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier
-                            .clickable { onEventRemove(event) }
-                            .testTag("inbox-event-remove-${event.key}"),
+                            .clickable { onEventToggle(event) }
+                            .testTag("inbox-event-eye-${event.key}"),
                     )
                 }
             }
@@ -190,5 +199,8 @@ data class InboxLabels(
     val fromCalendar: String,
     val allDay: String,
     val toTask: String,
-    val remove: String,
+    /** Quan la cita ja és a l'inbox de Tasques. */
+    val hide: String,
+    /** I quan no hi és. */
+    val show: String,
 )

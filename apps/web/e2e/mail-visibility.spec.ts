@@ -137,7 +137,7 @@ test('un correu nou no és a Tasques, és al calendari, i des d’allà puja', a
   await expect(targeta).toHaveCSS('border-left-style', 'dashed');
 
   // I des d'aquí es puja d'un clic.
-  await page.getByTestId(`inbox-mail-toggle-${id}`).click();
+  await page.getByTestId(`inbox-mail-eye-${id}`).click();
   await expect(targeta).toHaveCSS('border-left-style', 'solid');
 
   // Ara sí que és a Tasques.
@@ -150,7 +150,7 @@ test('i es pot tornar a treure, que abans era un carreró sense sortida', async 
   const { id, day } = await sembra(page, 'Banc');
 
   await page.goto(`/calendar?date=${day}`);
-  await page.getByTestId(`inbox-mail-toggle-${id}`).click();
+  await page.getByTestId(`inbox-mail-eye-${id}`).click();
   await page.goto(`/board?date=${day}`);
   await expect(page.getByTestId(`inbox-mail-${id}`)).toBeVisible();
 
@@ -158,7 +158,7 @@ test('i es pot tornar a treure, que abans era un carreró sense sortida', async 
    * Treure'l **no l'esborra**: abans, «descartar» el treia per sempre i cap ruta ho desfeia.
    * Ara torna al calendari, que és d'on el pots recuperar.
    */
-  await page.getByTestId(`inbox-mail-toggle-${id}`).click();
+  await page.getByTestId(`inbox-mail-eye-${id}`).click();
   await expect(page.getByTestId(`inbox-mail-${id}`)).toHaveCount(0);
 
   await page.goto(`/calendar?date=${day}`);
@@ -203,4 +203,29 @@ test('les dues pantalles demanen la mateixa bústia amb lents diferents', async 
    */
   expect(delTauler.length).toBeGreaterThan(0);
   expect(delTauler.every((url) => !url.includes('include_hidden=true'))).toBe(true);
+});
+
+test("l'ull diu on és cada cosa, i el mateix per a totes les menes", async ({ page }) => {
+  await enter(page);
+  const { id, day } = await sembra(page, 'Ull');
+
+  await page.goto(`/calendar?date=${day}`);
+  const ull = page.getByTestId(`inbox-mail-eye-${id}`);
+
+  /**
+   * **`aria-pressed` és el que ho fa llegible sense veure la icona.** Un interruptor premut
+   * és una cosa encesa; el nom diu què passarà si el prems, que no és el mateix i tampoc es
+   * pot endevinar del dibuix.
+   */
+  await expect(ull).toHaveAttribute('aria-pressed', 'false');
+  await expect(ull).toHaveAccessibleName(/inbox/i);
+
+  await ull.click();
+  await expect(ull).toHaveAttribute('aria-pressed', 'true');
+
+  // I una cita fa exactament el mateix control, amb el mateix aspecte.
+  const cites = page.locator('[data-testid^="inbox-event-eye-"]');
+  if ((await cites.count()) > 0) {
+    await expect(cites.first()).toHaveAttribute('aria-pressed', /true|false/);
+  }
 });

@@ -592,18 +592,21 @@ export function BoardScreen({
             })
             .then(() => refresh());
         }}
-        onEventRemove={(event) => {
+        onEventToggle={(event) => {
           /*
-            Treure'l de la bústia **no l'esborra**: segueix al calendari, i des d'allà es
-            pot tornar a posar. És per això que el botó diu "Treure" i no "Esborrar": el
-            que ve d'una font no és nostre per esborrar-lo.
+            **L'ull, i no un «Treure».** Amagar-lo no l'esborra: segueix al calendari, i des
+            d'allà torna. El que ve d'una font no és nostre per esborrar-lo.
+
+            S'envia el contrari del que hi ha ara, i no `null`: `null` diria «val el defecte
+            de la font», i amb una que per defecte no entra —un RSS, una carpeta de correu—
+            tornar-hi no faria res i el botó semblaria espatllat.
           */
           void api
             .post('/api/v1/inbox/events', {
               calendar_id: event.calendar_id,
               uid: event.uid,
               recurrence_id: event.recurrence_id,
-              visible: false,
+              visible: !event.in_inbox,
             })
             .then(() => refresh());
         }}

@@ -402,15 +402,20 @@ export function CalendarScreen({ activeScopeIds, onOpenTask }: CalendarScreenPro
             mail.reload();
           });
       }}
-      onEventRemove={(event) => {
+      onEventToggle={(event) => {
+        // El mateix gest que amb un correu: portar-lo a la llista o treure'l. Explícit i no
+        // `null`, perquè amb una font que per defecte no entra `null` no faria res.
         void api
           .post('/api/v1/inbox/events', {
             calendar_id: event.calendar_id,
             uid: event.uid,
             recurrence_id: event.recurrence_id,
-            visible: false,
+            visible: !event.in_inbox,
           })
-          .then(() => inbox.reload());
+          .then(() => {
+            inbox.reload();
+            events.reload();
+          });
       }}
       onChanged={inbox.reload}
       onMove={(taskId, status) => {

@@ -2521,7 +2521,7 @@ export interface components {
              */
             source_kind: "mail";
             /** @description Si surt a l'inbox de la pestanya Tasques. **El calcula el servidor i el client no el recalcula mai**: és el que fa que «difuminat al calendari» i «no és a la meva bústia» siguin literalment la mateixa cosa. Amb `false` l'ítem només arriba si s'ha demanat `include_hidden`. */
-            in_inbox?: boolean;
+            in_inbox: boolean;
         };
         Inbox: {
             /** Format: date */

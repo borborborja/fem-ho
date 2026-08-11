@@ -775,11 +775,16 @@ private fun CalendarHost(model: AppViewModel, onSettings: () -> Unit, onBoard: (
                 fromCalendar = stringResource(R.string.inbox_section_events),
                 allDay = stringResource(R.string.inbox_event_allday),
                 toTask = stringResource(R.string.inbox_event_totask),
-                remove = stringResource(R.string.inbox_event_remove),
+                hide = stringResource(R.string.inbox_eye_hide),
+                show = stringResource(R.string.inbox_eye_show),
             ),
             onOpenTask = { model.open(it) },
             onEventToTask = { model.eventToTask(it, selected.toString()) },
-            onEventRemove = { model.setEventInInbox(it, visible = false, day = selected.toString()) },
+            // El contrari del que hi ha ara, i no `null`: amb una font que per defecte no
+            // entra a la bústia —un RSS—, `null` no faria res i el botó semblaria espatllat.
+            onEventToggle = {
+                model.setEventInInbox(it, visible = !it.inInbox, day = selected.toString())
+            },
         )
     }
 }

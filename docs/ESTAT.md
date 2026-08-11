@@ -324,6 +324,10 @@ ets tu. Els defectes per mena:
 I es pot dir el contrari **per font** —a Ajustos— o **per ítem** —des del calendari—, en
 tots dos sentits i sempre reversible.
 
+Al costat de cada targeta hi ha **un ull**: obert vol dir que això surt a l'inbox de
+Tasques, tatxat que no. És el mateix control per a les quatre menes, i el mateix a la
+bústia i al calendari.
+
 Tres coses que val la pena saber abans de fer-lo servir:
 
 - **La primera lectura d'una carpeta no ingereix res.** El cursor comença al final: mapar
