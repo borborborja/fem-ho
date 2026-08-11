@@ -33,7 +33,9 @@ import {
   deleteEvent,
   getEvent,
   listCalendars,
+  inboxFlags,
   listEventOccurrences,
+  markKey,
   setEventInboxVisibility,
   updateCalendar,
   updateEvent,
@@ -508,11 +510,27 @@ export function registerEventRoutes(app: FastifyInstance, secret: () => string):
   app.get('/api/v1/events', async (request, reply) =>
     handle(app, request, reply, async (principal) => {
       const q = query(request);
-      return listEventOccurrences(db().db, principal, {
+      const occurrences = await listEventOccurrences(db().db, principal, {
         from: str(q.from) ?? '',
         to: str(q.to) ?? '',
         scopeIds: ids(q.scope_ids),
       });
+      /**
+       * I cadascuna diu **si és a la bústia de qui pregunta**.
+       *
+       * Ve calculat del servidor i el client no ho recalcula mai: és el que fa que
+       * "difuminat al calendari" i "no és a la meva bústia" siguin literalment la mateixa
+       * cosa, i no dues que un dia divergeixen.
+       */
+      const flags = await inboxFlags(db().db, principal.userId, occurrences);
+      return occurrences.map((occurrence) => ({
+        ...occurrence,
+        // La clau la fa el servei: repetir-ne el format aquí seria dues implementacions
+        // de la mateixa cosa, i la segona es trencaria en silenci.
+        in_inbox:
+          flags.get(markKey(occurrence.calendar_id, occurrence.uid, occurrence.recurrence_id)) ??
+          false,
+      }));
     }),
   );
 

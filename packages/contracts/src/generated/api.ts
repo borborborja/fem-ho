@@ -2631,6 +2631,16 @@ export interface components {
             status?: "TENTATIVE" | "CONFIRMED" | "CANCELLED";
             /** @description Cert si aquesta ocurrència ve d'una instància modificada. */
             is_override?: boolean;
+            /**
+             * @description Si aquesta ocurrència és a la bústia de qui pregunta.
+             *
+             *     **El calcula el servidor i el client no ho recalcula mai.** És el que fa que
+             *     "difuminat al calendari" i "no és a la meva bústia" siguin literalment la
+             *     mateixa cosa en comptes de dues que un dia divergeixen. Hi entren els cinc
+             *     nivells: si ja n'hi ha una tasca viva, la marca de l'ocurrència, la de la
+             *     sèrie, l'ajust del calendari i el defecte de la mena de font.
+             */
+            in_inbox: boolean;
         };
         Scope: {
             id: string;

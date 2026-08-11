@@ -26,6 +26,7 @@ import { useSession, useSessionData } from '../app/session.js';
 import { useApi } from '../app/useApi.js';
 import type { Calendar, EventOccurrence, Inbox } from '../app/types.js';
 import { InboxRail } from '../board/InboxRail.js';
+import { EventSheet } from './EventSheet.js';
 import { ErrorBanner } from './BoardScreen.js';
 
 type Mode = 'month' | 'week' | 'day';
@@ -67,6 +68,14 @@ export function CalendarScreen({ activeScopeIds, onOpenTask }: CalendarScreenPro
   const [mode, setMode] = useState<Mode>('month');
   const [selected, setSelected] = useState<string>(() => iso(new Date()));
   const [cursor, setCursor] = useState<Date>(() => new Date());
+  /**
+   * Quin esdeveniment s'ha obert.
+   *
+   * **Fins ara no se'n podia obrir cap**: al calendari, el text i el punt de color eren
+   * purament informatius i l'única cosa clicable era el dia. `docs/ESTAT.md` ho marcava
+   * com el que bloquejava els adjunts d'esdeveniments; això n'obre la porta.
+   */
+  const [obert, setObert] = useState<string | null>(null);
 
   /**
    * Amb quin dia comença la setmana.
@@ -82,14 +91,25 @@ export function CalendarScreen({ activeScopeIds, onOpenTask }: CalendarScreenPro
   // setmana per a la setmanal, el dia per a la diària. Demanar sempre el mes seria
   // portar trenta dies de dades per pintar-ne un.
   const [from, to] = useMemo<[string, string]>(() => {
-    if (mode === 'day') return [selected, selected];
+    /**
+     * **El `to` és exclusiu i per això sempre porta un dia de més.**
+     *
+     * El servidor rep dues dates i les llegeix com a instants: `2026-08-11` és la
+     * mitjanit d'aquell dia. Amb `from` i `to` iguals, la finestra era de mitjanit a
+     * mitjanit —**buida**— i la vista diària no ensenyava mai cap esdeveniment; a la
+     * setmanal i a la mensual, l'últim dia hi queia a fora. No es notava perquè el rail
+     * del costat va per `/inbox`, que sí que resol el dia bé: la pantalla ensenyava les
+     * cites en un panell i "sense esdeveniments" a l'altre.
+     */
+    const day = (date: string): string => iso(addDays(new Date(`${date}T12:00:00`), 1));
+    if (mode === 'day') return [selected, day(selected)];
     if (mode === 'week') {
       const first = weekStartOf(new Date(`${selected}T12:00:00`), start);
-      return [iso(first), iso(addDays(first, 6))];
+      return [iso(first), iso(addDays(first, 7))];
     }
     const first = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
     const last = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0);
-    return [iso(addDays(first, -7)), iso(addDays(last, 7))];
+    return [iso(addDays(first, -7)), iso(addDays(last, 8))];
   }, [mode, selected, cursor, start]);
 
   const scopeQuery = activeScopeIds.length > 0 ? `&scope_ids=${activeScopeIds.join(',')}` : '';
@@ -164,7 +184,19 @@ export function CalendarScreen({ activeScopeIds, onOpenTask }: CalendarScreenPro
       title: occurrence.summary,
       color: colorOf(occurrence.scope_id),
       time: occurrence.all_day ? undefined : shortTime(locale, new Date(occurrence.starts_at)),
+      /**
+       * **Un sol significat per a la vora discontínua: "això no és a la teva bústia".**
+       *
+       * El valor ve del servidor (`in_inbox`) i no es recalcula aquí: si es fes, hi
+       * hauria dues implementacions de la mateixa regla i un dia el que es difumina al
+       * calendari i el que falta a la bústia deixarien de ser la mateixa cosa.
+       */
+      muted: !occurrence.in_inbox,
     }));
+
+  /** L'ocurrència oberta a la fitxa, per la clau que fa servir la graella. */
+  const openItem =
+    obert === null ? undefined : occurrences.find((o) => `${o.event_id}@${o.starts_at}` === obert);
 
   const weekDays = useMemo(() => {
     const first = weekStartOf(new Date(`${selected}T12:00:00`), start);
@@ -378,9 +410,37 @@ export function CalendarScreen({ activeScopeIds, onOpenTask }: CalendarScreenPro
             label={longDay(locale, new Date(`${selected}T12:00:00`))}
             items={dayItems}
             emptyLabel={t('calendar.empty.day')}
+            onSelectItem={setObert}
           />
         )}
       </div>
+
+      {openItem === undefined ? null : (
+        <EventSheet
+          occurrence={openItem}
+          onClose={() => setObert(null)}
+          onToggleInbox={() => {
+            void api
+              .post('/api/v1/inbox/events', {
+                calendar_id: openItem.calendar_id,
+                uid: openItem.uid,
+                recurrence_id: openItem.recurrence_id,
+                /*
+                  Si hi és, se'n treu; si no hi és, s'hi torna a posar. **Tornar-hi envia
+                  `true` i no `null`**: `null` diria "val el defecte", i si el defecte
+                  d'aquella font és "no", tornar-hi no faria res i el botó semblaria
+                  espatllat.
+                */
+                visible: openItem.in_inbox ? false : true,
+              })
+              .then(() => {
+                setObert(null);
+                events.reload();
+                inbox.reload();
+              });
+          }}
+        />
+      )}
     </div>
   );
 

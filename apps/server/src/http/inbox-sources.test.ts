@@ -469,3 +469,33 @@ describe('la marca sobreviu el que la font li faci a sobre', () => {
     expect(await uids()).toContain('titular-1');
   });
 });
+
+describe('el calendari sap quines cites no són a la teva bústia', () => {
+  it('`in_inbox` ve del servidor i segueix els mateixos cinc nivells', async () => {
+    await sql`DELETE FROM event_inbox_marks`.execute(conn.db);
+
+    const llegir = async (): Promise<Record<string, boolean>> => {
+      const res = await api('GET', `/api/v1/events?from=${DIA}T00:00:00Z&to=${DIA}T23:59:59Z`);
+      return Object.fromEntries(
+        res.json<{ uid: string; in_inbox: boolean }[]>().map((e) => [e.uid, e.in_inbox]),
+      );
+    };
+
+    // De sortida: el calendari sí, l'RSS no. Els dos són al calendari igualment.
+    expect(await llegir()).toEqual({ 'reunio-escola': true, 'titular-1': false });
+
+    await api('POST', '/api/v1/inbox/events', {
+      calendar_id: calendari,
+      uid: 'reunio-escola',
+      visible: false,
+    });
+    expect((await llegir())['reunio-escola']).toBe(false);
+
+    await api('POST', '/api/v1/inbox/events', {
+      calendar_id: calendari,
+      uid: 'reunio-escola',
+      visible: null,
+    });
+    expect((await llegir())['reunio-escola']).toBe(true);
+  });
+});

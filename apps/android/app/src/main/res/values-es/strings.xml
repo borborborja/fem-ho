@@ -62,6 +62,10 @@
     <string name="calendar_day">Diario</string>
     <string name="calendar_empty_day">Sin eventos ni tareas este día.</string>
     <string name="calendar_empty_week">Sin nada</string>
+    <string name="calendar_event_frominbox">Quitar de la bandeja</string>
+    <string name="calendar_event_ininbox">Está en tu bandeja.</string>
+    <string name="calendar_event_notininbox">No está en tu bandeja: en el calendario sigue, pero no te reclama el día.</string>
+    <string name="calendar_event_toinbox">Poner en la bandeja</string>
     <string name="calendar_month">Mensual</string>
     <string name="calendar_nextmonth">Mes siguiente</string>
     <string name="calendar_nodate">SIN DÍA</string>

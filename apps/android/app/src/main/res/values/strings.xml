@@ -62,6 +62,10 @@
     <string name="calendar_day">Diari</string>
     <string name="calendar_empty_day">Sense esdeveniments ni tasques aquest dia.</string>
     <string name="calendar_empty_week">Sense res</string>
+    <string name="calendar_event_frominbox">Treure de la bústia</string>
+    <string name="calendar_event_ininbox">És a la teva bústia.</string>
+    <string name="calendar_event_notininbox">No és a la teva bústia: al calendari hi és, però no et reclama el dia.</string>
+    <string name="calendar_event_toinbox">Posar a la bústia</string>
     <string name="calendar_month">Mensual</string>
     <string name="calendar_nextmonth">Mes següent</string>
     <string name="calendar_nodate">SENSE DIA</string>

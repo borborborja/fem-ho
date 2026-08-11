@@ -62,6 +62,10 @@
     <string name="calendar_day">Day</string>
     <string name="calendar_empty_day">No events or tasks on this day.</string>
     <string name="calendar_empty_week">Nothing</string>
+    <string name="calendar_event_frominbox">Remove from inbox</string>
+    <string name="calendar_event_ininbox">It\'s in your inbox.</string>
+    <string name="calendar_event_notininbox">Not in your inbox: it stays on the calendar, but it doesn\'t claim your day.</string>
+    <string name="calendar_event_toinbox">Add to inbox</string>
     <string name="calendar_month">Month</string>
     <string name="calendar_nextmonth">Next month</string>
     <string name="calendar_nodate">NO DATE</string>

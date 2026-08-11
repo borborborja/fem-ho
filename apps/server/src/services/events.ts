@@ -363,6 +363,52 @@ export async function listInboxEvents(
   });
   if (occurrences.length === 0) return [];
 
+  const flags = await inboxFlags(db, userId, occurrences);
+  const byCalendar = await calendarsOf(db, [...new Set(occurrences.map((o) => o.calendar_id))]);
+
+  const out: InboxEvent[] = [];
+  for (const occurrence of occurrences) {
+    const calendar = byCalendar.get(occurrence.calendar_id);
+    if (calendar === undefined) continue;
+    if (
+      flags.get(markKey(occurrence.calendar_id, occurrence.uid, occurrence.recurrence_id)) !== true
+    )
+      continue;
+
+    out.push({
+      calendar_id: occurrence.calendar_id,
+      scope_id: occurrence.scope_id,
+      uid: occurrence.uid,
+      recurrence_id: occurrence.recurrence_id,
+      summary: occurrence.summary,
+      location: occurrence.location,
+      starts_at: occurrence.starts_at,
+      ends_at: occurrence.ends_at,
+      all_day: occurrence.all_day,
+      source_kind: calendar.source_kind,
+      calendar_name: calendar.name,
+      calendar_color: calendar.color,
+    });
+  }
+  return out;
+}
+
+/**
+ * Quins d'aquests esdeveniments són a la bústia d'aquesta persona.
+ *
+ * **La fan servir els dos costats**: la bústia, que filtra pel resultat, i el calendari,
+ * que hi pinta els que en queden fora d'una altra manera. Si cadascú ho resolgués pel seu
+ * compte, un dia la cita difuminada al calendari i la que falta a la bústia deixarien de
+ * ser la mateixa, que és el pitjor que li pot passar a un estat que vol dir una sola cosa.
+ */
+export async function inboxFlags(
+  db: MigrationDb,
+  userId: string,
+  occurrences: EventOccurrenceView[],
+): Promise<Map<string, boolean>> {
+  const flags = new Map<string, boolean>();
+  if (occurrences.length === 0) return flags;
+
   const calendarIds = [...new Set(occurrences.map((o) => o.calendar_id))];
 
   const calendars = await sql<{
@@ -413,43 +459,47 @@ export async function listInboxEvents(
     derived.rows.map((row) => `${row.event_calendar_id}\u0000${row.event_uid}`),
   );
 
-  const out: InboxEvent[] = [];
   for (const occurrence of occurrences) {
     const calendar = byCalendar.get(occurrence.calendar_id);
     if (calendar === undefined) continue;
-
-    const visible = isInInbox({
-      origin: calendar.origin,
-      sourceKind: calendar.source_kind,
-      calendarInboxVisible: maybeBool(calendar.inbox_visible),
-      seriesMark: markAt.get(markKey(occurrence.calendar_id, occurrence.uid, null)) ?? null,
-      occurrenceMark:
-        occurrence.recurrence_id === null
-          ? null
-          : (markAt.get(
-              markKey(occurrence.calendar_id, occurrence.uid, occurrence.recurrence_id),
-            ) ?? null),
-      hasLiveTask: hasTask.has(`${occurrence.calendar_id}\u0000${occurrence.uid}`),
-    });
-    if (!visible) continue;
-
-    out.push({
-      calendar_id: occurrence.calendar_id,
-      scope_id: occurrence.scope_id,
-      uid: occurrence.uid,
-      recurrence_id: occurrence.recurrence_id,
-      summary: occurrence.summary,
-      location: occurrence.location,
-      starts_at: occurrence.starts_at,
-      ends_at: occurrence.ends_at,
-      all_day: occurrence.all_day,
-      source_kind: calendar.source_kind,
-      calendar_name: calendar.name,
-      calendar_color: calendar.color,
-    });
+    flags.set(
+      markKey(occurrence.calendar_id, occurrence.uid, occurrence.recurrence_id),
+      isInInbox({
+        origin: calendar.origin,
+        sourceKind: calendar.source_kind,
+        calendarInboxVisible: maybeBool(calendar.inbox_visible),
+        seriesMark: markAt.get(markKey(occurrence.calendar_id, occurrence.uid, null)) ?? null,
+        occurrenceMark:
+          occurrence.recurrence_id === null
+            ? null
+            : (markAt.get(
+                markKey(occurrence.calendar_id, occurrence.uid, occurrence.recurrence_id),
+              ) ?? null),
+        hasLiveTask: hasTask.has(`${occurrence.calendar_id}\u0000${occurrence.uid}`),
+      }),
+    );
   }
-  return out;
+  return flags;
 }
+
+/** Els noms i colors de les fonts, per dibuixar-les. */
+async function calendarsOf(
+  db: MigrationDb,
+  ids: string[],
+): Promise<Map<string, { name: string; color: string | null; source_kind: SourceKindOf }>> {
+  if (ids.length === 0) return new Map();
+  const rows = await sql<{
+    id: string;
+    name: string;
+    color: string | null;
+    source_kind: SourceKindOf;
+  }>`
+    SELECT id, name, color, source_kind FROM calendars WHERE id IN (${sql.join(ids)})
+  `.execute(db);
+  return new Map(rows.rows.map((row) => [row.id, row]));
+}
+
+type SourceKindOf = 'caldav' | 'ical' | 'rss' | null;
 
 /**
  * Posar, canviar o treure la marca d'un esdeveniment a la bústia d'algú.
@@ -610,7 +660,7 @@ async function markValue(
  * un separador que pot sortir a les parts, dues identitats diferents poden donar la
  * mateixa clau, i la marca d'un titular acabaria amagant-ne un altre.
  */
-function markKey(calendarId: string, uid: string, recurrenceId: string | null): string {
+export function markKey(calendarId: string, uid: string, recurrenceId: string | null): string {
   return `${calendarId}\u0000${uid}\u0000${recurrenceId ?? ''}`;
 }
 

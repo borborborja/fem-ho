@@ -158,7 +158,55 @@ test("treure una cita de la bústia la treu, i NO l'esborra del calendari", asyn
   await page.locator(`[data-testid="${quina}"] [data-testid^="inbox-event-remove-"]`).click();
   await expect(page.locator(`[data-testid="${quina}"]`)).toHaveCount(0);
 
-  // I al calendari hi és igualment.
+  /**
+   * I al calendari hi és igualment.
+   *
+   * Es mira **la graella del dia i no `main`**: el rail de la bústia també viu dins de
+   * `main`, o sigui que buscar-hi el títol passaria encara que la graella fos buida — que
+   * és exactament el que passava, perquè la finestra de la vista diària era de mitjanit a
+   * mitjanit i no hi cabia res.
+   */
   await page.goto('/calendar');
-  await expect(page.locator('main')).toContainText('Dentista', { timeout: 10_000 });
+  await page.locator('[data-testid="calendar-mode-day"]').click();
+  await expect(page.locator('[data-testid="calendar-day"]')).toContainText('Dentista', {
+    timeout: 10_000,
+  });
+});
+
+test('al calendari, la cita treta es distingeix i es pot recuperar', async ({ page }) => {
+  /**
+   * **El recorregut de tornada sencer, que és el que fa que treure-la no doni por.**
+   *
+   * Fins ara, al calendari, clicar un esdeveniment no feia absolutament res: el text i el
+   * punt de color eren informatius i prou. Aquesta prova comprova les tres coses noves:
+   * que es pot obrir, que la que no és a la bústia es distingeix, i que des d'allà hi
+   * torna.
+   */
+  await enterAsNew(page, MEU);
+  const scope = await escenari(page);
+
+  // Es treu de la bústia des del tauler.
+  await page.goto(`/board?scopes=${scope}`);
+  const primera = page.locator('[data-kind="event"]').first();
+  await expect(primera).toBeVisible({ timeout: 10_000 });
+  await primera.locator('[data-testid^="inbox-event-remove-"]').click();
+
+  // I al calendari, a la vista de dia, hi és amb la vora que ho diu.
+  await page.goto('/calendar');
+  await page.locator('[data-testid="calendar-mode-day"]').click();
+  const item = page.locator('[data-testid^="day-item-"][data-muted="true"]').first();
+  await expect(item).toBeVisible({ timeout: 10_000 });
+
+  // Clicar-la obre la fitxa, que diu amb paraules què vol dir aquella vora.
+  await item.click();
+  const fitxa = page.locator('[data-testid="event-sheet"]');
+  await expect(fitxa).toBeVisible();
+  await expect(fitxa.locator('[data-testid="event-sheet-state"]')).toContainText('bústia');
+
+  // I d'allà torna a la bústia.
+  await fitxa.locator('[data-testid="event-sheet-toggle"]').click();
+  await expect(page.locator('[data-testid="event-sheet"]')).toHaveCount(0);
+  await expect(page.locator('[data-testid="inbox-rail"]')).toContainText('Dentista', {
+    timeout: 10_000,
+  });
 });
