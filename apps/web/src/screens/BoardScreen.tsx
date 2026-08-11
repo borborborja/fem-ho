@@ -566,6 +566,7 @@ export function BoardScreen({
         }
         inbox={inboxCards}
         inboxEvents={inbox.data?.events}
+        inboxMail={inbox.data?.mail}
         onEventToTask={(event) => {
           /*
             **La tasca neix amb el títol de la cita i la seva data**, i no buida: qui fa

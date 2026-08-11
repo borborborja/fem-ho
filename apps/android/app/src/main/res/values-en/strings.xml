@@ -167,6 +167,8 @@
     <string name="inbox_event_allday">All day</string>
     <string name="inbox_event_remove">Remove</string>
     <string name="inbox_event_totask">Make it a task</string>
+    <string name="inbox_mail_nosubject">(no subject)</string>
+    <string name="inbox_mail_unknownsender">No sender</string>
     <string name="inbox_mailbox">What the inbox shows</string>
     <string name="inbox_mailbox_all">All</string>
     <string name="inbox_mailbox_allhint">The whole inbox: both individual and shared scopes</string>
@@ -175,6 +177,7 @@
     <string name="inbox_mailbox_shared">Shared</string>
     <string name="inbox_mailbox_sharedhint">Only what is in the scopes you share with someone</string>
     <string name="inbox_section_events">From the calendar</string>
+    <string name="inbox_section_mail">From mail</string>
     <string name="invite_done">You can now sign in with your email and this password.</string>
     <string name="invite_mismatch">The two passwords do not match.</string>
     <string name="invite_password">Password</string>

@@ -592,3 +592,95 @@ export async function deleteMailRule(
 /** Les variables que la pantalla pot oferir, i les que una plantilla té mal escrites. */
 export const MAIL_VARS = MAIL_TEMPLATE_VARS;
 export { unknownMailVars };
+
+// ------------------------------------------------------ el correu a la bústia
+
+/**
+ * Un correu que ha entrat i **encara no és una tasca**.
+ *
+ * Tipus propi i array propi, com `InboxEvent`. Si compartís llista amb les tasques, un dia
+ * algú passaria un correu per on passa una tasca i la distinció s'evaporaria sense que res
+ * fallés.
+ */
+export interface InboxMail {
+  id: string;
+  account_id: string;
+  message_key: string;
+  subject: string | null;
+  from_name: string | null;
+  from_address: string | null;
+  received_at: string | null;
+  scope_id: string;
+  project_id: string | null;
+  account_name: string | null;
+  folder: string | null;
+  has_attachments: boolean;
+  source_kind: 'mail';
+}
+
+interface InboxMailRow {
+  id: string;
+  account_id: string;
+  message_key: string;
+  subject: string | null;
+  from_name: string | null;
+  from_address: string | null;
+  internal_date: string | null;
+  sent_at: string | null;
+  scope_id: string;
+  project_id: string | null;
+  account_name: string | null;
+  folder: string | null;
+}
+
+/**
+ * Els correus a la bústia de qui pregunta.
+ *
+ * **No filtra per dia, i és deliberat.** Un esdeveniment té data pròpia i per això la
+ * bústia d'un dia el porta o no; un correu que ha arribat és una cosa pendent fins que en
+ * facis alguna cosa, i amagar-lo demà seria perdre'l. Surt fins que es converteix o es
+ * descarta.
+ *
+ * I **només els comptes de qui pregunta**: un compte de correu és d'una persona, i la
+ * bústia d'un àmbit compartit no ha de portar el correu personal de ningú.
+ */
+export async function listInboxMail(
+  db: MigrationDb,
+  principal: Principal,
+  scopeIds?: string[] | undefined,
+): Promise<InboxMail[]> {
+  if (!hasCapability(principal, 'mail:read')) return [];
+
+  const found = await sql<InboxMailRow>`
+    SELECT m.id, m.account_id, m.message_key, m.subject, m.from_name, m.from_address,
+           m.internal_date, m.sent_at, r.scope_id, r.project_id, a.name AS account_name,
+           m.folder
+    FROM mail_messages m
+    JOIN mail_rules r ON r.id = m.rule_id
+    JOIN mail_accounts a ON a.id = m.account_id
+    WHERE m.deleted_at IS NULL AND m.disposition = 'inbox'
+      AND a.user_id = ${principal.userId} AND a.deleted_at IS NULL
+      AND r.inbox_visible = ${dbBool(true)}
+    ORDER BY m.internal_date DESC, m.id DESC
+    LIMIT 200
+  `.execute(db);
+
+  return found.rows
+    .filter((row) => scopeIds === undefined || scopeIds.includes(row.scope_id))
+    .map((row) => ({
+      id: row.id,
+      account_id: row.account_id,
+      message_key: row.message_key,
+      subject: row.subject,
+      from_name: row.from_name,
+      from_address: row.from_address,
+      // La del servidor que el va rebre, i la del remitent només com a recanvi.
+      received_at: row.internal_date ?? row.sent_at,
+      scope_id: row.scope_id,
+      project_id: row.project_id,
+      account_name: row.account_name,
+      folder: row.folder,
+      has_attachments: false,
+      source_kind: 'mail' as const,
+    }));
+}

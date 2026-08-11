@@ -2317,6 +2317,42 @@ export interface components {
             calendar_name: string;
             calendar_color: string | null;
         };
+        /**
+         * @description Un correu que ha entrat a la bústia i **encara no és una tasca**.
+         *
+         *     Igual que `InboxEvent`, **no és un `Task` i no n'ha de semblar cap**: sense
+         *     `status`, sense `position`, i cap identificador d'aquí pot arribar a
+         *     `POST /tasks/{id}/move`. Un correu a la bústia és una cosa que has de mirar; que
+         *     sigui una cosa a fer ho decideixes tu, o ho decideix la regla.
+         *
+         *     S'identifica per l'`id` de la fila **i** per `message_key`, que és la identitat de
+         *     veritat: la del `Message-ID` i mai la de l'UID d'IMAP (P11).
+         */
+        InboxMail: {
+            id: string;
+            account_id: string;
+            message_key: string;
+            subject: string | null;
+            from_name: string | null;
+            from_address: string | null;
+            /**
+             * Format: date-time
+             * @description La que va posar el servidor que el va rebre, no la del remitent. La del remitent es desa però no ordena res: pot mentir.
+             */
+            received_at: string | null;
+            /** @description On aniria si es convertís. */
+            scope_id: string;
+            project_id?: string | null;
+            account_name?: string | null;
+            folder?: string | null;
+            /** @default false */
+            has_attachments: boolean;
+            /**
+             * @description Sempre `mail`. Hi és perquè la targeta dibuixi la icona de provinença amb el mateix component que la resta, sense que el client hagi d'endevinar-ho pel tipus de l'ítem.
+             * @enum {string}
+             */
+            source_kind: "mail";
+        };
         Inbox: {
             /** Format: date */
             date: string;
@@ -2334,6 +2370,14 @@ export interface components {
              *     vulgui un l'encén a Ajustos, o n'encén un titular concret des del calendari.
              */
             events: components["schemas"]["InboxEvent"][];
+            /**
+             * @description Els correus que han entrat i encara no són tasques.
+             *
+             *     **Array a part, com els esdeveniments.** Si compartissin llista amb les
+             *     tasques, un dia algú passaria un correu per on passa una tasca i la distinció
+             *     —la que sosté la regla 7 esmenada— s'evaporaria sense que res fallés.
+             */
+            mail: components["schemas"]["InboxMail"][];
         };
         DashboardScope: {
             scope_id: string;

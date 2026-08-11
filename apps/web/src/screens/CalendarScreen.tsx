@@ -335,6 +335,7 @@ export function CalendarScreen({ activeScopeIds, onOpenTask }: CalendarScreenPro
       }
       onOpen={onOpenTask}
       events={inbox.data?.events}
+      mail={inbox.data?.mail}
       onEventRemove={(event) => {
         void api
           .post('/api/v1/inbox/events', {

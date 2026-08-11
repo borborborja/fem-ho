@@ -23,6 +23,9 @@ import { FALLBACK, catalogOf, isLocale, type Locale } from '@fem-ho/contracts';
 import { isDue, refreshSubscription, type SubscriptionRow } from '../dav/client.js';
 import { pullFromLink, type InstanceLinkRow } from '../services/federation.js';
 import { pruneOps } from '../services/sync.js';
+import { open } from '../crypto/secret-box.js';
+import { openImapClient } from '../net/imap-mail-client.js';
+import { pollMail } from './mail-poll.js';
 import type { Principal } from '../policy/principal.js';
 import {
   ensureVapidKeys,
@@ -41,6 +44,8 @@ export interface SchedulerOptions {
   baseUrl: string | undefined;
   /** On van els bytes dels `ATTACH` en base64 dels orígens subscrits. */
   dataDir?: string | undefined;
+  /** `FEMHO_MAIL_ALLOW_HOSTS`, si la instància n'ha posat. */
+  mailAllowHosts?: string[] | undefined;
   /** Injectables per a les proves: així no cal esperar mig minut ni piconar cap servei. */
   now?: () => string;
   send?: PushSender;
@@ -53,6 +58,8 @@ export interface TickResult {
   refreshed: number;
   /** Enllaços amb una altra instància que s'han replicat en aquest tic. */
   federated: number;
+  /** Correus nous que han entrat en aquest tic. */
+  mail: number;
   errors: number;
 }
 
@@ -83,7 +90,7 @@ export async function tick(options: SchedulerOptions): Promise<TickResult> {
   const now = (options.now ?? (() => new Date().toISOString()))();
   const log = options.log ?? (() => undefined);
   const principal = systemPrincipal();
-  const result: TickResult = { reminders: 0, refreshed: 0, federated: 0, errors: 0 };
+  const result: TickResult = { reminders: 0, refreshed: 0, federated: 0, mail: 0, errors: 0 };
 
   try {
     result.reminders = await runReminders(options, principal, now);
@@ -107,6 +114,42 @@ export async function tick(options: SchedulerOptions): Promise<TickResult> {
   } catch (error) {
     result.errors += 1;
     log("El refresc d'orígens externs ha fallat", error);
+  }
+
+  /**
+   * El correu, **en un bloc propi**.
+   *
+   * És la germana de la lliçó que va deixar la penjada de DNS al refresc de calendaris i
+   * de la que el pla demana explícitament: *un compte de correu caigut no impedeix els
+   * recordatoris*. Un servidor IMAP que no contesta és el cas normal, no l'excepció.
+   *
+   * La cadència no és la del tic: `pollMail` decideix a qui li toca amb el seu interval i
+   * la seva retirada, i aquí només se li dona l'oportunitat cada 30 segons.
+   */
+  try {
+    const mail = await pollMail({
+      db: options.connection.db,
+      openClient: async (account) =>
+        openImapClient(
+          {
+            host: account.host,
+            port: Number(account.port),
+            security: account.security,
+            username: account.username,
+            // El secret s'obre aquí, al planificador, que és qui el té. El client rep
+            // text pla i el text pla mor amb la connexió.
+            password: open(options.secret, `mail_account:${account.id}`, account.secret_enc ?? ''),
+          },
+          { allowHosts: options.mailAllowHosts },
+        ),
+      now: () => now,
+      log,
+    });
+    result.mail = mail.ingested;
+    result.errors += mail.errors;
+  } catch (error) {
+    result.errors += 1;
+    log('La lectura del correu ha fallat', error);
   }
 
   return result;
@@ -333,11 +376,17 @@ export function startScheduler(options: SchedulerOptions): Scheduler {
     running = true;
     try {
       const result = await tick(options);
-      if (result.reminders > 0 || result.refreshed > 0 || result.federated > 0) {
+      if (
+        result.reminders > 0 ||
+        result.refreshed > 0 ||
+        result.federated > 0 ||
+        result.mail > 0
+      ) {
         log(
           `planificador · ${String(result.reminders)} recordatoris, ` +
             `${String(result.refreshed)} orígens refrescats, ` +
-            `${String(result.federated)} enllaços replicats`,
+            `${String(result.federated)} enllaços replicats, ` +
+            `${String(result.mail)} correus`,
         );
       }
     } catch (error) {

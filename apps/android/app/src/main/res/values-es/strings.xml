@@ -167,6 +167,8 @@
     <string name="inbox_event_allday">Todo el día</string>
     <string name="inbox_event_remove">Quitar</string>
     <string name="inbox_event_totask">Hacer una tarea</string>
+    <string name="inbox_mail_nosubject">(sin asunto)</string>
+    <string name="inbox_mail_unknownsender">Sin remitente</string>
     <string name="inbox_mailbox">Qué se ve en la bandeja</string>
     <string name="inbox_mailbox_all">Todo</string>
     <string name="inbox_mailbox_allhint">Toda la bandeja: los ámbitos individuales y los compartidos</string>
@@ -175,6 +177,7 @@
     <string name="inbox_mailbox_shared">Compartidos</string>
     <string name="inbox_mailbox_sharedhint">Solo lo que hay en los ámbitos que compartes con alguien</string>
     <string name="inbox_section_events">Del calendario</string>
+    <string name="inbox_section_mail">Del correo</string>
     <string name="invite_done">Ya puedes entrar con tu correo y esta contraseña.</string>
     <string name="invite_mismatch">Las dos contraseñas no coinciden.</string>
     <string name="invite_password">Contraseña</string>

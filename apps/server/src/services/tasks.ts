@@ -26,6 +26,7 @@ import { normalizeForSearch, normalizeQuery } from '../text/search-text.js';
 import { clampInt } from '../util/clamp.js';
 import { localDayBounds } from '../time/local-day.js';
 import { listInboxEvents, type InboxEvent } from './events.js';
+import { listInboxMail, type InboxMail } from './mail.js';
 import { assertScopeAccess, listScopes } from './scopes.js';
 
 export interface TaskRow {
@@ -1206,6 +1207,13 @@ export interface InboxView {
    * arribar mai a `POST /tasks/{id}/move`.
    */
   events: InboxEvent[];
+  /**
+   * El que ha arribat per correu i encara no és una tasca.
+   *
+   * Array a part pel mateix motiu que `events`, i **sense filtre de dia**: un correu que
+   * ha arribat és pendent fins que en facis alguna cosa, i amagar-lo demà seria perdre'l.
+   */
+  mail: InboxMail[];
 }
 
 /**
@@ -1270,6 +1278,7 @@ export async function getInbox(
     overdue: [],
     undated: [],
     events: [],
+    mail: [],
   };
   if (allowed.length === 0) return empty;
 
@@ -1307,6 +1316,7 @@ export async function getInbox(
         : [],
     undated: tasks.filter((t) => t.due_date === null),
     events,
+    mail: await listInboxMail(db, principal, allowed),
   };
 }
 

@@ -43,6 +43,8 @@ export type QuickAddResult = S['QuickAddResult'];
 export type MailAccount = S['MailAccount'];
 export type MailRule = S['MailRule'];
 export type MailTestResult = S['MailTestResult'];
+/** Un correu a la bústia. **No és un `Task`**: no té estat ni posició. */
+export type InboxMail = S['InboxMail'];
 
 export type Theme = UserProfile['theme'];
 export type Accent = UserProfile['accent'];

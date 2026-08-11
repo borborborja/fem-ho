@@ -457,3 +457,56 @@ describe('provar la connexió', () => {
     expect(trobat?.has_secret).toBe(false);
   });
 });
+
+describe('el correu a la bústia', () => {
+  it("un correu ingerit surt a la bústia amb la seva provinença", async () => {
+    /**
+     * **Array a part de les tasques**, i és el que fa que la distinció de la regla 7
+     * esmenada es pugui comprovar en comptes de discutir: un correu de la bústia no té
+     * `status` ni `position`, i cap identificador d'aquí pot arribar a `/tasks/{id}/move`.
+     */
+    const compte = await crearCompte({ name: 'Amb bústia' });
+    const regla = (
+      await api('POST', '/api/v1/mail/rules', {
+        account_id: compte.id,
+        folder: 'INBOX/Bústia',
+        scope_id: scopeId,
+      })
+    ).json<Regla>();
+
+    const fil = uuidv7();
+    await sql`
+      INSERT INTO mail_threads (id, account_id, thread_key, created_at, updated_at)
+      VALUES (${fil}, ${compte.id}, 'mid:b@escola.test', ${NOW}, ${NOW})
+    `.execute(conn.db);
+    await sql`
+      INSERT INTO mail_messages (id, account_id, thread_id, message_key, folder, uid_validity,
+                                 uid, internal_date, from_name, from_address, subject,
+                                 disposition, rule_id, created_at, updated_at)
+      VALUES (${uuidv7()}, ${compte.id}, ${fil}, 'mid:b@escola.test', 'INBOX/Bústia', '1', '1',
+              ${NOW}, 'Escola', 'secretaria@escola.test', 'La factura de març', 'inbox',
+              ${regla.id}, ${NOW}, ${NOW})
+    `.execute(conn.db);
+
+    const vista = await api('GET', '/api/v1/inbox?date=2026-08-11');
+    const cos = vista.json<{ mail: Record<string, unknown>[] }>();
+
+    expect(cos.mail).toHaveLength(1);
+    expect(cos.mail[0]).toMatchObject({
+      subject: 'La factura de març',
+      from_address: 'secretaria@escola.test',
+      // La icona es dibuixa amb això, amb el mateix component que la resta.
+      source_kind: 'mail',
+      scope_id: scopeId,
+    });
+    expect(cos.mail[0]).not.toHaveProperty('status');
+    expect(cos.mail[0]).not.toHaveProperty('position');
+  });
+
+  it("i el correu d'un altre no surt a la teva bústia", async () => {
+    // Un compte de correu és d'una persona. Que el seu correu entrés a la bústia d'un
+    // company d'àmbit seria el pitjor error que aquesta funció pot cometre.
+    const vista = await api('GET', '/api/v1/inbox?date=2026-08-11', undefined, altreAuth);
+    expect(vista.json<{ mail: unknown[] }>().mail).toHaveLength(0);
+  });
+});

@@ -167,6 +167,8 @@
     <string name="inbox_event_allday">Tot el dia</string>
     <string name="inbox_event_remove">Treure</string>
     <string name="inbox_event_totask">Fer-ne una tasca</string>
+    <string name="inbox_mail_nosubject">(sense assumpte)</string>
+    <string name="inbox_mail_unknownsender">Sense remitent</string>
     <string name="inbox_mailbox">Què es veu a la bústia</string>
     <string name="inbox_mailbox_all">Tot</string>
     <string name="inbox_mailbox_allhint">Tota la bústia: els àmbits individuals i els compartits</string>
@@ -175,6 +177,7 @@
     <string name="inbox_mailbox_shared">Compartits</string>
     <string name="inbox_mailbox_sharedhint">Només el que hi ha als àmbits que comparteixes amb algú</string>
     <string name="inbox_section_events">Del calendari</string>
+    <string name="inbox_section_mail">Del correu</string>
     <string name="invite_done">Ja pots entrar amb el teu correu i aquesta contrasenya.</string>
     <string name="invite_mismatch">Les dues contrasenyes no coincideixen.</string>
     <string name="invite_password">Contrasenya</string>

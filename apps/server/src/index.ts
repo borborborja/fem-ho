@@ -107,6 +107,7 @@ async function main(): Promise<void> {
     secret,
     baseUrl: config.baseUrl,
     dataDir: config.dataDir,
+    mailAllowHosts: config.mailAllowHosts,
     log: (message, error) => {
       if (error === undefined) app.log.info(message);
       else app.log.warn({ err: error }, message);
