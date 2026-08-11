@@ -301,9 +301,6 @@
     <string name="settings_inviterole">What they can do</string>
     <string name="settings_language">Language</string>
     <string name="settings_mail_accounts">Accounts</string>
-    <string name="settings_mail_action">What happens to it</string>
-    <string name="settings_mail_action_inbox">Lands in the inbox</string>
-    <string name="settings_mail_action_task">Becomes a task</string>
     <string name="settings_mail_add">Add the account</string>
     <string name="settings_mail_addrule">Map the folder</string>
     <string name="settings_mail_apppassword">With Fastmail, Gmail or iCloud you need an app password, not your account one. Spaces at either end are stripped.</string>
@@ -313,13 +310,16 @@
     <string name="settings_mail_firstrun">The first read of a folder ingests nothing: it starts from now.</string>
     <string name="settings_mail_folder">Folder</string>
     <string name="settings_mail_host">IMAP server</string>
+    <string name="settings_mail_inboxvisible">Shows in the Tasks inbox</string>
     <string name="settings_mail_intro">Mail accounts are yours, not the household\'s: nobody else sees them, not even the admin.</string>
     <string name="settings_mail_lastpolled">Last read: {when}</string>
+    <string name="settings_mail_loadingfolders">Reading the folders…</string>
     <string name="settings_mail_name">Name</string>
     <string name="settings_mail_neverpolled">Not read yet.</string>
     <string name="settings_mail_nottouched">Nothing marks your mail as read.</string>
     <string name="settings_mail_password">Password</string>
     <string name="settings_mail_passwordkept">Saved. Leave empty to keep it.</string>
+    <string name="settings_mail_pickfolder">Pick a folder…</string>
     <string name="settings_mail_port">Port</string>
     <string name="settings_mail_project">Project</string>
     <string name="settings_mail_projectnone">The general space</string>

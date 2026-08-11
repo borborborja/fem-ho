@@ -3420,7 +3420,17 @@ components:
 
     MailRule:
       type: object
-      required: [id, account_id, folder, scope_id, action, inbox_visible, title_template, enabled]
+      required:
+        [
+          id,
+          account_id,
+          folder,
+          scope_id,
+          inbox_visible,
+          inbox_visible_default,
+          title_template,
+          enabled,
+        ]
       properties:
         id: { type: string }
         account_id: { type: string }
@@ -3429,13 +3439,24 @@ components:
         project_id:
           type: [string, 'null']
           description: "`null` vol dir l'espai general de l'àmbit."
-        action:
-          type: string
-          enum: [inbox, task]
+        inbox_visible:
+          type: [boolean, 'null']
           description: >-
-            Si el correu cau a la bústia del dia perquè hi decideixis, o si es converteix
-            en tasca tot sol.
-        inbox_visible: { type: boolean, default: true }
+            Si el que arriba per aquesta carpeta surt a l'inbox de la pestanya Tasques.
+
+            **Tri-estat**: `null` vol dir que no s'hi ha dit res i val `inbox_visible_default`.
+            Absent en un `PATCH` vol dir «no ho toquis», que no és el mateix — sense el
+            `null` no hi hauria manera de desdir-se'n i la carpeta es quedaria clavada al
+            valor que se li va posar encara que el defecte canviés.
+
+            El que no és visible **no desapareix**: es veu a la vista de calendari, i des
+            d'allà es puja d'un clic.
+        inbox_visible_default:
+          type: boolean
+          description: >-
+            El defecte de la mena de font, que per al correu és **no**. Mapar una carpeta és
+            dir «vull veure això en algun lloc», no «posa-m'ho tot a la llista de coses per
+            fer». Va al contracte perquè **cap client hagi de duplicar aquesta regla**.
         title_template:
           type: string
           description: >-
@@ -3459,8 +3480,7 @@ components:
         folder: { type: string }
         scope_id: { type: string }
         project_id: { type: [string, 'null'] }
-        action: { type: string, enum: [inbox, task] }
-        inbox_visible: { type: boolean }
+        inbox_visible: { type: [boolean, 'null'] }
         title_template: { type: string }
         body_to_description: { type: boolean }
         attachments_to_task: { type: boolean }
@@ -3473,8 +3493,7 @@ components:
         folder: { type: string }
         scope_id: { type: string }
         project_id: { type: [string, 'null'] }
-        action: { type: string, enum: [inbox, task] }
-        inbox_visible: { type: boolean }
+        inbox_visible: { type: [boolean, 'null'] }
         title_template: { type: string }
         body_to_description: { type: boolean }
         attachments_to_task: { type: boolean }

@@ -2191,12 +2191,13 @@ export interface components {
             /** @description `null` vol dir l'espai general de l'àmbit. */
             project_id?: string | null;
             /**
-             * @description Si el correu cau a la bústia del dia perquè hi decideixis, o si es converteix en tasca tot sol.
-             * @enum {string}
+             * @description Si el que arriba per aquesta carpeta surt a l'inbox de la pestanya Tasques.
+             *     **Tri-estat**: `null` vol dir que no s'hi ha dit res i val `inbox_visible_default`. Absent en un `PATCH` vol dir «no ho toquis», que no és el mateix — sense el `null` no hi hauria manera de desdir-se'n i la carpeta es quedaria clavada al valor que se li va posar encara que el defecte canviés.
+             *     El que no és visible **no desapareix**: es veu a la vista de calendari, i des d'allà es puja d'un clic.
              */
-            action: "inbox" | "task";
-            /** @default true */
-            inbox_visible: boolean;
+            inbox_visible: boolean | null;
+            /** @description El defecte de la mena de font, que per al correu és **no**. Mapar una carpeta és dir «vull veure això en algun lloc», no «posa-m'ho tot a la llista de coses per fer». Va al contracte perquè **cap client hagi de duplicar aquesta regla**. */
+            inbox_visible_default: boolean;
             /** @description Amb `{{subject}}`, `{{from}}`, `{{from_name}}`, `{{from_email}}`, `{{date}}`, `{{folder}}` i `{{account}}`. **Una sola passada**: un assumpte que sigui literalment `{{from_email}}` no s'expandeix. */
             title_template: string;
             /** @default true */
@@ -2218,9 +2219,7 @@ export interface components {
             folder: string;
             scope_id: string;
             project_id?: string | null;
-            /** @enum {string} */
-            action?: "inbox" | "task";
-            inbox_visible?: boolean;
+            inbox_visible?: boolean | null;
             title_template?: string;
             body_to_description?: boolean;
             attachments_to_task?: boolean;
@@ -2231,9 +2230,7 @@ export interface components {
             folder?: string;
             scope_id?: string;
             project_id?: string | null;
-            /** @enum {string} */
-            action?: "inbox" | "task";
-            inbox_visible?: boolean;
+            inbox_visible?: boolean | null;
             title_template?: string;
             body_to_description?: boolean;
             attachments_to_task?: boolean;

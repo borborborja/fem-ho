@@ -65,6 +65,40 @@ test('una carpeta es mapa, i el títol es veu mentre s’escriu', async ({ page 
   await expect(regla.first()).toBeVisible();
 });
 
+test('i la carpeta neix apagada, amb l’interruptor per encendre-la', async ({ page }) => {
+  await enter(page);
+  await page.goto('/settings?tab=mail');
+
+  const regla = page.locator('[data-testid^="mail-rule-"]').filter({ hasText: 'INBOX/Escola' });
+  await expect(regla.first()).toBeVisible();
+
+  /**
+   * **El defecte d'una carpeta nova és no sortir a l'inbox de Tasques**, i l'interruptor és
+   * el que abans no existia enlloc: la visibilitat es podia canviar per l'API i per cap
+   * pantalla.
+   */
+  const interruptor = regla.first().locator('input[type="checkbox"]');
+  await expect(interruptor).not.toBeChecked();
+
+  /**
+   * **`click` i no `check`.** És una casella controlada: el clic no la canvia tot sol, la
+   * canvia el que torna el servidor. `check()` exigeix que l'estat hagi canviat en acabar
+   * el clic i falla abans que arribi la resposta, que és una prova que comprova la latència
+   * de la xarxa i no el producte.
+   */
+  await interruptor.click();
+  await expect(interruptor).toBeChecked();
+
+  await page.reload();
+  await expect(
+    page
+      .locator('[data-testid^="mail-rule-"]')
+      .filter({ hasText: 'INBOX/Escola' })
+      .first()
+      .locator('input[type="checkbox"]'),
+  ).toBeChecked();
+});
+
 test('una variable que no existeix es diu, i no es rebutja', async ({ page }) => {
   await enter(page);
   await page.goto('/settings?tab=mail');

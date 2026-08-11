@@ -301,9 +301,6 @@
     <string name="settings_inviterole">Qué podrá hacer</string>
     <string name="settings_language">Idioma</string>
     <string name="settings_mail_accounts">Cuentas</string>
-    <string name="settings_mail_action">Qué se hace</string>
-    <string name="settings_mail_action_inbox">Cae en la bandeja</string>
-    <string name="settings_mail_action_task">Se convierte en tarea</string>
     <string name="settings_mail_add">Añadir la cuenta</string>
     <string name="settings_mail_addrule">Mapear la carpeta</string>
     <string name="settings_mail_apppassword">Con Fastmail, Gmail o iCloud hace falta una contraseña de aplicación, no la de tu cuenta. Los espacios de los extremos se quitan solos.</string>
@@ -313,13 +310,16 @@
     <string name="settings_mail_firstrun">La primera lectura de una carpeta no ingiere nada: se empieza desde ahora.</string>
     <string name="settings_mail_folder">Carpeta</string>
     <string name="settings_mail_host">Servidor IMAP</string>
+    <string name="settings_mail_inboxvisible">Sale en el inbox de Tareas</string>
     <string name="settings_mail_intro">Las cuentas de correo son tuyas y no de la casa: nadie más las ve, ni el administrador.</string>
     <string name="settings_mail_lastpolled">Última lectura: {when}</string>
+    <string name="settings_mail_loadingfolders">Leyendo las carpetas…</string>
     <string name="settings_mail_name">Nombre</string>
     <string name="settings_mail_neverpolled">Todavía no se ha leído.</string>
     <string name="settings_mail_nottouched">Nada marca tus correos como leídos.</string>
     <string name="settings_mail_password">Contraseña</string>
     <string name="settings_mail_passwordkept">Guardada. Déjalo vacío para no tocarla.</string>
+    <string name="settings_mail_pickfolder">Elige una carpeta…</string>
     <string name="settings_mail_port">Puerto</string>
     <string name="settings_mail_project">Proyecto</string>
     <string name="settings_mail_projectnone">El espacio general</string>

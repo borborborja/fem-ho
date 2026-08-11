@@ -483,6 +483,56 @@ Dos detalls que se'n deriven:
 
 ---
 
+### P12 · Una sola regla de visibilitat, i res arriba sol al kanban
+
+**La resolució: tot el que ve d'una font va a la bústia, i l'única pregunta és si es veu.**
+
+El correu va néixer amb un camp `action` a la regla, amb dos valors: «cau a la bústia» o
+«es converteix en tasca sola». La segona opció posava coses **al kanban d'algú** perquè una
+carpeta de correu ho havia dit, i el model del producte és el contrari:
+
+> A l'inbox hi ha correus, cites, titulars i tasques. **Les tasques les has escrit tu**; la
+> resta són **elements que pots convertir**. El calendari és l'organitzador de la setmana:
+> hi surt tot el que ha arribat, i és des d'allà que decideixes què puja a la llista.
+
+`action` no era una opció que sobrés: era una que no hauria d'existir. La plantilla del
+títol no es perd —s'aplica quan converteixes—, i l'únic automatisme que queda és que una
+resposta a un fil que **ja** té tasca hi deixi un comentari, que hi és per no partir la
+feina en dues.
+
+**El que ho fa comprovable és que ara les quatre menes fan servir la mateixa cascada.** Els
+cinc nivells d'`isInInbox` ja existien per als esdeveniments; el correu hi entra sense
+inventar-ne cap:
+
+| Nivell | Cita | Correu |
+| --- | --- | --- |
+| 0 · ja n'hi ha tasca | `tasks.event_uid` | `tasks.mail_message_key` |
+| 1 · aquest ítem | marca de l'ocurrència | `mail_messages.inbox_visible` |
+| 2 · la sèrie | marca de la sèrie | *(el fil: buit a posta)* |
+| 3 · la font | `calendars.inbox_visible` | `mail_rules.inbox_visible` |
+| 4 · el defecte | `defaultInInbox` | `defaultInInbox` |
+
+Tres coses que se'n deriven i que no són òbvies:
+
+- **El defecte d'una carpeta de correu és «no visible»**, com l'RSS i pel mateix motiu:
+  mapar-la és dir «vull veure això en algun lloc», no «posa-m'ho tot a la llista de coses
+  per fer». Una bústia amb volum enterraria la pantalla principal el primer matí, i la
+  reacció raonable de qualsevol és deixar de mirar-la.
+- **El que s'amaga no desapareix.** Abans, «descartar» un correu el treia per sempre i cap
+  ruta ho desfeia; ara es queda al calendari, difuminat, i torna d'un clic. La diferència
+  no és de comoditat: **una acció que no es pot desfer no es pren amb tranquil·litat**, i
+  una bústia on esborrar fa por no es buida mai.
+- **`/inbox?include_hidden` és una consulta amb dues lents**, i és el que salva P4. La
+  columna del kanban i el rail del calendari segueixen sent el mateix component amb la
+  mateixa font de dades: el tauler ensenya el que has decidit que és feina, i el calendari
+  ho ensenya tot. Amb dues consultes, un dia el que es difumina al calendari i el que falta
+  a la bústia deixarien de ser la mateixa cosa.
+
+**El nivell 2 del correu es queda buit a posta.** Seria «tot aquest fil, no», i el forat hi
+és perquè el dia que es demani entri sense tocar res més.
+
+---
+
 ## Part 3 — Fets sospitosos de `research/`
 
 El crític va marcar 7 afirmacions com a probablement inventades, obsoletes o internament incoherents. **Cap `docs/` en depèn.**

@@ -2184,6 +2184,13 @@ function MailRuleRow({ rule, onDone }: { rule: MailRule; onDone: () => void }) {
     onDone();
   });
 
+  const desa = useMutation(async (next: boolean) => {
+    await api.patch<MailRule>(`/api/v1/mail/rules/${rule.id}`, {
+      inbox_visible: next === rule.inbox_visible_default ? null : next,
+    });
+    onDone();
+  });
+
   return (
     <div
       data-testid={`mail-rule-${rule.id}`}
@@ -2191,12 +2198,26 @@ function MailRuleRow({ rule, onDone }: { rule: MailRule; onDone: () => void }) {
     >
       <strong style={{ fontSize: 12.5 }}>{rule.folder}</strong>
       <span style={{ fontSize: 11.5, color: 'var(--ink-soft)' }}>
-        → {scope?.name ?? rule.scope_id} ·{' '}
-        {rule.action === 'task' ? t('settings.mail.action.task') : t('settings.mail.action.inbox')}
+        → {scope?.name ?? rule.scope_id}
       </span>
       <span style={{ fontSize: 11.5, color: 'var(--ink-soft)' }}>
         {renderMailTitle(rule.title_template, MOSTRA, MOSTRA.subject)}
       </span>
+
+      {/*
+        **L'interruptor que abans no sortia enlloc.**
+
+        Mateix component i mateixa semàntica que les fonts de calendari: es desa
+        **l'excepció i no l'estat**, o sigui que si el valor coincideix amb el defecte
+        s'envia `null`. Sense això, una carpeta es quedaria clavada al valor que se li va
+        posar encara que el defecte canviés.
+      */}
+      <Toggle
+        checked={rule.inbox_visible ?? rule.inbox_visible_default}
+        onChange={(next) => void desa.run(next)}
+        label={t('settings.mail.inboxVisible')}
+        testId={`mail-rule-inbox-${rule.id}`}
+      />
       <button
         type="button"
         className="plou-btn plou-btn-ghost"
@@ -2214,9 +2235,20 @@ function MailRuleForm({ accounts, onDone }: { accounts: MailAccount[]; onDone: (
   const [accountId, setAccountId] = useState(accounts[0]?.id ?? '');
   const [folder, setFolder] = useState('');
   const [scopeId, setScopeId] = useState(scopes[0]?.id ?? '');
-  const [action, setAction] = useState<'inbox' | 'task'>('inbox');
   const [template, setTemplate] = useState(DEFAULT_MAIL_TEMPLATE);
   const [error, setError] = useState<string | null>(null);
+
+  /**
+   * Les carpetes del servidor, per **triar-les**.
+   *
+   * Es demanen en triar el compte i no en obrir la pestanya: és una connexió IMAP, i
+   * fer-la per si de cas voldria dir piconar el servidor de correu cada vegada que algú
+   * mira els seus ajustos.
+   */
+  const folders = useApi<{ folders: string[]; delimiter: string | null; error: string | null }>(
+    accountId === '' ? null : `/api/v1/mail/accounts/${accountId}/folders`,
+  );
+  const llista = folders.data?.folders ?? [];
 
   const desconegudes = unknownMailVars(template);
 
@@ -2228,7 +2260,6 @@ function MailRuleForm({ accounts, onDone }: { accounts: MailAccount[]; onDone: (
         account_id: accountId,
         folder: folder.trim(),
         scope_id: scopeId,
-        action,
         title_template: template,
       });
       setFolder('');
@@ -2257,16 +2288,39 @@ function MailRuleForm({ accounts, onDone }: { accounts: MailAccount[]; onDone: (
         </Camp>
         <Camp label={t('settings.mail.folder')}>
           {/*
-            Text lliure i no una llista tancada: les carpetes es poden llistar amb «Prova
-            la connexió», però una llista sense entrada lliure deixaria clavat qui té una
-            carpeta que el servidor no anuncia.
+            **Es tria de la llista que diu el servidor**, i es pot escriure a mà.
+
+            Era només text lliure, i el resultat era que la prova de connexió trobava onze
+            carpetes, no en deia ni una, i havies d'endevinar-ne el nom exacte —amb els
+            `[Gmail]/` i els accents que porti cada proveïdor. Una llista tancada tampoc:
+            deixaria clavat qui tingui una carpeta que el servidor no anuncia.
+
+            La llista **arriba sola** en triar el compte; si el servidor no contesta, queda
+            el camp de sempre i no s'ha perdut res.
           */}
-          <input
-            className="plou-input"
-            data-testid="mail-rule-folder"
-            value={folder}
-            onChange={(event) => setFolder(event.target.value)}
-          />
+          {llista.length === 0 ? (
+            <input
+              className="plou-input"
+              data-testid="mail-rule-folder"
+              value={folder}
+              onChange={(event) => setFolder(event.target.value)}
+              placeholder={folders.loading ? t('settings.mail.loadingFolders') : ''}
+            />
+          ) : (
+            <select
+              className="plou-input"
+              data-testid="mail-rule-folder"
+              value={folder}
+              onChange={(event) => setFolder(event.target.value)}
+            >
+              <option value="">{t('settings.mail.pickFolder')}</option>
+              {llista.map((path) => (
+                <option key={path} value={path}>
+                  {path}
+                </option>
+              ))}
+            </select>
+          )}
         </Camp>
         <Camp label={t('settings.mail.scope')}>
           <select
@@ -2280,17 +2334,6 @@ function MailRuleForm({ accounts, onDone }: { accounts: MailAccount[]; onDone: (
                 {scope.name}
               </option>
             ))}
-          </select>
-        </Camp>
-        <Camp label={t('settings.mail.action')}>
-          <select
-            className="plou-input"
-            data-testid="mail-rule-action"
-            value={action}
-            onChange={(event) => setAction(event.target.value === 'task' ? 'task' : 'inbox')}
-          >
-            <option value="inbox">{t('settings.mail.action.inbox')}</option>
-            <option value="task">{t('settings.mail.action.task')}</option>
           </select>
         </Camp>
       </div>

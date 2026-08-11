@@ -286,10 +286,11 @@ l'administrador, i demanar-lo per identificador dona el mateix que si no existí
 
 | Què | Estat |
 | --- | --- |
-| Comptes i regles, i «Prova la connexió» que no desa res | Fet, provat contra l'API i amb la pantalla oberta |
+| Comptes i regles, amb les carpetes triables de la llista del servidor | Fet, provat amb la pantalla oberta |
+| «Prova la connexió», que no desa res | Fet |
 | Lectura periòdica amb cursor i retirada exponencial | Fet, provat contra un client fals injectat |
-| Bústia: el correu hi surt amb la seva icona de provinença | Fet |
-| Conversió a tasca, amb plantilla de títol i cos a la descripció | Fet |
+| Bústia i calendari, amb la icona de provinença | Fet |
+| Conversió a tasca, amb plantilla de títol i cos a la descripció | Fet, **sempre la demana una persona** |
 | Adjunts del correu com a adjunts de la tasca | Fet |
 | Resposta a un fil que ja té tasca → comentari | Fet |
 | Retenció del cos dels correus ingerits | Fet, `0` (per sempre) per defecte |
@@ -299,6 +300,29 @@ l'administrador, i demanar-lo per identificador dona el mateix que si no existí
 `MailClient` fals i contra la base de dades real, i això prova el cicle i les decisions —no
 prova que `imapflow` parli bé amb un Dovecot o amb Gmail. En aquest projecte ja sabem què
 vol dir «compila».
+
+### Què es veu i on
+
+**Tot el que arriba d'una font va a la bústia**, i l'única pregunta és si es veu:
+
+| | Pestanya Tasques | Pestanya Calendari |
+| --- | --- | --- |
+| Visible | Sí, a la columna Inbox | Sí |
+| No visible | No | **Sí, difuminat**, amb el botó per pujar-lo |
+
+Val igual per a un correu, una cita d'un CalDAV, un `.ics` i un titular d'RSS. **Res es
+converteix en tasca sol**: el que arriba és un element que pots convertir, i qui ho decideix
+ets tu. Els defectes per mena:
+
+| | Entra a l'inbox de Tasques |
+| --- | --- |
+| Calendari d'aquesta casa | Sí |
+| CalDAV i `.ics` subscrits | Sí |
+| RSS | No |
+| Correu | No |
+
+I es pot dir el contrari **per font** —a Ajustos— o **per ítem** —des del calendari—, en
+tots dos sentits i sempre reversible.
 
 Tres coses que val la pena saber abans de fer-lo servir:
 
