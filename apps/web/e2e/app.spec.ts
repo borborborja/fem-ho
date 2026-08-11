@@ -52,6 +52,8 @@ test("el primer arrencament crea l'administrador i els seus tres àmbits", async
     await formulari.fill(ADMIN.name);
     await page.locator('[data-testid="setup-email"]').fill(ADMIN.email);
     await page.locator('[data-testid="setup-password"]').fill(ADMIN.password);
+    // Dues vegades: la instància no té cap manera de recuperar el primer compte.
+    await page.locator('[data-testid="setup-password2"]').fill(ADMIN.password);
     await page.locator('[data-testid="setup-submit"]').click();
   }
 

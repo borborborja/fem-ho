@@ -161,6 +161,7 @@
   "error.too-many-attempts": "Demasiados intentos. Vuelve a probar dentro de {seconds} segundos.",
   "error.unauthenticated": "Hay que volver a entrar.",
   "error.unknown-entity": "Esto no es algo que se sincronice.",
+  "error.unreachable": "El servidor no contesta. No es lo que has escrito: mira si la instancia está encendida.",
   "error.version-conflict": "Alguien más lo ha cambiado mientras tanto.",
   "error.weak-share-password": "La contraseña del enlace necesita {min} caracteres como mínimo.",
   "error.window-invalid": "Las fechas del periodo no son válidas.",

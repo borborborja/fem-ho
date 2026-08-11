@@ -156,6 +156,7 @@
     <string name="error_too_many_attempts">Demasiados intentos. Vuelve a probar dentro de {seconds} segundos.</string>
     <string name="error_unauthenticated">Hay que volver a entrar.</string>
     <string name="error_unknown_entity">Esto no es algo que se sincronice.</string>
+    <string name="error_unreachable">El servidor no contesta. No es lo que has escrito: mira si la instancia está encendida.</string>
     <string name="error_version_conflict">Alguien más lo ha cambiado mientras tanto.</string>
     <string name="error_weak_share_password">La contraseña del enlace necesita {min} caracteres como mínimo.</string>
     <string name="error_window_invalid">Las fechas del periodo no son válidas.</string>
