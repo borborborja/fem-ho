@@ -1,3 +1,14 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/img/portada-fosc.svg">
+  <img src="docs/img/portada-clar.svg" alt="Fem-ho">
+</picture>
+
+<p align="right">
+  <strong>Català</strong> ·
+  <a href="README.en.md">English</a> ·
+  <a href="README.es.md">Castellano</a>
+</p>
+
 # Fem-ho
 
 Un gestor de tasques i calendari **per a una casa**, pensat per autoallotjar-se. Web, app
@@ -7,18 +18,48 @@ En català, anglès i castellà.
 
 ---
 
-## Què és
+## Per a qui és, i per a qui no
 
-Un tauler kanban de quatre columnes, un calendari, llistes senzilles i una bústia
-compartida, amb tres idees que el distingeixen d'un gestor de tasques qualsevol:
+Per a **una llar**: una o més persones adultes que ja tenen un servidor a casa i volen
+gestionar la feina, la vida personal i la família al mateix lloc, **sense que la feina
+s'assabenti de la família ni al revés**.
 
-- **Àmbits**, no projectes solts. Personal, feina i família conviuen al mateix tauler i
-  es filtren amb un clic. Una tasca sempre pertany a un àmbit; pot no tenir projecte.
+No és un producte per a equips d'empresa. No hi ha sprints, ni estimacions, ni informes de
+velocitat, ni permisos granulars per camp. Hi ha persones que comparteixen una casa i,
+algunes d'elles, també una feina.
+
+## Les cinc idees que el governen
+
+**1 · D'una mirada.** La pantalla principal ha de respondre «què he de fer» sense clicar
+res. Si per saber què toca avui cal navegar, el disseny ha fallat.
+
+**2 · Afegir ha de ser instantani.** Escriure una tasca no obre cap finestra: s'escriu en
+un camp i s'apreta Enter. La riquesa —venciment, adjunts, instruccions per a la IA—
+arriba després, editant.
+
+**3 · Les dades són teves.** CalDAV en les dues direccions, API oberta, exportació
+completa. Fem-ho pot ser la font principal o un client d'un calendari que ja tens. Tries
+tu, i **pots marxar quan vulguis**.
+
+**4 · La IA és un col·laborador amb corretja.** Pot llegir el que li deixis llegir i
+escriure el que li deixis escriure, cada cosa que fa queda registrada i es pot desfer, i
+**mai és responsable d'una tasca**: sempre hi ha una persona al darrere.
+
+**5 · Una sola app amb dues formes.** Web i Android són la mateixa cosa adaptada. Qui
+passi del mòbil a l'ordinador no ha de reaprendre res.
+
+## Què el distingeix
+
+- **Àmbits, no projectes solts.** Personal, feina i família conviuen al mateix tauler i es
+  filtren amb un clic. Una tasca sempre pertany a un àmbit; pot no tenir projecte.
+- **La bústia és el dia sencer.** No només les teves tasques: els calendaris subscrits i
+  els canals RSS hi entren al costat, i es navega dia a dia. D'una cita se'n pot fer una
+  tasca, i mentre la tasca visqui la cita no et reclama res.
 - **CalDAV de veritat**, en les dues direccions. El calendari del telèfon i el de
   l'ordinador veuen el mateix, i un `.ics` o un RSS externs es poden posar com a font.
-- **La IA com un membre més**, no com una capa a sobre. Una tasca es pot delegar, l'agent
-  la reserva mentre hi treballa, i tot el que fa queda a l'historial amb "Desfés" al
-  costat.
+- **Tot deixa rastre.** Cap escriptura arriba a la base sense una entrada a l'historial
+  dins de la mateixa transacció. No és una funció: és una invariant que una comprovació
+  permanent fa complir.
 
 ## Com s'engega
 
@@ -36,7 +77,7 @@ La imatge és multi-arquitectura (`amd64` i `arm64`), o sigui que va igual en un
 que en una Raspberry Pi:
 
 ```
-ghcr.io/borborborja/fem-ho:latest        # o :0.3.0 per fixar la versió
+ghcr.io/borborborja/fem-ho:latest        # o :0.6.0 per fixar la versió
 ```
 
 ### El `compose.yaml`
@@ -134,7 +175,7 @@ apps/web         React + Vite, PWA amb cua de sortida
 apps/android     Kotlin + Compose, Room i UnifiedPush
 packages/contracts       openapi.yaml, catàlegs d'idioma, parser i índex fraccional
 packages/design-system   Plou vendoritzat + els components de Fem-ho
-tools/checks     les tretze comprovacions
+tools/checks     les quinze comprovacions
 docs/            quinze documents normatius
 ```
 
