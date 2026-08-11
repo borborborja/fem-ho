@@ -20,6 +20,19 @@ export interface WeekdayLabels {
 }
 
 export interface MonthViewProps {
+  /**
+   * L'últim dia que es pot triar, `YYYY-MM-DD`. Els posteriors surten atenuats i
+   * desactivats. Ho fa servir la columna Fet: no es pot mirar què vas fer demà.
+   */
+  maxDate?: string | undefined;
+  /**
+   * Afegir una tasca a la bústia d'aquell dia, des del `+` que surt en passar-hi per
+   * sobre. Sense això no es pinta cap botó.
+   */
+  onAddOnDay?: ((iso: string) => void) | undefined;
+  /** L'etiqueta del `+`. Un component del design system no sap de catàlegs. */
+  addLabel?: string | undefined;
+
   year: number;
   month: number;
   monthLabel: string;
@@ -48,6 +61,14 @@ export interface WeekDay {
 }
 
 export interface WeekViewProps {
+  /**
+   * Afegir una tasca a la bústia d'aquell dia, des del `+` que surt en passar-hi per
+   * sobre. Sense això no es pinta cap botó.
+   */
+  onAddOnDay?: ((iso: string) => void) | undefined;
+  /** L'etiqueta del `+`. Un component del design system no sap de catàlegs. */
+  addLabel?: string | undefined;
+
   days: WeekDay[];
   selectedDate?: string | undefined;
   onSelect?: ((iso: string) => void) | undefined;
@@ -80,6 +101,15 @@ export interface DayViewProps {
    * cap manera d'actuar sobre un esdeveniment des del calendari.
    */
   onSelectItem?: ((id: string) => void) | undefined;
+  /**
+   * Afegir una tasca a aquest dia.
+   *
+   * **Permanent i no en passar-hi per sobre**, a diferència del mes i la setmana: aquí hi
+   * ha un sol dia, i amagar l'acció darrere del ratolí seria amagar-la per res — i en una
+   * pantalla tàctil, amagar-la del tot.
+   */
+  onAdd?: (() => void) | undefined;
+  addLabel?: string | undefined;
 }
 
 export declare function MonthView(props: MonthViewProps): React.JSX.Element;

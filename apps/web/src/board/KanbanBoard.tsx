@@ -120,6 +120,13 @@ export interface KanbanBoardProps {
   onToggleDone?: (taskId: string) => void;
   doneHeaderActions?: ReactNode;
   /**
+   * El text de la columna Fet quan és buida.
+   *
+   * Depèn del dia que es miri: «encara no has acabat res avui» no val per a un dimarts de
+   * la setmana passada. Ve de fora perquè qui sap quin dia es mira és qui munta el tauler.
+   */
+  doneEmptyLabel?: string | undefined;
+  /**
    * Arrossegar entre columnes canvia `status`. La crida ha de fer l'actualització
    * optimista i revertir si el servidor rebutja (docs/02 §4).
    */
@@ -192,6 +199,7 @@ export function KanbanBoard({
   onOpen,
   onToggleDone,
   doneHeaderActions,
+  doneEmptyLabel,
   onDrop,
   renderFooter,
   onChanged,
@@ -241,7 +249,13 @@ export function KanbanBoard({
 
     let body: ReactNode;
     if (ofColumn.length === 0) {
-      body = <EmptyState>{t(column.emptyKey)}</EmptyState>;
+      body = (
+        <EmptyState>
+          {column.status === 'done' && doneEmptyLabel !== undefined
+            ? doneEmptyLabel
+            : t(column.emptyKey)}
+        </EmptyState>
+      );
     } else if (!grouped) {
       body = ofColumn.map(cardFor);
     } else {

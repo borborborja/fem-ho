@@ -130,3 +130,41 @@ test('les altres tres columnes no es mouen en canviar de dia', async ({ page }) 
   await expect(page.locator('[data-testid="inbox-rail"]')).toContainText('De demà');
   await expect(doing).toContainText('Ja en marxa');
 });
+
+test('la bústia també té calendari, i sense límit de futur', async ({ page }) => {
+  /**
+   * Amb fletxes soles, anar d'aquí a deu dies són deu clics. I **aquí no hi ha límit de
+   * futur**, a diferència de la columna Fet: allà mirar endavant no vol dir res —què vaig
+   * fer demà— i aquí és per a què serveix, avançar feina.
+   */
+  await enterAsNew(page, MEU);
+  const scope = await escenari(page);
+  await page.goto(`/board?scopes=${scope}`);
+
+  const boto = page.locator('[data-testid="inbox-day-pick"]');
+  await expect(boto).toBeVisible({ timeout: 10_000 });
+  // La mateixa icona que la columna Fet, i no un emoji.
+  await expect(boto.locator('svg')).toHaveCount(1);
+
+  await boto.click();
+  // Un dia d'aquí a una setmana es pot triar: mirar endavant és el sentit de la bústia.
+  const futur = page.locator(`[data-testid="day-${iso(7)}"]`);
+  await expect(futur).toBeEnabled();
+  await futur.click();
+
+  await expect(page.locator('[data-testid="inbox-day-label"]')).not.toHaveText('Avui');
+  // I les sense data hi són igualment, com a qualsevol altre dia.
+  await expect(page.locator('[data-testid="inbox-rail"]')).toContainText('Sense dia');
+});
+
+test('i enrere també, que és on es mira què hi havia', async ({ page }) => {
+  await enterAsNew(page, MEU);
+  const scope = await escenari(page);
+  await page.goto(`/board?scopes=${scope}`);
+
+  await page.locator('[data-testid="inbox-day-pick"]').click();
+  await page.locator(`[data-testid="day-${iso(-3)}"]`).click();
+
+  await expect(page.locator('[data-testid="inbox-day-today"]')).toBeVisible();
+  await expect(page.locator('[data-testid="inbox-rail"]')).toContainText('Sense dia');
+});

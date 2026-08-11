@@ -38,7 +38,9 @@
     <string name="board_column_done">Hecho</string>
     <string name="board_column_inbox">Inbox</string>
     <string name="board_column_todo">Por hacer</string>
+    <string name="board_done_backtotoday">Volver a hoy</string>
     <string name="board_done_clear">Limpiar</string>
+    <string name="board_done_emptyday">Ninguna tarea hecha el {day}.</string>
     <string name="board_done_showalltoday">Todo hoy</string>
     <string name="board_done_thisweek">Esta semana</string>
     <string name="board_done_yesterday">Ayer</string>
@@ -59,6 +61,7 @@
     <string name="board_quickadd_revert">Devolver «{label}» a texto</string>
     <string name="board_quickadd_scoperequired">Indica el ámbito con #{scopes}</string>
     <string name="board_quickadd_scoperequiredprefix">Indica el ámbito con #</string>
+    <string name="calendar_addonday">Añadir una tarea este día</string>
     <string name="calendar_day">Diario</string>
     <string name="calendar_empty_day">Sin eventos ni tareas este día.</string>
     <string name="calendar_empty_week">Sin nada</string>
@@ -158,6 +161,7 @@
     <string name="error_wrong_component">«{name}» es de tareas y no acepta eventos.</string>
     <string name="error_wrong_password">La contraseña actual no es correcta.</string>
     <string name="inbox_day_next">El día siguiente</string>
+    <string name="inbox_day_pick">Elegir el día</string>
     <string name="inbox_day_prev">El día anterior</string>
     <string name="inbox_day_today">Hoy</string>
     <string name="inbox_event_allday">Todo el día</string>
@@ -224,6 +228,7 @@
     <string name="nav_search">Buscar</string>
     <string name="nav_settings">Ajustes</string>
     <string name="nav_tasks">Tareas</string>
+    <string name="nav_view">Vista</string>
     <string name="notify_reminder">Recordatorio</string>
     <string name="palette_empty">Nada que coincida.</string>
     <string name="palette_go">Ir a</string>

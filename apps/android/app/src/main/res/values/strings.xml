@@ -38,7 +38,9 @@
     <string name="board_column_done">Fet</string>
     <string name="board_column_inbox">Inbox</string>
     <string name="board_column_todo">Per fer</string>
+    <string name="board_done_backtotoday">Tornar a avui</string>
     <string name="board_done_clear">Netejar</string>
+    <string name="board_done_emptyday">Cap tasca feta el {day}.</string>
     <string name="board_done_showalltoday">Tot avui</string>
     <string name="board_done_thisweek">Aquesta setmana</string>
     <string name="board_done_yesterday">Ahir</string>
@@ -59,6 +61,7 @@
     <string name="board_quickadd_revert">Tornar «{label}» a text</string>
     <string name="board_quickadd_scoperequired">Indica l\'àmbit amb #{scopes}</string>
     <string name="board_quickadd_scoperequiredprefix">Indica l\'àmbit amb #</string>
+    <string name="calendar_addonday">Afegir una tasca aquest dia</string>
     <string name="calendar_day">Diari</string>
     <string name="calendar_empty_day">Sense esdeveniments ni tasques aquest dia.</string>
     <string name="calendar_empty_week">Sense res</string>
@@ -158,6 +161,7 @@
     <string name="error_wrong_component">«{name}» és de tasques i no accepta esdeveniments.</string>
     <string name="error_wrong_password">La contrasenya actual no és correcta.</string>
     <string name="inbox_day_next">El dia següent</string>
+    <string name="inbox_day_pick">Triar el dia</string>
     <string name="inbox_day_prev">El dia abans</string>
     <string name="inbox_day_today">Avui</string>
     <string name="inbox_event_allday">Tot el dia</string>
@@ -224,6 +228,7 @@
     <string name="nav_search">Cercar</string>
     <string name="nav_settings">Ajustos</string>
     <string name="nav_tasks">Tasques</string>
+    <string name="nav_view">Vista</string>
     <string name="notify_reminder">Recordatori</string>
     <string name="palette_empty">Res que coincideixi.</string>
     <string name="palette_go">Anar a</string>

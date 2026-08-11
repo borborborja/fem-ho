@@ -1,6 +1,53 @@
 import React from 'react';
 
 /**
+ * El `+` que apareix damunt d'un dia en passar-hi per sobre.
+ *
+ * **Un `span` amb `role="button"` i no un `<button>`**, i no per gust: la cel·la del dia
+ * ja ÉS un botó, i el HTML no permet un botó dins d'un altre — el navegador desfà
+ * l'imbricat i el resultat és impredictible. Amb `role` i `tabIndex` es comporta igual per
+ * a teclat i lector de pantalla.
+ */
+function DayAdd({ label, onClick }) {
+  const activa = (event) => {
+    event.stopPropagation();
+    onClick();
+  };
+  return (
+    <span
+      role="button"
+      tabIndex={0}
+      aria-label={label}
+      title={label}
+      data-testid="day-add"
+      onClick={activa}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') activa(event);
+      }}
+      style={{
+        position: 'absolute',
+        top: 2,
+        right: 2,
+        width: 18,
+        height: 18,
+        borderRadius: '50%',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: 14,
+        lineHeight: 1,
+        cursor: 'pointer',
+        background: 'var(--card-bg)',
+        color: 'var(--ink-soft)',
+        border: '1px solid var(--card-border)',
+      }}
+    >
+      +
+    </span>
+  );
+}
+
+/**
  * CalendarGrid — mes, setmana i dia.
  *
  * PORTAT del prototip, amb les seves mesures: cel·les quadrades de radi 14 i 6px de
@@ -70,8 +117,12 @@ export function MonthView({
   onSelect,
   onPrev,
   onNext,
+  onAddOnDay,
+  addLabel,
+  maxDate,
 }) {
   const cells = monthCells(year, month, weekStart);
+  const [hovered, setHovered] = React.useState(null);
 
   return (
     <div
@@ -153,6 +204,14 @@ export function MonthView({
           const selected = iso !== null && iso === selectedDate;
           const isToday = iso !== null && iso === today;
           const dots = iso === null ? [] : (dotsByDate[iso] ?? []);
+          /**
+           * **Un dia més enllà del límit no es pot triar.**
+           *
+           * Ho fa servir la columna Fet: "què vaig fer dijous que ve" no vol dir res, i un
+           * dia que es pot clicar i sempre surt buit és pitjor que un que no es pot clicar
+           * — el primer et fa dubtar de si has perdut una tasca.
+           */
+          const beyond = maxDate !== undefined && iso !== null && iso > maxDate;
 
           return (
             <button
@@ -160,10 +219,25 @@ export function MonthView({
               type="button"
               data-testid={iso === null ? undefined : `day-${iso}`}
               data-selected={selected ? 'true' : 'false'}
+              data-hovered={hovered !== null && hovered === iso ? 'true' : undefined}
               aria-current={isToday ? 'date' : undefined}
               onClick={() => (iso === null ? undefined : onSelect?.(iso))}
-              disabled={iso === null}
+              onMouseEnter={() => setHovered(iso)}
+              onMouseLeave={() => setHovered(null)}
+              // El teclat també: qui hi navega amb Tab ha de veure el mateix que qui hi
+              // passa el ratolí, o el `+` seria una acció que només existeix amb ratolí.
+              onFocus={() => setHovered(iso)}
+              onBlur={() => setHovered(null)}
+              disabled={iso === null || beyond}
+              data-beyond={beyond ? 'true' : undefined}
               style={{
+                position: 'relative',
+                // El contorn diu "el pots agafar" sense competir amb el farciment del dia
+                // seleccionat ni amb el d'avui.
+                boxShadow:
+                  hovered !== null && hovered === iso && !selected
+                    ? 'inset 0 0 0 2px var(--day-hover-ring)'
+                    : 'none',
                 aspectRatio: '1',
                 borderRadius: 14,
                 display: 'flex',
@@ -181,8 +255,10 @@ export function MonthView({
                     ? 'var(--ghost-bg)'
                     : 'transparent',
                 // Els dies d'altres mesos ocupen lloc i no es veuen: treure'ls
-                // desalinearia les columnes.
-                opacity: cell.inMonth ? 1 : 0,
+                // desalinearia les columnes. Els de més enllà del límit sí que es veuen,
+                // atenuats: han de dir "existeix, però aquí no".
+                opacity: cell.inMonth ? (beyond ? 0.35 : 1) : 0,
+                cursor: beyond ? 'not-allowed' : iso === null ? 'default' : 'pointer',
               }}
             >
               <span
@@ -194,6 +270,9 @@ export function MonthView({
               >
                 {cell.date === null ? '' : cell.date.getDate()}
               </span>
+              {onAddOnDay && iso !== null && hovered === iso ? (
+                <DayAdd label={addLabel} onClick={() => onAddOnDay(iso)} />
+              ) : null}
               <span style={{ display: 'flex', gap: 3, height: 5 }}>
                 {/* Fins a 3 punts de 5px amb els colors dels àmbits que hi tenen res. */}
                 {dots.slice(0, 3).map((color, dotIndex) => (
@@ -212,7 +291,8 @@ export function MonthView({
   );
 }
 
-export function WeekView({ days, selectedDate, onSelect, emptyLabel }) {
+export function WeekView({ days, selectedDate, onSelect, emptyLabel, onAddOnDay, addLabel }) {
+  const [hovered, setHovered] = React.useState(null);
   return (
     <div
       data-testid="calendar-week"
@@ -223,8 +303,24 @@ export function WeekView({ days, selectedDate, onSelect, emptyLabel }) {
           key={day.iso}
           type="button"
           data-testid={`week-day-${day.iso}`}
+          data-hovered={hovered === day.iso ? 'true' : undefined}
           onClick={() => onSelect?.(day.iso)}
+          onMouseEnter={() => setHovered(day.iso)}
+          onMouseLeave={() => setHovered(null)}
+          onFocus={() => setHovered(day.iso)}
+          onBlur={() => setHovered(null)}
           style={{
+            position: 'relative',
+            /*
+              **A la setmana el contorn substitueix el farciment i no s'hi suma.** Una
+              columna de 160px amb fons i contorn alhora es llegeix com dues capes; amb el
+              contorn sol, el dia seleccionat —que sí que porta fons— segueix distingint-se
+              d'un damunt del qual només hi ha el ratolí.
+            */
+            boxShadow:
+              hovered === day.iso && day.iso !== selectedDate
+                ? 'inset 0 0 0 2px var(--day-hover-ring)'
+                : 'none',
             display: 'flex',
             flexDirection: 'column',
             gap: 8,
@@ -277,13 +373,16 @@ export function WeekView({ days, selectedDate, onSelect, emptyLabel }) {
               ))
             )}
           </span>
+          {onAddOnDay && hovered === day.iso ? (
+            <DayAdd label={addLabel} onClick={() => onAddOnDay(day.iso)} />
+          ) : null}
         </button>
       ))}
     </div>
   );
 }
 
-export function DayView({ label, items, emptyLabel, onSelectItem }) {
+export function DayView({ label, items, emptyLabel, onSelectItem, onAdd, addLabel }) {
   return (
     <div
       data-testid="calendar-day"
@@ -364,6 +463,40 @@ export function DayView({ label, items, emptyLabel, onSelectItem }) {
           </button>
         ))
       )}
+
+      {/*
+        **A la vista diària l'acció és permanent i no de passada.**
+
+        Al mes i a la setmana el `+` surt en passar per sobre d'una cel·la, perquè hi ha
+        trenta o set dies i un botó a cadascun seria soroll. Aquí n'hi ha un: amagar-lo
+        darrere del ratolí seria amagar-lo per res —i a una pantalla tàctil, on no hi ha
+        `hover`, seria amagar-lo del tot.
+      */}
+      {onAdd ? (
+        <button
+          type="button"
+          data-testid="day-add"
+          onClick={onAdd}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 6,
+            width: '100%',
+            padding: '10px 0',
+            marginTop: 2,
+            borderRadius: 14,
+            border: '1px dashed var(--card-border)',
+            background: 'transparent',
+            color: 'var(--ink-soft)',
+            font: 'inherit',
+            fontSize: 12.5,
+            cursor: 'pointer',
+          }}
+        >
+          + {addLabel}
+        </button>
+      ) : null}
     </div>
   );
 }

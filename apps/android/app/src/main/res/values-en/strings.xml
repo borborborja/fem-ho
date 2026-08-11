@@ -38,7 +38,9 @@
     <string name="board_column_done">Done</string>
     <string name="board_column_inbox">Inbox</string>
     <string name="board_column_todo">To do</string>
+    <string name="board_done_backtotoday">Back to today</string>
     <string name="board_done_clear">Clear</string>
+    <string name="board_done_emptyday">Nothing finished on {day}.</string>
     <string name="board_done_showalltoday">All of today</string>
     <string name="board_done_thisweek">This week</string>
     <string name="board_done_yesterday">Yesterday</string>
@@ -59,6 +61,7 @@
     <string name="board_quickadd_revert">Turn “{label}” back into text</string>
     <string name="board_quickadd_scoperequired">Name the scope with #{scopes}</string>
     <string name="board_quickadd_scoperequiredprefix">Name the scope with #</string>
+    <string name="calendar_addonday">Add a task on this day</string>
     <string name="calendar_day">Day</string>
     <string name="calendar_empty_day">No events or tasks on this day.</string>
     <string name="calendar_empty_week">Nothing</string>
@@ -158,6 +161,7 @@
     <string name="error_wrong_component">“{name}” is for tasks and does not accept events.</string>
     <string name="error_wrong_password">The current password is not correct.</string>
     <string name="inbox_day_next">Next day</string>
+    <string name="inbox_day_pick">Pick a day</string>
     <string name="inbox_day_prev">Previous day</string>
     <string name="inbox_day_today">Today</string>
     <string name="inbox_event_allday">All day</string>
@@ -224,6 +228,7 @@
     <string name="nav_search">Search</string>
     <string name="nav_settings">Settings</string>
     <string name="nav_tasks">Tasks</string>
+    <string name="nav_view">View</string>
     <string name="notify_reminder">Reminder</string>
     <string name="palette_empty">Nothing matches.</string>
     <string name="palette_go">Go to</string>

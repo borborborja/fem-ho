@@ -10,7 +10,7 @@
  * amb aquestes paraules.
  */
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   getLocale,
   longDay,
@@ -21,11 +21,14 @@ import {
   weekdayNames,
 } from '@fem-ho/contracts';
 import { DayView, MonthView, WeekView, useIsMobile } from '@fem-ho/design-system/femho';
+import { generatePosition, type QuickAddContext } from '@fem-ho/contracts';
 import { api } from '../app/api.js';
+import { v7 as uuidv7 } from 'uuid';
 import { useSession, useSessionData } from '../app/session.js';
 import { useApi } from '../app/useApi.js';
 import type { Calendar, EventOccurrence, Inbox } from '../app/types.js';
 import { InboxRail } from '../board/InboxRail.js';
+import { ColumnQuickAdd } from '../board/ColumnQuickAdd.js';
 import { EventSheet } from './EventSheet.js';
 import { ErrorBanner } from './BoardScreen.js';
 
@@ -62,7 +65,7 @@ export interface CalendarScreenProps {
 }
 
 export function CalendarScreen({ activeScopeIds, onOpenTask }: CalendarScreenProps) {
-  const { scopes, settings } = useSessionData();
+  const { scopes, projects, people, settings } = useSessionData();
   const { updateSettings } = useSession();
   const mobile = useIsMobile();
   const [mode, setMode] = useState<Mode>('month');
@@ -220,6 +223,61 @@ export function CalendarScreen({ activeScopeIds, onOpenTask }: CalendarScreenPro
   const position = mobile ? 'below' : (settings.inbox_position ?? 'right');
   const railFirst = position === 'left';
 
+  /**
+   * Crear a la bústia **d'un dia concret**.
+   *
+   * `dueDate` nul vol dir "sense dia", que és el bloc de sota del rail. Amb data, la tasca
+   * neix ja situada: és el que fa que el `+` d'una cel·la del calendari valgui la pena en
+   * comptes de crear-la i haver-la d'arrossegar.
+   */
+  const crear = useCallback(
+    (
+      dueDate: string | null,
+      input: { title: string; scopeId: string; projectId: string | null; assigneeIds: string[] },
+    ) => {
+      void api
+        .post('/api/v1/tasks', {
+          id: uuidv7(),
+          scope_id: input.scopeId,
+          project_id: input.projectId ?? undefined,
+          title: input.title,
+          status: 'inbox',
+          position: generatePosition(null, null),
+          ...(dueDate === null ? {} : { due_date: dueDate }),
+          assignee_ids: input.assigneeIds.length > 0 ? input.assigneeIds : undefined,
+        })
+        .then(() => {
+          inbox.reload();
+          events.reload();
+        });
+    },
+    [inbox, events],
+  );
+
+  /**
+   * El context de l'afegida ràpida, **el mateix que al tauler**.
+   *
+   * Els projectes hi han de ser: `#Àmbit/Projecte` és una de les dues formes que el parser
+   * entén, i un context sense projectes faria que al calendari la mateixa sintaxi que
+   * funciona al tauler no encaminés enlloc.
+   */
+  const contextRapid = useMemo<QuickAddContext>(
+    () => ({
+      scopes: scopes
+        .filter((scope) => activeScopeIds.includes(scope.id))
+        .map((scope) => ({
+          id: scope.id,
+          name: scope.name,
+          projects: projects
+            .filter((project) => project.scope_id === scope.id)
+            .map((project) => ({ id: project.id, name: project.name })),
+        })),
+      people,
+      activeScopeIds,
+    }),
+    [scopes, projects, people, activeScopeIds],
+  );
+
   const rail = (
     <InboxRail
       tasks={[...(inbox.data?.dated ?? []), ...(inbox.data?.overdue ?? [])].map((task) => ({
@@ -245,6 +303,24 @@ export function CalendarScreen({ activeScopeIds, onOpenTask }: CalendarScreenPro
         }))}
       placement="rail"
       dayLabel={longDay(locale, new Date(`${selected}T12:00:00`))}
+      dayFooter={
+        <ColumnQuickAdd
+          status="inbox"
+          context={contextRapid}
+          scopes={scopes.map((scope) => ({ id: scope.id, color: scope.color }))}
+          onCreate={(task) => crear(selected, task)}
+          onFullEdit={() => onOpenTask('')}
+        />
+      }
+      undatedFooter={
+        <ColumnQuickAdd
+          status="inbox"
+          context={contextRapid}
+          scopes={scopes.map((scope) => ({ id: scope.id, color: scope.color }))}
+          onCreate={(task) => crear(null, task)}
+          onFullEdit={() => onOpenTask('')}
+        />
+      }
       onOpen={onOpenTask}
       events={inbox.data?.events}
       onEventRemove={(event) => {
@@ -390,6 +466,13 @@ export function CalendarScreen({ activeScopeIds, onOpenTask }: CalendarScreenPro
             onPrev={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1))}
             onNext={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1))}
             onSelect={setSelected}
+            /*
+              El `+` d'una cel·la **selecciona el dia i hi crea**: sense seleccionar-lo, la
+              tasca apareixeria a un rail que ensenya un altre dia i semblaria que no s'ha
+              creat res.
+            */
+            onAddOnDay={(iso) => setSelected(iso)}
+            addLabel={t('calendar.addOnDay')}
           />
         ) : mode === 'week' ? (
           <WeekView
@@ -397,6 +480,8 @@ export function CalendarScreen({ activeScopeIds, onOpenTask }: CalendarScreenPro
             selectedDate={selected}
             onSelect={setSelected}
             emptyLabel={t('calendar.empty.week')}
+            onAddOnDay={(iso) => setSelected(iso)}
+            addLabel={t('calendar.addOnDay')}
           />
         ) : (
           <DayView
@@ -411,6 +496,16 @@ export function CalendarScreen({ activeScopeIds, onOpenTask }: CalendarScreenPro
             items={dayItems}
             emptyLabel={t('calendar.empty.day')}
             onSelectItem={setObert}
+            /*
+              A la diària el dia ja és el seleccionat: el botó no ha de canviar de dia,
+              només portar el focus al camp del rail, que és on s'escriu.
+            */
+            onAdd={() => {
+              document
+                .querySelector<HTMLInputElement>('[data-testid="quick-add-inbox"] input')
+                ?.focus();
+            }}
+            addLabel={t('calendar.addOnDay')}
           />
         )}
       </div>
