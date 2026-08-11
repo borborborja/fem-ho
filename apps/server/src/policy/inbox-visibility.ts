@@ -39,8 +39,8 @@
  *     cita en tasca de la família, ha de marxar de la bústia de tothom, perquè la feina
  *     ja és a la columna del costat i seguir veient la cita seria veure-la dues vegades.
  *
- * PER QUÈ EL DEFECTE DELS RSS ÉS "NO"
- * -----------------------------------
+ * PER QUÈ EL DEFECTE DELS RSS I DEL CORREU ÉS "NO"
+ * ------------------------------------------------
  * Un ítem d'RSS és un instant, no una durada (`dav/rss.ts`), i un canal actiu en pot
  * publicar desenes al dia. Amb el defecte a "sí", el primer matí després de subscriure'n
  * un, la bústia —que és l'entrada de tot— queda enterrada, i la reacció raonable de
@@ -49,10 +49,32 @@
  * Trenca a mitges el principi de la migració 006 ("una font nova ha de sortir sola"), i
  * es fa a posta: allà es parlava del calendari, on una font de més és una capa més; aquí
  * es parla de la llista del que has de fer avui.
+ *
+ * **El correu segueix el mateix criteri, i encara més clar.** Una carpeta de correu en pot
+ * portar desenes al dia i la immensa majoria no són feina: mapar-la és dir "vull veure això
+ * en algun lloc", no "posa-m'ho tot a la llista de coses per fer". Amb el calendari fent
+ * d'organitzador, el que arriba hi és sempre i tu decideixes què puja.
+ *
+ * QUATRE MENES, UNA SOLA CASCADA
+ * ------------------------------
+ * Els cinc nivells valen igual per a una cita i per a un correu; el que canvia és **d'on
+ * surt cada nivell**, i prou:
+ *
+ *   | Nivell | Cita                      | Correu                          |
+ *   | ------ | ------------------------- | ------------------------------- |
+ *   | 0      | `tasks.event_uid`         | `tasks.mail_message_key`        |
+ *   | 1      | marca de l'ocurrència     | `mail_messages.inbox_visible`   |
+ *   | 2      | marca de la sèrie         | *(el fil: buit a posta)*        |
+ *   | 3      | `calendars.inbox_visible` | `mail_rules.inbox_visible`      |
+ *   | 4      | `defaultInInbox`          | `defaultInInbox`                |
+ *
+ * El nivell 2 del correu seria "tot aquest fil, no". No es fa ara —ningú ho ha demanat i
+ * demana decidir on viu—, i el forat es deixa obert a posta: `seriesMark` accepta `null` i
+ * el dia que es vulgui, hi entra sense tocar res més.
  */
 
 export type CalendarOrigin = 'local' | 'subscription';
-export type SourceKind = 'caldav' | 'ical' | 'rss' | null;
+export type SourceKind = 'caldav' | 'ical' | 'rss' | 'mail' | null;
 
 export interface InboxVisibilityInput {
   origin: CalendarOrigin;
@@ -78,7 +100,7 @@ export interface InboxVisibilityInput {
 export function defaultInInbox(origin: CalendarOrigin, sourceKind: SourceKind): boolean {
   // Un calendari d'aquesta casa: hi és. No hi ha cap raó per amagar el que has escrit tu.
   if (origin === 'local') return true;
-  return sourceKind !== 'rss';
+  return sourceKind !== 'rss' && sourceKind !== 'mail';
 }
 
 export function isInInbox(input: InboxVisibilityInput): boolean {

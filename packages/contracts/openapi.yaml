@@ -2109,6 +2109,18 @@ paths:
         - { name: date, in: query, required: false, schema: { type: string, format: date } }
         - { name: include_overdue, in: query, required: false, schema: { type: boolean } }
         - { name: scope_ids, in: query, required: false, schema: { type: string } }
+        - name: include_hidden
+          in: query
+          required: false
+          schema: { type: boolean }
+          description: |
+            Amb `true`, la bústia porta **també el que no és visible**, cada ítem amb el seu
+            `in_inbox`.
+
+            És el que fa que la columna del kanban i el rail del calendari segueixin sent el
+            mateix component amb la mateixa font de dades (P4): el que canvia és la lent. El
+            tauler ensenya el que has decidit que és feina; el calendari ho ensenya tot,
+            difuminat, perquè és des d'allà que decideixes.
         - name: mailbox
           in: query
           required: false
@@ -3164,6 +3176,107 @@ paths:
           content: { application/json: { schema: { $ref: '#/components/schemas/AiStatus' } } }
         '401': { $ref: '#/components/responses/Unauthenticated' }
 
+  /inbox/mail:
+    post:
+      tags: [mail]
+      operationId: setMailInboxVisibility
+      summary: Fer visible o invisible un correu a l'inbox de Tasques
+      description: |
+        **Bessona de `POST /inbox/events`.** Un correu i una cita són coses diferents, i la
+        pregunta «vull veure això a la meva llista?» és exactament la mateixa.
+
+        Amagar-lo **no l'esborra i no el treu del calendari**: hi segueix, difuminat, i és
+        des d'allà que el pots tornar a pujar. Al servidor de correu no s'hi toca mai res.
+
+        `visible: null` treu l'excepció i torna a manar la carpeta. Els botons envien `true`
+        o `false` explícits: amb `null`, tornar a fer visible un correu d'una carpeta que per
+        defecte no ho és no faria res i el botó semblaria espatllat.
+
+        Demana **`mail:read`** i no `mail:write`: el que s'escriu és una preferència teva
+        sobre com vols veure la teva bústia, no el correu.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message_id]
+              properties:
+                message_id: { type: string }
+                visible: { type: [boolean, 'null'] }
+      responses:
+        '200':
+          description: L'estat resultant.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [visible, in_inbox]
+                properties:
+                  visible:
+                    type: [boolean, 'null']
+                    description: L'excepció desada, o `null` si no n'hi ha cap.
+                  in_inbox:
+                    type: boolean
+                    description: >-
+                      El resultat de la cascada sencera, ja recalculat: l'excepció, l'ajust
+                      de la carpeta i el defecte de la mena.
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /mail/messages:
+    get:
+      tags: [mail]
+      operationId: listMailMessages
+      summary: Els correus d'un interval, per al calendari
+      description: |
+        El calendari els pinta **al dia que van arribar**, i per això demana un interval i no
+        un dia: la vista mensual en necessita trenta-un de cop.
+
+        **Porta també els que no són visibles**, cadascun amb el seu `in_inbox`: el calendari
+        és l'organitzador i hi ha de sortir tot.
+      parameters:
+        - { name: from, in: query, required: false, schema: { type: string, format: date-time } }
+        - { name: to, in: query, required: false, schema: { type: string, format: date-time } }
+        - { name: scope_ids, in: query, required: false, schema: { type: string } }
+      responses:
+        '200':
+          description: Els correus.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/InboxMail' } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+
+  /mail/accounts/{id}/folders:
+    get:
+      tags: [mail]
+      operationId: listMailFolders
+      summary: Les carpetes del servidor
+      description: |
+        Per poder-les **triar** en comptes d'escriure-les. Es connecta amb les credencials
+        desades, llista i tanca; **no desa res i no marca cap correu**.
+
+        Va a part de `/test` perquè la pregunta és una altra: allà preguntes si les
+        credencials van bé, i aquí quines carpetes hi ha.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: |
+            Les carpetes. **Una llista buida amb `error` no és un error de l'API**: vol dir
+            que el servidor de correu no ha contestat el que esperàvem.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [folders]
+                properties:
+                  folders: { type: array, items: { type: string } }
+                  delimiter: { type: [string, 'null'] }
+                  error: { type: [string, 'null'] }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
 components:
   schemas:
     AiStatus:
@@ -3648,6 +3761,7 @@ components:
           source_kind,
           calendar_name,
           calendar_color,
+          in_inbox,
         ]
       properties:
         calendar_id: { type: string, format: uuid }
@@ -3667,6 +3781,11 @@ components:
           description: De quina mena és la font. `null` si el calendari és d'aquesta casa.
         calendar_name: { type: string }
         calendar_color: { type: [string, 'null'] }
+        in_inbox:
+          type: boolean
+          description: >-
+            Si surt a l'inbox de la pestanya Tasques. Amb `false` només arriba si s'ha
+            demanat `include_hidden`, i el calendari el pinta difuminat.
 
     InboxMail:
       type: object
@@ -3718,6 +3837,13 @@ components:
             Sempre `mail`. Hi és perquè la targeta dibuixi la icona de provinença amb el
             mateix component que la resta, sense que el client hagi d'endevinar-ho pel
             tipus de l'ítem.
+        in_inbox:
+          type: boolean
+          description: >-
+            Si surt a l'inbox de la pestanya Tasques. **El calcula el servidor i el client no
+            el recalcula mai**: és el que fa que «difuminat al calendari» i «no és a la meva
+            bústia» siguin literalment la mateixa cosa. Amb `false` l'ítem només arriba si
+            s'ha demanat `include_hidden`.
 
     Inbox:
       type: object

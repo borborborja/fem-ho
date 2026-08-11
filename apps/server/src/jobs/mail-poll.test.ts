@@ -10,7 +10,7 @@
  * amb dotze anys de correu crea desenes de milers de tasques i no hi ha desfer massiu.
  */
 
-import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { sql } from 'kysely';
@@ -104,13 +104,16 @@ const missatges = async (): Promise<{ message_key: string; disposition: string; 
     `.execute(conn.db)
   ).rows;
 
-async function regla(folder = 'INBOX', over: Record<string, string> = {}): Promise<string> {
+/**
+ * Una regla. **Ja no hi ha `action`**: cap regla converteix res sola, i el que es tria és si
+ * el que arriba es veu a l'inbox de Tasques o només al calendari.
+ */
+async function regla(folder = 'INBOX'): Promise<string> {
   const id = uuidv7();
   await sql`
-    INSERT INTO mail_rules (id, account_id, folder, scope_id, action, position,
+    INSERT INTO mail_rules (id, account_id, folder, scope_id, position,
                             created_at, updated_at)
-    VALUES (${id}, ${accountId}, ${folder}, ${scopeId}, ${over.action ?? 'inbox'}, 'a1',
-            ${NOW}, ${NOW})
+    VALUES (${id}, ${accountId}, ${folder}, ${scopeId}, 'a1', ${NOW}, ${NOW})
   `.execute(conn.db);
   return id;
 }
@@ -283,7 +286,7 @@ describe('el fil', () => {
      * I **no obre una segona tasca**: si no, respondre un correu et partiria el fil en
      * dues coses a fer amb el mateix assumpte.
      */
-    await regla('INBOX', { action: 'task' });
+    await regla();
     servidor.status = { uidValidity: '1', uidNext: '1', exists: 0 };
     await córrer();
 
@@ -366,18 +369,16 @@ describe('la corba de la retirada', () => {
   });
 });
 
-describe('la conversió', () => {
-  it("d'un correu en surt una tasca amb el títol demanat", async () => {
+describe('res es converteix sol', () => {
+  it('un correu que arriba **no crea cap tasca**', async () => {
     /**
-     * El títol el fa **la mateixa funció que la previsualització d'Ajustos**: si el
-     * servidor en tingués una còpia, un dia el que veus escrivint la plantilla no seria el
-     * que et surt al tauler.
+     * **La invariant del producte, i el que aquesta tanda va venir a arreglar.**
+     *
+     * Abans una regla podia dir «converteix-ho en tasca», i llavors el que et posava coses
+     * a la llista de feina era una carpeta de correu. El model és el contrari: el que
+     * arriba d'una font és **un element que pots convertir**, i qui converteix ets tu.
      */
-    const id = await regla('INBOX', { action: 'task' });
-    await sql`
-      UPDATE mail_rules SET title_template = '{{from_name}} - {{subject}}' WHERE id = ${id}
-    `.execute(conn.db);
-
+    await regla();
     servidor.status = { uidValidity: '1', uidNext: '1', exists: 0 };
     await córrer();
 
@@ -386,117 +387,133 @@ describe('la conversió', () => {
     servidor.bodies.set('1', { text: 'Us adjuntem la factura.', html: null, attachments: [] });
     await córrer('2026-08-11T11:00:00.000Z');
 
-    const tasques = await sql<{
-      title: string;
-      description: string | null;
-      source_kind: string | null;
-      mail_account_id: string | null;
-      mail_message_key: string | null;
-      scope_id: string;
-    }>`SELECT title, description, source_kind, mail_account_id, mail_message_key, scope_id
-       FROM tasks`.execute(conn.db);
-
-    expect(tasques.rows).toHaveLength(1);
-    expect(tasques.rows[0]).toMatchObject({
-      title: 'Escola - La factura de març',
-      description: 'Us adjuntem la factura.',
-      // **La provinença sobreviu a la conversió**: «s'ha creat a partir de» vol dir que la
-      // marca es queda, i és el que dibuixa la icona a la targeta.
-      source_kind: 'mail',
-      mail_account_id: accountId,
-      scope_id: scopeId,
-    });
-
-    const missatge = await missatges();
-    expect(missatge[0]?.disposition).toBe('task');
-  });
-
-  it('i la resposta comenta, sense duplicar la tasca', async () => {
-    await regla('INBOX', { action: 'task' });
-    servidor.status = { uidValidity: '1', uidNext: '1', exists: 0 };
-    await córrer();
-
-    servidor.status = { uidValidity: '1', uidNext: '2', exists: 1 };
-    servidor.headers = [sobre('1', { messageId: '<arrel@escola.test>' })];
-    await córrer('2026-08-11T11:00:00.000Z');
-
-    servidor.status = { uidValidity: '1', uidNext: '3', exists: 2 };
-    servidor.headers = [
-      ...servidor.headers,
-      sobre('2', {
-        messageId: '<resposta@escola.test>',
-        references: ['<arrel@escola.test>'],
-        subject: 'Re: Assumpte 1',
-      }),
-    ];
-    servidor.bodies.set('2', { text: 'Doncs ja està pagada.', html: null, attachments: [] });
-    await córrer('2026-08-11T12:00:00.000Z');
-
-    /**
-     * **Una tasca, no dues.** Si la resposta n'obrís una de nova, acabaries amb el fil
-     * partit en dues coses a fer amb el mateix assumpte, i això passa cada dia.
-     */
     const tasques = await sql<{ n: number }>`SELECT COUNT(*) AS n FROM tasks`.execute(conn.db);
-    expect(Number(tasques.rows[0]?.n)).toBe(1);
+    expect(Number(tasques.rows[0]?.n)).toBe(0);
 
-    const comentaris = await sql<{ body: string }>`SELECT body FROM comments`.execute(conn.db);
-    expect(comentaris.rows).toHaveLength(1);
-    // I porta **el remitent de debò**, el del correu i no el de cap plantilla.
-    expect(comentaris.rows[0]?.body).toContain('Escola');
-    expect(comentaris.rows[0]?.body).toContain('ja està pagada');
+    // I hi és, a la bústia, esperant que algú decideixi.
+    const files = await missatges();
+    expect(files).toHaveLength(1);
+    expect(files[0]?.disposition).toBe('inbox');
   });
 
-  it('convertir dues vegades el mateix correu dona la mateixa tasca', async () => {
-    // Dos clics, un reintent, un rescaneig: la clau és la del Message-ID, i qui la té ja
-    // té la tasca.
-    await regla('INBOX', { action: 'task' });
-    servidor.status = { uidValidity: '1', uidNext: '1', exists: 0 };
-    await córrer();
-
-    servidor.status = { uidValidity: '1', uidNext: '2', exists: 1 };
-    servidor.headers = [sobre('1')];
-    await córrer('2026-08-11T11:00:00.000Z');
-
-    // Es torna a deixar pendent a mà: és el que passaria amb un reintent a mig camí.
-    await sql`UPDATE mail_messages SET disposition = 'pending'`.execute(conn.db);
-    await córrer('2026-08-11T13:00:00.000Z');
-
-    const tasques = await sql<{ n: number }>`SELECT COUNT(*) AS n FROM tasks`.execute(conn.db);
-    expect(Number(tasques.rows[0]?.n)).toBe(1);
-  });
-
-  it("i una regla 'inbox' NO crea cap tasca sola", async () => {
-    // La diferència entre els dos valors de `action` és exactament aquesta: qui decideix.
+  it("i el cos s'hi desa igualment, per si el converteixes", async () => {
     await regla();
     servidor.status = { uidValidity: '1', uidNext: '1', exists: 0 };
     await córrer();
 
     servidor.status = { uidValidity: '1', uidNext: '2', exists: 1 };
     servidor.headers = [sobre('1')];
+    servidor.bodies.set('1', { text: 'El cos del correu.', html: null, attachments: [] });
+    await córrer('2026-08-11T11:00:00.000Z');
+
+    const cos = await sql<{ body_text: string | null }>`
+      SELECT body_text FROM mail_messages
+    `.execute(conn.db);
+    expect(cos.rows[0]?.body_text).toBe('El cos del correu.');
+  });
+});
+
+describe('el fil, quan ja hi ha tasca', () => {
+  it('la resposta hi deixa un comentari i no obre una segona tasca', async () => {
+    /**
+     * **L'únic automatisme que queda**, i hi és per no partir la feina: si una resposta
+     * obrís una tasca nova, respondre un correu et duplicaria la feina cada vegada.
+     */
+    await regla();
+    servidor.status = { uidValidity: '1', uidNext: '1', exists: 0 };
+    await córrer();
+
+    const tasca = uuidv7();
+    await sql`
+      INSERT INTO tasks (id, scope_id, title, status, position, origin, source_kind,
+                         mail_account_id, mail_thread_key, created_by, created_at, updated_at)
+      VALUES (${tasca}, ${scopeId}, 'D’un correu', 'inbox', 'a1', 'native', 'mail',
+              ${accountId}, 'mid:arrel@escola.test', ${userId}, ${NOW}, ${NOW})
+    `.execute(conn.db);
+
+    servidor.status = { uidValidity: '1', uidNext: '2', exists: 1 };
+    servidor.headers = [
+      sobre('1', {
+        messageId: '<resposta@escola.test>',
+        references: ['<arrel@escola.test>'],
+        subject: 'Re: la factura',
+      }),
+    ];
+    servidor.bodies.set('1', { text: 'Doncs ja està pagada.', html: null, attachments: [] });
     await córrer('2026-08-11T11:00:00.000Z');
 
     const tasques = await sql<{ n: number }>`SELECT COUNT(*) AS n FROM tasks`.execute(conn.db);
-    expect(Number(tasques.rows[0]?.n)).toBe(0);
+    expect(Number(tasques.rows[0]?.n)).toBe(1);
+
+    const comentaris = await sql<{ body: string }>`SELECT body FROM comments`.execute(conn.db);
+    expect(comentaris.rows).toHaveLength(1);
+    // Amb **el remitent de debò**, el del correu i no el de cap plantilla.
+    expect(comentaris.rows[0]?.body).toContain('Escola');
+    expect(comentaris.rows[0]?.body).toContain('ja està pagada');
+
+    expect((await missatges())[0]?.disposition).toBe('comment');
+  });
+
+  it('i si la tasca ja no hi és, el correu cau a la bústia i prou', async () => {
+    /**
+     * **Ni tan sols aquí es crea res.** La tasca s'ha esborrat entre que el correu va
+     * arribar i que va passar el tic: la resposta no té on comentar, i el que toca és
+     * deixar-la a la bústia —no obrir una tasca que ningú ha demanat.
+     */
+    await regla();
+    servidor.status = { uidValidity: '1', uidNext: '1', exists: 0 };
+    await córrer();
+
+    const tasca = uuidv7();
+    await sql`
+      INSERT INTO tasks (id, scope_id, title, status, position, origin, source_kind,
+                         mail_account_id, mail_thread_key, created_by, created_at, updated_at)
+      VALUES (${tasca}, ${scopeId}, 'Ja esborrada', 'inbox', 'a1', 'native', 'mail',
+              ${accountId}, 'mid:arrel@escola.test', ${userId}, ${NOW}, ${NOW})
+    `.execute(conn.db);
+
+    servidor.status = { uidValidity: '1', uidNext: '2', exists: 1 };
+    servidor.headers = [
+      sobre('1', { messageId: '<resp@escola.test>', references: ['<arrel@escola.test>'] }),
+    ];
+    // S'esborra just abans que el tic hi arribi.
+    await sql`UPDATE tasks SET deleted_at = ${NOW} WHERE id = ${tasca}`.execute(conn.db);
+    await córrer('2026-08-11T11:00:00.000Z');
+
+    const vives = await sql<{ n: number }>`
+      SELECT COUNT(*) AS n FROM tasks WHERE deleted_at IS NULL
+    `.execute(conn.db);
+    expect(Number(vives.rows[0]?.n)).toBe(0);
     expect((await missatges())[0]?.disposition).toBe('inbox');
   });
 });
 
 describe('els adjunts', () => {
-  it('un factura.pdf que és un executable rep el que diuen els bytes', async () => {
+  it("es baixen en arribar, i el nom i el tipus queden nets d'entrada", async () => {
     /**
-     * **El `Content-Type` declarat es llença.** El que decideix el tipus són els bytes, i
-     * el nom passa per `safeFilename`: les dues coses vénen d'un desconegut. Servir un
-     * fitxer amb el tipus que ell diu és XSS emmagatzemat des del teu propi domini.
+     * **Es baixen encara que ningú hagi convertit res**, i és una tria amb motiu. Fer-ho en
+     * convertir voldria dir xarxa dins d'una petició —i la conversió fallaria amb el
+     * servidor de correu caigut, just al pitjor moment—, i un correu esborrat de la bústia
+     * d'origen s'enduria els fitxers.
+     *
+     * El nom i el tipus es decideixen **un sol cop, quan tenim els bytes**: `safeFilename`
+     * sobre el que deia el correu, i el tipus ensumat dels bytes amb el `Content-Type`
+     * declarat llençat. Servir un fitxer amb el tipus que diu un desconegut és XSS
+     * emmagatzemat des del teu propi domini.
      */
     const dades = mkdtempSync(join(tmpdir(), 'femho-adjunts-'));
-    await regla('INBOX', { action: 'task' });
+    const córrerAmbDisc = async (now: string): Promise<void> => {
+      await pollMail({
+        db: conn.db,
+        openClient: async () => servidor,
+        now: () => now,
+        dataDir: dades,
+      });
+    };
+
+    await regla();
     servidor.status = { uidValidity: '1', uidNext: '1', exists: 0 };
-    await pollMail({
-      db: conn.db,
-      openClient: async () => servidor,
-      now: () => NOW,
-      dataDir: dades,
-    });
+    await córrerAmbDisc(NOW);
 
     servidor.status = { uidValidity: '1', uidNext: '2', exists: 1 };
     servidor.headers = [sobre('1')];
@@ -516,34 +533,39 @@ describe('els adjunts', () => {
     // `MZ` és la signatura d'un executable de Windows.
     servidor.fitxers.set('1:2', new Uint8Array([0x4d, 0x5a, 0x90, 0x00]));
 
-    await pollMail({
-      db: conn.db,
-      openClient: async () => servidor,
-      now: () => '2026-08-11T11:00:00.000Z',
-      dataDir: dades,
-    });
+    await córrerAmbDisc('2026-08-11T11:00:00.000Z');
 
-    const adjunts = await sql<{
+    const fila = await sql<{ attachments: string | null }>`
+      SELECT attachments FROM mail_messages
+    `.execute(conn.db);
+    const desats = JSON.parse(fila.rows[0]?.attachments ?? '[]') as {
       filename: string;
       mime_type: string;
-      source: string;
-      is_ai_context: number;
-    }>`SELECT filename, mime_type, source, is_ai_context FROM attachments`.execute(conn.db);
+      storage_path: string;
+    }[];
 
-    expect(adjunts.rows).toHaveLength(1);
+    expect(desats).toHaveLength(1);
     // El nom no pot sortir de la seva carpeta.
-    expect(adjunts.rows[0]?.filename).not.toContain('..');
+    expect(desats[0]?.filename).not.toContain('..');
     // I el tipus no és el que deia el correu.
-    expect(adjunts.rows[0]?.mime_type).not.toBe('application/pdf');
-    expect(adjunts.rows[0]?.source).toBe('mail_attach');
-    // Un adjunt d'un desconegut no entra al context d'un model pel sol fet d'existir.
-    expect(Number(adjunts.rows[0]?.is_ai_context)).toBe(0);
+    expect(desats[0]?.mime_type).not.toBe('application/pdf');
+    // Els bytes són a disc, i la fila diu on.
+    expect(existsSync(join(dades, desats[0]!.storage_path))).toBe(true);
+
+    /**
+     * I **encara no hi ha cap adjunt de tasca**: no hi ha tasca. Les files d'`attachments`
+     * apareixen quan algú converteix, que és quan hi ha on penjar-les.
+     */
+    const penjats = await sql<{ n: number }>`
+      SELECT COUNT(*) AS n FROM attachments
+    `.execute(conn.db);
+    expect(Number(penjats.rows[0]?.n)).toBe(0);
 
     rmSync(dades, { recursive: true, force: true });
   });
 
-  it("i sense `dataDir` no se'n desa cap: no hi ha on posar-los", async () => {
-    await regla('INBOX', { action: 'task' });
+  it("i sense `dataDir` no se'n baixa cap: no hi hauria on posar-los", async () => {
+    await regla();
     servidor.status = { uidValidity: '1', uidNext: '1', exists: 0 };
     await córrer();
 
@@ -559,10 +581,11 @@ describe('els adjunts', () => {
     servidor.fitxers.set('1:2', new Uint8Array([1, 2, 3, 4]));
     await córrer('2026-08-11T11:00:00.000Z');
 
-    const adjunts = await sql<{ n: number }>`SELECT COUNT(*) AS n FROM attachments`.execute(
-      conn.db,
-    );
-    expect(Number(adjunts.rows[0]?.n)).toBe(0);
+    expect(servidor.baixats).toHaveLength(0);
+    const fila = await sql<{ attachments: string | null }>`
+      SELECT attachments FROM mail_messages
+    `.execute(conn.db);
+    expect(fila.rows[0]?.attachments).toBeNull();
   });
 });
 
@@ -573,7 +596,7 @@ describe('la retenció', () => {
      * claus foranes: amb una clau forana, purgar obligaria a triar entre trencar-la i
      * esborrar tasques d'algú. La tasca és teva; el correu és el que caduca.
      */
-    await regla('INBOX', { action: 'task' });
+    await regla();
     servidor.status = { uidValidity: '1', uidNext: '1', exists: 0 };
     await córrer();
 
@@ -582,24 +605,33 @@ describe('la retenció', () => {
     servidor.bodies.set('1', { text: 'Un cos que caducarà.', html: null, attachments: [] });
     await córrer('2026-08-11T11:00:00.000Z');
 
+    // Una tasca feta a mà a partir d'aquell correu: ara la conversió sempre la demana algú.
+    const tasca = uuidv7();
+    await sql`
+      INSERT INTO tasks (id, scope_id, title, status, position, origin, source_kind,
+                         mail_account_id, mail_message_key, created_by, created_at, updated_at)
+      VALUES (${tasca}, ${scopeId}, 'D’un correu', 'inbox', 'a1', 'native', 'mail',
+              ${accountId}, 'mid:1@escola.test', ${userId}, ${NOW}, ${NOW})
+    `.execute(conn.db);
+
     const purgats = await pruneMail(conn.db, '2026-12-31T00:00:00.000Z', 30);
     expect(purgats).toBe(1);
 
-    const missatge = await sql<{ body_text: string | null; disposition: string }>`
-      SELECT body_text, disposition FROM mail_messages
+    const missatge = await sql<{ body_text: string | null }>`
+      SELECT body_text FROM mail_messages
     `.execute(conn.db);
     expect(missatge.rows[0]?.body_text).toBeNull();
     /**
      * **I la fila hi segueix.** Si s'esborrés, la pròxima reindexació del servidor tornaria
-     * a ingerir el mateix correu i en sortiria una segona tasca.
+     * a ingerir el mateix correu i en tornaria a sortir un element a la bústia.
      */
     expect(missatge.rows).toHaveLength(1);
 
-    const tasca = await sql<{ title: string; source_kind: string | null }>`
+    const queda = await sql<{ title: string; source_kind: string | null }>`
       SELECT title, source_kind FROM tasks
     `.execute(conn.db);
-    expect(tasca.rows).toHaveLength(1);
-    expect(tasca.rows[0]?.source_kind).toBe('mail');
+    expect(queda.rows).toHaveLength(1);
+    expect(queda.rows[0]?.source_kind).toBe('mail');
   });
 
   it('i amb 0 dies no purga res: 0 vol dir per sempre', async () => {

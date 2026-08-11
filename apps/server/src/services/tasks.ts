@@ -1231,6 +1231,16 @@ export async function getInbox(
     includeOverdue?: boolean | undefined;
     scopeIds?: string[] | undefined;
     /**
+     * Amb `true`, la bústia porta **també el que no és visible**, cada ítem amb el seu
+     * `in_inbox`.
+     *
+     * És el que fa que la columna del kanban i el rail del calendari segueixin sent el
+     * mateix component amb **la mateixa font de dades** (P4): el que canvia és la lent. El
+     * tauler ensenya el que has decidit que és feina; el calendari ho ensenya tot, difuminat,
+     * perquè és des d'allà que decideixes.
+     */
+    includeHidden?: boolean | undefined;
+    /**
      * De quin calaix.
      *
      * **És un commutador, no un filtre**: canvies de calaix, no acotes una llista. Per
@@ -1305,6 +1315,7 @@ export async function getInbox(
     from: bounds.startUTC,
     to: bounds.endUTC,
     scopeIds: allowed,
+    includeHidden: options.includeHidden,
   });
 
   return {
@@ -1316,7 +1327,10 @@ export async function getInbox(
         : [],
     undated: tasks.filter((t) => t.due_date === null),
     events,
-    mail: await listInboxMail(db, principal, allowed),
+    mail: await listInboxMail(db, principal, {
+      scopeIds: allowed,
+      includeHidden: options.includeHidden,
+    }),
   };
 }
 

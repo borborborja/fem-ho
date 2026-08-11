@@ -21,6 +21,7 @@ import { connect, type Connection } from './connection.js';
 import type { Engine } from './dialect.js';
 import { connectTestSchema, postgresUrl, type TestSchema } from './test-postgres.js';
 import { migrateDown, migrateToLatest } from './migrator.js';
+import { dbBool } from './bool.js';
 
 const NOW = '2026-08-11T10:00:00.000Z';
 
@@ -95,7 +96,9 @@ describe.each(motors)('la 013 · $engine', (motor) => {
       const dIcs = await adjunt('ical_attach');
       expect(await compta()).toBe(2);
 
-      // Es desfà la 013 i es torna a aplicar **amb les files posades**: el refet, dos cops.
+      // Es desfan la 014 i la 013 i es tornen a aplicar **amb les files posades**: els dos
+      // refets, dues vegades cadascun.
+      expect(await migrateDown(conn.db, engine)).toBe('014-mail-visibility');
       expect(await migrateDown(conn.db, engine)).toBe('013-mail-sources');
       expect(await compta()).toBe(2);
       await migrateToLatest(conn.db, { engine });
@@ -145,8 +148,15 @@ describe.each(motors)('la 013 · $engine', (motor) => {
        * Desfer una migració **no pot voler dir perdre fitxers d'algú**. Amb el
        * `mail_attach` de la prova anterior a taula, la 013 s'ha de negar.
        */
+      // La 014 se'n va sense problema; és la 013 la que s'ha de negar.
+      expect(await migrateDown(conn.db, engine)).toBe('014-mail-visibility');
       await expect(migrateDown(conn.db, engine)).rejects.toThrow(/adjunts de correu/u);
       expect(await compta()).toBe(3);
+
+      // I es torna a deixar al dia: el que ve després d'aquest fitxer escriu a l'esquema
+      // d'ara, i deixar-lo a mig desfer faria que una prova fallés per l'ordre i no pel
+      // que comprova.
+      await migrateToLatest(conn.db, { engine });
     });
 
     it.skipIf(engine !== 'sqlite')(
@@ -160,6 +170,86 @@ describe.each(motors)('la 013 · $engine', (motor) => {
         expect(noms).toContain('idx_attachments_event');
       },
     );
+  });
+
+  describe('la 014 sobre dades de la 013', () => {
+    /**
+     * El rebliment només es pot provar **amb files d'abans**: es desfà fins a treure la 014,
+     * s'hi escriuen les tres situacions que existien i es torna a aplicar. Contra una base
+     * buida, aquest bloc passaria en verd sense executar ni una línia dels tres `UPDATE`.
+     */
+    it('cap correu es queda esperant una conversió que ja no existeix', async () => {
+      expect(await migrateDown(conn.db, engine)).toBe('014-mail-visibility');
+
+      const compte = uuidv7();
+      const fil = uuidv7();
+      await sql`
+        INSERT INTO mail_accounts (id, user_id, name, host, username, created_at, updated_at)
+        VALUES (${compte}, ${ids.user}, 'Vell', 'imap.example.test', 'borja', ${NOW}, ${NOW})
+      `.execute(conn.db);
+      await sql`
+        INSERT INTO mail_threads (id, account_id, thread_key, created_at, updated_at)
+        VALUES (${fil}, ${compte}, 'mid:vell@escola.test', ${NOW}, ${NOW})
+      `.execute(conn.db);
+
+      // Una regla de les que convertien soles, amb el booleà antic a `true`.
+      const regla = uuidv7();
+      await sql`
+        INSERT INTO mail_rules (id, account_id, folder, scope_id, action, inbox_visible,
+                                position, created_at, updated_at)
+        VALUES (${regla}, ${compte}, 'INBOX/Vella', ${ids.scope}, 'task', ${dbBool(true)},
+                'a1', ${NOW}, ${NOW})
+      `.execute(conn.db);
+
+      const posa = async (id: string, key: string, disposition: string): Promise<void> => {
+        await sql`
+          INSERT INTO mail_messages (id, account_id, thread_id, message_key, folder,
+                                     uid_validity, uid, disposition, rule_id,
+                                     created_at, updated_at)
+          VALUES (${id}, ${compte}, ${fil}, ${key}, 'INBOX/Vella', '1', ${key},
+                  ${disposition}, ${regla}, ${NOW}, ${NOW})
+        `.execute(conn.db);
+      };
+      const pendent = uuidv7();
+      const descartat = uuidv7();
+      const normal = uuidv7();
+      await posa(pendent, 'mid:p@x', 'pending');
+      await posa(descartat, 'mid:d@x', 'dismissed');
+      await posa(normal, 'mid:n@x', 'inbox');
+
+      await migrateToLatest(conn.db, { engine });
+
+      const files = await sql<{ id: string; disposition: string; inbox_visible: number | null }>`
+        SELECT id, disposition, inbox_visible FROM mail_messages
+        WHERE id IN (${pendent}, ${descartat}, ${normal})
+      `.execute(conn.db);
+      const per = new Map(files.rows.map((r) => [r.id, r]));
+
+      // El que esperava la conversió automàtica ara espera una persona.
+      expect(per.get(pendent)?.disposition).toBe('inbox');
+      expect(per.get(pendent)?.inbox_visible).toBeNull();
+
+      /**
+       * I el descartat deixa de ser un carreró sense sortida: passa a ser «no visible», que
+       * **es veu al calendari i es pot recuperar**.
+       */
+      expect(per.get(descartat)?.disposition).toBe('inbox');
+      expect(Boolean(per.get(descartat)?.inbox_visible)).toBe(false);
+      expect(per.get(descartat)?.inbox_visible).not.toBeNull();
+
+      // Un que ja hi era no es toca.
+      expect(per.get(normal)?.disposition).toBe('inbox');
+      expect(per.get(normal)?.inbox_visible).toBeNull();
+
+      /**
+       * I la regla perd `action` i el seu `true` heretat: **ningú va decidir aquell `true`**,
+       * era el defecte de la 013, i deixar-l'hi seria convertir-lo en una decisió.
+       */
+      const després = await sql<{ inbox_visible: number | null }>`
+        SELECT inbox_visible FROM mail_rules WHERE id = ${regla}
+      `.execute(conn.db);
+      expect(després.rows[0]?.inbox_visible).toBeNull();
+    });
   });
 
   describe('les taules de correu', () => {
@@ -203,9 +293,9 @@ describe.each(motors)('la 013 · $engine', (motor) => {
 
       const regla = (id: string): Promise<unknown> =>
         sql`
-          INSERT INTO mail_rules (id, account_id, folder, scope_id, action, position,
+          INSERT INTO mail_rules (id, account_id, folder, scope_id, position,
                                   created_at, updated_at)
-          VALUES (${id}, ${compte}, 'INBOX/Escola', ${ids.scope}, 'inbox', 'a1', ${NOW}, ${NOW})
+          VALUES (${id}, ${compte}, 'INBOX/Escola', ${ids.scope}, 'a1', ${NOW}, ${NOW})
         `.execute(conn.db);
 
       const primera = uuidv7();

@@ -320,6 +320,13 @@ export interface InboxEvent {
   source_kind: 'caldav' | 'ical' | 'rss' | null;
   calendar_name: string;
   calendar_color: string | null;
+  /**
+   * Si surt a l'inbox de la pestanya Tasques.
+   *
+   * Hi és sempre —també quan és `false`— perquè el calendari els ensenya tots i difumina
+   * els que no hi són: és des d'allà que es decideix què puja a la llista.
+   */
+  in_inbox: boolean;
 }
 
 export interface ListInboxEventsOptions {
@@ -327,6 +334,8 @@ export interface ListInboxEventsOptions {
   from: string;
   to: string;
   scopeIds?: string[] | undefined;
+  /** Amb `true`, també els que no són a la bústia, cadascun amb el seu `in_inbox`. */
+  includeHidden?: boolean | undefined;
 }
 
 /**
@@ -370,10 +379,10 @@ export async function listInboxEvents(
   for (const occurrence of occurrences) {
     const calendar = byCalendar.get(occurrence.calendar_id);
     if (calendar === undefined) continue;
-    if (
-      flags.get(markKey(occurrence.calendar_id, occurrence.uid, occurrence.recurrence_id)) !== true
-    )
-      continue;
+
+    const dins =
+      flags.get(markKey(occurrence.calendar_id, occurrence.uid, occurrence.recurrence_id)) === true;
+    if (!dins && options.includeHidden !== true) continue;
 
     out.push({
       calendar_id: occurrence.calendar_id,
@@ -388,6 +397,7 @@ export async function listInboxEvents(
       source_kind: calendar.source_kind,
       calendar_name: calendar.name,
       calendar_color: calendar.color,
+      in_inbox: dins,
     });
   }
   return out;

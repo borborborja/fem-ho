@@ -44,6 +44,8 @@ export interface MailMessageRow {
   internal_date: string | null;
   disposition: string;
   rule_id: string | null;
+  /** Els adjunts ja baixats, en JSON. `null` si no en porta o si no es volien. */
+  attachments?: string | null;
 }
 
 export interface ConvertRule {
@@ -174,6 +176,8 @@ export async function convertMailToTask(
     WHERE id = ${message.thread_id}
   `.execute(ctx.tx);
 
+  await attachStored(ctx, message, taskId, rule.scope_id);
+
   ctx.record({
     entityType: 'task',
     entityId: taskId,
@@ -240,4 +244,53 @@ export async function dismissMail(
     UPDATE mail_messages SET disposition = 'dismissed', updated_at = ${ctx.now}
     WHERE id = ${messageId}
   `.execute(ctx.tx);
+}
+
+/**
+ * Penja a la tasca els adjunts que la ingesta ja va baixar.
+ *
+ * **Els bytes ja són a disc i el nom i el tipus ja vénen nets** —`safeFilename` i el tipus
+ * ensumat dels bytes, decidits quan es van baixar—: aquí només es crea la fila que els lliga
+ * a la tasca. Per això no hi ha xarxa ni cap decisió de seguretat en aquest camí, que és el
+ * que permet que la conversió sigui una transacció curta.
+ *
+ * `is_ai_context = FALSE`: un adjunt d'un desconegut no entra al context d'un model pel sol
+ * fet d'existir. Que hi entri és una decisió que pren una persona.
+ */
+async function attachStored(
+  ctx: AuditContext,
+  message: MailMessageRow,
+  taskId: string,
+  scopeId: string,
+): Promise<void> {
+  const raw = message.attachments;
+  if (raw === undefined || raw === null || raw === '') return;
+
+  let desats: StoredAttachment[];
+  try {
+    desats = JSON.parse(raw) as StoredAttachment[];
+  } catch {
+    // Una fila malmesa no pot impedir que es converteixi el correu: el que es perd és un
+    // adjunt, i el que es guanyaria petant és res.
+    return;
+  }
+
+  for (const adjunt of desats) {
+    await sql`
+      INSERT INTO attachments (id, task_id, scope_id, filename, mime_type, size_bytes,
+                               storage_path, source, is_ai_context, created_at, updated_at,
+                               version)
+      VALUES (${uuidv7()}, ${taskId}, ${scopeId}, ${adjunt.filename}, ${adjunt.mime_type},
+              ${adjunt.size_bytes}, ${adjunt.storage_path}, 'mail_attach', 0, ${ctx.now},
+              ${ctx.now}, 1)
+    `.execute(ctx.tx);
+  }
+}
+
+/** La fitxa d'un adjunt ja baixat, tal com la desa la ingesta. */
+interface StoredAttachment {
+  filename: string;
+  mime_type: string;
+  size_bytes: number;
+  storage_path: string;
 }

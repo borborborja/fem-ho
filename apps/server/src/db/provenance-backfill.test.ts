@@ -48,10 +48,12 @@ async function llavor(sourceKind: string | null, origin: string): Promise<string
 /**
  * Desfà fins a treure la 012, inclosa.
  *
- * La 013 hi és pel mig i **també es desfà sobre aquestes dades**, que de propina fa que
- * aquest fitxer exerciti el refet d'`attachments` en tots dos sentits amb files a taula.
+ * La 013 i la 014 hi són pel mig i **també es desfan sobre aquestes dades**, que de propina
+ * fa que aquest fitxer exerciti els dos refets —el d'`attachments` i el de `mail_rules`— en
+ * tots dos sentits i amb files a taula.
  */
 async function desfesLa012(): Promise<void> {
+  expect(await migrateDown(conn.db, 'sqlite')).toBe('014-mail-visibility');
   expect(await migrateDown(conn.db, 'sqlite')).toBe('013-mail-sources');
   expect(await migrateDown(conn.db, 'sqlite')).toBe('012-task-provenance');
 }

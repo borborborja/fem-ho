@@ -346,6 +346,13 @@ export function registerTaskRoutes(app: FastifyInstance): void {
         date: str(q.date) ?? today(profile.timezone),
         includeOverdue: bool(q.include_overdue) ?? true,
         scopeIds: ids(q.scope_ids),
+        /**
+         * **La lent del calendari.** Sense el paràmetre, la bústia porta el que has decidit
+         * que és feina —el que vol la columna del kanban—; amb ell, ho porta tot amb el seu
+         * `in_inbox`, que és el que necessita el rail del calendari per ensenyar difuminat
+         * el que no hi és i deixar-t'ho pujar d'un clic.
+         */
+        includeHidden: bool(q.include_hidden) ?? false,
         // I el mateix fus serveix per tallar el dia dels esdeveniments, que són instants
         // i no dates.
         timezone: profile.timezone,
