@@ -339,6 +339,58 @@ costat de la xinxeta seria repetir amb un número el que el text ja diu.
 
 ---
 
+### P9 · Les fonts a la bústia, i la regla 7
+
+**La resolució: la regla 7 s'acota al model i no al lloc on es dibuixa.**
+
+La bústia diària havia de ser **el que arriba de fora més les tasques** —calendaris
+subscrits, `.ics` publicats i canals RSS—, que és el que distingeix Fem-ho d'una llista de
+coses per fer. Però la bústia és **la primera columna del kanban**, i `instruccions.md` §7
+deia «els esdeveniments no surten mai al kanban». A més, P4 diu que la columna i el rail
+del calendari són el mateix component amb la mateixa font de dades.
+
+Les tres coses no hi caben alhora. Es va mirar què cedia:
+
+| Opció | Cost |
+| --- | --- |
+| Cedeix P4: les fonts només al rail del calendari | La columna i el rail deixen de ser el mateix, que és exactament la divergència que P4 volia evitar |
+| Cedeix la visió: la bústia només amb tasques | Es perd «les fonts conformen el dia», que és la gràcia del producte |
+| **Cedeix la regla 7, acotada** | Cap: el que protegia es manté sencer |
+
+Perquè el que la regla 7 protegeix **no és on es dibuixa un esdeveniment**: és que no es
+modeli com una tasca. Els seus `STATUS` són els de VEVENT, té `TRANSP` i assistents amb
+`PARTSTAT`, i un calendari subscrit només en pot produir d'aquests. Res d'això canvia
+perquè surti a la bústia.
+
+La frase nova és:
+
+> Un esdeveniment **no té mai estat de kanban ni s'arrossega entre columnes**. A la bústia
+> hi pot sortir com a font, mai com a targeta de tasca.
+
+**El que la fa millor que l'anterior és que es pot comprovar.** «No surten al kanban» és
+una frase sobre píxels i s'ha de discutir mirant una pantalla. La nova és una llista de
+fets: un esdeveniment no té `status`, no té `position`, no és un `Task` en cap tipus, no
+s'arrossega, no té casella de fet, i cap identificador seu pot arribar a
+`POST /tasks/{id}/move`. Les tres columnes de treball vénen de `/board`, i allà no hi entra
+cap esdeveniment mai. Hi ha una prova de navegador que ho asserta: si algú dibuixa les
+cites amb `BoardCard` per estalviar-se un component, cau.
+
+Dues coses que se'n deriven i que val la pena deixar dites:
+
+- **`InboxEvent` és un tipus propi i un array propi**, no un `Task` amb camps buits ni una
+  llista barrejada. Si compartissin llista, un dia algú passaria un esdeveniment per on
+  passa una tasca i la distinció s'evaporaria sense que res fallés.
+- **La diferència visual va a la superfície i la forma, no al contrast.** La temptació era
+  difuminar-les; `docs/04` §8 reserva `--ink-faint` per a text decoratiu i prohibeix
+  fer-lo servir per a res que calgui llegir, i una cita de la bústia s'ha de llegir. A més,
+  cap de les comprovacions permanents ho hauria vist: `contrast-check` només mira la seva
+  llista de parells.
+
+És l'única vegada que s'ha tocat `instruccions.md`, que és el document de precedència
+màxima, i es va fer amb aprovació explícita abans d'escriure cap línia de codi.
+
+---
+
 ## Part 3 — Fets sospitosos de `research/`
 
 El crític va marcar 7 afirmacions com a probablement inventades, obsoletes o internament incoherents. **Cap `docs/` en depèn.**
