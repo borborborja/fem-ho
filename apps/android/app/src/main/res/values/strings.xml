@@ -419,6 +419,7 @@
     <string name="shortcuts_title">Dreceres de teclat</string>
     <string name="source_caldav">D’un calendari CalDAV</string>
     <string name="source_ical">D’un calendari subscrit</string>
+    <string name="source_mail">D’un correu</string>
     <string name="source_rss">D’un canal RSS</string>
     <string name="state_empty_pinned">No tens cap llista pinejada.</string>
     <string name="state_empty_projects">Aquest àmbit encara no té cap projecte.</string>

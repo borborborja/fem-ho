@@ -391,6 +391,98 @@ màxima, i es va fer amb aprovació explícita abans d'escriure cap línia de co
 
 ---
 
+### P10 · Que el servidor truqui a un model inverteix `docs/09`
+
+**La resolució: es construeix el terreny, no el motor — i quan hi hagi motor, el que faci
+surt per on ja surt la IA.**
+
+`docs/09-mode-ia.md` diu una cosa que fins ara ha estat literalment certa: **Fem-ho no té
+motor d'IA propi**. La intel·ligència és sempre externa —un agent, amb un token, que entra
+per MCP o per l'API— i per això avui **no hi ha ni una variable de proveïdor** a
+`config.ts`. Que el servidor agafi un correu i el porti ell a un model és el contrari
+d'això, i no és un detall d'implementació: canvia qui fa la crida, qui paga la factura i
+qui pot veure el text.
+
+Es registra aquí perquè **la fase de correu construeix el terreny i no el motor**, i la
+diferència entre les dues coses és exactament el que aquesta decisió fixa:
+
+| Es fa ara | No es fa ara |
+| --- | --- |
+| Les variables validades (`FEMHO_AI_*`), documentades als tres llocs | Cap crida a cap model |
+| `GET /api/v1/ai/status`, que diu si hi ha credencials | Cap connector, ni buit ni amb un `TODO` |
+| El `.eml` cru, el fil ordenat i la decisió registrada | Cap columna que només serveixi per a demà |
+
+Les tres coses de l'esquerra **tenen un ús avui sense cap model pel mig**, i és el criteri
+que separa el terreny de l'especulació.
+
+Dues restriccions que el disseny d'ara ha de deixar possibles, i que si no s'escriuen ara
+no es podran afegir després sense refer-ho:
+
+- **Tot el que faci un model ha de sortir per on ja surt la IA**: `activity_log` amb
+  `actor_type = 'ai_agent'`, lligat a un agent que actua **en nom d'una persona**, i
+  **desfeible** — `services/activity.ts` només ofereix «Desfés» amb aquell actor i amb els
+  verbs que porten valors previs. Escriure com a `system` seria més fàcil i trencaria la
+  promesa central del mòdul: que el que fa una IA es veu i es pot desfer.
+- **La provinença és dada i no conveni.** `tasks.source_kind = 'mail'` vol dir que una eina
+  futura pot etiquetar el text com a **extern** consultant-ho, i no endevinant-ho pel
+  format. És la base de qualsevol defensa contra la injecció de prompts que es vulgui fer
+  després.
+
+I la barrera que ja existeix i no depèn de cap model: **el correu no tria res del seu
+encaminament**. Ho tria la carpeta, i la carpeta la va mapar una persona. Un remitent pot
+escriure el que vulgui al text; no pot decidir a quin àmbit va.
+
+La frase honesta, que va a la pantalla: **«configurada» vol dir que hi ha credencials, no
+que res les faci servir encara.**
+
+---
+
+### P11 · Un correu és el seu `Message-ID`, i un fil no és un assumpte
+
+**La resolució: la identitat és `(account_id, message_key)`, mai l'UID d'IMAP; i els fils
+s'agrupen per referències, mai per assumpte.**
+
+Són dues decisions i van juntes perquè les dues responen a la mateixa pregunta —«quan són
+el mateix?»— i les dues, mal resoltes, fallen **en silenci i mesos després**.
+
+**Per què l'UID no serveix.** Un UID és estable dins d'una carpeta i mentre `UIDVALIDITY`
+no canviï, i les dues condicions es trenquen soles:
+
+- Quan el servidor reindexa, el protocol diu literalment «oblida tots els UID que t'he
+  donat». Amb l'UID com a clau, això vol dir reingerir la bústia sencera i **duplicar cada
+  tasca creada des del primer dia**.
+- Moure un correu de carpeta és `COPY` + `EXPUNGE`, o sigui UID nou. Arrossegar entre
+  etiquetes és un gest quotidià a Gmail: si cada arrossegada creés una segona tasca, la
+  funció seria inservible la primera setmana.
+
+Per això `message_key` surt del `Message-ID` normalitzat, amb prefix (`mid:`) i amb un
+digest determinista (`sha:`) per als correus que no en porten — determinista **perquè el
+cas on cal és exactament el de tornar a veure el mateix correu**. L'UID es desa igualment,
+però com a **on l'hem vist per última vegada**: serveix per demanar només els nous.
+
+Això té una conseqüència que va escrita a la comprovació permanent `mail-invariants`: **cap
+índex únic sobre `mail_messages` que inclogui `uid`**. És l'anàleg directe de la lliçó de la
+011, i existeix perquè «optimitzar» la desduplicació cap a l'UID sembla una millora.
+
+**Per què l'assumpte no agrupa.** Agrupar per assumpte normalitzat —treure els `Re:` i
+comparar— fusionaria correus de **remitents diferents** que comparteixen assumpte
+(«Factura», «Reunió»). I en aquest disseny una fusió errònia no és un desordre: vol dir que
+**el correu d'un desconegut apareix com a comentari a una tasca teva**. No és una comoditat,
+és una propietat de seguretat.
+
+La fallada correcta és la contrària: **un fil duplicat es veu i es descarta amb un clic; una
+fusió no es veu i filtra.** Per això `thread_key` surt de `References` / `In-Reply-To` i
+`mail_threads.subject` es desa **només per a la llista**.
+
+Dos detalls que se'n deriven:
+
+- **L'arrel de la conversa i no el pare immediat**, perquè una branca que arriba abans que
+  el seu pare acabi convergint igualment.
+- **L'ordre del fil és per `internal_date`** —la posa el servidor que el va rebre— i no per
+  `Date:`, que la posa el remitent i pot mentir.
+
+---
+
 ## Part 3 — Fets sospitosos de `research/`
 
 El crític va marcar 7 afirmacions com a probablement inventades, obsoletes o internament incoherents. **Cap `docs/` en depèn.**

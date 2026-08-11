@@ -45,6 +45,17 @@ async function llavor(sourceKind: string | null, origin: string): Promise<string
   return task;
 }
 
+/**
+ * Desfà fins a treure la 012, inclosa.
+ *
+ * La 013 hi és pel mig i **també es desfà sobre aquestes dades**, que de propina fa que
+ * aquest fitxer exerciti el refet d'`attachments` en tots dos sentits amb files a taula.
+ */
+async function desfesLa012(): Promise<void> {
+  expect(await migrateDown(conn.db, 'sqlite')).toBe('013-mail-sources');
+  expect(await migrateDown(conn.db, 'sqlite')).toBe('012-task-provenance');
+}
+
 const kindOf = async (taskId: string): Promise<string | null> => {
   const row = await sql<{ source_kind: string | null }>`
     SELECT source_kind FROM tasks WHERE id = ${taskId}
@@ -81,7 +92,7 @@ describe('la 012 omple el passat', () => {
     const deRss = await llavor('rss', 'subscription');
     const deCasa = await llavor(null, 'local');
 
-    expect(await migrateDown(conn.db, 'sqlite')).toBe('012-task-provenance');
+    await desfesLa012();
     await migrateToLatest(conn.db, { engine: 'sqlite' });
 
     expect(await kindOf(deIcal)).toBe('ical');
@@ -103,7 +114,7 @@ describe('la 012 omple el passat', () => {
               ${NOW}, ${NOW})
     `.execute(conn.db);
 
-    expect(await migrateDown(conn.db, 'sqlite')).toBe('012-task-provenance');
+    await desfesLa012();
     await migrateToLatest(conn.db, { engine: 'sqlite' });
 
     expect(await kindOf(propia)).toBeNull();

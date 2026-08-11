@@ -419,6 +419,7 @@
     <string name="shortcuts_title">Keyboard shortcuts</string>
     <string name="source_caldav">From a CalDAV calendar</string>
     <string name="source_ical">From a subscribed calendar</string>
+    <string name="source_mail">From an email</string>
     <string name="source_rss">From an RSS feed</string>
     <string name="state_empty_pinned">You have no pinned lists.</string>
     <string name="state_empty_projects">This scope has no projects yet.</string>

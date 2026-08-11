@@ -45,10 +45,26 @@ function RssGlyph() {
   );
 }
 
+/** El sobre. La forma que ningú ha de desxifrar. */
+function MailGlyph() {
+  return (
+    <>
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <path d="m3 7 9 6 9-6" />
+    </>
+  );
+}
+
+/**
+ * Que sigui un `Record` sobre `SourceKind` i no un objecte solt és el que fa que **afegir
+ * una mena al vocabulari no compili fins que té dibuix**. Quan `mail` va entrar a
+ * `SOURCE_KINDS`, aquesta línia és la que ho va dir.
+ */
 const GLYPHS: Record<SourceKind, () => React.JSX.Element> = {
   caldav: CalendarGlyph,
   ical: CalendarGlyph,
   rss: RssGlyph,
+  mail: MailGlyph,
 };
 
 export interface SourceIconProps {

@@ -424,6 +424,7 @@
   "shortcuts.title": "Atajos de teclado",
   "source.caldav": "De un calendario CalDAV",
   "source.ical": "De un calendario suscrito",
+  "source.mail": "De un correo",
   "source.rss": "De un canal RSS",
   "state.empty.pinned": "No tienes ninguna lista fijada.",
   "state.empty.projects": "Este ámbito todavía no tiene ningún proyecto.",

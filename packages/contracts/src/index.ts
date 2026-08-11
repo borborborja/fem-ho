@@ -58,6 +58,14 @@ export type {
   QuickAddToken,
 } from './quickadd.js';
 export type { Locale, MessageKey, TranslateOptions } from './i18n.js';
+export {
+  DEFAULT_MAIL_TEMPLATE,
+  MAIL_TEMPLATE_VARS,
+  MAIL_TITLE_MAX,
+  renderMailTitle,
+  unknownMailVars,
+} from './mailtemplate.js';
+export type { MailTemplateVars } from './mailtemplate.js';
 
 /** Els valors canònics de `status`. `column` no existeix (D2). */
 export const TASK_STATUSES = ['inbox', 'todo', 'doing', 'done'] as const;
@@ -86,7 +94,7 @@ export type Source = (typeof SOURCES)[number];
  * afegir Slack o Telegram serà un valor més aquí, una icona més, i una ingesta més:
  * mai una columna més a `tasks`.
  */
-export const SOURCE_KINDS = ['caldav', 'ical', 'rss'] as const;
+export const SOURCE_KINDS = ['caldav', 'ical', 'rss', 'mail'] as const;
 export type SourceKind = (typeof SOURCE_KINDS)[number];
 
 export function isSourceKind(value: unknown): value is SourceKind {

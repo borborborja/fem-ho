@@ -426,6 +426,7 @@
   "shortcuts.title": "Dreceres de teclat",
   "source.caldav": "D’un calendari CalDAV",
   "source.ical": "D’un calendari subscrit",
+  "source.mail": "D’un correu",
   "source.rss": "D’un canal RSS",
   "state.empty.pinned": "No tens cap llista pinejada.",
   "state.empty.projects": "Aquest àmbit encara no té cap projecte.",

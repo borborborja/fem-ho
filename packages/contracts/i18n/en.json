@@ -425,6 +425,7 @@
   "shortcuts.title": "Keyboard shortcuts",
   "source.caldav": "From a CalDAV calendar",
   "source.ical": "From a subscribed calendar",
+  "source.mail": "From an email",
   "source.rss": "From an RSS feed",
   "state.empty.pinned": "You have no pinned lists.",
   "state.empty.projects": "This scope has no projects yet.",

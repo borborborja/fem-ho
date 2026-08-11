@@ -39,12 +39,18 @@ export function ddl(engine: Engine): string[] {
   const t = typeMap(engine);
   return [
     /**
-     * El `CHECK` no llista `mail`, i és a posta: aquesta migració no en sap res. La 013
-     * l'amplia quan el correu existeix, i així cada migració diu la veritat del dia que es
-     * va escriure.
+     * El `CHECK` llista **les quatre menes de `SOURCE_KINDS`**, `mail` inclòs, tot i que
+     * avui res n'escriu cap.
+     *
+     * La temptació és llistar només les tres que existeixen i ampliar-lo quan arribi el
+     * correu. **A SQLite un `CHECK` no s'altera**: ampliar-lo vol dir refer `tasks`
+     * sencera, que és la taula més gran de la base i la que més claus foranes rep. Pagar
+     * això per un valor que el vocabulari ja té tancat seria absurd.
+     *
+     * El que la columna promet és «un valor de `SOURCE_KINDS`», i això ja és veritat avui.
      */
     `ALTER TABLE tasks ADD COLUMN source_kind ${t.text}
-       CHECK (source_kind IN ('caldav', 'ical', 'rss'))`,
+       CHECK (source_kind IN ('caldav', 'ical', 'rss', 'mail'))`,
 
     /**
      * Parcial: la immensa majoria de tasques les escriu una persona i no han d'ocupar
