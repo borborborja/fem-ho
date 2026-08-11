@@ -53,15 +53,23 @@ L'API de còpia en línia de SQLite. Fem-ho ja la fa servir abans de cada migrac
 (`apps/server/src/db/migrator.ts`), i es pot invocar a mà:
 
 ```sh
-docker compose exec femho \
+docker compose exec -w /app/apps/server femho \
   node -e "new (require('better-sqlite3'))('/data/femho.db').backup('/data/backups/manual-'+Date.now()+'.db')"
 ```
 
-O amb la instrucció de la línia d'ordres de SQLite, que fa el mateix:
+**El `-w /app/apps/server` no és decoració.** La imatge és un monorepo i `better-sqlite3`
+viu al `node_modules` del servidor, no al de l'arrel: sense el directori de treball, el
+comandament falla amb `Cannot find module 'better-sqlite3'`.
 
-```sh
-docker compose exec femho sqlite3 /data/femho.db ".backup '/data/backups/manual.db'"
-```
+Aquí ho deia sense el `-w`, i el comandament **no ha funcionat mai a la imatge publicada**.
+Es va descobrir el dia que va caldre fer una còpia de veritat abans d'una migració, que és
+exactament el pitjor dia per descobrir-ho. Ara ho comprova el flux de la imatge a cada
+construcció: veure «Còpia de seguretat» a la sortida de CI vol dir que aquesta línia,
+literalment aquesta, ha funcionat.
+
+**La imatge no porta el binari `sqlite3`**, i per això aquí no n'hi ha cap comandament: la
+còpia la fa el mateix `better-sqlite3` que fa servir el servidor, que és el que ja invoca
+`apps/server/src/db/migrator.ts` abans de cada migració.
 
 ### Amb el servidor aturat
 
@@ -118,9 +126,15 @@ docker run --rm -v femho-data:/data -v "$PWD:/entrada" alpine \
 ### 4. Comprovar-ho abans d'arrencar
 
 ```sh
-docker run --rm -v femho-data:/data nouchka/sqlite3 \
-  sqlite3 /data/femho.db 'PRAGMA integrity_check; SELECT COUNT(*) FROM tasks;'
+docker compose run --rm --no-deps -w /app/apps/server femho \
+  node -e "const d=new (require('better-sqlite3'))('/data/femho.db',{readonly:true});
+           console.log(d.prepare('PRAGMA integrity_check').get(),
+                       d.prepare('SELECT COUNT(*) AS n FROM tasks').get());"
 ```
+
+**Amb la imatge de Fem-ho i no amb una de SQLite de fora**: la que hi havia aquí demanava
+una imatge amb el binari `sqlite3`, que ni la nostra porta ni cal baixar —el servidor ja
+duu la llibreria que ho fa.
 
 Sortida de la prova real:
 

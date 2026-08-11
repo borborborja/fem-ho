@@ -76,16 +76,34 @@ jobs:
 
       # La imatge ha d'arrencar, no només construir-se. Un `healthz` que respon és el
       # mínim que distingeix una imatge publicada d'una que no serveix de res.
+      #
+      # I des de l'agost del 2026, també **el comandament de còpia que documentem**. El de
+      # `docs/BACKUP.md` no havia funcionat mai a la imatge publicada —`better-sqlite3` viu
+      # al `node_modules` del servidor i no al de l'arrel, i faltava el directori de
+      # treball—, i es va descobrir el dia que va caldre fer una còpia de veritat abans
+      # d'una migració. Un procediment de còpia trencat només es nota el pitjor dia.
       - name: Comprovar que arrenca
         if: github.event_name == 'pull_request'
         run: |
           docker buildx build --load --platform linux/amd64 -t femho:ci .
           docker run -d --name femho-ci -p 8080:8080 \
             -e FEMHO_DATABASE_URL=sqlite:///data/femho.db femho:ci
+
+          arrencat=0
           for i in $(seq 1 30); do
-            if curl -fsS http://localhost:8080/healthz; then echo; exit 0; fi
+            if curl -fsS http://localhost:8080/healthz; then echo; arrencat=1; break; fi
             sleep 2
           done
-          echo "La imatge no ha arrencat:"
-          docker logs femho-ci
-          exit 1
+          if [ "$arrencat" != "1" ]; then
+            echo "La imatge no ha arrencat:"
+            docker logs femho-ci
+            exit 1
+          fi
+
+          # Literalment la línia de `docs/BACKUP.md`. Si algú la canvia i deixa d'anar,
+          # això falla aquí i no a casa de ningú. El `-w` és la meitat del que es comprova.
+          docker exec -w /app/apps/server femho-ci \
+            node -e "new (require('better-sqlite3'))('/data/femho.db').backup('/data/backups/ci.db')"
+          docker exec femho-ci sh -c 'test -s /data/backups/ci.db' \
+            || { echo "El comandament de còpia de docs/BACKUP.md no ha deixat cap fitxer"; exit 1; }
+          echo "Còpia de seguretat · el comandament documentat funciona"
