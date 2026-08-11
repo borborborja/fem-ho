@@ -608,7 +608,12 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
             selectedDate={selected}
             today={iso(new Date())}
             dotsByDate={dotsByDate}
-            itemsByDate={itemsByDate}
+            /*
+              **Al mòbil, punts.** Una columna del mes hi fa quaranta píxels d'ample: un
+              títol no hi cap i el que en surt és una lletra i mitja amb punts suspensius.
+              Allà la vista de mes és per triar dia, i el detall el dona el rail de sota.
+            */
+            itemsByDate={mobile ? undefined : itemsByDate}
             onPrev={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1))}
             onNext={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1))}
             onSelect={setSelected}
