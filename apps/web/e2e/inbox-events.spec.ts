@@ -201,7 +201,11 @@ test('al calendari, la cita treta es distingeix i es pot recuperar', async ({ pa
   await item.click();
   const fitxa = page.locator('[data-testid="event-sheet"]');
   await expect(fitxa).toBeVisible();
-  await expect(fitxa.locator('[data-testid="event-sheet-state"]')).toContainText('bústia');
+  // El fragment és de la frase i no el terme del vocabulari: `vocab-lint` vigila que el
+  // nom canònic de la columna no s'escrigui en català fora dels catàlegs (regla 3).
+  await expect(fitxa.locator('[data-testid="event-sheet-state"]')).toContainText(
+    'no et reclama el dia',
+  );
 
   // I d'allà torna a la bústia.
   await fitxa.locator('[data-testid="event-sheet-toggle"]').click();
