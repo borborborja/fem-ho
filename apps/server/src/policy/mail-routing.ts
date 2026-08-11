@@ -12,7 +12,7 @@
  *   1. **El fil ja té una tasca viva** → comentari. Guanya **fins i tot sobre una regla que
  *      digui «fes-ne una tasca»**: si no, una resposta obriria una segona tasca del mateix
  *      assumpte i acabaries amb el fil partit en dues coses a fer.
- *   2. **La regla més específica** de les carpetes on és → el que digui.
+ *   2. **La regla més específica** de les carpetes on és → cau a la bústia.
  *   3. Cap regla → res.
  *
  * L'ESPECIFICITAT ÉS LA PROFUNDITAT, NO UN ORDRE A MÀ
@@ -31,14 +31,9 @@
  * no és una raó per copiar-lo al nostre disc.
  */
 
-export type MailAction = 'inbox' | 'task';
-
 export interface MailRule {
   id: string;
   folder: string;
-  action: MailAction;
-  /** Amb `inbox`, si surt a la bústia del dia o s'arxiva en silenci. */
-  inboxVisible: boolean;
   position: string;
   enabled: boolean;
 }
@@ -58,8 +53,7 @@ export interface MailRoutingInput {
 export type MailRouting =
   | { kind: 'skip'; reason: 'duplicate' | 'no-rule' }
   | { kind: 'comment'; taskId: string }
-  | { kind: 'inbox'; rule: MailRule }
-  | { kind: 'task'; rule: MailRule };
+  | { kind: 'inbox'; rule: MailRule };
 
 /**
  * `INBOX` és insensible a majúscules per l'RFC 3501 i **tota la resta no ho és**.
@@ -93,5 +87,12 @@ export function routeMail(input: MailRoutingInput): MailRouting {
 
   const rule = candidates[0];
   if (rule === undefined) return { kind: 'skip', reason: 'no-rule' };
-  return rule.action === 'task' ? { kind: 'task', rule } : { kind: 'inbox', rule };
+  /**
+   * **I sempre a la bústia.** Abans aquí hi havia una bifurcació: la regla podia dir
+   * «converteix-ho en tasca». Posava coses a la llista de feina d'algú sense que ningú ho
+   * hagués demanat, i el model és el contrari —el que arriba d'una font és un element que
+   * **pots** convertir. Si es veu o no a l'inbox de Tasques ho decideix la visibilitat, que
+   * no és feina d'aquesta funció.
+   */
+  return { kind: 'inbox', rule };
 }

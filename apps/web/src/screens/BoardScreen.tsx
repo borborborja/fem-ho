@@ -616,12 +616,19 @@ export function BoardScreen({
           */
           void api.post(`/api/v1/mail/messages/${mail.id}/convert`).then(() => refresh());
         }}
-        onMailDismiss={(mail) => {
+        onMailToggle={(mail) => {
           /*
-            Descartar-lo **no l'esborra de la teva bústia de veritat**: el correu segueix
-            allà sencer, i el que passa aquí és que deixa de sortir.
+            Treure'l de l'inbox **no l'esborra**: el correu segueix sencer al servidor i a la
+            vista de calendari, difuminat, i des d'allà el pots tornar a pujar. Per això el
+            botó diu «Treure de l'inbox» i no «Esborrar».
+
+            S'envia `false` explícit i no `null`: `null` diria «val el defecte de la
+            carpeta», i com que el defecte del correu és «no visible», tornar-hi no faria
+            res i el botó semblaria espatllat.
           */
-          void api.post(`/api/v1/mail/messages/${mail.id}/dismiss`).then(() => refresh());
+          void api
+            .post('/api/v1/inbox/mail', { message_id: mail.id, visible: !mail.in_inbox })
+            .then(() => refresh());
         }}
         inboxHeader={
           /*

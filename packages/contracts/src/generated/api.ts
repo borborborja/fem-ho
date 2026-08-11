@@ -2021,6 +2021,85 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/inbox/mail": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Fer visible o invisible un correu a l'inbox de Tasques
+         * @description **Bessona de `POST /inbox/events`.** Un correu i una cita són coses diferents, i la
+         *     pregunta «vull veure això a la meva llista?» és exactament la mateixa.
+         *
+         *     Amagar-lo **no l'esborra i no el treu del calendari**: hi segueix, difuminat, i és
+         *     des d'allà que el pots tornar a pujar. Al servidor de correu no s'hi toca mai res.
+         *
+         *     `visible: null` treu l'excepció i torna a manar la carpeta. Els botons envien `true`
+         *     o `false` explícits: amb `null`, tornar a fer visible un correu d'una carpeta que per
+         *     defecte no ho és no faria res i el botó semblaria espatllat.
+         *
+         *     Demana **`mail:read`** i no `mail:write`: el que s'escriu és una preferència teva
+         *     sobre com vols veure la teva bústia, no el correu.
+         */
+        post: operations["setMailInboxVisibility"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/mail/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Els correus d'un interval, per al calendari
+         * @description El calendari els pinta **al dia que van arribar**, i per això demana un interval i no
+         *     un dia: la vista mensual en necessita trenta-un de cop.
+         *
+         *     **Porta també els que no són visibles**, cadascun amb el seu `in_inbox`: el calendari
+         *     és l'organitzador i hi ha de sortir tot.
+         */
+        get: operations["listMailMessages"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/mail/accounts/{id}/folders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Les carpetes del servidor
+         * @description Per poder-les **triar** en comptes d'escriure-les. Es connecta amb les credencials
+         *     desades, llista i tanca; **no desa res i no marca cap correu**.
+         *
+         *     Va a part de `/test` perquè la pregunta és una altra: allà preguntes si les
+         *     credencials van bé, i aquí quines carpetes hi ha.
+         */
+        get: operations["listMailFolders"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2112,12 +2191,13 @@ export interface components {
             /** @description `null` vol dir l'espai general de l'àmbit. */
             project_id?: string | null;
             /**
-             * @description Si el correu cau a la bústia del dia perquè hi decideixis, o si es converteix en tasca tot sol.
-             * @enum {string}
+             * @description Si el que arriba per aquesta carpeta surt a l'inbox de la pestanya Tasques.
+             *     **Tri-estat**: `null` vol dir que no s'hi ha dit res i val `inbox_visible_default`. Absent en un `PATCH` vol dir «no ho toquis», que no és el mateix — sense el `null` no hi hauria manera de desdir-se'n i la carpeta es quedaria clavada al valor que se li va posar encara que el defecte canviés.
+             *     El que no és visible **no desapareix**: es veu a la vista de calendari, i des d'allà es puja d'un clic.
              */
-            action: "inbox" | "task";
-            /** @default true */
-            inbox_visible: boolean;
+            inbox_visible: boolean | null;
+            /** @description El defecte de la mena de font, que per al correu és **no**. Mapar una carpeta és dir «vull veure això en algun lloc», no «posa-m'ho tot a la llista de coses per fer». Va al contracte perquè **cap client hagi de duplicar aquesta regla**. */
+            inbox_visible_default: boolean;
             /** @description Amb `{{subject}}`, `{{from}}`, `{{from_name}}`, `{{from_email}}`, `{{date}}`, `{{folder}}` i `{{account}}`. **Una sola passada**: un assumpte que sigui literalment `{{from_email}}` no s'expandeix. */
             title_template: string;
             /** @default true */
@@ -2139,9 +2219,7 @@ export interface components {
             folder: string;
             scope_id: string;
             project_id?: string | null;
-            /** @enum {string} */
-            action?: "inbox" | "task";
-            inbox_visible?: boolean;
+            inbox_visible?: boolean | null;
             title_template?: string;
             body_to_description?: boolean;
             attachments_to_task?: boolean;
@@ -2152,9 +2230,7 @@ export interface components {
             folder?: string;
             scope_id?: string;
             project_id?: string | null;
-            /** @enum {string} */
-            action?: "inbox" | "task";
-            inbox_visible?: boolean;
+            inbox_visible?: boolean | null;
             title_template?: string;
             body_to_description?: boolean;
             attachments_to_task?: boolean;
@@ -2406,6 +2482,8 @@ export interface components {
             source_kind: "caldav" | "ical" | "rss" | null;
             calendar_name: string;
             calendar_color: string | null;
+            /** @description Si surt a l'inbox de la pestanya Tasques. Amb `false` només arriba si s'ha demanat `include_hidden`, i el calendari el pinta difuminat. */
+            in_inbox: boolean;
         };
         /**
          * @description Un correu que ha entrat a la bústia i **encara no és una tasca**.
@@ -2442,6 +2520,8 @@ export interface components {
              * @enum {string}
              */
             source_kind: "mail";
+            /** @description Si surt a l'inbox de la pestanya Tasques. **El calcula el servidor i el client no el recalcula mai**: és el que fa que «difuminat al calendari» i «no és a la meva bústia» siguin literalment la mateixa cosa. Amb `false` l'ítem només arriba si s'ha demanat `include_hidden`. */
+            in_inbox?: boolean;
         };
         Inbox: {
             /** Format: date */
@@ -5963,6 +6043,16 @@ export interface operations {
                 include_overdue?: boolean;
                 scope_ids?: string;
                 /**
+                 * @description Amb `true`, la bústia porta **també el que no és visible**, cada ítem amb el seu
+                 *     `in_inbox`.
+                 *
+                 *     És el que fa que la columna del kanban i el rail del calendari segueixin sent el
+                 *     mateix component amb la mateixa font de dades (P4): el que canvia és la lent. El
+                 *     tauler ensenya el que has decidit que és feina; el calendari ho ensenya tot,
+                 *     difuminat, perquè és des d'allà que decideixes.
+                 */
+                include_hidden?: boolean;
+                /**
                  * @description De quin calaix. **Es composa amb `scope_ids`, no el substitueix**: és un
                  *     commutador de calaix, no un filtre, i els xips d'àmbit de dalt segueixen
                  *     valent.
@@ -7418,6 +7508,96 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+        };
+    };
+    setMailInboxVisibility: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    message_id: string;
+                    visible?: boolean | null;
+                };
+            };
+        };
+        responses: {
+            /** @description L'estat resultant. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description L'excepció desada, o `null` si no n'hi ha cap. */
+                        visible: boolean | null;
+                        /** @description El resultat de la cascada sencera, ja recalculat: l'excepció, l'ajust de la carpeta i el defecte de la mena. */
+                        in_inbox: boolean;
+                    };
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listMailMessages: {
+        parameters: {
+            query?: {
+                from?: string;
+                to?: string;
+                scope_ids?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Els correus. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InboxMail"][];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    listMailFolders: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /**
+             * @description Les carpetes. **Una llista buida amb `error` no és un error de l'API**: vol dir
+             *     que el servidor de correu no ha contestat el que esperàvem.
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        folders: string[];
+                        delimiter?: string | null;
+                        error?: string | null;
+                    };
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
         };
     };
 }

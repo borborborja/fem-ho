@@ -31,10 +31,12 @@ import {
   deleteMailRule,
   listMailAccounts,
   listMailRules,
+  listInboxMail,
+  setMailInboxVisibility,
   updateMailAccount,
   updateMailRule,
 } from '../services/mail.js';
-import { body, handle, num, str } from './handle.js';
+import { body, handle, ids, num, query, str } from './handle.js';
 
 const bool = (value: unknown): boolean | undefined =>
   typeof value === 'boolean' ? value : undefined;
@@ -42,8 +44,20 @@ const bool = (value: unknown): boolean | undefined =>
 const security = (value: unknown): 'tls' | 'starttls' | undefined =>
   value === 'starttls' ? 'starttls' : value === 'tls' ? 'tls' : undefined;
 
-const action = (value: unknown): 'inbox' | 'task' | undefined =>
-  value === 'task' ? 'task' : value === 'inbox' ? 'inbox' : undefined;
+/**
+ * `inbox_visible`, amb el tri-estat sencer.
+ *
+ * **Es mira si la clau HI ÉS i no només el seu tipus**: `{ inbox_visible: null }` vol dir
+ * «treu l'excepció» i s'ha de distingir de no enviar-la, que vol dir «no ho toquis». Sense
+ * el `null` no hi hauria manera de desdir-se'n, i la carpeta es quedaria clavada al valor
+ * que se li va posar encara que el defecte canviés. Mateix patró que als calendaris.
+ */
+const inboxVisible = (input: Record<string, unknown>): boolean | null | undefined =>
+  'inbox_visible' in input
+    ? typeof input.inbox_visible === 'boolean'
+      ? input.inbox_visible
+      : null
+    : undefined;
 
 /** El propòsit del segell. Una constant perquè crear i obrir no puguin divergir. */
 const purpose = (id: string): string => `mail_account:${id}`;
@@ -221,6 +235,47 @@ export function registerMailRoutes(app: FastifyInstance, secret: () => string): 
       ),
   );
 
+  /**
+   * Fer visible o invisible un correu a l'inbox de Tasques.
+   *
+   * **Bessona de `POST /inbox/events`**, i a posta: un correu i una cita són coses diferents
+   * i la pregunta «vull veure això a la meva llista?» és la mateixa. Amagar-lo **no
+   * l'esborra i no el treu del calendari**: és des d'allà que el pots tornar a pujar.
+   */
+  app.post('/api/v1/inbox/mail', async (request, reply) =>
+    handle(app, request, reply, async (principal) => {
+      const input = body(request);
+      return auditedTransaction(db().db, principal, (ctx) =>
+        setMailInboxVisibility(
+          ctx,
+          principal,
+          str(input.message_id) ?? '',
+          // Absent o nul volen dir el mateix: treu l'excepció i torna a manar la carpeta.
+          typeof input.visible === 'boolean' ? input.visible : null,
+        ),
+      );
+    }),
+  );
+
+  /**
+   * Els correus d'un interval, per a la graella del calendari.
+   *
+   * El calendari els pinta **al dia que van arribar**, i per això necessita un interval i no
+   * un dia: la vista mensual en demana trenta-un de cop. Porta els no visibles igualment
+   * —difuminats— perquè el calendari és l'organitzador i hi ha de sortir tot.
+   */
+  app.get('/api/v1/mail/messages', async (request, reply) =>
+    handle(app, request, reply, async (principal) => {
+      const q = query(request);
+      return listInboxMail(db().db, principal, {
+        from: str(q.from),
+        to: str(q.to),
+        scopeIds: ids(q.scope_ids),
+        includeHidden: true,
+      });
+    }),
+  );
+
   app.post<{ Params: { id: string } }>(
     '/api/v1/mail/messages/:id/dismiss',
     async (request, reply) =>
@@ -234,6 +289,47 @@ export function registerMailRoutes(app: FastifyInstance, secret: () => string): 
         void reply.code(204).send();
         return undefined;
       }),
+  );
+
+  /**
+   * Les carpetes del servidor, per poder-les triar en comptes d'escriure-les.
+   *
+   * És la mateixa connexió que `/test` i **tampoc desa res**. Va a part perquè la pregunta
+   * és una altra: allà preguntes «van bé les credencials?», aquí «quines carpetes hi ha?»,
+   * i el formulari de regla necessita la segona sense haver de fer la primera.
+   */
+  app.get<{ Params: { id: string } }>('/api/v1/mail/accounts/:id/folders', async (request, reply) =>
+    handle(app, request, reply, async (principal) => {
+      const accounts = await listMailAccounts(db().db, principal);
+      const account = accounts.find((a) => a.id === request.params.id);
+      if (account === undefined || !account.has_secret) {
+        throw new PolicyError(
+          'mail-account-not-found',
+          'Not found',
+          404,
+          'Aquest compte de correu no existeix, o encara no té contrasenya.',
+        );
+      }
+
+      try {
+        const probe = await probeImap(
+          {
+            host: account.host,
+            port: account.port,
+            security: account.security,
+            username: account.username,
+            password: await openStored(app, secret(), principal, account.id),
+          },
+          { allowHosts: app.config.mailAllowHosts },
+        );
+        return { folders: probe.folders, delimiter: probe.delimiter, error: probe.error };
+      } catch (error) {
+        if (error instanceof SsrfError) {
+          throw new PolicyError('mail-host-not-allowed', 'Host not allowed', 422, error.message);
+        }
+        throw error;
+      }
+    }),
   );
 
   app.get('/api/v1/mail/rules', async (request, reply) =>
@@ -250,8 +346,7 @@ export function registerMailRoutes(app: FastifyInstance, secret: () => string): 
           folder: str(input.folder),
           scope_id: str(input.scope_id),
           project_id: 'project_id' in input ? (str(input.project_id) ?? null) : undefined,
-          action: action(input.action),
-          inbox_visible: bool(input.inbox_visible),
+          inbox_visible: inboxVisible(input),
           title_template: str(input.title_template),
           body_to_description: bool(input.body_to_description),
           attachments_to_task: bool(input.attachments_to_task),
@@ -272,8 +367,7 @@ export function registerMailRoutes(app: FastifyInstance, secret: () => string): 
           folder: str(input.folder),
           scope_id: str(input.scope_id),
           project_id: 'project_id' in input ? (str(input.project_id) ?? null) : undefined,
-          action: action(input.action),
-          inbox_visible: bool(input.inbox_visible),
+          inbox_visible: inboxVisible(input),
           title_template: str(input.title_template),
           body_to_description: bool(input.body_to_description),
           attachments_to_task: bool(input.attachments_to_task),

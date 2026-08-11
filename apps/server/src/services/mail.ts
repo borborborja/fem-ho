@@ -33,6 +33,7 @@ import type { MigrationDb } from '../db/migration-db.js';
 import { PolicyError, missingCapability } from '../policy/errors.js';
 import { hasCapability, type Principal } from '../policy/principal.js';
 import { normalizeFolder } from '../policy/mail-routing.js';
+import { defaultInInbox, isInInbox } from '../policy/inbox-visibility.js';
 import { assertScopeAccess } from './scopes.js';
 
 /** El que la interfície sap d'un compte. **Sense contrasenya, en cap forma.** */
@@ -97,8 +98,16 @@ export interface MailRuleSummary {
   folder: string;
   scope_id: string;
   project_id: string | null;
-  action: 'inbox' | 'task';
-  inbox_visible: boolean;
+  /**
+   * Si el que arriba per aquesta carpeta surt a l'inbox de Tasques.
+   *
+   * **Tri-estat**: `null` vol dir «no s'hi ha dit res» i val el defecte de la mena de font,
+   * que per al correu és **no**. És el mateix patró que `calendars.inbox_visible`, i hi és
+   * perquè canviar el defecte demà no obligui a migrar files.
+   */
+  inbox_visible: boolean | null;
+  /** El defecte de la mena, perquè l'interruptor sàpiga on ha de començar. */
+  inbox_visible_default: boolean;
   title_template: string;
   body_to_description: boolean;
   attachments_to_task: boolean;
@@ -115,8 +124,7 @@ interface RuleRow {
   folder: string;
   scope_id: string;
   project_id: string | null;
-  action: string;
-  inbox_visible: number;
+  inbox_visible: number | null;
   title_template: string;
   body_to_description: number;
   attachments_to_task: number;
@@ -127,7 +135,7 @@ interface RuleRow {
   last_error_at: string | null;
 }
 
-const RULE_COLUMNS = sql`id, account_id, folder, scope_id, project_id, action, inbox_visible,
+const RULE_COLUMNS = sql`id, account_id, folder, scope_id, project_id, inbox_visible,
   title_template, body_to_description, attachments_to_task, position, enabled, last_seen_at,
   last_error, last_error_at`;
 
@@ -138,8 +146,9 @@ function toRule(row: RuleRow): MailRuleSummary {
     folder: row.folder,
     scope_id: row.scope_id,
     project_id: row.project_id,
-    action: row.action === 'task' ? 'task' : 'inbox',
-    inbox_visible: Boolean(row.inbox_visible),
+    inbox_visible: row.inbox_visible === null ? null : Boolean(row.inbox_visible),
+    // Surt del mateix lloc que el dels calendaris: **cap client duplica aquesta regla**.
+    inbox_visible_default: defaultInInbox('subscription', 'mail'),
     title_template: row.title_template,
     body_to_description: Boolean(row.body_to_description),
     attachments_to_task: Boolean(row.attachments_to_task),
@@ -407,8 +416,8 @@ export interface CreateMailRuleInput {
   folder?: string | undefined;
   scope_id?: string | undefined;
   project_id?: string | null | undefined;
-  action?: 'inbox' | 'task' | undefined;
-  inbox_visible?: boolean | undefined;
+  /** `null` treu l'excepció; absent, no la toca. */
+  inbox_visible?: boolean | null | undefined;
   title_template?: string | undefined;
   body_to_description?: boolean | undefined;
   attachments_to_task?: boolean | undefined;
@@ -462,12 +471,15 @@ export async function createMailRule(
   }
 
   await sql`
-    INSERT INTO mail_rules (id, account_id, folder, scope_id, project_id, action,
+    INSERT INTO mail_rules (id, account_id, folder, scope_id, project_id,
                             inbox_visible, title_template, body_to_description,
                             attachments_to_task, position, enabled, created_at, updated_at)
     VALUES (${id}, ${accountId}, ${folder}, ${scopeId}, ${input.project_id ?? null},
-            ${input.action === 'task' ? 'task' : 'inbox'},
-            ${dbBool(input.inbox_visible !== false)},
+            ${
+              input.inbox_visible === undefined || input.inbox_visible === null
+                ? null
+                : dbBool(input.inbox_visible)
+            },
             ${assertTemplate(input.title_template ?? DEFAULT_MAIL_TEMPLATE)},
             ${dbBool(input.body_to_description !== false)},
             ${dbBool(input.attachments_to_task !== false)},
@@ -545,8 +557,15 @@ export async function updateMailRule(
     UPDATE mail_rules SET
       folder = ${folder}, scope_id = ${scopeId},
       project_id = ${input.project_id === undefined ? before.project_id : input.project_id},
-      action = ${input.action ?? (before.action === 'task' ? 'task' : 'inbox')},
-      inbox_visible = ${dbBool(input.inbox_visible ?? Boolean(before.inbox_visible))},
+      inbox_visible = ${
+        input.inbox_visible === undefined
+          ? before.inbox_visible === null
+            ? null
+            : dbBool(Boolean(before.inbox_visible))
+          : input.inbox_visible === null
+            ? null
+            : dbBool(input.inbox_visible)
+      },
       title_template = ${assertTemplate(input.title_template ?? before.title_template)},
       body_to_description = ${dbBool(input.body_to_description ?? Boolean(before.body_to_description))},
       attachments_to_task = ${dbBool(input.attachments_to_task ?? Boolean(before.attachments_to_task))},
@@ -608,6 +627,14 @@ export interface InboxMail {
   folder: string | null;
   has_attachments: boolean;
   source_kind: 'mail';
+  /**
+   * Si surt a l'inbox de la pestanya Tasques.
+   *
+   * **Ve calculat del servidor i el client no el recalcula mai**, igual que a
+   * `EventOccurrence.in_inbox`: és el que fa que «difuminat al calendari» i «no és a la meva
+   * bústia» siguin literalment la mateixa cosa, i no dues que un dia divergeixen.
+   */
+  in_inbox: boolean;
 }
 
 interface InboxMailRow {
@@ -619,47 +646,90 @@ interface InboxMailRow {
   from_address: string | null;
   internal_date: string | null;
   sent_at: string | null;
+  attachments: string | null;
+  message_visible: number | null;
+  rule_visible: number | null;
   scope_id: string;
   project_id: string | null;
   account_name: string | null;
   folder: string | null;
+  has_task: number;
+}
+
+export interface ListInboxMailOptions {
+  scopeIds?: string[] | undefined;
+  /** Amb `true`, també els que no són visibles: és el que necessita el calendari. */
+  includeHidden?: boolean | undefined;
+  /** Interval de `received_at`, per a la graella del calendari. Sense, tot el que hi ha. */
+  from?: string | undefined;
+  to?: string | undefined;
 }
 
 /**
- * Els correus a la bústia de qui pregunta.
+ * Els correus de qui pregunta, **amb la mateixa cascada de visibilitat que les cites**.
  *
- * **No filtra per dia, i és deliberat.** Un esdeveniment té data pròpia i per això la
- * bústia d'un dia el porta o no; un correu que ha arribat és una cosa pendent fins que en
- * facis alguna cosa, i amagar-lo demà seria perdre'l. Surt fins que es converteix o es
- * descarta.
+ * Els cinc nivells d'`isInInbox` es llegeixen així per al correu:
  *
- * I **només els comptes de qui pregunta**: un compte de correu és d'una persona, i la
- * bústia d'un àmbit compartit no ha de portar el correu personal de ningú.
+ *   0. ja n'hi ha una tasca viva → no (la feina viu a la targeta)
+ *   1. `mail_messages.inbox_visible` → l'excepció d'aquest correu
+ *   2. *(el fil: buit a posta, veure el capçal de la política)*
+ *   3. `mail_rules.inbox_visible` → l'ajust de la carpeta
+ *   4. el defecte de la mena, que per al correu és **no**
+ *
+ * **No filtra per dia**, i és deliberat. Un esdeveniment té data pròpia i per això la bústia
+ * d'un dia el porta o no; un correu que ha arribat és una cosa pendent fins que en facis
+ * alguna cosa, i amagar-lo demà seria perdre'l. `from`/`to` hi són per a la graella del
+ * calendari, que sí que pinta per dies.
+ *
+ * I **només els comptes de qui pregunta**: un compte de correu és d'una persona, i la bústia
+ * d'un àmbit compartit no ha de portar el correu personal de ningú.
  */
 export async function listInboxMail(
   db: MigrationDb,
   principal: Principal,
-  scopeIds?: string[] | undefined,
+  options: ListInboxMailOptions = {},
 ): Promise<InboxMail[]> {
   if (!hasCapability(principal, 'mail:read')) return [];
 
   const found = await sql<InboxMailRow>`
     SELECT m.id, m.account_id, m.message_key, m.subject, m.from_name, m.from_address,
-           m.internal_date, m.sent_at, r.scope_id, r.project_id, a.name AS account_name,
-           m.folder
+           m.internal_date, m.sent_at, m.attachments,
+           m.inbox_visible AS message_visible, r.inbox_visible AS rule_visible,
+           r.scope_id, r.project_id, a.name AS account_name, m.folder,
+           (SELECT COUNT(*) FROM tasks t
+             WHERE t.mail_account_id = m.account_id AND t.mail_message_key = m.message_key
+               AND t.deleted_at IS NULL) AS has_task
     FROM mail_messages m
     JOIN mail_rules r ON r.id = m.rule_id
     JOIN mail_accounts a ON a.id = m.account_id
     WHERE m.deleted_at IS NULL AND m.disposition = 'inbox'
       AND a.user_id = ${principal.userId} AND a.deleted_at IS NULL
-      AND r.inbox_visible = ${dbBool(true)}
     ORDER BY m.internal_date DESC, m.id DESC
-    LIMIT 200
+    LIMIT 500
   `.execute(db);
 
+  const dins = (row: InboxMailRow): boolean =>
+    isInInbox({
+      origin: 'subscription',
+      sourceKind: 'mail',
+      calendarInboxVisible: maybeBool(row.rule_visible),
+      // El nivell del fil, buit a posta: el forat hi és per al dia que es vulgui.
+      seriesMark: null,
+      occurrenceMark: maybeBool(row.message_visible),
+      hasLiveTask: Number(row.has_task) > 0,
+    });
+
   return found.rows
-    .filter((row) => scopeIds === undefined || scopeIds.includes(row.scope_id))
-    .map((row) => ({
+    .filter((row) => options.scopeIds === undefined || options.scopeIds.includes(row.scope_id))
+    .filter((row) => {
+      const quan = row.internal_date ?? row.sent_at;
+      if (options.from !== undefined && (quan === null || quan < options.from)) return false;
+      if (options.to !== undefined && (quan === null || quan >= options.to)) return false;
+      return true;
+    })
+    .map((row) => ({ row, in_inbox: dins(row) }))
+    .filter(({ in_inbox }) => options.includeHidden === true || in_inbox)
+    .map(({ row, in_inbox }) => ({
       id: row.id,
       account_id: row.account_id,
       message_key: row.message_key,
@@ -672,7 +742,75 @@ export async function listInboxMail(
       project_id: row.project_id,
       account_name: row.account_name,
       folder: row.folder,
-      has_attachments: false,
+      has_attachments: row.attachments !== null && row.attachments !== '',
       source_kind: 'mail' as const,
+      in_inbox,
     }));
+}
+
+/**
+ * Fer visible o invisible **un correu concret** a l'inbox de Tasques.
+ *
+ * **Bessona de `setEventInboxVisibility`, i amb la mateixa capacitat: `mail:read`.** El que
+ * s'escriu és una preferència teva sobre com vols veure la teva bústia, no el correu —que
+ * no es toca mai, ni aquí ni al servidor d'origen—. Demanar `mail:write` faria que un token
+ * de només lectura no pogués silenciar res, que és justament el que voldria fer.
+ *
+ * `visible: null` **treu l'excepció** i torna a manar la carpeta. Els clients envien `true`
+ * o `false` explícits per als botons: amb `null`, tornar a fer visible un correu d'una
+ * carpeta que per defecte no ho és no faria res i el botó semblaria espatllat.
+ */
+export async function setMailInboxVisibility(
+  ctx: AuditContext,
+  principal: Principal,
+  messageId: string,
+  visible: boolean | null,
+): Promise<{ visible: boolean | null; in_inbox: boolean }> {
+  if (!hasCapability(principal, 'mail:read')) throw missingCapability('mail:read');
+
+  const found = await sql<{ id: string; rule_visible: number | null; has_task: number }>`
+    SELECT m.id, r.inbox_visible AS rule_visible,
+           (SELECT COUNT(*) FROM tasks t
+             WHERE t.mail_account_id = m.account_id AND t.mail_message_key = m.message_key
+               AND t.deleted_at IS NULL) AS has_task
+    FROM mail_messages m
+    JOIN mail_rules r ON r.id = m.rule_id
+    JOIN mail_accounts a ON a.id = m.account_id
+    WHERE m.id = ${messageId} AND a.user_id = ${principal.userId}
+      AND m.deleted_at IS NULL AND a.deleted_at IS NULL
+  `.execute(ctx.tx);
+
+  const row = found.rows[0];
+  if (row === undefined) {
+    throw new PolicyError('mail-message-not-found', 'Not found', 404, 'Aquest correu no existeix.');
+  }
+
+  await sql`
+    UPDATE mail_messages
+    SET inbox_visible = ${visible === null ? null : dbBool(visible)}, updated_at = ${ctx.now}
+    WHERE id = ${messageId}
+  `.execute(ctx.tx);
+
+  /**
+   * `scopeId: null` a posta, com a les marques d'esdeveniment: el sync filtra per
+   * `change_log.scope_id`, i **una preferència personal no ha de viatjar a l'àmbit**.
+   */
+  ctx.record({ entityType: 'mail_message', entityId: messageId, verb: 'updated' });
+
+  return {
+    visible,
+    in_inbox: isInInbox({
+      origin: 'subscription',
+      sourceKind: 'mail',
+      calendarInboxVisible: maybeBool(row.rule_visible),
+      seriesMark: null,
+      occurrenceMark: visible,
+      hasLiveTask: Number(row.has_task) > 0,
+    }),
+  };
+}
+
+/** 0/1/NULL de la base a tri-estat. */
+function maybeBool(value: number | null): boolean | null {
+  return value === null ? null : Boolean(value);
 }

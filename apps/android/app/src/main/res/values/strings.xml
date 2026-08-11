@@ -169,7 +169,9 @@
     <string name="inbox_event_allday">Tot el dia</string>
     <string name="inbox_event_remove">Treure</string>
     <string name="inbox_event_totask">Fer-ne una tasca</string>
+    <string name="inbox_mail_frominbox">Treure de l’inbox</string>
     <string name="inbox_mail_nosubject">(sense assumpte)</string>
+    <string name="inbox_mail_toinbox">Portar a l’inbox</string>
     <string name="inbox_mail_unknownsender">Sense remitent</string>
     <string name="inbox_mailbox">Què es veu a la bústia</string>
     <string name="inbox_mailbox_all">Tot</string>
@@ -299,9 +301,6 @@
     <string name="settings_inviterole">Què podrà fer</string>
     <string name="settings_language">Idioma</string>
     <string name="settings_mail_accounts">Comptes</string>
-    <string name="settings_mail_action">Què se’n fa</string>
-    <string name="settings_mail_action_inbox">Cau a la bústia</string>
-    <string name="settings_mail_action_task">Es converteix en tasca</string>
     <string name="settings_mail_add">Afegeix el compte</string>
     <string name="settings_mail_addrule">Mapa la carpeta</string>
     <string name="settings_mail_apppassword">Amb Fastmail, Gmail o iCloud cal una contrasenya d’aplicació, no la del teu compte. Els espais dels extrems es treuen sols.</string>
@@ -311,13 +310,16 @@
     <string name="settings_mail_firstrun">La primera lectura d’una carpeta no ingereix res: es comença des d’ara.</string>
     <string name="settings_mail_folder">Carpeta</string>
     <string name="settings_mail_host">Servidor IMAP</string>
+    <string name="settings_mail_inboxvisible">Surt a l’inbox de Tasques</string>
     <string name="settings_mail_intro">Els comptes de correu són teus i no de la casa: ningú més els veu, ni l’administrador.</string>
     <string name="settings_mail_lastpolled">Última lectura: {when}</string>
+    <string name="settings_mail_loadingfolders">Llegint les carpetes…</string>
     <string name="settings_mail_name">Nom</string>
     <string name="settings_mail_neverpolled">Encara no s’ha llegit.</string>
     <string name="settings_mail_nottouched">Res marca els teus correus com a llegits.</string>
     <string name="settings_mail_password">Contrasenya</string>
     <string name="settings_mail_passwordkept">Desada. Deixa-ho buit per no tocar-la.</string>
+    <string name="settings_mail_pickfolder">Tria una carpeta…</string>
     <string name="settings_mail_port">Port</string>
     <string name="settings_mail_project">Projecte</string>
     <string name="settings_mail_projectnone">L’espai general</string>

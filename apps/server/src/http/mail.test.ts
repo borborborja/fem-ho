@@ -522,7 +522,12 @@ describe('el correu a la bústia', () => {
               ${regla.id}, ${NOW}, ${NOW})
     `.execute(conn.db);
 
-    const vista = await api('GET', '/api/v1/inbox?date=2026-08-11');
+    /**
+     * **Amb `include_hidden`**, perquè el defecte d'una carpeta nova és no sortir a l'inbox
+     * de Tasques: hi és igualment, i és el calendari qui l'ensenya. La visibilitat té el seu
+     * fitxer de proves (`mail-visibility.test.ts`); aquí el que es mira és la forma.
+     */
+    const vista = await api('GET', '/api/v1/inbox?date=2026-08-11&include_hidden=true');
     const cos = vista.json<{ mail: Record<string, unknown>[] }>();
 
     expect(cos.mail).toHaveLength(1);
@@ -532,6 +537,7 @@ describe('el correu a la bústia', () => {
       // La icona es dibuixa amb això, amb el mateix component que la resta.
       source_kind: 'mail',
       scope_id: scopeId,
+      in_inbox: false,
     });
     expect(cos.mail[0]).not.toHaveProperty('status');
     expect(cos.mail[0]).not.toHaveProperty('position');
@@ -540,7 +546,12 @@ describe('el correu a la bústia', () => {
   it("i el correu d'un altre no surt a la teva bústia", async () => {
     // Un compte de correu és d'una persona. Que el seu correu entrés a la bústia d'un
     // company d'àmbit seria el pitjor error que aquesta funció pot cometre.
-    const vista = await api('GET', '/api/v1/inbox?date=2026-08-11', undefined, altreAuth);
+    const vista = await api(
+      'GET',
+      '/api/v1/inbox?date=2026-08-11&include_hidden=true',
+      undefined,
+      altreAuth,
+    );
     expect(vista.json<{ mail: unknown[] }>().mail).toHaveLength(0);
   });
 });

@@ -13,8 +13,6 @@ import { folderDepth, normalizeFolder, routeMail, type MailRule } from './mail-r
 const regla = (canvis: Partial<MailRule> = {}): MailRule => ({
   id: 'r1',
   folder: 'INBOX',
-  action: 'inbox',
-  inboxVisible: true,
   position: 'a1',
   enabled: true,
   ...canvis,
@@ -29,9 +27,13 @@ const base = {
 };
 
 describe('el cas normal', () => {
-  it('la regla diu què se’n fa', () => {
+  it('el que té regla cau a la bústia', () => {
+    /**
+     * **I no hi ha cap altre destí.** Abans una regla podia dir «converteix-ho en tasca»;
+     * això posava coses a la llista de feina d'algú sense que ho hagués demanat. Ara el que
+     * arriba d'una font és sempre un element que **pots** convertir.
+     */
     expect(routeMail(base).kind).toBe('inbox');
-    expect(routeMail({ ...base, rules: [regla({ action: 'task' })] }).kind).toBe('task');
   });
 
   it('i una carpeta sense regla no es llegeix', () => {
@@ -55,20 +57,19 @@ describe('ja ingerit guanya a tot', () => {
       ...base,
       alreadyIngested: true,
       threadTaskId: 'task-1',
-      rules: [regla({ action: 'task' })],
     });
     expect(res).toEqual({ kind: 'skip', reason: 'duplicate' });
   });
 });
 
 describe('una resposta comenta, i no obre res', () => {
-  it('guanya fins i tot sobre una regla que diu «fes-ne una tasca»', () => {
-    // Si no, el fil acabaria partit en dues coses a fer.
-    const res = routeMail({
-      ...base,
-      threadTaskId: 'task-1',
-      rules: [regla({ action: 'task' })],
-    });
+  it('guanya sobre la bústia quan el fil ja té una tasca viva', () => {
+    /**
+     * **L'únic automatisme que queda a tot el correu**, i hi és per no partir la feina: si
+     * una resposta caigués a la bústia com un correu més, acabaries amb la conversa en dos
+     * llocs —una tasca i un element solt— i sense res que els lligui.
+     */
+    const res = routeMail({ ...base, threadTaskId: 'task-1' });
     expect(res).toEqual({ kind: 'comment', taskId: 'task-1' });
   });
 });
@@ -83,12 +84,12 @@ describe('la més específica guanya', () => {
       ...base,
       folders: ['[Gmail]/All Mail', 'INBOX/Feina/Clients'],
       rules: [
-        regla({ id: 'tot', folder: '[Gmail]/All Mail', action: 'inbox' }),
-        regla({ id: 'clients', folder: 'INBOX/Feina/Clients', action: 'task' }),
+        regla({ id: 'tot', folder: '[Gmail]/All Mail' }),
+        regla({ id: 'clients', folder: 'INBOX/Feina/Clients' }),
       ],
     });
-    expect(res.kind).toBe('task');
-    expect(res.kind === 'task' && res.rule.id).toBe('clients');
+    // La més profunda mana: és la que porta l'àmbit i el projecte que toquen.
+    expect(res.kind === 'inbox' && res.rule.id).toBe('clients');
   });
 
   it('i amb la mateixa profunditat desempata la posició', () => {

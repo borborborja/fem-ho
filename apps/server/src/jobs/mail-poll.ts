@@ -39,17 +39,12 @@ import { htmlToText } from '../text/html-to-text.js';
 import { routeMail, type MailRule as RoutingRule } from '../policy/mail-routing.js';
 import { messageKey, threadKey } from '../services/mail-identity.js';
 import type { MailAttachmentMeta, MailClient, MailHeader } from '../net/mail-client.js';
-import type { AuditEntry } from '../audit/audited-transaction.js';
 import { safeFilename, sniffMime, storeAttachment } from '../services/attachments.js';
 import { auditedTransaction } from '../audit/audited-transaction.js';
 import { capabilitiesForRole } from '../policy/capabilities.js';
 import type { Principal } from '../policy/principal.js';
-import {
-  convertMailToTask,
-  type ConvertRule,
-  type MailMessageRow,
-} from '../services/mail-convert.js';
-import { catalogOf, isLocale, FALLBACK, type Locale } from '@fem-ho/contracts';
+import type { MailMessageRow } from '../services/mail-convert.js';
+import { addComment } from '../services/comments.js';
 
 /** Cada quant es llegeix un compte, per defecte. */
 export const MAIL_POLL_SECONDS = 300;
@@ -92,8 +87,7 @@ interface RuleRow {
   folder: string;
   scope_id: string;
   project_id: string | null;
-  action: string;
-  inbox_visible: number;
+  inbox_visible: number | null;
   title_template: string;
   body_to_description: number;
   attachments_to_task: number;
@@ -158,7 +152,7 @@ export async function pollMail(options: MailPollOptions): Promise<MailPollResult
      */
     try {
       await pollAccount(account, options, now, result);
-      await convertPending(account, options, now);
+      await applyThreadComments(account, options, now);
       await markOk(options.db, account.id, now);
     } catch (error) {
       result.errors += 1;
@@ -177,7 +171,7 @@ async function pollAccount(
   result: MailPollResult,
 ): Promise<void> {
   const rules = await sql<RuleRow>`
-    SELECT id, account_id, folder, scope_id, project_id, action, inbox_visible,
+    SELECT id, account_id, folder, scope_id, project_id, inbox_visible,
            title_template, body_to_description, attachments_to_task, position,
            uid_validity, last_uid
     FROM mail_rules
@@ -256,8 +250,6 @@ const toRouting = (rules: RuleRow[]): RoutingRule[] =>
   rules.map((rule) => ({
     id: rule.id,
     folder: rule.folder,
-    action: rule.action === 'task' ? 'task' : 'inbox',
-    inboxVisible: Boolean(rule.inbox_visible),
     position: rule.position,
     enabled: true,
   }));
@@ -324,15 +316,13 @@ async function ingestOne(
     body === null ? null : (body.text ?? (body.html === null ? null : htmlToText(body.html)));
 
   /**
-   * `pending` vol dir «hi ha una decisió a aplicar», i s'hi posa tant si la regla diu
-   * `task` com si el fil ja té tasca i això serà un comentari.
+   * **Tot el que entra va a la bústia, i prou.**
    *
-   * **Una sola porta.** La temptació és desar-ho ja com a `comment` aquí i estalviar-se un
-   * pas; llavors la conversió tindria dues entrades —el bucle de xarxa i el de conversió—
-   * i la decisió de «comentari o tasca nova» viuria a dos llocs que un dia divergirien.
-   * `convertMailToTask` la pren una vegada i deixa la disposició definitiva.
+   * Ja no hi ha `pending`: cap regla converteix res sola. L'única excepció és el correu que
+   * respon un fil que **ja té una tasca viva**, que hi deixa un comentari —si obrís una
+   * segona tasca del mateix assumpte, respondre un correu et partiria la feina en dues.
    */
-  const disposition = massaGros ? 'skipped' : routing.kind === 'inbox' ? 'inbox' : 'pending';
+  const disposition = massaGros ? 'skipped' : routing.kind === 'comment' ? 'pending' : 'inbox';
 
   /**
    * **Els adjunts es baixen aquí, fora de qualsevol transacció, i amb dues portes.**
@@ -344,12 +334,13 @@ async function ingestOne(
    * Les imatges en línia ja les ha tret el client: si no, cada signatura corporativa
    * deixaria un logotip adjunt a cada tasca.
    */
-  const volAdjunts = !massaGros && rule.attachments_to_task !== 0 && rule.action === 'task';
-  const adjunts: { meta: MailAttachmentMeta; data: Uint8Array }[] = [];
+  const volAdjunts = !massaGros && rule.attachments_to_task !== 0 && options.dataDir !== undefined;
+  const adjunts: StoredAttachment[] = [];
   if (volAdjunts && body !== null) {
     for (const meta of body.attachments.slice(0, MAIL_MAX_ATTACHMENTS)) {
       const data = await client.fetchAttachment(rule.folder, header.uid, meta.part, maxBytes);
-      if (data !== null) adjunts.push({ meta, data });
+      if (data === null) continue;
+      adjunts.push(await storeOne(meta, data, now, options.dataDir!));
     }
   }
 
@@ -360,26 +351,16 @@ async function ingestOne(
                                uid_validity, uid, internal_date, sent_at, from_name,
                                from_address, to_addresses, subject, body_text, has_html,
                                raw_bytes, in_reply_to, reference_ids, disposition, rule_id,
-                               error, created_at, updated_at)
+                               attachments, error, created_at, updated_at)
     VALUES (${uuidv7()}, ${account.id}, ${filId}, ${key}, ${header.messageId},
             ${rule.folder}, ${rule.uid_validity ?? '0'}, ${header.uid},
             ${header.internalDate}, ${header.sentAt}, ${header.fromName},
             ${header.fromAddress}, ${JSON.stringify(header.toAddresses)}, ${header.subject},
             ${text}, ${dbBool(header.hasHtml)}, ${header.size}, ${header.inReplyTo},
             ${JSON.stringify(header.references)}, ${disposition}, ${rule.id},
+            ${adjunts.length === 0 ? null : JSON.stringify(adjunts)},
             ${massaGros ? 'massa gros' : null}, ${now}, ${now})
   `.execute(options.db);
-
-  if (disposition === 'pending') {
-    /**
-     * **La conversió va aquí i no en una segona passada, i el motiu són els adjunts.**
-     *
-     * Els bytes els tenim a la mà i el client encara és obert; ajornar-ho voldria dir
-     * tornar-hi a connectar per baixar el mateix. La xarxa ja s'ha acabat: el que ve ara és
-     * una transacció curta i prou.
-     */
-    await convertOne(options, account, rule, key, adjunts);
-  }
 
   return massaGros ? 'skipped' : 'ingested';
 }
@@ -388,94 +369,34 @@ async function ingestOne(
 export const MAIL_MAX_ATTACHMENTS = 10;
 
 /**
- * Converteix un correu concret i hi penja els adjunts que ja s'han baixat.
+ * Un adjunt ja baixat, tal com queda desat a la fila del missatge.
  *
- * Tot en **una transacció curta**: o hi ha la tasca amb els seus fitxers, o no hi ha res.
- * Una tasca amb la meitat dels adjunts seria pitjor que qualsevol de les dues coses.
+ * **El nom i el tipus ja vénen nets d'aquí**: `safeFilename` sobre el que deia el correu i
+ * `sniffMime` **sobre els bytes**, amb el `Content-Type` declarat llençat. Un `factura.pdf`
+ * que en realitat és un executable rep el que diuen els bytes, i això es decideix un sol cop
+ * —quan els tenim a la mà— i no cada vegada que algú els mira.
  */
-async function convertOne(
-  options: MailPollOptions,
-  account: AccountRow,
-  rule: RuleRow,
-  key: string,
-  adjunts: { meta: MailAttachmentMeta; data: Uint8Array }[],
-): Promise<void> {
-  const found = await sql<MailMessageRow>`
-    SELECT id, account_id, thread_id, message_key, folder, subject, from_name, from_address,
-           body_text, internal_date, disposition, rule_id
-    FROM mail_messages
-    WHERE account_id = ${account.id} AND message_key = ${key}
-  `.execute(options.db);
-  const message = found.rows[0];
-  if (message === undefined) return;
-
-  const locale = await localeOf(options.db, account.user_id);
-  const principal = ownerPrincipal(account.user_id);
-
-  await auditedTransaction(options.db, principal, async (ctx) => {
-    const { taskId, created } = await convertMailToTask(
-      ctx,
-      principal,
-      message,
-      {
-        scope_id: rule.scope_id,
-        project_id: rule.project_id,
-        title_template: rule.title_template,
-        body_to_description: rule.body_to_description !== 0,
-      },
-      {
-        accountName: account.name,
-        locale,
-        fallbackTitle: catalogOf(locale)['inbox.mail.noSubject'] ?? '(sense assumpte)',
-      },
-    );
-
-    // Els adjunts només a la tasca **nova**: en una resposta que ha acabat sent comentari,
-    // penjar-los-hi tornaria a adjuntar el mateix a cada correu del fil.
-    if (created && options.dataDir !== undefined) {
-      for (const adjunt of adjunts) {
-        await attachToTask(ctx, taskId, rule.scope_id, adjunt, options.dataDir);
-      }
-    }
-  });
+export interface StoredAttachment {
+  filename: string;
+  mime_type: string;
+  size_bytes: number;
+  storage_path: string;
 }
 
-/**
- * Penja un adjunt de correu a una tasca, amb **les tres defenses que ja hi ha**.
- *
- * - `safeFilename`: el nom que ve del correu és text d'un desconegut.
- * - `sniffMime` **sobre els bytes**, i el `Content-Type` declarat es llença: un
- *   `factura.pdf` que en realitat és un executable rep el que diuen els bytes.
- * - `is_ai_context = FALSE`: un adjunt d'un desconegut no entra al context d'un model pel
- *   sol fet d'existir. Que hi entri és una decisió que pren una persona.
- */
-async function attachToTask(
-  ctx: { tx: MigrationDb; now: string; record: (entry: AuditEntry) => void },
-  taskId: string,
-  scopeId: string,
-  adjunt: { meta: MailAttachmentMeta; data: Uint8Array },
+/** Desa un adjunt a disc i en torna la fitxa. Cap escriptura a la base. */
+async function storeOne(
+  meta: MailAttachmentMeta,
+  data: Uint8Array,
+  now: string,
   dataDir: string,
-): Promise<void> {
-  const id = uuidv7();
-  const { path } = await storeAttachment(id, adjunt.data, ctx.now, dataDir);
-  const filename = safeFilename(adjunt.meta.filename ?? 'adjunt');
-
-  await sql`
-    INSERT INTO attachments (id, task_id, scope_id, filename, mime_type, size_bytes,
-                             storage_path, source, is_ai_context, created_at, updated_at,
-                             version)
-    VALUES (${id}, ${taskId}, ${scopeId}, ${filename}, ${sniffMime(adjunt.data)},
-            ${adjunt.data.length}, ${path}, 'mail_attach', ${dbBool(false)}, ${ctx.now},
-            ${ctx.now}, 1)
-  `.execute(ctx.tx);
-
-  ctx.record({
-    entityType: 'attachment',
-    entityId: id,
-    scopeId,
-    verb: 'created',
-    changes: { filename: { from: null, to: filename } },
-  });
+): Promise<StoredAttachment> {
+  const { path } = await storeAttachment(uuidv7(), data, now, dataDir);
+  return {
+    filename: safeFilename(meta.filename ?? 'adjunt'),
+    mime_type: sniffMime(data),
+    size_bytes: data.length,
+    storage_path: path,
+  };
 }
 
 /** La tasca viva d'un fil, si en té. */
@@ -564,16 +485,24 @@ function ownerPrincipal(userId: string): Principal {
 }
 
 /**
- * Converteix els correus que una regla `task` ha deixat pendents.
+ * Els correus que responen un fil que **ja té una tasca viva**: hi deixen un comentari.
  *
- * **Fora del bucle de xarxa i en transaccions curtes**, una per correu: convertir vint
- * correus dins d'una sola transacció faria que un error al vintè desfés els dinou primers,
- * i amb SQLite mantindria l'únic escriptor ocupat tota l'estona.
+ * **Aquesta funció no pot crear cap tasca, i és tot el que la fa correcta.** Cap font posa
+ * res al kanban sola; l'únic automatisme que queda és el que evita partir la feina en dues
+ * —si una resposta obrís una segona tasca del mateix assumpte, respondre un correu et
+ * duplicaria la feina cada vegada.
+ *
+ * Si entremig la tasca ha desaparegut —l'han esborrada abans que passés el tic—, el correu
+ * **cau a la bústia com qualsevol altre** en comptes de crear-ne una de nova.
+ *
+ * Va fora del bucle de xarxa i en **transaccions curtes**, una per correu: vint dins d'una
+ * sola faria que un error al vintè desfés els dinou primers, i amb SQLite mantindria
+ * l'únic escriptor ocupat tota l'estona.
  */
-async function convertPending(
+async function applyThreadComments(
   account: AccountRow,
   options: MailPollOptions,
-  now: string,
+  ara: string,
 ): Promise<void> {
   const pendents = await sql<MailMessageRow>`
     SELECT id, account_id, thread_id, message_key, folder, subject, from_name, from_address,
@@ -584,43 +513,49 @@ async function convertPending(
   `.execute(options.db);
   if (pendents.rows.length === 0) return;
 
-  const locale = await localeOf(options.db, account.user_id);
   const principal = ownerPrincipal(account.user_id);
 
   for (const message of pendents.rows) {
-    const rule = await sql<ConvertRule>`
-      SELECT scope_id, project_id, title_template, body_to_description
-      FROM mail_rules WHERE id = ${message.rule_id}
+    const tasca = await sql<{ id: string }>`
+      SELECT t.id FROM tasks t
+      JOIN mail_threads th ON th.thread_key = t.mail_thread_key
+      WHERE th.id = ${message.thread_id} AND t.mail_account_id = ${account.id}
+        AND t.deleted_at IS NULL
+      LIMIT 1
     `.execute(options.db);
-    const regla = rule.rows[0];
-    if (regla === undefined) continue;
 
-    await auditedTransaction(options.db, principal, (ctx) =>
-      convertMailToTask(
-        ctx,
-        principal,
-        message,
-        { ...regla, body_to_description: Boolean(regla.body_to_description) },
-        {
-          accountName: account.name,
-          locale,
-          // **En l'idioma de qui té el compte.** Un correu sense assumpte que caigués al
-          // tauler amb una frase en un altre idioma es veuria com un error del producte.
-          fallbackTitle: catalogOf(locale)['inbox.mail.noSubject'] ?? '(sense assumpte)',
-        },
-      ),
-    );
+    const taskId = tasca.rows[0]?.id;
+    if (taskId === undefined) {
+      // La tasca ja no hi és: això no és un comentari, és un correu més a la bústia.
+      await sql`
+        UPDATE mail_messages SET disposition = 'inbox', updated_at = ${ara}
+        WHERE id = ${message.id}
+      `.execute(options.db);
+      continue;
+    }
+
+    await auditedTransaction(options.db, principal, async (ctx) => {
+      await addComment(ctx, principal, taskId, commentOf(message));
+      await sql`
+        UPDATE mail_messages SET disposition = 'comment', task_id = ${taskId},
+               updated_at = ${ctx.now}
+        WHERE id = ${message.id}
+      `.execute(ctx.tx);
+    });
   }
-  void now;
 }
 
-/** L'idioma de qui té el compte, per al títol de recanvi. */
-async function localeOf(db: MigrationDb, userId: string): Promise<Locale> {
-  const found = await sql<{ locale: string | null }>`
-    SELECT locale FROM users WHERE id = ${userId}
-  `.execute(db);
-  const raw = found.rows[0]?.locale ?? '';
-  return isLocale(raw) ? raw : FALLBACK;
+/**
+ * El text del comentari que deixa una resposta.
+ *
+ * Porta **el remitent de debò** —el del correu, no el que hagi sortit de cap plantilla— i
+ * per això no es pot falsejar escrivint-lo a l'assumpte.
+ */
+function commentOf(message: MailMessageRow): string {
+  const qui = message.from_name ?? message.from_address ?? '';
+  const cap = qui === '' ? '' : `${qui}: `;
+  const cos = (message.body_text ?? message.subject ?? '').slice(0, 2000).trim();
+  return `${cap}${cos === '' ? (message.subject ?? '') : cos}`.trim() || 'Un correu del fil.';
 }
 
 /**

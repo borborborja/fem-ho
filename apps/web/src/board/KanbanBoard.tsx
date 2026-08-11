@@ -117,7 +117,7 @@ export interface KanbanBoardProps {
   /** El correu que ha entrat i encara no és tasca. */
   inboxMail?: InboxMail[] | undefined;
   onMailToTask?: ((mail: InboxMail) => void) | undefined;
-  onMailDismiss?: ((mail: InboxMail) => void) | undefined;
+  onMailToggle?: ((mail: InboxMail) => void) | undefined;
   /** De quin calaix es veu la bústia. El mateix criteri que `/inbox` al servidor. */
   mailbox?: 'own' | 'shared' | 'all';
   onToggleGroup?: (status: TaskStatus, scopeId: string) => void;
@@ -200,7 +200,7 @@ export function KanbanBoard({
   onEventToTask,
   inboxMail,
   onMailToTask,
-  onMailDismiss,
+  onMailToggle,
   mailbox = 'all',
   collapsed = {},
   onToggleGroup,
@@ -476,7 +476,7 @@ export function KanbanBoard({
                 events={inboxEvents}
                 mail={inboxMail}
                 onMailToTask={onMailToTask}
-                onMailDismiss={onMailDismiss}
+                onMailToggle={onMailToggle}
                 onEventRemove={onEventRemove}
                 onEventToTask={onEventToTask}
                 header={inboxHeader}

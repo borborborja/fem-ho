@@ -172,9 +172,9 @@ describe('cap feina en tomba una altra', () => {
               ${NOW}, ${NOW})
     `.execute(conn.db);
     await sql`
-      INSERT INTO mail_rules (id, account_id, folder, scope_id, action, position,
+      INSERT INTO mail_rules (id, account_id, folder, scope_id, position,
                               created_at, updated_at)
-      VALUES (${uuidv7()}, ${compte}, 'INBOX', ${scopeId}, 'inbox', 'a1', ${NOW}, ${NOW})
+      VALUES (${uuidv7()}, ${compte}, 'INBOX', ${scopeId}, 'a1', ${NOW}, ${NOW})
     `.execute(conn.db);
 
     const send = vi.fn<PushSender>(async () => ({ statusCode: 201 }));

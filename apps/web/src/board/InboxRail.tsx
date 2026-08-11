@@ -55,7 +55,7 @@ export interface InboxRailProps {
    */
   mail?: InboxMail[] | undefined;
   onMailToTask?: ((mail: InboxMail) => void) | undefined;
-  onMailDismiss?: ((mail: InboxMail) => void) | undefined;
+  onMailToggle?: ((mail: InboxMail) => void) | undefined;
   /** Fer una tasca a partir d'un esdeveniment. Sense això, el botó no surt. */
   onEventToTask?: ((event: InboxEvent) => void) | undefined;
   /** Treure un esdeveniment de la bústia. El mateix. */
@@ -97,7 +97,7 @@ export function InboxRail({
   events,
   mail,
   onMailToTask,
-  onMailDismiss,
+  onMailToggle,
   onEventToTask,
   onEventRemove,
   scopes,
@@ -237,7 +237,7 @@ export function InboxRail({
                   mail={item}
                   color={scopes.find((scope) => scope.id === item.scope_id)?.color}
                   onToTask={onMailToTask === undefined ? undefined : () => onMailToTask(item)}
-                  onDismiss={onMailDismiss === undefined ? undefined : () => onMailDismiss(item)}
+                  onToggleInbox={onMailToggle === undefined ? undefined : () => onMailToggle(item)}
                 />
               ))}
             </div>,

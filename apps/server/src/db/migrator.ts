@@ -31,6 +31,7 @@ import * as gravatar from './migrations/010-gravatar.js';
 import * as inboxSources from './migrations/011-inbox-sources.js';
 import * as taskProvenance from './migrations/012-task-provenance.js';
 import * as mailSources from './migrations/013-mail-sources.js';
+import * as mailVisibility from './migrations/014-mail-visibility.js';
 
 export interface Migration {
   name: string;
@@ -81,6 +82,16 @@ export const MIGRATIONS: Migration[] = [
     name: '013-mail-sources',
     up: mailSources.up,
     down: mailSources.down,
+    needsForeignKeysOff: true,
+  },
+  /**
+   * `needsForeignKeysOff`: refà `mail_rules`, i `mail_messages.rule_id` hi apunta —o sigui
+   * que aquí el `DROP TABLE` sí que violaria una clau forana amb dades a taula.
+   */
+  {
+    name: '014-mail-visibility',
+    up: mailVisibility.up,
+    down: mailVisibility.down,
     needsForeignKeysOff: true,
   },
 ];
