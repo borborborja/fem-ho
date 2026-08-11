@@ -6,6 +6,7 @@ import ho.fem.model.Board
 import ho.fem.model.Checklist
 import ho.fem.model.EventOccurrence
 import ho.fem.model.Inbox
+import ho.fem.model.InboxMark
 import ho.fem.model.InstanceInfo
 import ho.fem.model.Person
 import ho.fem.model.Project
@@ -150,14 +151,26 @@ class FemhoApi(
     private fun encode(body: Any): String = when (body) {
         is String -> body
         is Map<*, *> -> body.entries.joinToString(",", "{", "}") { (key, value) ->
-            "\"$key\":" + when (value) {
-                null -> "null"
-                is Number, is Boolean -> value.toString()
-                is List<*> -> value.joinToString(",", "[", "]") { "\"$it\"" }
-                else -> "\"${value.toString().replace("\\", "\\\\").replace("\"", "\\\"")}\""
-            }
+            "\"$key\":" + encodeValue(value)
         }
         else -> error("cos no suportat: ${body::class}")
+    }
+
+    /**
+     * Un valor dins d'un cos.
+     *
+     * **Els mapes es codifiquen recursivament**, que abans no passava: un objecte
+     * imbricat queia al `else` i sortia com una cadena amb el `toString()` de Kotlin a
+     * dins —`"{calendar_id=abc, uid=xyz}"`—, que el servidor no pot llegir i que no dona
+     * cap error aquí. Va caldre en afegir `source_event`, que és el primer cos amb un
+     * objecte a dins.
+     */
+    private fun encodeValue(value: Any?): String = when (value) {
+        null -> "null"
+        is Number, is Boolean -> value.toString()
+        is Map<*, *> -> encode(value)
+        is List<*> -> value.joinToString(",", "[", "]") { encodeValue(it) }
+        else -> "\"${value.toString().replace("\\", "\\\\").replace("\"", "\\\"")}\""
     }
 
     // ------------------------------------------------------------------ públic
@@ -204,6 +217,28 @@ class FemhoApi(
         return get("/api/v1/inbox?$query")
     }
 
+    /**
+     * Treure o tornar a posar una cita a la bústia de qui ho demana.
+     *
+     * **L'uid va al cos i no al camí**: el d'un ítem d'RSS és `"<calendarId>-<itemId>"` i
+     * l'itemId pot ser una URL sencera. `visible = null` treu la marca i torna al defecte,
+     * que no és el mateix que `false`.
+     */
+    suspend fun setEventInInbox(
+        calendarId: String,
+        uid: String,
+        recurrenceId: String?,
+        visible: Boolean?,
+    ): InboxMark = post(
+        "/api/v1/inbox/events",
+        mapOf(
+            "calendar_id" to calendarId,
+            "uid" to uid,
+            "recurrence_id" to recurrenceId,
+            "visible" to visible,
+        ),
+    )
+
     suspend fun events(from: String, to: String, scopeIds: List<String>): List<EventOccurrence> {
         val query = buildList {
             add("from=$from")
@@ -219,6 +254,8 @@ class FemhoApi(
         title: String,
         projectId: String?,
         assigneeIds: List<String>,
+        /** D'on ve, si ve d'una cita: calendari, uid i ocurrència. */
+        sourceEvent: Triple<String, String, String?>? = null,
     ): Task = post(
         "/api/v1/tasks",
         buildMap {
@@ -227,6 +264,16 @@ class FemhoApi(
             put("title", title)
             if (projectId != null) put("project_id", projectId)
             if (assigneeIds.isNotEmpty()) put("assignee_ids", assigneeIds)
+            if (sourceEvent != null) {
+                put(
+                    "source_event",
+                    mapOf(
+                        "calendar_id" to sourceEvent.first,
+                        "uid" to sourceEvent.second,
+                        "recurrence_id" to sourceEvent.third,
+                    ),
+                )
+            }
         },
     )
 

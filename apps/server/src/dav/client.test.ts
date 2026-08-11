@@ -267,6 +267,56 @@ describe('el refresc', () => {
     expect(vius.rows.map((row) => row.uid)).toEqual(['a']);
   });
 
+  it("i si l'origen el torna a servir, torna a sortir", async () => {
+    /**
+     * **El cas de la finestra rodant, i era un defecte de veritat.**
+     *
+     * Molts `.ics` publicats només serveixen una finestra —«els propers 30 dies»— i un
+     * canal RSS només els últims N titulars. Un ítem que en surt i hi torna a entrar és
+     * el cas normal, no una raresa.
+     *
+     * El que passava: `applyFetched` indexa el que ja hi ha **filtrant per
+     * `deleted_at IS NULL`**, o sigui que no veia la fila esborrada suaument; anava per
+     * la branca d'`INSERT`; i l'índex únic `idx_events_component` **no exclou les files
+     * esborrades**, o sigui que l'INSERT petava. No es perdia un esdeveniment: petava
+     * **el refresc sencer**, i el calendari es quedava amb `last_error` per sempre.
+     *
+     * Cap prova ho veia perquè totes servien l'ítem, el treien, i s'aturaven allà.
+     */
+    served = ics([{ uid: 'a', summary: 'Sant Jordi' }]);
+    await refreshSubscription(conn.db, principal, await subscription(), {
+      masterSecret: MASTER,
+      fetchOptions: permetLoopback,
+    });
+
+    // Surt de la finestra.
+    served = ics([]);
+    await refreshSubscription(conn.db, principal, await subscription(), {
+      masterSecret: MASTER,
+      fetchOptions: permetLoopback,
+    });
+
+    // I hi torna a entrar.
+    served = ics([{ uid: 'a', summary: 'Sant Jordi' }]);
+    const result = await refreshSubscription(conn.db, principal, await subscription(), {
+      masterSecret: MASTER,
+      fetchOptions: permetLoopback,
+    });
+
+    expect(result.fetched).toBe(1);
+    const vius = await sql<{ uid: string }>`
+      SELECT uid FROM events WHERE calendar_id = ${calendarId} AND deleted_at IS NULL
+    `.execute(conn.db);
+    expect(vius.rows.map((row) => row.uid)).toEqual(['a']);
+
+    // I **una sola fila**: ressuscitada, no duplicada. Amb dues, l'esdeveniment sortiria
+    // dues vegades al calendari.
+    const totes = await sql<{ n: number }>`
+      SELECT COUNT(*) AS n FROM events WHERE calendar_id = ${calendarId} AND uid = 'a'
+    `.execute(conn.db);
+    expect(Number(totes.rows[0]?.n)).toBe(1);
+  });
+
   it('un refresc sense canvis NO reescriu res', async () => {
     // Reescriure-ho tot a cada refresc mouria el `change_log` i faria que tots els
     // clients de Fem-ho es rebaixessin el calendari sencer cada hora per no res.

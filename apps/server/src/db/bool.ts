@@ -31,3 +31,17 @@ export function dbBool(value: boolean): ReturnType<typeof sql> {
 export function isTrue(value: unknown): boolean {
   return value === true || value === 1 || value === '1' || value === 't';
 }
+
+/**
+ * Un booleà que **també pot no dir res**.
+ *
+ * `isTrue` no serveix per a una columna tri-estat: dona `false` tant per a un fals de
+ * veritat com per a un `NULL`, i són coses diferents. `calendars.inbox_visible` en depèn:
+ * `NULL` vol dir "no s'hi ha dit res, val el defecte" i `false` vol dir "aquest no, encara
+ * que el defecte digui que sí". Confondre'ls trauria de la bústia tots els calendaris on
+ * ningú ha tocat res.
+ */
+export function maybeBool(value: unknown): boolean | null {
+  if (value === null || value === undefined) return null;
+  return isTrue(value);
+}

@@ -62,6 +62,10 @@
     <string name="calendar_day">Day</string>
     <string name="calendar_empty_day">No events or tasks on this day.</string>
     <string name="calendar_empty_week">Nothing</string>
+    <string name="calendar_event_frominbox">Remove from inbox</string>
+    <string name="calendar_event_ininbox">It\'s in your inbox.</string>
+    <string name="calendar_event_notininbox">Not in your inbox: it stays on the calendar, but it doesn\'t claim your day.</string>
+    <string name="calendar_event_toinbox">Add to inbox</string>
     <string name="calendar_month">Month</string>
     <string name="calendar_nextmonth">Next month</string>
     <string name="calendar_nodate">NO DATE</string>
@@ -153,6 +157,12 @@
     <string name="error_window_required">A window is needed: without one, recurrences cannot be expanded.</string>
     <string name="error_wrong_component">“{name}” is for tasks and does not accept events.</string>
     <string name="error_wrong_password">The current password is not correct.</string>
+    <string name="inbox_day_next">Next day</string>
+    <string name="inbox_day_prev">Previous day</string>
+    <string name="inbox_day_today">Today</string>
+    <string name="inbox_event_allday">All day</string>
+    <string name="inbox_event_remove">Remove</string>
+    <string name="inbox_event_totask">Make it a task</string>
     <string name="inbox_mailbox">What the inbox shows</string>
     <string name="inbox_mailbox_all">All</string>
     <string name="inbox_mailbox_allhint">The whole inbox: both individual and shared scopes</string>
@@ -160,6 +170,7 @@
     <string name="inbox_mailbox_ownhint">Only what is in your individual scopes</string>
     <string name="inbox_mailbox_shared">Shared</string>
     <string name="inbox_mailbox_sharedhint">Only what is in the scopes you share with someone</string>
+    <string name="inbox_section_events">From the calendar</string>
     <string name="invite_done">You can now sign in with your email and this password.</string>
     <string name="invite_mismatch">The two passwords do not match.</string>
     <string name="invite_password">Password</string>
@@ -250,6 +261,11 @@
     <string name="settings_empty_calendars">This scope has no calendars yet.</string>
     <string name="settings_empty_shares">You have not created any share link yet.</string>
     <string name="settings_enableai">Turn on the AI user</string>
+    <string name="settings_events_ondelete">When you delete a task made from an event</string>
+    <string name="settings_events_ondelete_hide">The event stays out</string>
+    <string name="settings_events_ondelete_hidehint">It remains on the calendar, but stops claiming your day.</string>
+    <string name="settings_events_ondelete_return">The event returns to the inbox</string>
+    <string name="settings_events_ondelete_returnhint">Deleting the task undoes the conversion.</string>
     <string name="settings_gravatar">Use Gravatar for my picture</string>
     <string name="settings_gravatarfill">Fill in from Gravatar</string>
     <string name="settings_gravatarhelp">The server asks gravatar.com for your picture using a hash of your email. The hash is not anonymous: anyone who already suspects your address can check it. Turn this off and your initials are shown instead.</string>
@@ -322,6 +338,7 @@
     <string name="settings_sources_add">+ Add source</string>
     <string name="settings_sources_empty">This scope has no external sources. The ones you add will show up in the calendar.</string>
     <string name="settings_sources_failed">The last refresh failed: {reason}</string>
+    <string name="settings_sources_inbox">In the inbox</string>
     <string name="settings_sources_kind_caldav">CalDAV</string>
     <string name="settings_sources_kind_ical">iCal</string>
     <string name="settings_sources_kind_rss">RSS</string>

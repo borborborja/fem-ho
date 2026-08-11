@@ -266,6 +266,33 @@ function GeneralTab() {
       </Group>
 
       {/*
+        Què li passa a la cita quan s'esborra la tasca que en va sortir.
+
+        Viu aquí i no a la fitxa de cada esdeveniment perquè és **una manera de treballar**
+        i no una decisió per cas: qui esborra una tasca derivada vol sempre el mateix, i
+        preguntar-ho cada vegada seria un diàleg més al camí d'una acció que ja en té un.
+      */}
+      <Group title={t('settings.events.onDelete')}>
+        <Chips
+          testId="event-task-deleted"
+          value={settings.event_task_deleted ?? 'return_to_inbox'}
+          options={[
+            {
+              key: 'return_to_inbox' as const,
+              label: t('settings.events.onDelete.return'),
+              hint: t('settings.events.onDelete.returnHint'),
+            },
+            {
+              key: 'hide_from_inbox' as const,
+              label: t('settings.events.onDelete.hide'),
+              hint: t('settings.events.onDelete.hideHint'),
+            },
+          ]}
+          onChange={(value) => void updateSettings({ event_task_deleted: value })}
+        />
+      </Group>
+
+      {/*
         **Article 13 de l'AGPL, no un crèdit.**
 
         Qui fa servir aquesta instància per la xarxa té dret al codi de la versió que li
@@ -1120,6 +1147,25 @@ function SourcesForScope({
                       })}
               </div>
             </div>
+            {/*
+              A la bústia o només al calendari.
+              **Es desa l'excepció i no l'estat**: si el valor triat coincideix amb el que
+              el defecte ja diria, s'envia `null` i la base es queda buida. Així el dia
+              que el defecte canviï, qui no hagi tocat res el segueix. La casella, en
+              canvi, és un interruptor normal: ensenya `inbox_visible ?? el defecte`.
+            */}
+            <Toggle
+              checked={source.inbox_visible ?? source.inbox_visible_default}
+              label={t('settings.sources.inbox')}
+              testId={`source-inbox-${source.id}`}
+              onChange={(next) => {
+                void api
+                  .patch(`/api/v1/calendars/${source.id}`, {
+                    inbox_visible: next === source.inbox_visible_default ? null : next,
+                  })
+                  .then(() => calendars.reload());
+              }}
+            />
             <button
               type="button"
               className="plou-btn plou-btn-ghost"

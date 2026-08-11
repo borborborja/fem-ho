@@ -33,7 +33,10 @@ import {
   deleteEvent,
   getEvent,
   listCalendars,
+  inboxFlags,
   listEventOccurrences,
+  markKey,
+  setEventInboxVisibility,
   updateCalendar,
   updateEvent,
   type CreateEventInput,
@@ -71,6 +74,24 @@ function parseStatuses(raw: unknown): TaskStatus[] | undefined {
 
 function parseSeriesMode(raw: unknown): SeriesMode {
   return raw === 'future' || raw === 'all' ? raw : 'single';
+}
+
+/**
+ * D'on ve una tasca feta a partir d'una cita.
+ *
+ * Les tres parts són **la identitat externa** de l'esdeveniment i no el seu `id`: el
+ * refresc d'una font reescriu les files i les pot tornar a la vida, o sigui que l'`id` no
+ * és estable.
+ */
+function sourceEvent(
+  raw: unknown,
+): { calendar_id: string; uid: string; recurrence_id?: string | null } | undefined {
+  if (typeof raw !== 'object' || raw === null) return undefined;
+  const value = raw as Record<string, unknown>;
+  const calendarId = str(value.calendar_id);
+  const uid = str(value.uid);
+  if (calendarId === undefined || uid === undefined) return undefined;
+  return { calendar_id: calendarId, uid, recurrence_id: str(value.recurrence_id) ?? null };
 }
 
 /** `caldav`, `ical` o `rss`; qualsevol altra cosa no és una font que sapiguem llegir. */
@@ -115,6 +136,7 @@ export function registerTaskRoutes(app: FastifyInstance): void {
             assignee_ids: Array.isArray(input.assignee_ids)
               ? input.assignee_ids.filter((v): v is string => typeof v === 'string')
               : undefined,
+            source_event: sourceEvent(input.source_event),
           },
           db().engine,
         ),
@@ -324,6 +346,9 @@ export function registerTaskRoutes(app: FastifyInstance): void {
         date: str(q.date) ?? today(profile.timezone),
         includeOverdue: bool(q.include_overdue) ?? true,
         scopeIds: ids(q.scope_ids),
+        // I el mateix fus serveix per tallar el dia dels esdeveniments, que són instants
+        // i no dates.
+        timezone: profile.timezone,
         // Sense paràmetre, el calaix és la preferència de l'usuari. Un valor inventat
         // cau a `all`, que és el comportament de sempre.
         mailbox:
@@ -475,6 +500,17 @@ export function registerEventRoutes(app: FastifyInstance, secret: () => string):
           strip_alarms: typeof input.strip_alarms === 'boolean' ? input.strip_alarms : undefined,
           shared_with_scope:
             typeof input.shared_with_scope === 'boolean' ? input.shared_with_scope : undefined,
+          /**
+           * Tri-estat, i per això es mira si la clau **hi és** i no només el seu tipus:
+           * `{ inbox_visible: null }` vol dir "treu l'excepció" i s'ha de distingir de no
+           * enviar-la, que vol dir "no ho toquis". El mateix patró que `refresh_interval`.
+           */
+          inbox_visible:
+            'inbox_visible' in input
+              ? typeof input.inbox_visible === 'boolean'
+                ? input.inbox_visible
+                : null
+              : undefined,
         }),
       );
     }),
@@ -493,11 +529,51 @@ export function registerEventRoutes(app: FastifyInstance, secret: () => string):
   app.get('/api/v1/events', async (request, reply) =>
     handle(app, request, reply, async (principal) => {
       const q = query(request);
-      return listEventOccurrences(db().db, principal, {
+      const occurrences = await listEventOccurrences(db().db, principal, {
         from: str(q.from) ?? '',
         to: str(q.to) ?? '',
         scopeIds: ids(q.scope_ids),
       });
+      /**
+       * I cadascuna diu **si és a la bústia de qui pregunta**.
+       *
+       * Ve calculat del servidor i el client no ho recalcula mai: és el que fa que
+       * "difuminat al calendari" i "no és a la meva bústia" siguin literalment la mateixa
+       * cosa, i no dues que un dia divergeixen.
+       */
+      const flags = await inboxFlags(db().db, principal.userId, occurrences);
+      return occurrences.map((occurrence) => ({
+        ...occurrence,
+        // La clau la fa el servei: repetir-ne el format aquí seria dues implementacions
+        // de la mateixa cosa, i la segona es trencaria en silenci.
+        in_inbox:
+          flags.get(markKey(occurrence.calendar_id, occurrence.uid, occurrence.recurrence_id)) ??
+          false,
+      }));
+    }),
+  );
+
+  /**
+   * Marcar un esdeveniment com a visible o amagat a la bústia de qui ho demana.
+   *
+   * **Amb cos i no amb l'uid al camí, i és deliberat.** L'uid d'un ítem d'RSS és
+   * `"<calendarId>-<itemId>"` i l'itemId pot ser una URL sencera amb barres i signes
+   * d'interrogació (`dav/rss.ts`). Posar-lo en un segment de ruta és doble descodificació
+   * i 404 que ningú entén — la lliçó que aquest repositori ja va pagar amb els `href` de
+   * DAV.
+   */
+  app.post('/api/v1/inbox/events', async (request, reply) =>
+    handle(app, request, reply, async (principal) => {
+      const input = (request.body ?? {}) as Record<string, unknown>;
+      return auditedTransaction(db().db, principal, (ctx) =>
+        setEventInboxVisibility(ctx, principal, principal.userId, {
+          calendarId: str(input.calendar_id) ?? '',
+          uid: str(input.uid) ?? '',
+          recurrenceId: str(input.recurrence_id) ?? null,
+          // Absent o nul volen dir el mateix aquí: treu la marca.
+          visible: typeof input.visible === 'boolean' ? input.visible : null,
+        }),
+      );
     }),
   );
 

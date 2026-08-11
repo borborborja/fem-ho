@@ -37,6 +37,14 @@ export interface UserProfile {
   avatar_color: string | null;
 }
 
+/** Els dos comportaments possibles en esborrar una tasca feta des d'una cita. */
+export const EVENT_TASK_DELETED = ['return_to_inbox', 'hide_from_inbox'] as const;
+export type EventTaskDeleted = (typeof EVENT_TASK_DELETED)[number];
+
+export function isEventTaskDeleted(value: unknown): value is EventTaskDeleted {
+  return typeof value === 'string' && (EVENT_TASK_DELETED as readonly string[]).includes(value);
+}
+
 export interface UserSettings {
   done_cleared_at: string | null;
   inbox_position: InboxPosition;
@@ -60,6 +68,14 @@ export interface UserSettings {
    * hash i viatja**, no el de qui administra, i per això la casella és meva.
    */
   gravatar: boolean;
+  /**
+   * Què li passa a la cita quan s'esborra la tasca que en va sortir.
+   *
+   * `return_to_inbox` —el defecte— la torna a la bústia: esborrar es llegeix com a
+   * desfer. `hide_from_inbox` la deixa fora: "d'això ja me n'he ocupat". Segueix al
+   * calendari en tots dos casos.
+   */
+  event_task_deleted: EventTaskDeleted;
 }
 
 const PROFILE_COLUMNS = sql`
@@ -259,6 +275,7 @@ const DEFAULT_SETTINGS: UserSettings = {
   quiet_hours_end: null,
   daily_digest_at: null,
   gravatar: true,
+  event_task_deleted: 'return_to_inbox',
 };
 
 /**
@@ -282,10 +299,11 @@ export async function getSettings(db: MigrationDb, userId: string): Promise<User
     quiet_hours_end: string | null;
     daily_digest_at: string | null;
     gravatar: unknown;
+    event_task_deleted: EventTaskDeleted;
   }>`SELECT done_cleared_at, inbox_position, inbox_show_overdue, inbox_origin, collapsed_groups,
             hidden_calendar_ids, week_start,
             show_calendar_widget, show_overdue_section, quiet_hours_start, quiet_hours_end,
-            daily_digest_at, gravatar
+            daily_digest_at, gravatar, event_task_deleted
      FROM user_settings WHERE user_id = ${userId}`.execute(db);
 
   const row = found.rows[0];
@@ -305,6 +323,7 @@ export async function getSettings(db: MigrationDb, userId: string): Promise<User
     quiet_hours_end: row.quiet_hours_end,
     daily_digest_at: row.daily_digest_at,
     gravatar: isTrue(row.gravatar),
+    event_task_deleted: row.event_task_deleted,
   };
 }
 
@@ -333,6 +352,7 @@ export interface UpdateSettingsInput {
   quiet_hours_end?: string | null | undefined;
   daily_digest_at?: string | null | undefined;
   gravatar?: boolean | undefined;
+  event_task_deleted?: EventTaskDeleted | undefined;
 }
 
 export async function updateSettings(
@@ -365,6 +385,7 @@ export async function updateSettings(
     daily_digest_at:
       input.daily_digest_at === undefined ? before.daily_digest_at : input.daily_digest_at,
     gravatar: input.gravatar ?? before.gravatar,
+    event_task_deleted: input.event_task_deleted ?? before.event_task_deleted,
   };
 
   if (JSON.stringify(next) === JSON.stringify(before)) {
@@ -379,15 +400,16 @@ export async function updateSettings(
                                inbox_origin, collapsed_groups, hidden_calendar_ids, week_start,
                                show_calendar_widget, show_overdue_section,
                                quiet_hours_start, quiet_hours_end, daily_digest_at,
-                               gravatar, notify_prefs, updated_at)
+                               gravatar, event_task_deleted, notify_prefs, updated_at)
     VALUES (${principal.userId}, ${next.done_cleared_at}, ${next.inbox_position},
             ${dbBool(next.inbox_show_overdue)}, ${next.inbox_origin},
             ${JSON.stringify(next.collapsed_groups)},
             ${JSON.stringify(next.hidden_calendar_ids)}, ${next.week_start},
             ${dbBool(next.show_calendar_widget)}, ${dbBool(next.show_overdue_section)},
             ${next.quiet_hours_start}, ${next.quiet_hours_end}, ${next.daily_digest_at},
-            ${dbBool(next.gravatar)}, '{}', ${ctx.now})
+            ${dbBool(next.gravatar)}, ${next.event_task_deleted}, '{}', ${ctx.now})
     ON CONFLICT (user_id) DO UPDATE SET
+      event_task_deleted = excluded.event_task_deleted,
       done_cleared_at = excluded.done_cleared_at,
       inbox_position = excluded.inbox_position,
       inbox_show_overdue = excluded.inbox_show_overdue,

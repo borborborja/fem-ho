@@ -62,6 +62,10 @@
     <string name="calendar_day">Diari</string>
     <string name="calendar_empty_day">Sense esdeveniments ni tasques aquest dia.</string>
     <string name="calendar_empty_week">Sense res</string>
+    <string name="calendar_event_frominbox">Treure de la bústia</string>
+    <string name="calendar_event_ininbox">És a la teva bústia.</string>
+    <string name="calendar_event_notininbox">No és a la teva bústia: al calendari hi és, però no et reclama el dia.</string>
+    <string name="calendar_event_toinbox">Posar a la bústia</string>
     <string name="calendar_month">Mensual</string>
     <string name="calendar_nextmonth">Mes següent</string>
     <string name="calendar_nodate">SENSE DIA</string>
@@ -153,6 +157,12 @@
     <string name="error_window_required">Cal un període: sense ell no es poden expandir les repeticions.</string>
     <string name="error_wrong_component">«{name}» és de tasques i no accepta esdeveniments.</string>
     <string name="error_wrong_password">La contrasenya actual no és correcta.</string>
+    <string name="inbox_day_next">El dia següent</string>
+    <string name="inbox_day_prev">El dia abans</string>
+    <string name="inbox_day_today">Avui</string>
+    <string name="inbox_event_allday">Tot el dia</string>
+    <string name="inbox_event_remove">Treure</string>
+    <string name="inbox_event_totask">Fer-ne una tasca</string>
     <string name="inbox_mailbox">Què es veu a la bústia</string>
     <string name="inbox_mailbox_all">Tot</string>
     <string name="inbox_mailbox_allhint">Tota la bústia: els àmbits individuals i els compartits</string>
@@ -160,6 +170,7 @@
     <string name="inbox_mailbox_ownhint">Només el que hi ha als teus àmbits individuals</string>
     <string name="inbox_mailbox_shared">Compartits</string>
     <string name="inbox_mailbox_sharedhint">Només el que hi ha als àmbits que comparteixes amb algú</string>
+    <string name="inbox_section_events">Del calendari</string>
     <string name="invite_done">Ja pots entrar amb el teu correu i aquesta contrasenya.</string>
     <string name="invite_mismatch">Les dues contrasenyes no coincideixen.</string>
     <string name="invite_password">Contrasenya</string>
@@ -250,6 +261,11 @@
     <string name="settings_empty_calendars">Aquest àmbit encara no té cap calendari.</string>
     <string name="settings_empty_shares">Encara no has creat cap enllaç compartit.</string>
     <string name="settings_enableai">Activar l\'usuari IA</string>
+    <string name="settings_events_ondelete">En esborrar una tasca feta des d\'una cita</string>
+    <string name="settings_events_ondelete_hide">La cita es queda fora</string>
+    <string name="settings_events_ondelete_hidehint">Segueix al calendari, però no et torna a reclamar el dia.</string>
+    <string name="settings_events_ondelete_return">La cita torna a la bústia</string>
+    <string name="settings_events_ondelete_returnhint">Esborrar la tasca desfà la conversió.</string>
     <string name="settings_gravatar">Fer servir Gravatar per a la meva foto</string>
     <string name="settings_gravatarfill">Omplir amb el que hi ha a Gravatar</string>
     <string name="settings_gravatarhelp">El servidor demana la teva foto a gravatar.com amb el hash del teu correu. El hash no és anònim: qui ja sospiti la teva adreça la pot comprovar. Si ho treus, es veuran les teves inicials.</string>
@@ -322,6 +338,7 @@
     <string name="settings_sources_add">+ Afegir font</string>
     <string name="settings_sources_empty">Aquest àmbit no té cap font externa. Les que hi afegeixis es veuran al calendari.</string>
     <string name="settings_sources_failed">L\'últim refresc va fallar: {reason}</string>
+    <string name="settings_sources_inbox">A la bústia</string>
     <string name="settings_sources_kind_caldav">CalDAV</string>
     <string name="settings_sources_kind_ical">iCal</string>
     <string name="settings_sources_kind_rss">RSS</string>

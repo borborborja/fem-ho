@@ -28,6 +28,7 @@ import * as weekStart from './migrations/007-week-start.js';
 import * as sharedScopes from './migrations/008-shared-scopes.js';
 import * as federation from './migrations/009-federation.js';
 import * as gravatar from './migrations/010-gravatar.js';
+import * as inboxSources from './migrations/011-inbox-sources.js';
 
 export interface Migration {
   name: string;
@@ -68,6 +69,7 @@ export const MIGRATIONS: Migration[] = [
   { name: '008-shared-scopes', up: sharedScopes.up, down: sharedScopes.down },
   { name: '009-federation', up: federation.up, down: federation.down, needsForeignKeysOff: true },
   { name: '010-gravatar', up: gravatar.up, down: gravatar.down },
+  { name: '011-inbox-sources', up: inboxSources.up, down: inboxSources.down },
 ];
 
 const MIGRATIONS_TABLE = 'schema_migrations';

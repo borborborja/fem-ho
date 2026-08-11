@@ -149,12 +149,65 @@ data class EventOccurrence(
     @SerialName("ends_at") val endsAt: String,
     @SerialName("all_day") val allDay: Boolean = false,
     @SerialName("scope_id") val scopeId: String,
+    @SerialName("calendar_id") val calendarId: String = "",
+    @SerialName("recurrence_id") val recurrenceId: String? = null,
+    /**
+     * Si aquesta cita és a la bústia de qui pregunta.
+     *
+     * **El calcula el servidor i aquí no es recalcula mai.** És el que fa que "difuminat
+     * al calendari" i "no és a la meva bústia" siguin la mateixa cosa a les dues apps en
+     * comptes de dues que un dia divergeixen.
+     *
+     * El defecte és `true` perquè un servidor antic no envia el camp: davant d'un
+     * servidor que no en sap res, val més ensenyar-ho tot que amagar-ho tot.
+     */
+    @SerialName("in_inbox") val inInbox: Boolean = true,
 ) {
     /**
      * Una ocurrència **no té identitat pròpia**: dues del mateix mestre comparteixen
      * `event_id` (D8). La clau és l'esdeveniment més l'instant.
      */
     val key: String get() = "$eventId@$startsAt"
+}
+
+/**
+ * El que arriba d'una font a la bústia d'un dia.
+ *
+ * **No és una `Task` i no ho ha de semblar mai**: no té estat de kanban ni posició, i cap
+ * identificador d'aquí pot arribar a moure's entre columnes. És la forma que pren la
+ * regla 7 esmenada, i per això té tipus propi en comptes de ser una `Task` amb camps
+ * buits.
+ */
+/**
+ * El resultat de marcar una cita.
+ *
+ * `inInbox` és **la resolució sencera** i no només el que s'ha desat: hi entren l'ajust
+ * del calendari, el defecte de la mena de font i si ja n'hi ha una tasca viva. El client
+ * no ho recalcula.
+ */
+@Serializable
+data class InboxMark(
+    val visible: Boolean? = null,
+    @SerialName("in_inbox") val inInbox: Boolean = true,
+)
+
+@Serializable
+data class InboxEvent(
+    @SerialName("calendar_id") val calendarId: String,
+    @SerialName("scope_id") val scopeId: String,
+    val uid: String,
+    @SerialName("recurrence_id") val recurrenceId: String? = null,
+    val summary: String,
+    val location: String? = null,
+    @SerialName("starts_at") val startsAt: String,
+    @SerialName("ends_at") val endsAt: String,
+    @SerialName("all_day") val allDay: Boolean = false,
+    @SerialName("source_kind") val sourceKind: String? = null,
+    @SerialName("calendar_name") val calendarName: String = "",
+    @SerialName("calendar_color") val calendarColor: String? = null,
+) {
+    /** La identitat externa, que és estable entre refrescos de la font. */
+    val key: String get() = "$calendarId|$uid|${recurrenceId ?: ""}"
 }
 
 @Serializable
@@ -194,6 +247,13 @@ data class Inbox(
     val dated: List<Task> = emptyList(),
     val overdue: List<Task> = emptyList(),
     val undated: List<Task> = emptyList(),
+    /**
+     * El que arriba de les fonts aquell dia, ja filtrat pel servidor.
+     *
+     * **Amb valor per defecte**, com tota la resta: un servidor antic no l'envia i una app
+     * nova no ha de petar per això.
+     */
+    val events: List<InboxEvent> = emptyList(),
 )
 
 @Serializable

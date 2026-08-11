@@ -18,9 +18,10 @@ import { api } from '../app/api.js';
 import { Chips } from '../app/Chips.js';
 import { useSessionData, useSession } from '../app/session.js';
 import { useApi } from '../app/useApi.js';
-import type { Board, Task } from '../app/types.js';
+import type { Board, Inbox, Task } from '../app/types.js';
 import { KanbanBoard, type BoardTask } from '../board/KanbanBoard.js';
 import { ColumnQuickAdd, PlusIcon } from '../board/ColumnQuickAdd.js';
+import { DayNavigator } from '../board/DayNavigator.js';
 import { DoneHeader } from '../board/DoneColumnView.js';
 
 export interface BoardScreenProps {
@@ -33,6 +34,19 @@ export interface BoardScreenProps {
   /** El kanban de la IA. Les columnes són les mateixes; el que canvia és què hi surt. */
   aiBoard?: boolean;
   flip?: { transform: string; transition: string } | undefined;
+}
+
+/**
+ * Avui, **en local**.
+ *
+ * No es fa amb `toISOString()`, que passa per UTC: a Madrid, a les onze de la nit, això
+ * donaria el dia de demà i la bústia s'obriria al dia equivocat cada vespre.
+ */
+function todayISO(): string {
+  const now = new Date();
+  return `${String(now.getFullYear())}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(
+    now.getDate(),
+  ).padStart(2, '0')}`;
 }
 
 /** La targeta tal com la vol el component, des de la tasca tal com la dona l'API. */
@@ -174,6 +188,80 @@ export function BoardScreen({
   }, [activeScopeIds]);
 
   const board = useApi<Board>(path);
+
+  const activeScopes = scopes.filter((scope) => activeScopeIds.includes(scope.id));
+
+  /**
+   * El calaix que s'aplica de debò.
+   *
+   * **Una preferència desada no ha de filtrar quan no hi ha commutador per desfer-ho.**
+   * Qui deixés la bústia a "compartits" i després es quedés només amb àmbits individuals
+   * es trobava la columna buida, sense cap botó a la vista, i sense manera d'endevinar per
+   * què: el filtre seguia actiu i el control que el governa havia desaparegut.
+   *
+   * El criteri és el mateix que decideix si el commutador surt, i per això viu aquí i no
+   * dins seu: si es calculessin per separat, un dia divergirien i tornaríem a tenir una
+   * columna que amaga coses sense dir-ho.
+   */
+  const potFiltrar =
+    activeScopes.some((scope) => scope.kind === 'collective') &&
+    activeScopes.some((scope) => scope.kind !== 'collective');
+  const mailbox = potFiltrar ? (settings.inbox_origin ?? 'all') : 'all';
+
+  /**
+   * El dia de la bústia.
+   *
+   * Viu aquí i no a la URL a posta: canviar de dia és un gest de treball —"què tinc
+   * demà"— i no un lloc on es vulgui tornar. Els xips d'àmbit i el filtre de projecte sí
+   * que hi viuen, perquè aquells sí que descriuen què estàs mirant.
+   */
+  const [day, setDay] = useState(() => todayISO());
+
+  /**
+   * I la bústia surt de `/inbox`, no de `/board`.
+   *
+   * Les altres tres columnes segueixen amb `/board`, que no sap de dies i que Android
+   * replica sencer precisament perquè no depèn de res. La bústia sí que en sap: és qui
+   * resol el dia, el fus de qui mira, i **què hi entra de les fonts**.
+   *
+   * Les endarrerides només es demanen quan es mira avui: respecte d'un dijous que encara
+   * no ha arribat, "endarrerit" no vol dir res.
+   */
+  const inboxPath = useMemo(() => {
+    const query = new URLSearchParams({ date: day });
+    query.set('include_overdue', String(day === todayISO()));
+    if (activeScopeIds.length > 0) query.set('scope_ids', activeScopeIds.join(','));
+    /**
+     * **El calaix viatja a la consulta encara que el servidor ja el sàpiga.**
+     *
+     * Sense el paràmetre, `/inbox` mana per `user_settings.inbox_origin`, i el
+     * commutador el desa allà. Però llavors canviar de calaix no canviava aquesta URL, o
+     * sigui que no es tornava a demanar res i la columna es quedava igual: els tres
+     * botons es marcaven i no filtraven. Posant-lo aquí, la preferència forma part de la
+     * clau de la consulta i el canvi la refà sol.
+     */
+    query.set('mailbox', mailbox);
+    return `/api/v1/inbox?${query.toString()}`;
+  }, [day, activeScopeIds, mailbox]);
+
+  const inbox = useApi<Inbox>(inboxPath);
+
+  /**
+   * **Refrescar és refrescar els dos.**
+   *
+   * El tauler beu de dos llocs —`/board` per a les tres columnes de treball i `/inbox`
+   * per a la bústia— i qualsevol gest en pot tocar els dos alhora: crear una tasca la
+   * posa a la bústia, arrossegar-la l'en treu. Refrescant-ne només un, la mateixa tasca
+   * hi surt dues vegades o desapareix de les dues.
+   *
+   * Va passar de debò en escriure això: cinc proves de navegador que no tenien res a
+   * veure entre elles van caure alhora perquè la tasca acabada de crear no arribava mai
+   * a la columna.
+   */
+  const refresh = useCallback(() => {
+    board.reload();
+    inbox.reload();
+  }, [board.reload, inbox.reload]);
   const [optimistic, setOptimistic] = useState<Record<string, TaskStatus>>({});
 
   // Quan arriben dades noves, les suposicions optimistes ja no calen: la resposta del
@@ -257,24 +345,45 @@ export function BoardScreen({
     projects,
   ]);
 
-  const activeScopes = scopes.filter((scope) => activeScopeIds.includes(scope.id));
-
   /**
-   * El calaix que s'aplica de debò.
+   * Les targetes de la bústia, que vénen del seu propi lloc.
    *
-   * **Una preferència desada no ha de filtrar quan no hi ha commutador per desfer-ho.**
-   * Qui deixés la bústia a "compartits" i després es quedés només amb àmbits individuals
-   * es trobava la columna buida, sense cap botó a la vista, i sense manera d'endevinar per
-   * què: el filtre seguia actiu i el control que el governa havia desaparegut.
-   *
-   * El criteri és el mateix que decideix si el commutador surt, i per això viu aquí i no
-   * dins seu: si es calculessin per separat, un dia divergirien i tornaríem a tenir una
-   * columna que amaga coses sense dir-ho.
+   * **Les tres llistes es fonen en una de sola i sense epígrafs**, a diferència del rail
+   * del calendari. `docs/02` §5 ho diu: al kanban la columna JA és "tot l'Inbox", i
+   * partir-la en seccions hi afegiria capçaleres que allà no signifiquen res. El que fa
+   * el navegador de dia és canviar **quines amb data** hi ha; les sense data hi són
+   * sempre, perquè són el dipòsit del que has apuntat i encara no has situat.
    */
-  const potFiltrar =
-    activeScopes.some((scope) => scope.kind === 'collective') &&
-    activeScopes.some((scope) => scope.kind !== 'collective');
-  const mailbox = potFiltrar ? (settings.inbox_origin ?? 'all') : 'all';
+  const inboxCards = useMemo<BoardTask[]>(() => {
+    const view = inbox.data;
+    if (view === undefined) return [];
+    return (
+      [...view.dated, ...view.overdue, ...view.undated]
+        .filter((task) => {
+          if (projectIds.length === 0) return true;
+          const triatsDelSeu = projects.some(
+            (project) => project.scope_id === task.scope_id && projectIds.includes(project.id),
+          );
+          if (!triatsDelSeu) return true;
+          return task.project_id != null && projectIds.includes(task.project_id);
+        })
+        .map((task) => {
+          const assignees = task.assignee_ids ?? [];
+          const card = toBoardTask(
+            task,
+            projectName(task.project_id ?? null),
+            initialsOf(assignees),
+            assignees.length > 0 && !assignees.includes(profile.id),
+            scopes.find((scope) => scope.id === task.scope_id)?.kind === 'collective',
+          );
+          const moved = optimistic[task.id];
+          return moved === undefined ? card : { ...card, status: moved };
+        })
+        // Una que s'acaba de moure fora de la bústia ha de marxar de seguida, sense esperar
+        // que el servidor torni a contestar.
+        .filter((card) => card.status === 'inbox')
+    );
+  }, [inbox.data, optimistic, projectName, initialsOf, profile.id, scopes, projectIds, projects]);
 
   const context = useMemo<QuickAddContext>(
     () => ({
@@ -333,7 +442,7 @@ export function BoardScreen({
         status,
         position: generatePosition(lastPosition, null),
       });
-      board.reload();
+      refresh();
     } catch {
       // Reversió: la targeta torna al seu lloc i l'usuari veu que no s'ha mogut.
       setOptimistic((current) => {
@@ -365,7 +474,7 @@ export function BoardScreen({
       status,
       assignee_ids: input.assigneeIds.length > 0 ? input.assigneeIds : undefined,
     });
-    board.reload();
+    refresh();
   };
 
   const toggleGroup = (status: TaskStatus, scopeId: string): void => {
@@ -392,16 +501,67 @@ export function BoardScreen({
         gap: 16,
         // Contingut anterior amb opacitat mentre es revalida: res d'esquelets brillants,
         // que el design system prohibeix (docs/02 §12).
-        opacity: board.revalidating ? 0.6 : 1,
+        opacity: board.revalidating || inbox.revalidating ? 0.6 : 1,
       }}
     >
-      {board.error !== undefined ? <ErrorBanner onRetry={board.reload} /> : null}
+      {board.error !== undefined || inbox.error !== undefined ? (
+        <ErrorBanner onRetry={refresh} />
+      ) : null}
 
       <KanbanBoard
         aiBoard={aiBoard}
         flip={flip}
+        inbox={inboxCards}
+        inboxEvents={inbox.data?.events}
+        onEventToTask={(event) => {
+          /*
+            **La tasca neix amb el títol de la cita i la seva data**, i no buida: qui fa
+            això ja sap què és, i obligar-lo a reescriure-ho seria demanar-li que copiés
+            una cosa que ja té al davant.
+
+            La cita marxa de la bústia sola, perquè ara hi ha una tasca viva que hi
+            apunta: no cal amagar res.
+          */
+          void api
+            .post('/api/v1/tasks', {
+              id: uuidv7(),
+              scope_id: event.scope_id,
+              title: event.summary,
+              status: 'inbox',
+              position: generatePosition(null, null),
+              due_date: event.starts_at.slice(0, 10),
+              source_event: {
+                calendar_id: event.calendar_id,
+                uid: event.uid,
+                recurrence_id: event.recurrence_id,
+              },
+            })
+            .then(() => refresh());
+        }}
+        onEventRemove={(event) => {
+          /*
+            Treure'l de la bústia **no l'esborra**: segueix al calendari, i des d'allà es
+            pot tornar a posar. És per això que el botó diu "Treure" i no "Esborrar": el
+            que ve d'una font no és nostre per esborrar-lo.
+          */
+          void api
+            .post('/api/v1/inbox/events', {
+              calendar_id: event.calendar_id,
+              uid: event.uid,
+              recurrence_id: event.recurrence_id,
+              visible: false,
+            })
+            .then(() => refresh());
+        }}
         inboxHeader={
-          potFiltrar ? <MailboxSwitch activeScopes={activeScopes} tasks={tasks} /> : null
+          /*
+            Dos controls a la mateixa capçalera, en dues files: el navegador de dia hi és
+            sempre i el commutador de calaix només quan hi ha àmbits de les dues menes.
+          */
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
+            <DayNavigator value={day} onChange={setDay} today={todayISO()} />
+            {potFiltrar ? <MailboxSwitch activeScopes={activeScopes} tasks={tasks} /> : null}
+          </div>
         }
         mailbox={mailbox}
         renderFooter={(status) =>
@@ -456,7 +616,7 @@ export function BoardScreen({
         collapsed={collapsed}
         onToggleGroup={toggleGroup}
         onOpen={onOpenTask}
-        onChanged={board.reload}
+        onChanged={refresh}
         onDrop={(taskId, status) => void move(taskId, status)}
         onMove={(taskId, status) => void move(taskId, status)}
         onToggleDone={(taskId) => {

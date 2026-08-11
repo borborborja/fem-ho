@@ -20,6 +20,7 @@ import {
 import { BoardCard } from './BoardCard.js';
 import { BoardDnd, DraggableCard, DroppableColumn } from './dnd.js';
 import { InboxRail } from './InboxRail.js';
+import type { InboxEvent } from '../app/types.js';
 
 export interface BoardTask {
   id: string;
@@ -92,6 +93,25 @@ export interface KanbanBoardProps {
    * el mateix als dos llocs per P4.
    */
   inboxHeader?: ReactNode;
+  /**
+   * La bústia, ja resolta pel servidor.
+   *
+   * **Aquesta prop és el que fa que P4 sigui veritat de debò.** La decisió deia que la
+   * columna del kanban i el rail del calendari són el mateix component amb *la mateixa
+   * font de dades*; compartien component però bevien de dos llocs —`/board` aquí i
+   * `/inbox` allà—, que és exactament la divergència que la decisió volia evitar. Ara la
+   * columna també ve de `/inbox`, que és qui sap de dies i de fonts.
+   *
+   * Sense la prop es continua derivant de `tasks`, que és el que necessita el tauler de
+   * proves de components: no té servidor al darrere.
+   */
+  inbox?: BoardTask[];
+  /** El que arriba de les fonts aquell dia. Va a la seva secció, mai amb les tasques. */
+  inboxEvents?: InboxEvent[] | undefined;
+  /** Treure un esdeveniment de la bústia. Sense això, el botó no surt. */
+  onEventRemove?: ((event: InboxEvent) => void) | undefined;
+  /** Fer-ne una tasca. El mateix. */
+  onEventToTask?: ((event: InboxEvent) => void) | undefined;
   /** De quin calaix es veu la bústia. El mateix criteri que `/inbox` al servidor. */
   mailbox?: 'own' | 'shared' | 'all';
   onToggleGroup?: (status: TaskStatus, scopeId: string) => void;
@@ -161,6 +181,10 @@ export function KanbanBoard({
   tasks,
   scopes,
   inboxHeader,
+  inbox,
+  inboxEvents,
+  onEventRemove,
+  onEventToTask,
   mailbox = 'all',
   collapsed = {},
   onToggleGroup,
@@ -311,12 +335,14 @@ export function KanbanBoard({
    * hi són —vénen de `/board`— i el filtre s'aplica sobre el que hi ha, en comptes de
    * demanar la mateixa cosa dues vegades. El criteri és idèntic: el tipus de l'àmbit.
    */
-  const inboxTasks = tasks.filter((task) => {
-    if (task.status !== 'inbox') return false;
-    if (mailbox === 'all') return true;
-    const own = scopes.find((scope) => scope.id === task.scope_id)?.kind === 'individual';
-    return mailbox === 'own' ? own : !own;
-  });
+  const inboxTasks =
+    inbox ??
+    tasks.filter((task) => {
+      if (task.status !== 'inbox') return false;
+      if (mailbox === 'all') return true;
+      const own = scopes.find((scope) => scope.id === task.scope_id)?.kind === 'individual';
+      return mailbox === 'own' ? own : !own;
+    });
 
   const titleOf = (taskId: string): string => tasks.find((task) => task.id === taskId)?.title ?? '';
   const labelOf = (status: TaskStatus): string =>
@@ -424,6 +450,9 @@ export function KanbanBoard({
                 // no des de dins d'InboxRail perquè el rail també viu al calendari, on el
                 // peu és un altre.
                 footer={renderFooter?.('inbox')}
+                events={inboxEvents}
+                onEventRemove={onEventRemove}
+                onEventToTask={onEventToTask}
                 header={inboxHeader}
                 wrapCard={(task, card) => (
                   <DraggableCard key={task.id} id={task.id} testId={`task-${task.id}`}>

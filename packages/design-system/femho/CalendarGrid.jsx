@@ -283,7 +283,7 @@ export function WeekView({ days, selectedDate, onSelect, emptyLabel }) {
   );
 }
 
-export function DayView({ label, items, emptyLabel }) {
+export function DayView({ label, items, emptyLabel, onSelectItem }) {
   return (
     <div
       data-testid="calendar-day"
@@ -306,16 +306,45 @@ export function DayView({ label, items, emptyLabel }) {
         </div>
       ) : (
         items.map((item) => (
-          <div
+          /**
+           * **Un `button` de veritat, i no un `div` amb `onClick`.** És l'única manera
+           * que això funcioni amb el teclat i amb un lector de pantalla sense reinventar
+           * `role`, `tabIndex` i el maneig d'Enter i Espai a mà.
+           *
+           * `muted` vol dir **"això no és a la teva bústia"**, i es dibuixa amb una vora
+           * discontínua i prou: el text es queda igual de llegible. Difuminar-lo seria
+           * fer servir el contrast per portar informació, que és el que `docs/04` §8
+           * prohibeix — i el que cap comprovació permanent veuria.
+           */
+          <button
             key={item.id}
+            type="button"
             data-testid={`day-item-${item.id}`}
+            data-muted={item.muted === true ? 'true' : undefined}
+            disabled={!onSelectItem}
+            onClick={
+              onSelectItem
+                ? (event) => {
+                    // La targeta del dia també és clicable: aquesta acció no l'ha de disparar.
+                    event.stopPropagation();
+                    onSelectItem(item.id);
+                  }
+                : undefined
+            }
             style={{
               display: 'flex',
               alignItems: 'center',
               gap: 10,
+              width: '100%',
+              textAlign: 'left',
+              font: 'inherit',
+              color: 'var(--ink)',
               background: 'var(--tag-bg)',
+              border:
+                item.muted === true ? '1px dashed var(--card-border)' : '1px solid transparent',
               borderRadius: 14,
               padding: '12px 14px',
+              cursor: onSelectItem ? 'pointer' : 'default',
             }}
           >
             <span
@@ -330,9 +359,9 @@ export function DayView({ label, items, emptyLabel }) {
             />
             <span style={{ flex: 1, fontSize: 14, fontWeight: 600 }}>{item.title}</span>
             {item.time ? (
-              <span style={{ fontSize: 12, color: 'var(--ink-faint)' }}>{item.time}</span>
+              <span style={{ fontSize: 12, color: 'var(--ink-soft)' }}>{item.time}</span>
             ) : null}
-          </div>
+          </button>
         ))
       )}
     </div>

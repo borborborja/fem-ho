@@ -2120,6 +2120,71 @@ paths:
           content: { application/json: { schema: { $ref: '#/components/schemas/Inbox' } } }
         '401': { $ref: '#/components/responses/Unauthenticated' }
 
+  /inbox/events:
+    post:
+      tags: [tasks]
+      operationId: setEventInboxVisibility
+      summary: Treure o tornar a posar un esdeveniment a la teva bústia
+      description: |
+        **La marca és teva i de ningú més.** L'interruptor per font és del calendari i
+        val per a tot l'àmbit —"aquest RSS inunda" és un judici sobre la font—, però
+        "aquesta cita concreta no és feina meva" és personal.
+
+        `visible: null` **treu la marca** i torna al defecte, que no és el mateix que
+        `false`. Amb `false` dius "aquest no, encara que el calendari digui que sí"; amb
+        `null` dius "oblida que en vaig dir res". Sense les dues coses no hi hauria manera
+        de desdir-se'n.
+
+        Amb `recurrence_id` es marca **una ocurrència**; sense, **tota la sèrie**. La
+        d'ocurrència mana sobre la de sèrie, que és el que deixa amagar totes les reunions
+        i recuperar-ne una.
+
+        **L'uid va al cos i no al camí** perquè el d'un ítem d'RSS és
+        `"<calendar_id>-<item_id>"` i l'`item_id` pot ser una URL sencera.
+
+        Demana `events:read` i no `events:write`: no toca l'esdeveniment, escriu una
+        preferència sobre una cosa que ja pots llegir. Amb `events:write`, un calendari
+        subscrit de només lectura no es podria silenciar mai — i és el cas que més ho
+        necessita.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [calendar_id, uid]
+              properties:
+                calendar_id: { type: string, format: uuid }
+                uid: { type: string }
+                recurrence_id: { type: [string, 'null'] }
+                visible:
+                  type: [boolean, 'null']
+                  description: '`null` treu la marca i torna al defecte.'
+      responses:
+        '200':
+          description: La marca, i si amb ella l'esdeveniment queda a la bústia.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [visible, in_inbox]
+                properties:
+                  visible: { type: [boolean, 'null'] }
+                  in_inbox:
+                    type: boolean
+                    description: |
+                      El resultat de la resolució **sencera**, no només el que s'ha desat:
+                      hi entren també l'ajust del calendari, el defecte de la mena de font
+                      i si ja n'hi ha una tasca viva. El client no ho ha de recalcular mai,
+                      o hi hauria dues implementacions de la mateixa regla.
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403':
+          description: |
+            El calendari no s'ha compartit amb tu. **403 i no 404**: un 404 diria si
+            aquell `uid` existeix, que és informació d'un calendari que no et pertoca.
+        '404': { description: No hi ha cap esdeveniment amb aquell uid en aquell calendari. }
+
   /dashboard:
     get:
       tags: [tasks]
@@ -3067,9 +3132,58 @@ components:
         body: { type: string }
         created_at: { type: string, format: date-time }
 
+    InboxEvent:
+      type: object
+      description: |
+        El que arriba d'una font i entra a la bústia d'un dia.
+
+        **No és una tasca i no en té res.** Sense `status`, sense `position`, sense
+        assignació: és la forma que pren la regla 7 —un esdeveniment no té mai estat de
+        kanban ni s'arrossega entre columnes—, i per això té esquema propi en comptes de
+        ser un `Task` amb camps buits. Cap identificador d'aquí pot arribar a
+        `POST /tasks/{id}/move`.
+
+        S'identifica per `calendar_id` + `uid` + `recurrence_id`, que és la identitat que
+        promet l'origen, i **no per l'`id` de la fila**: el refresc d'una font pot
+        reescriure-la o tornar-la a la vida, i la fila no és estable.
+      additionalProperties: false
+      required:
+        [
+          calendar_id,
+          scope_id,
+          uid,
+          recurrence_id,
+          summary,
+          location,
+          starts_at,
+          ends_at,
+          all_day,
+          source_kind,
+          calendar_name,
+          calendar_color,
+        ]
+      properties:
+        calendar_id: { type: string, format: uuid }
+        scope_id: { type: string, format: uuid }
+        uid: { type: string }
+        recurrence_id:
+          type: [string, 'null']
+          description: L'ocurrència concreta. `null` si no forma part de cap sèrie.
+        summary: { type: string }
+        location: { type: [string, 'null'] }
+        starts_at: { type: string, format: date-time }
+        ends_at: { type: string, format: date-time }
+        all_day: { type: boolean }
+        source_kind:
+          type: [string, 'null']
+          enum: [caldav, ical, rss, null]
+          description: De quina mena és la font. `null` si el calendari és d'aquesta casa.
+        calendar_name: { type: string }
+        calendar_color: { type: [string, 'null'] }
+
     Inbox:
       type: object
-      required: [date, dated, overdue, undated]
+      required: [date, dated, overdue, undated, events]
       properties:
         date: { type: string, format: date }
         dated:
@@ -3083,6 +3197,16 @@ components:
           type: array
           description: La secció "SENSE DIA" del rail (docs/02 §5).
           items: { $ref: '#/components/schemas/Task' }
+        events:
+          type: array
+          description: |
+            El que arriba de les fonts subscrites aquell dia, ja filtrat: hi són els que
+            aquesta persona ha de veure a la bústia i prou.
+
+            **Els calendaris hi entren per defecte i els RSS no.** Un canal actiu pot
+            publicar desenes de titulars al dia i la bústia és l'entrada de tot; qui en
+            vulgui un l'encén a Ajustos, o n'encén un titular concret des del calendari.
+          items: { $ref: '#/components/schemas/InboxEvent' }
 
     DashboardScope:
       type: object
@@ -3206,6 +3330,16 @@ components:
         writable: { type: boolean }
         refresh_interval: { type: [integer, 'null'] }
         strip_alarms: { type: boolean }
+        inbox_visible:
+          type: [boolean, 'null']
+          description: |
+            Si la font entra a la bústia. **Absent vol dir "no ho toquis" i `null` vol dir
+            "treu l'excepció"**, que no és el mateix: sense el `null` no hi hauria manera
+            de desdir-se'n i el calendari es quedaria clavat al valor que se li va posar
+            encara que el defecte canviés.
+
+            Canvia el que veu tot l'àmbit, i per això demana el mateix rol que compartir
+            el calendari.
 
     UserSettings:
       type: object
@@ -3216,6 +3350,17 @@ components:
           description: El botó de netejar la columna Fet. No esborra res (P2).
         inbox_position: { type: string, enum: [left, right, below] }
         inbox_show_overdue: { type: boolean }
+        event_task_deleted:
+          type: string
+          enum: [return_to_inbox, hide_from_inbox]
+          default: return_to_inbox
+          description: |
+            Què li passa a la cita quan s'esborra la tasca que en va sortir.
+
+            `return_to_inbox` la torna a la bústia —esborrar es llegeix com a desfer— i
+            **no escriu res enlloc**: la cita havia marxat només perquè hi havia una tasca
+            viva, i en desaparèixer torna sola. `hide_from_inbox` deixa una marca: "d'això
+            ja me n'he ocupat". En tots dos casos segueix al calendari.
         inbox_origin:
           type: string
           enum: [own, shared, all]
@@ -3653,7 +3798,9 @@ components:
     Calendar:
       type: object
       additionalProperties: false
-      required: [id, scope_id, name, kind, origin, writable]
+      # `inbox_visible` hi és encara que pugui ser nul: el client ha de poder distingir
+      # "no s'hi ha dit res" d'un camp que el servidor no ha enviat.
+      required: [id, scope_id, name, kind, origin, writable, inbox_visible, inbox_visible_default]
       properties:
         id: { type: string }
         scope_id: { type: string }
@@ -3708,6 +3855,27 @@ components:
             Si la font porta usuari i contrasenya guardats. **El secret no surt mai** del
             servei; això només diu que n'hi ha, perquè la interfície pugui avisar abans
             de compartir el calendari.
+        inbox_visible:
+          type: [boolean, 'null']
+          description: |
+            Si aquesta font entra a la bústia diària.
+
+            **Tri-estat, i els tres valors diuen coses diferents.** `null` és "no s'hi ha
+            dit res i val el defecte"; `false` és "aquesta no, encara que el defecte digui
+            que sí". Es desa **l'excepció i no l'estat**, com `hidden_calendar_ids`: el dia
+            que el defecte canviï, qui no hagi tocat res segueix el defecte nou sense que
+            calgui migrar cap fila.
+
+            Llegir-lo com un booleà trauria de la bústia tots els calendaris on ningú ha
+            tocat res. Per ensenyar l'interruptor, `inbox_visible ?? inbox_visible_default`.
+        inbox_visible_default:
+          type: boolean
+          description: |
+            Què li tocaria si ningú digués res: **els calendaris sí i els canals RSS no**.
+            Un RSS pot publicar desenes de titulars al dia i la bústia és l'entrada de tot.
+
+            El calcula el servidor perquè la regla visqui en un sol lloc i cap client
+            l'hagi de duplicar.
 
     Event:
       type: object
@@ -3766,7 +3934,7 @@ components:
     EventOccurrence:
       type: object
       additionalProperties: false
-      required: [event_id, uid, summary, starts_at, ends_at, all_day, scope_id]
+      required: [event_id, uid, summary, starts_at, ends_at, all_day, scope_id, in_inbox]
       properties:
         event_id: { type: string }
         uid: { type: string }
@@ -3786,6 +3954,16 @@ components:
         is_override:
           type: boolean
           description: Cert si aquesta ocurrència ve d'una instància modificada.
+        in_inbox:
+          type: boolean
+          description: |
+            Si aquesta ocurrència és a la bústia de qui pregunta.
+
+            **El calcula el servidor i el client no ho recalcula mai.** És el que fa que
+            "difuminat al calendari" i "no és a la meva bústia" siguin literalment la
+            mateixa cosa en comptes de dues que un dia divergeixen. Hi entren els cinc
+            nivells: si ja n'hi ha una tasca viva, la marca de l'ocurrència, la de la
+            sèrie, l'ajust del calendari i el defecte de la mena de font.
 
     Scope:
       type: object
@@ -3955,6 +4133,28 @@ components:
         assignee_ids:
           type: array
           items: { type: string }
+        source_event:
+          type: object
+          additionalProperties: false
+          required: [calendar_id, uid]
+          description: |
+            De quin esdeveniment surt aquesta tasca.
+
+            **És una referència morta, no un enllaç viu** (P6). Esborrar l'esdeveniment no
+            toca la tasca, i esborrar la tasca no toca l'esdeveniment: l'alternativa
+            voldria dir que treure una cita d'un calendari compartit esborrés en silenci
+            la tasca que algú altre s'havia apuntat.
+
+            S'identifica per `calendar_id` + `uid` + `recurrence_id` i **no per l'`id` de
+            la fila**: el refresc d'una font la reescriu i la pot tornar a la vida.
+
+            Mentre la tasca visqui, la cita **no surt a la bústia**: seria la mateixa
+            obligació dues vegades. Què passa en esborrar-la ho decideix
+            `UserSettings.event_task_deleted`.
+          properties:
+            calendar_id: { type: string, format: uuid }
+            uid: { type: string }
+            recurrence_id: { type: [string, 'null'] }
 
     MoveInput:
       type: object

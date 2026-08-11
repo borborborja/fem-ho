@@ -19,6 +19,8 @@ import type { Mailbox } from '../policy/mailbox.js';
 import { visibleScopesPredicate } from '../policy/scope-visibility.js';
 import { normalizeForSearch, normalizeQuery } from '../text/search-text.js';
 import { clampInt } from '../util/clamp.js';
+import { localDayBounds } from '../time/local-day.js';
+import { listInboxEvents, type InboxEvent } from './events.js';
 import { assertScopeAccess, listScopes } from './scopes.js';
 
 export interface TaskRow {
@@ -277,6 +279,16 @@ export interface CreateTaskInput {
   due_date?: string | undefined;
   due_time?: string | undefined;
   assignee_ids?: string[] | undefined;
+  /**
+   * De quin esdeveniment ve, si ve d'algun.
+   *
+   * **És una referència morta i no un enllaç viu.** P6 de `docs/14` ja ho va decidir: la
+   * tasca neix independent. Un enllaç viu voldria dir que esborrar un esdeveniment d'un
+   * calendari compartit esborrés en silenci la tasca que algú altre s'havia apuntat.
+   * Serveix per saber d'on ve —i per decidir què passa amb la cita quan s'esborri la
+   * tasca—, no per obeir-lo.
+   */
+  source_event?: { calendar_id: string; uid: string; recurrence_id?: string | null } | undefined;
 }
 
 /**
@@ -323,6 +335,47 @@ export async function createTask(
     return { task: task!, created: false };
   }
 
+  /**
+   * Si ve d'un esdeveniment, dues invariants abans de res.
+   *
+   * L'àmbit ha de ser el del calendari: una tasca de la família feta a partir d'una cita
+   * de la feina seria una cita que desapareix de la bústia d'un àmbit i una tasca que
+   * apareix a un altre, i ningú relacionaria les dues coses. I no n'hi pot haver dues
+   * vives de la mateixa cita: si no, la cita marxaria de la bústia i tornaria segons
+   * quina de les dues s'esborrés primer.
+   */
+  if (input.source_event !== undefined) {
+    const cal = await sql<{ scope_id: string }>`
+      SELECT scope_id FROM calendars
+      WHERE id = ${input.source_event.calendar_id} AND deleted_at IS NULL
+    `.execute(ctx.tx);
+    const calScope = cal.rows[0]?.scope_id;
+    if (calScope === undefined) throw notFound('calendar', input.source_event.calendar_id);
+    if (calScope !== input.scope_id) {
+      throw new PolicyError(
+        'event-scope-mismatch',
+        'Event is from another scope',
+        422,
+        'A task made from an event has to live in the same scope as its calendar.',
+      );
+    }
+
+    const ja = await sql<{ id: string }>`
+      SELECT id FROM tasks
+      WHERE deleted_at IS NULL AND event_calendar_id = ${input.source_event.calendar_id}
+        AND event_uid = ${input.source_event.uid}
+    `.execute(ctx.tx);
+    if (ja.rows[0] !== undefined) {
+      throw new PolicyError(
+        'event-already-a-task',
+        'Already a task',
+        409,
+        'There is already a task made from that event.',
+        { task_id: ja.rows[0].id },
+      );
+    }
+  }
+
   const status = input.status ?? 'inbox';
 
   /**
@@ -357,11 +410,14 @@ export async function createTask(
   const inserted = await sql`
     INSERT INTO tasks (id, scope_id, project_id, title, description, status, position,
                        due_date, due_time, view_mode, ai_mode, origin, search_text,
+                       event_calendar_id, event_uid, event_recurrence_id,
                        created_by, created_at, updated_at, version)
     VALUES (${id}, ${input.scope_id}, ${input.project_id ?? null}, ${input.title.trim()},
             ${input.description ?? null}, ${status}, ${position}, ${input.due_date ?? null},
             ${input.due_time ?? null}, 'card', 'manual', 'native',
             ${normalizeForSearch(input.title, input.description)},
+            ${input.source_event?.calendar_id ?? null}, ${input.source_event?.uid ?? null},
+            ${input.source_event?.recurrence_id ?? null},
             ${principal.userId}, ${ctx.now}, ${ctx.now}, 1)
     ON CONFLICT (id) DO NOTHING
   `.execute(ctx.tx);
@@ -912,8 +968,15 @@ export async function deleteTask(
 ): Promise<void> {
   if (!hasCapability(principal, 'tasks:delete')) throw missingCapability('tasks:delete');
 
-  const found = await sql<TaskRow>`
-    SELECT ${TASK_COLUMNS} FROM tasks WHERE id = ${id} AND deleted_at IS NULL
+  const found = await sql<
+    TaskRow & {
+      event_calendar_id: string | null;
+      event_uid: string | null;
+      event_recurrence_id: string | null;
+    }
+  >`
+    SELECT ${TASK_COLUMNS}, event_calendar_id, event_uid, event_recurrence_id
+    FROM tasks WHERE id = ${id} AND deleted_at IS NULL
   `.execute(ctx.tx);
   const task = found.rows[0];
   if (task === undefined) throw notFound('task', id);
@@ -939,6 +1002,82 @@ export async function deleteTask(
   `.execute(ctx.tx);
 
   ctx.record({ entityType: 'task', entityId: id, scopeId: task.scope_id, verb: 'deleted' });
+
+  /**
+   * I si la tasca venia d'un esdeveniment, què li passa a la cita.
+   *
+   * **Amb el defecte —`return_to_inbox`— no s'escriu res, i és el punt.** La cita havia
+   * marxat de la bústia només perquè hi havia una tasca viva; en desaparèixer, torna
+   * sola. Cap fila, cap neteja, res que es pugui quedar penjat.
+   *
+   * `hide_from_inbox` sí que escriu una marca: qui tria això vol dir "d'això ja me n'he
+   * ocupat i no vull que em torni a punxar", i llavors cal deixar-ho dit en algun lloc.
+   * Segueix al calendari, i des d'allà es pot recuperar.
+   */
+  if (task.event_uid !== null && task.event_calendar_id !== null) {
+    const settings = await sql<{ event_task_deleted: string }>`
+      SELECT event_task_deleted FROM user_settings WHERE user_id = ${principal.userId}
+    `.execute(ctx.tx);
+    if (settings.rows[0]?.event_task_deleted === 'hide_from_inbox') {
+      await hideEventFromInbox(ctx, principal.userId, {
+        calendarId: task.event_calendar_id,
+        uid: task.event_uid,
+        recurrenceId: task.event_recurrence_id,
+      });
+    }
+  }
+}
+
+/**
+ * Amaga una cita de la bústia d'algú, dins de la transacció que esborra la seva tasca.
+ *
+ * No es crida `setEventInboxVisibility`: aquella comprova capacitats i visibilitat de
+ * calendari perquè ve d'una petició de fora, i **aquí ja s'ha comprovat tot** —qui esborra
+ * la tasca hi té accés—. Tornar-hi a passar seria demanar `events:read` per esborrar una
+ * tasca, i un token d'IA amb abast només de tasques deixaria de poder-ho fer.
+ */
+async function hideEventFromInbox(
+  ctx: AuditContext,
+  userId: string,
+  ref: { calendarId: string; uid: string; recurrenceId: string | null },
+): Promise<void> {
+  const existing = await sql<{ id: string }>`
+    SELECT id FROM event_inbox_marks
+    WHERE deleted_at IS NULL AND user_id = ${userId} AND calendar_id = ${ref.calendarId}
+      AND uid = ${ref.uid}
+      AND ${ref.recurrenceId === null ? sql`recurrence_id IS NULL` : sql`recurrence_id = ${ref.recurrenceId}`}
+  `.execute(ctx.tx);
+
+  const row = existing.rows[0];
+  if (row !== undefined) {
+    await sql`
+      UPDATE event_inbox_marks SET visible = ${dbBool(false)}, deleted_at = NULL,
+                                   updated_at = ${ctx.now}, version = version + 1
+      WHERE id = ${row.id}
+    `.execute(ctx.tx);
+    ctx.record({
+      entityType: 'event_inbox_mark',
+      entityId: row.id,
+      scopeId: null,
+      verb: 'updated',
+    });
+    return;
+  }
+
+  const markId = uuidv7();
+  await sql`
+    INSERT INTO event_inbox_marks (id, user_id, calendar_id, uid, recurrence_id, visible,
+                                   created_at, updated_at)
+    VALUES (${markId}, ${userId}, ${ref.calendarId}, ${ref.uid}, ${ref.recurrenceId},
+            ${dbBool(false)}, ${ctx.now}, ${ctx.now})
+  `.execute(ctx.tx);
+  ctx.record({
+    entityType: 'event_inbox_mark',
+    entityId: markId,
+    // Sense àmbit: és una preferència personal i no ha de viatjar pel sync.
+    scopeId: null,
+    verb: 'created',
+  });
 }
 
 /**
@@ -1037,6 +1176,15 @@ export interface InboxView {
   overdue: Task[];
   /** Sense data. És la secció "SENSE DIA" del rail (docs/02 §5). */
   undated: Task[];
+  /**
+   * El que arriba de fora: calendaris subscrits, `.ics` publicats i canals RSS.
+   *
+   * **Array a part i tipus a part, no barrejat amb les tasques**, i és el que fa que la
+   * regla 7 esmenada es pugui comprovar en comptes de discutir: un `InboxEvent` no té
+   * `status` ni `position`, no és un `Task` en cap tipus, i cap identificador d'aquí pot
+   * arribar mai a `POST /tasks/{id}/move`.
+   */
+  events: InboxEvent[];
 }
 
 /**
@@ -1061,6 +1209,14 @@ export async function getInbox(
      * dalt segueixen valent.
      */
     mailbox?: Mailbox | undefined;
+    /**
+     * El fus de qui pregunta, per tallar el dia on el talla ell.
+     *
+     * Les tasques no en necessitaven —`due_date` ja és una data local—, però els
+     * esdeveniments són instants i sí. Sense això, el dia es tallaria pel fus del
+     * servidor i les cites de la nit ballarien de dia.
+     */
+    timezone?: string | undefined;
   },
 ): Promise<InboxView> {
   if (!hasCapability(principal, 'tasks:read')) throw missingCapability('tasks:read');
@@ -1087,7 +1243,13 @@ export async function getInbox(
     .map((s) => s.id)
     .filter((id) => requested === undefined || requested.includes(id));
 
-  const empty: InboxView = { date: options.date, dated: [], overdue: [], undated: [] };
+  const empty: InboxView = {
+    date: options.date,
+    dated: [],
+    overdue: [],
+    undated: [],
+    events: [],
+  };
   if (allowed.length === 0) return empty;
 
   const rows = await sql<TaskRow>`
@@ -1097,6 +1259,24 @@ export async function getInbox(
   `.execute(db);
   const tasks = await withAssignees(db, rows.rows);
 
+  /**
+   * I el que arriba de fora.
+   *
+   * **El fus és de qui mira, no del servidor.** La bústia parla de dies i els
+   * esdeveniments d'instants; sense convertir-ho al fus de qui pregunta, una cita a les
+   * 23:30 cauria a la bústia de demà i ningú entendria per què. `localDayBounds` ja fa
+   * exactament aquesta conversió des de la fita del calendari.
+   *
+   * Els esdeveniments **no són d'un usuari abstracte sinó d'aquest**: les marques de
+   * visibilitat són personals, i per això cal el `userId` i no només el principal.
+   */
+  const bounds = localDayBounds(options.timezone ?? 'UTC', options.date);
+  const events = await listInboxEvents(db, principal, principal.userId, {
+    from: bounds.startUTC,
+    to: bounds.endUTC,
+    scopeIds: allowed,
+  });
+
   return {
     date: options.date,
     dated: tasks.filter((t) => t.due_date === options.date),
@@ -1105,6 +1285,7 @@ export async function getInbox(
         ? tasks.filter((t) => t.due_date !== null && t.due_date < options.date)
         : [],
     undated: tasks.filter((t) => t.due_date === null),
+    events,
   };
 }
 

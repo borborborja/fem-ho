@@ -224,6 +224,19 @@ No es pot verificar en aquesta màquina i **no s'ha verificat**:
 - La comparació de captures entre la web mòbil i l'app — el mateix.
 - **L'app d'Android en execució.** Compila, empaqueta i les proves de Kotlin passen, però
   aquí no hi ha ni emulador ni telèfon: el que s'ha vist funcionar de veritat és la web.
+
+  **La bústia amb fonts d'Android entra sencera en aquest sac.** `InboxRail`, el botó de
+  fer-ne una tasca i el de treure-la de la bústia compilen, passen R8 i tenen proves de
+  model —la deserialització, els valors per defecte contra un servidor vell i la clau per
+  identitat externa—, **però no s'han vist a la pantalla**. El que sí que es va poder
+  verificar llegint el codi és el defecte que hi havia: `LaunchedEffect(selected.month,
+  selected.year)` no reaccionava a canviar de dia dins del mes, o sigui que la bústia que
+  es carregava era la del dia en què s'havia obert el mes. Ningú ho havia vist perquè el
+  resultat no es pintava enlloc.
+
+  El bloqueig és concret i té solució coneguda: aquesta màquina no té accés a `/dev/kvm`
+  des de la reengegada del 10 d'agost del 2026. `sudo usermod -aG kvm $USER` i tornar a
+  entrar el desbloqueja.
 - Les proves amb clients CalDAV reals: DAVx⁵, Apple Recordatoris, Thunderbird,
   Evolution, Nextcloud Tasks. Veure [`CALDAV-CLIENTS.md`](CALDAV-CLIENTS.md).
 - La preservació de les propietats `X-FEMHO-*` en servidors de tercers. `docs/07` §7

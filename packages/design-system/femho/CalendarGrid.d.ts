@@ -60,12 +60,26 @@ export interface DayItem {
   title: string;
   color: string;
   time?: string | undefined;
+  /**
+   * **"Això no és a la teva bústia."**
+   *
+   * Es dibuixa amb una vora discontínua i el text es queda igual de llegible: difuminar-lo
+   * seria portar informació amb el contrast, que `docs/04` §8 prohibeix i que cap
+   * comprovació permanent veuria.
+   */
+  muted?: boolean | undefined;
 }
 
 export interface DayViewProps {
   label: string;
   items: DayItem[];
   emptyLabel: string;
+  /**
+   * Obrir un element del dia. **Sense això els elements no són clicables**, que és com
+   * estaven fins ara: el text i el punt de color eren purament informatius i no hi havia
+   * cap manera d'actuar sobre un esdeveniment des del calendari.
+   */
+  onSelectItem?: ((id: string) => void) | undefined;
 }
 
 export declare function MonthView(props: MonthViewProps): React.JSX.Element;

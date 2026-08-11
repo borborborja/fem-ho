@@ -13,6 +13,7 @@ import {
   changePassword,
   getProfile,
   getSettings,
+  isEventTaskDeleted,
   updateProfile,
   updateSettings,
 } from '../services/users.js';
@@ -124,6 +125,9 @@ export function registerMeRoutes(app: FastifyInstance): void {
           inbox_show_overdue:
             typeof input.inbox_show_overdue === 'boolean' ? input.inbox_show_overdue : undefined,
           inbox_origin: isMailbox(input.inbox_origin) ? input.inbox_origin : undefined,
+          event_task_deleted: isEventTaskDeleted(input.event_task_deleted)
+            ? input.event_task_deleted
+            : undefined,
           collapsed_groups: Array.isArray(input.collapsed_groups)
             ? input.collapsed_groups.filter((v): v is string => typeof v === 'string')
             : undefined,

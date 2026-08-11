@@ -1218,6 +1218,45 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/inbox/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Treure o tornar a posar un esdeveniment a la teva bústia
+         * @description **La marca és teva i de ningú més.** L'interruptor per font és del calendari i
+         *     val per a tot l'àmbit —"aquest RSS inunda" és un judici sobre la font—, però
+         *     "aquesta cita concreta no és feina meva" és personal.
+         *
+         *     `visible: null` **treu la marca** i torna al defecte, que no és el mateix que
+         *     `false`. Amb `false` dius "aquest no, encara que el calendari digui que sí"; amb
+         *     `null` dius "oblida que en vaig dir res". Sense les dues coses no hi hauria manera
+         *     de desdir-se'n.
+         *
+         *     Amb `recurrence_id` es marca **una ocurrència**; sense, **tota la sèrie**. La
+         *     d'ocurrència mana sobre la de sèrie, que és el que deixa amagar totes les reunions
+         *     i recuperar-ne una.
+         *
+         *     **L'uid va al cos i no al camí** perquè el d'un ítem d'RSS és
+         *     `"<calendar_id>-<item_id>"` i l'`item_id` pot ser una URL sencera.
+         *
+         *     Demana `events:read` i no `events:write`: no toca l'esdeveniment, escriu una
+         *     preferència sobre una cosa que ja pots llegir. Amb `events:write`, un calendari
+         *     subscrit de només lectura no es podria silenciar mai — i és el cas que més ho
+         *     necessita.
+         */
+        post: operations["setEventInboxVisibility"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/dashboard": {
         parameters: {
             query?: never;
@@ -1951,6 +1990,42 @@ export interface components {
             /** Format: date-time */
             created_at: string;
         };
+        /**
+         * @description El que arriba d'una font i entra a la bústia d'un dia.
+         *
+         *     **No és una tasca i no en té res.** Sense `status`, sense `position`, sense
+         *     assignació: és la forma que pren la regla 7 —un esdeveniment no té mai estat de
+         *     kanban ni s'arrossega entre columnes—, i per això té esquema propi en comptes de
+         *     ser un `Task` amb camps buits. Cap identificador d'aquí pot arribar a
+         *     `POST /tasks/{id}/move`.
+         *
+         *     S'identifica per `calendar_id` + `uid` + `recurrence_id`, que és la identitat que
+         *     promet l'origen, i **no per l'`id` de la fila**: el refresc d'una font pot
+         *     reescriure-la o tornar-la a la vida, i la fila no és estable.
+         */
+        InboxEvent: {
+            /** Format: uuid */
+            calendar_id: string;
+            /** Format: uuid */
+            scope_id: string;
+            uid: string;
+            /** @description L'ocurrència concreta. `null` si no forma part de cap sèrie. */
+            recurrence_id: string | null;
+            summary: string;
+            location: string | null;
+            /** Format: date-time */
+            starts_at: string;
+            /** Format: date-time */
+            ends_at: string;
+            all_day: boolean;
+            /**
+             * @description De quina mena és la font. `null` si el calendari és d'aquesta casa.
+             * @enum {string|null}
+             */
+            source_kind: "caldav" | "ical" | "rss" | null;
+            calendar_name: string;
+            calendar_color: string | null;
+        };
         Inbox: {
             /** Format: date */
             date: string;
@@ -1959,6 +2034,15 @@ export interface components {
             overdue: components["schemas"]["Task"][];
             /** @description La secció "SENSE DIA" del rail (docs/02 §5). */
             undated: components["schemas"]["Task"][];
+            /**
+             * @description El que arriba de les fonts subscrites aquell dia, ja filtrat: hi són els que
+             *     aquesta persona ha de veure a la bústia i prou.
+             *
+             *     **Els calendaris hi entren per defecte i els RSS no.** Un canal actiu pot
+             *     publicar desenes de titulars al dia i la bústia és l'entrada de tot; qui en
+             *     vulgui un l'encén a Ajustos, o n'encén un titular concret des del calendari.
+             */
+            events: components["schemas"]["InboxEvent"][];
         };
         DashboardScope: {
             scope_id: string;
@@ -2053,6 +2137,16 @@ export interface components {
             writable?: boolean;
             refresh_interval?: number | null;
             strip_alarms?: boolean;
+            /**
+             * @description Si la font entra a la bústia. **Absent vol dir "no ho toquis" i `null` vol dir
+             *     "treu l'excepció"**, que no és el mateix: sense el `null` no hi hauria manera
+             *     de desdir-se'n i el calendari es quedaria clavat al valor que se li va posar
+             *     encara que el defecte canviés.
+             *
+             *     Canvia el que veu tot l'àmbit, i per això demana el mateix rol que compartir
+             *     el calendari.
+             */
+            inbox_visible?: boolean | null;
         };
         UserSettings: {
             /**
@@ -2063,6 +2157,17 @@ export interface components {
             /** @enum {string} */
             inbox_position?: "left" | "right" | "below";
             inbox_show_overdue?: boolean;
+            /**
+             * @description Què li passa a la cita quan s'esborra la tasca que en va sortir.
+             *
+             *     `return_to_inbox` la torna a la bústia —esborrar es llegeix com a desfer— i
+             *     **no escriu res enlloc**: la cita havia marxat només perquè hi havia una tasca
+             *     viva, i en desaparèixer torna sola. `hide_from_inbox` deixa una marca: "d'això
+             *     ja me n'he ocupat". En tots dos casos segueix al calendari.
+             * @default return_to_inbox
+             * @enum {string}
+             */
+            event_task_deleted: "return_to_inbox" | "hide_from_inbox";
             /**
              * @description El calaix de la bústia. Per usuari, com la resta de preferències.
              * @enum {string}
@@ -2446,6 +2551,27 @@ export interface components {
              *     de compartir el calendari.
              */
             has_credentials?: boolean;
+            /**
+             * @description Si aquesta font entra a la bústia diària.
+             *
+             *     **Tri-estat, i els tres valors diuen coses diferents.** `null` és "no s'hi ha
+             *     dit res i val el defecte"; `false` és "aquesta no, encara que el defecte digui
+             *     que sí". Es desa **l'excepció i no l'estat**, com `hidden_calendar_ids`: el dia
+             *     que el defecte canviï, qui no hagi tocat res segueix el defecte nou sense que
+             *     calgui migrar cap fila.
+             *
+             *     Llegir-lo com un booleà trauria de la bústia tots els calendaris on ningú ha
+             *     tocat res. Per ensenyar l'interruptor, `inbox_visible ?? inbox_visible_default`.
+             */
+            inbox_visible: boolean | null;
+            /**
+             * @description Què li tocaria si ningú digués res: **els calendaris sí i els canals RSS no**.
+             *     Un RSS pot publicar desenes de titulars al dia i la bústia és l'entrada de tot.
+             *
+             *     El calcula el servidor perquè la regla visqui en un sol lloc i cap client
+             *     l'hagi de duplicar.
+             */
+            inbox_visible_default: boolean;
         };
         Event: {
             id: string;
@@ -2516,6 +2642,16 @@ export interface components {
             status?: "TENTATIVE" | "CONFIRMED" | "CANCELLED";
             /** @description Cert si aquesta ocurrència ve d'una instància modificada. */
             is_override?: boolean;
+            /**
+             * @description Si aquesta ocurrència és a la bústia de qui pregunta.
+             *
+             *     **El calcula el servidor i el client no ho recalcula mai.** És el que fa que
+             *     "difuminat al calendari" i "no és a la meva bústia" siguin literalment la
+             *     mateixa cosa en comptes de dues que un dia divergeixen. Hi entren els cinc
+             *     nivells: si ja n'hi ha una tasca viva, la marca de l'ocurrència, la de la
+             *     sèrie, l'ajust del calendari i el defecte de la mena de font.
+             */
+            in_inbox: boolean;
         };
         Scope: {
             id: string;
@@ -2659,6 +2795,27 @@ export interface components {
             due_date?: string;
             due_time?: string;
             assignee_ids?: string[];
+            /**
+             * @description De quin esdeveniment surt aquesta tasca.
+             *
+             *     **És una referència morta, no un enllaç viu** (P6). Esborrar l'esdeveniment no
+             *     toca la tasca, i esborrar la tasca no toca l'esdeveniment: l'alternativa
+             *     voldria dir que treure una cita d'un calendari compartit esborrés en silenci
+             *     la tasca que algú altre s'havia apuntat.
+             *
+             *     S'identifica per `calendar_id` + `uid` + `recurrence_id` i **no per l'`id` de
+             *     la fila**: el refresc d'una font la reescriu i la pot tornar a la vida.
+             *
+             *     Mentre la tasca visqui, la cita **no surt a la bústia**: seria la mateixa
+             *     obligació dues vegades. Què passa en esborrar-la ho decideix
+             *     `UserSettings.event_task_deleted`.
+             */
+            source_event?: {
+                /** Format: uuid */
+                calendar_id: string;
+                uid: string;
+                recurrence_id?: string | null;
+            };
         };
         MoveInput: {
             /** @enum {string} */
@@ -5397,6 +5554,64 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+        };
+    };
+    setEventInboxVisibility: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: uuid */
+                    calendar_id: string;
+                    uid: string;
+                    recurrence_id?: string | null;
+                    /** @description `null` treu la marca i torna al defecte. */
+                    visible?: boolean | null;
+                };
+            };
+        };
+        responses: {
+            /** @description La marca, i si amb ella l'esdeveniment queda a la bústia. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        visible: boolean | null;
+                        /**
+                         * @description El resultat de la resolució **sencera**, no només el que s'ha desat:
+                         *     hi entren també l'ajust del calendari, el defecte de la mena de font
+                         *     i si ja n'hi ha una tasca viva. El client no ho ha de recalcular mai,
+                         *     o hi hauria dues implementacions de la mateixa regla.
+                         */
+                        in_inbox: boolean;
+                    };
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            /**
+             * @description El calendari no s'ha compartit amb tu. **403 i no 404**: un 404 diria si
+             *     aquell `uid` existeix, que és informació d'un calendari que no et pertoca.
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No hi ha cap esdeveniment amb aquell uid en aquell calendari. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     getDashboard: {
