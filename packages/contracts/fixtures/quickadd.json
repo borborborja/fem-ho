@@ -350,6 +350,35 @@
           "scopeId": "scope-personal",
           "error": null
         }
+      },
+      {
+        "name": "amb un sol ambit, #Projecte es el projecte d'aquell ambit",
+        "input": "#Client Salt Enviar proposta",
+        "expect": {
+          "scopeId": "scope-feina",
+          "projectId": "proj-client-salt",
+          "title": "Enviar proposta",
+          "error": null
+        }
+      },
+      {
+        "name": "i #Ambit/Projecte segueix funcionant igual",
+        "input": "#Feina/Client Enviar proposta",
+        "expect": {
+          "scopeId": "scope-feina",
+          "projectId": "proj-client",
+          "title": "Enviar proposta",
+          "error": null
+        }
+      },
+      {
+        "name": "un nom que no es cap projecte de l'ambit unic encara pot ser un ambit",
+        "input": "#Personal Comprar pa",
+        "expect": {
+          "scopeId": "scope-personal",
+          "projectId": null,
+          "error": null
+        }
       }
     ]
   }

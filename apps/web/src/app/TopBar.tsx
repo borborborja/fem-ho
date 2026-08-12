@@ -110,6 +110,8 @@ export interface TopBarProps {
   attentionCount?: number;
   /** Si hi ha cap àmbit amb registre de dedicació: decideix si el menú en porta les entrades. */
   timeTracking?: boolean;
+  /** Com se'n diu, d'un projecte, als àmbits actius. Només canvia la paraula. */
+  projectNoun?: 'project' | 'client';
   onToggleAiBoard?: () => void;
 }
 
@@ -127,6 +129,7 @@ export function TopBar({
   aiBoardActive = false,
   attentionCount = 0,
   timeTracking = false,
+  projectNoun = 'project',
   onToggleAiBoard,
 }: TopBarProps) {
   const { profile, scopes, projects, settings, instance } = useSessionData();
@@ -631,7 +634,10 @@ export function TopBar({
             {menu === 'add'
               ? menuBox(
                   <>
-                    {menuItem(t('nav.newProject'), onNewProject)}
+                    {menuItem(
+                      t(projectNoun === 'client' ? 'nav.newProject.client' : 'nav.newProject'),
+                      onNewProject,
+                    )}
                     {menuItem(t('nav.newChecklistFull'), onNewChecklist)}
                   </>,
                 )

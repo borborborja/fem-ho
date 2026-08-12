@@ -112,9 +112,18 @@ export function rangeOf(periode: Periode): { from: string; to: string } {
 export interface RegistreScreenProps {
   activeScopeIds: string[];
   onOpenTask: (id: string) => void;
+  /** Com se'n diu, d'un projecte, en aquests àmbits. Només canvia la paraula. */
+  projectNoun?: 'project' | 'client';
 }
 
-export function RegistreScreen({ activeScopeIds, onOpenTask }: RegistreScreenProps) {
+export function RegistreScreen({
+  activeScopeIds,
+  onOpenTask,
+  projectNoun = 'project',
+}: RegistreScreenProps) {
+  /** La clau del catàleg per a tot el que parla de projectes en aquesta pantalla. */
+  const nom = (base: string): string => t(projectNoun === 'client' ? `${base}.client` : base);
+
   const { scopes, projects, people, profile } = useSessionData();
 
   const [vista, setVista] = useState<'table' | 'chrono'>('table');
@@ -234,7 +243,7 @@ export function RegistreScreen({ activeScopeIds, onOpenTask }: RegistreScreenPro
             onChange={(event) => setProjecte(event.target.value)}
             style={{ width: 'auto' }}
           >
-            <option value="">{t('registre.allProjects')}</option>
+            <option value="">{nom('registre.allProjects')}</option>
             <option value="none">{t('registre.noProject')}</option>
             {projectesActius.map((project) => (
               <option key={project.id} value={project.id}>
@@ -354,6 +363,7 @@ export function RegistreScreen({ activeScopeIds, onOpenTask }: RegistreScreenPro
             byDay={totals?.by_day ?? []}
             onOpenTask={onOpenTask}
             nomPersona={nomPersona}
+            projectLabel={nom('registre.col.project')}
           />
         )}
       </div>
@@ -386,11 +396,13 @@ function Taula({
   byDay,
   onOpenTask,
   nomPersona,
+  projectLabel,
 }: {
   entries: SessionEntry[];
   byDay: Bucket[];
   onOpenTask: (id: string) => void;
   nomPersona: (id: string) => string;
+  projectLabel: string;
 }) {
   const totalDia = new Map(byDay.map((bucket) => [bucket.key, bucket.minutes]));
   const locale = getLocale();
@@ -506,9 +518,7 @@ function Taula({
             <th style={{ padding: '6px 10px', fontSize: 11, fontWeight: 700 }}>
               {t('registre.col.when')}
             </th>
-            <th style={{ padding: '6px 10px', fontSize: 11, fontWeight: 700 }}>
-              {t('registre.col.project')}
-            </th>
+            <th style={{ padding: '6px 10px', fontSize: 11, fontWeight: 700 }}>{projectLabel}</th>
             <th style={{ padding: '6px 10px', fontSize: 11, fontWeight: 700 }}>
               {t('registre.col.task')}
             </th>

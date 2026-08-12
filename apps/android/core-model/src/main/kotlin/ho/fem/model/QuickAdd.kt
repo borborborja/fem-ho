@@ -179,6 +179,43 @@ fun parseQuickAdd(text: String, context: QuickAddContext): QuickAddResult {
         val char = text[i]
 
         if (char == '#') {
+            /**
+             * **Amb un sol àmbit actiu, `#X` mira primer els projectes d'aquell àmbit.**
+             *
+             * Abans `#` era sempre l'àmbit, i un projecte només s'escrivia
+             * `#Àmbit/Projecte` —també quan l'àmbit era únic, que és absurd: en monoàmbit
+             * la barra ja no ensenya cap xip d'àmbit. Amb diversos actius no canvia res.
+             */
+            val unic =
+                if (context.activeScopeIds.size == 1) {
+                    context.scopes.firstOrNull { it.id == context.activeScopeIds.first() }
+                } else {
+                    null
+                }
+
+            if (unic != null) {
+                val project = matchLongest(text, i + 1, unic.projects.map { it.id to it.name })
+                if (project != null) {
+                    flushPlain(i)
+                    val end = i + 1 + project.length
+                    tokens.add(
+                        QuickAddToken(
+                            kind = TokenKind.PROJECT,
+                            raw = text.substring(i, end),
+                            start = i,
+                            end = end,
+                            id = project.id,
+                            label = project.name,
+                        ),
+                    )
+                    projectId = project.id
+                    scopeId = unic.id
+                    i = end
+                    plainFrom = i
+                    continue
+                }
+            }
+
             val scope = matchLongest(text, i + 1, scopePairs)
             if (scope != null) {
                 flushPlain(i)

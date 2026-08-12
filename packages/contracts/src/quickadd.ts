@@ -157,6 +157,45 @@ export function parseQuickAdd(text: string, context: QuickAddContext): QuickAddR
     const char = text[i];
 
     if (char === '#') {
+      /**
+       * **Amb un sol àmbit actiu, `#X` mira primer els projectes d'aquell àmbit.**
+       *
+       * Abans `#` era **sempre** l'àmbit, i un projecte només s'escrivia `#Àmbit/Projecte`
+       * —també quan l'àmbit era únic, que és absurd: en monoàmbit la barra ja no ensenya
+       * cap xip d'àmbit i el sigil demanava el nom d'una cosa que la interfície ha deixat
+       * de nomenar. Amb diversos actius no canvia res: allà `#` ha de poder triar l'àmbit,
+       * que és la decisió que la interfície sí que et demana.
+       *
+       * No cal reinterpretar res en passar de mono a multi: del text cru no se'n desa res,
+       * els sigils es resolen en escriure i el que es guarda són `scope_id` i `project_id`
+       * ja resolts.
+       */
+      const unic =
+        context.activeScopeIds.length === 1
+          ? context.scopes.find((s) => s.id === context.activeScopeIds[0])
+          : undefined;
+
+      if (unic !== undefined) {
+        const project = matchLongest(text, i + 1, unic.projects);
+        if (project !== null) {
+          flushPlain(i);
+          const end = i + 1 + project.length;
+          tokens.push({
+            kind: 'project',
+            raw: text.slice(i, end),
+            start: i,
+            end,
+            id: project.id,
+            label: project.name,
+          });
+          projectId = project.id;
+          scopeId = unic.id;
+          i = end;
+          plainFrom = i;
+          continue;
+        }
+      }
+
       const scope = matchLongest(text, i + 1, context.scopes);
       if (scope !== null) {
         flushPlain(i);

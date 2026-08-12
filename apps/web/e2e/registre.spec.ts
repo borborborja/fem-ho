@@ -183,6 +183,30 @@ test('les Estadístiques diuen el mateix que la taula', async ({ page }) => {
   await expect(page.getByTestId('stats-by-person')).toContainText('Qui factura hores');
 });
 
+test('amb «clients» triat, la pantalla ho diu i cap identificador canvia', async ({ page }) => {
+  const { scope, auth } = await prepara(page, 'Feina amb clients');
+
+  await page.request.patch(`/api/v1/scopes/${scope}/settings`, {
+    headers: { authorization: auth },
+    data: { project_noun: 'client' },
+  });
+
+  await page.goto(`/registre?scopes=${scope}`);
+  // La columna i el filtre parlen de clients…
+  await expect(page.getByTestId('registre-project')).toContainText('Tots els clients');
+
+  /**
+   * …i el que viatja segueix sent `project_id`. **Només canvia la paraula**: si el camp
+   * canviés de nom, canviaria a la base, a l'API i a les tools d'MCP, que és exactament el
+   * que la regla del vocabulari únic prohibeix.
+   */
+  const tasca = await page.request.post('/api/v1/tasks', {
+    headers: { authorization: auth },
+    data: { scope_id: scope, title: 'Una del client' },
+  });
+  expect(Object.keys((await tasca.json()) as Record<string, unknown>)).toContain('project_id');
+});
+
 /** El bloc obert que acaba de deixar el tauler. */
 async function primerBloc(page: Page, auth: string): Promise<string> {
   const res = await page.request.get('/api/v1/sessions', { headers: { authorization: auth } });

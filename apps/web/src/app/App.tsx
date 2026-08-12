@@ -28,6 +28,7 @@ import { LoginScreen } from '../screens/LoginScreen.js';
 import { RegisterScreen } from '../screens/RegisterScreen.js';
 import { PublicShareScreen } from '../screens/PublicShareScreen.js';
 import { CommandPalette } from '../screens/CommandPalette.js';
+import { projectNoun } from './project-noun.js';
 import { EstadistiquesScreen } from '../screens/EstadistiquesScreen.js';
 import { RegistreScreen } from '../screens/RegistreScreen.js';
 import { SearchScreen } from '../screens/SearchScreen.js';
@@ -191,6 +192,9 @@ function AppShell() {
     .filter((row) => row.time_tracking)
     .map((row) => row.scope_id);
 
+  /** «Projecte» o «client», segons ho hagin dit els àmbits actius. */
+  const noun = projectNoun(timeTracking.data?.data ?? [], activeScopeIds);
+
   /**
    * El gir del tauler.
    *
@@ -349,6 +353,7 @@ function AppShell() {
         aiBoardActive={aiBoard}
         attentionCount={attention.data?.count ?? 0}
         timeTracking={ambRegistre.length > 0}
+        projectNoun={noun}
         onToggleAiBoard={toggleAiBoard}
       />
 
@@ -430,7 +435,11 @@ function AppShell() {
         ) : route.path === '/search' ? (
           <SearchScreen onOpenTask={setOpenTask} />
         ) : route.path === '/registre' ? (
-          <RegistreScreen activeScopeIds={activeScopeIds} onOpenTask={setOpenTask} />
+          <RegistreScreen
+            activeScopeIds={activeScopeIds}
+            onOpenTask={setOpenTask}
+            projectNoun={noun}
+          />
         ) : route.path === '/estadistiques' ? (
           <EstadistiquesScreen activeScopeIds={activeScopeIds} />
         ) : route.path === '/dashboard' ? (
