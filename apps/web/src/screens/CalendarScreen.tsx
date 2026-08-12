@@ -422,7 +422,11 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
           ordenada i amb el correu i les tasques a dins. Filtrar-ho aquí una segona vegada
           era com el mes acabava ensenyant coses que la setmana callava.
         */
-        items: (itemsByDate[key] ?? []).map((item) => ({ id: item.id, title: item.title })),
+        items: (itemsByDate[key] ?? []).map((item) => ({
+          id: item.id,
+          title: item.title,
+          color: item.color,
+        })),
       };
     });
   }, [selected, itemsByDate, weekdays, start]);
@@ -718,6 +722,12 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
           />
         ) : mode === 'week' ? (
           <WeekView
+            /*
+              Al telèfon, punts: el mateix criteri que la vista de mes. Set columnes de
+              quaranta-vuit píxels no hi caben els títols, i una lletra amb punts
+              suspensius ocupa el lloc de la informació sense ser-ho.
+            */
+            compact={mobile}
             days={weekDays}
             selectedDate={selected}
             onSelect={setSelected}

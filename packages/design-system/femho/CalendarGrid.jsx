@@ -384,12 +384,40 @@ export function MonthView({
   );
 }
 
-export function WeekView({ days, selectedDate, onSelect, emptyLabel, onAddOnDay, addLabel }) {
+/**
+ * La setmana.
+ *
+ * **`compact` és per al telèfon**, i fa el mateix que la vista de mes hi fa: punts en
+ * comptes de títols. A 390px una columna de set fa quaranta-vuit píxels, i el que hi
+ * cabia era «D..», «9..», «1..» —una lletra i punts suspensius—, que no és informació:
+ * és soroll que ocupa el lloc de la informació. Amb els punts, la setmana diu **quins
+ * dies tenen alguna cosa** i el detall del dia el dona el rail de sota, que és per a
+ * això.
+ */
+export function WeekView({
+  days,
+  selectedDate,
+  onSelect,
+  emptyLabel,
+  onAddOnDay,
+  addLabel,
+  compact = false,
+}) {
   const [hovered, setHovered] = React.useState(null);
   return (
     <div
       data-testid="calendar-week"
-      style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 8 }}
+      /*
+        **`minmax(0, 1fr)` i no `1fr`.** `1fr` és `minmax(auto, 1fr)`: la columna no
+        s'encongeix per sota del **mínim del seu contingut**, i el contingut aquí són
+        pastilles amb `white-space: nowrap`. Un dia amb «Declaració de la renda» estirava
+        la seva columna fins a 152px mentre els dies buits en feien 53, i a un telèfon de
+        390 la setmana ocupava 546: els tres últims dies queien fora de la pantalla i **la
+        pàgina es desplaçava de costat**. Amb el zero explícit, les set columnes es
+        reparteixen l'ample i el text es talla amb punts suspensius, que és el que ja
+        demanava la pastilla.
+      */
+      style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: 8 }}
     >
       {days.map((day) => (
         <button
@@ -442,48 +470,68 @@ export function WeekView({ days, selectedDate, onSelect, emptyLabel, onAddOnDay,
             </span>
           </span>
 
-          <span style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {day.items.length === 0 ? (
-              <span style={{ fontSize: 11, color: 'var(--ink-faint)', textAlign: 'center' }}>
-                {emptyLabel}
-              </span>
-            ) : (
-              day.items.slice(0, 4).map((item) => (
+          {compact ? (
+            <span
+              data-testid={`week-dots-${day.iso}`}
+              style={{ display: 'flex', gap: 3, height: 5, justifyContent: 'center' }}
+            >
+              {day.items.slice(0, 3).map((item) => (
                 <span
                   key={item.id}
-                  title={item.title}
+                  aria-hidden="true"
                   style={{
-                    fontSize: 10.5,
-                    fontWeight: 600,
-                    padding: '3px 8px',
-                    borderRadius: 100,
-                    background: 'var(--tag-bg)',
-                    color: 'var(--tag-text)',
-                    textAlign: 'center',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
+                    width: 5,
+                    height: 5,
+                    borderRadius: '50%',
+                    background: item.color ?? 'var(--ink-faint)',
                   }}
-                >
-                  {item.title}
+                />
+              ))}
+            </span>
+          ) : (
+            <span style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {day.items.length === 0 ? (
+                <span style={{ fontSize: 11, color: 'var(--ink-faint)', textAlign: 'center' }}>
+                  {emptyLabel}
                 </span>
-              ))
-            )}
-            {/*
+              ) : (
+                day.items.slice(0, 4).map((item) => (
+                  <span
+                    key={item.id}
+                    title={item.title}
+                    style={{
+                      fontSize: 10.5,
+                      fontWeight: 600,
+                      padding: '3px 8px',
+                      borderRadius: 100,
+                      background: 'var(--tag-bg)',
+                      color: 'var(--tag-text)',
+                      textAlign: 'center',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {item.title}
+                  </span>
+                ))
+              )}
+              {/*
               **El que no hi cap es diu.** Un dia amb vuit cites n'ensenyava tres i callava
               les altres cinc: la setmana et deia que dimarts hi havia «Gimnàs, Reunió,
               Dentista» i et deixava sortir de casa sense saber que hi havia el dentista a
               les dotze i quatre coses més. Amagar és inevitable; **amagar en silenci, no**.
             */}
-            {day.items.length > 4 ? (
-              <span
-                data-testid={`week-more-${day.iso}`}
-                style={{ fontSize: 10, color: 'var(--ink-soft)', textAlign: 'center' }}
-              >
-                +{day.items.length - 4}
-              </span>
-            ) : null}
-          </span>
+              {day.items.length > 4 ? (
+                <span
+                  data-testid={`week-more-${day.iso}`}
+                  style={{ fontSize: 10, color: 'var(--ink-soft)', textAlign: 'center' }}
+                >
+                  +{day.items.length - 4}
+                </span>
+              ) : null}
+            </span>
+          )}
           {onAddOnDay && hovered === day.iso ? (
             <DayAdd label={addLabel} onClick={() => onAddOnDay(day.iso)} />
           ) : null}

@@ -746,6 +746,30 @@ pàgina que es mou de costat es veu igual que una que no.
 
 ---
 
+### P20 · La setmana al telèfon, i el parany del `1fr`
+
+**La resolució: `minmax(0, 1fr)` a la graella, i punts en comptes de títols al telèfon.**
+
+Dos defectes al mateix lloc.
+
+**El desbordament.** La setmana era `repeat(7, 1fr)`, i `1fr` és `minmax(auto, 1fr)`: la
+columna **no s'encongeix per sota del mínim del seu contingut**, i el contingut són
+pastilles amb `white-space: nowrap`. Un dia amb «Declaració de la renda» estirava la seva
+columna fins a **152px** mentre els dies buits en feien 53; a 390 la setmana ocupava 546 i
+**els tres últims dies queien fora de la pantalla**. És el mateix parany que `minWidth: 0`
+resol als contenidors de flex (P19), amb una altra cara.
+
+**El que quedava.** Amb les set columnes repartides, cadascuna fa quaranta-vuit píxels i el
+títol hi sortia com «D..»: una lletra i punts suspensius. Això no és informació retallada,
+és soroll ocupant el lloc de la informació — el mateix argument de P13 al revés. Al telèfon
+la setmana passa a **punts**, com ja fa el mes, i el detall del dia el dona el rail de sota,
+que és per a això.
+
+De passada, **l'ull de la bústia passa de 21 a 28 píxels**. Al ratolí s'encerta i al dit
+no, i aquest botó surt a cada fila de cada cita, cada correu i cada titular.
+
+---
+
 ## Part 3 — Fets sospitosos de `research/`
 
 El crític va marcar 7 afirmacions com a probablement inventades, obsoletes o internament incoherents. **Cap `docs/` en depèn.**
