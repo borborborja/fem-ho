@@ -1705,6 +1705,25 @@ paths:
           content: { text/csv: { schema: { type: string } } }
         '401': { $ref: '#/components/responses/Unauthenticated' }
 
+  /sessions/stats:
+    get:
+      tags: [tasks]
+      operationId: sessionStats
+      summary: Les Estadístiques — els mateixos blocs, mirats de lluny
+      description: |
+        Passa pels **mateixos filtres i la mateixa visibilitat** que `GET /sessions`, perquè
+        el dia que un número no quadri amb el Registre la culpa sigui d'una sola consulta i
+        no de dues que s'assemblen.
+
+        L'evolució porta **els dies buits inclosos** —un gràfic que només porta els dies amb
+        feina insinua una continuïtat que no hi va ser— i s'agrupa **per setmanes passats els
+        70 dies**, perquè un any de punts diaris és una tanca i no una tendència.
+      responses:
+        '200':
+          description: Les mètriques i els desglossaments.
+          content: { application/json: { schema: { $ref: '#/components/schemas/SessionStats' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+
   /sessions/{id}:
     patch:
       tags: [tasks]
@@ -5587,6 +5606,50 @@ components:
             by_user: { type: array, items: { $ref: '#/components/schemas/SessionBucket' } }
             by_project: { type: array, items: { $ref: '#/components/schemas/SessionBucket' } }
             by_day: { type: array, items: { $ref: '#/components/schemas/SessionBucket' } }
+
+    SessionStats:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          tasks,
+          minutes,
+          overtime_minutes,
+          projects,
+          average_minutes,
+          evolution,
+          weekly,
+          by_type,
+          by_project,
+          by_user,
+          overtime_by_project,
+        ]
+      properties:
+        tasks: { type: integer }
+        minutes: { type: integer }
+        overtime_minutes: { type: integer }
+        projects: { type: integer }
+        average_minutes:
+          type: integer
+          description: Minuts per **tasca**, no per bloc ni per dia.
+        evolution:
+          type: array
+          items:
+            type: object
+            required: [key, minutes]
+            properties:
+              key: { type: string }
+              minutes: { type: integer }
+        weekly:
+          type: boolean
+          description: Cert si l'evolució està agrupada per setmanes.
+        by_type: { type: array, items: { $ref: '#/components/schemas/SessionBucket' } }
+        by_project: { type: array, items: { $ref: '#/components/schemas/SessionBucket' } }
+        by_user: { type: array, items: { $ref: '#/components/schemas/SessionBucket' } }
+        overtime_by_project:
+          type: array
+          items: { $ref: '#/components/schemas/SessionBucket' }
+          description: "Les hores extres per projecte: per saber per a qui s'han fet."
 
     ScopeSettings:
       type: object

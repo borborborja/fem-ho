@@ -28,6 +28,7 @@ import { LoginScreen } from '../screens/LoginScreen.js';
 import { RegisterScreen } from '../screens/RegisterScreen.js';
 import { PublicShareScreen } from '../screens/PublicShareScreen.js';
 import { CommandPalette } from '../screens/CommandPalette.js';
+import { EstadistiquesScreen } from '../screens/EstadistiquesScreen.js';
 import { RegistreScreen } from '../screens/RegistreScreen.js';
 import { SearchScreen } from '../screens/SearchScreen.js';
 import { SettingsScreen } from '../screens/SettingsScreen.js';
@@ -430,6 +431,8 @@ function AppShell() {
           <SearchScreen onOpenTask={setOpenTask} />
         ) : route.path === '/registre' ? (
           <RegistreScreen activeScopeIds={activeScopeIds} onOpenTask={setOpenTask} />
+        ) : route.path === '/estadistiques' ? (
+          <EstadistiquesScreen activeScopeIds={activeScopeIds} />
         ) : route.path === '/dashboard' ? (
           <DashboardScreen
             onOpenTask={setOpenTask}

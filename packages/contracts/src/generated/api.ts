@@ -946,6 +946,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/sessions/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Les Estadístiques — els mateixos blocs, mirats de lluny
+         * @description Passa pels **mateixos filtres i la mateixa visibilitat** que `GET /sessions`, perquè
+         *     el dia que un número no quadri amb el Registre la culpa sigui d'una sola consulta i
+         *     no de dues que s'assemblen.
+         *
+         *     L'evolució porta **els dies buits inclosos** —un gràfic que només porta els dies amb
+         *     feina insinua una continuïtat que no hi va ser— i s'agrupa **per setmanes passats els
+         *     70 dies**, perquè un any de punts diaris és una tanca i no una tendència.
+         */
+        get: operations["sessionStats"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/sessions/{id}": {
         parameters: {
             query?: never;
@@ -3842,6 +3868,25 @@ export interface components {
                 by_day: components["schemas"]["SessionBucket"][];
             };
         };
+        SessionStats: {
+            tasks: number;
+            minutes: number;
+            overtime_minutes: number;
+            projects: number;
+            /** @description Minuts per **tasca**, no per bloc ni per dia. */
+            average_minutes: number;
+            evolution: {
+                key: string;
+                minutes: number;
+            }[];
+            /** @description Cert si l'evolució està agrupada per setmanes. */
+            weekly: boolean;
+            by_type: components["schemas"]["SessionBucket"][];
+            by_project: components["schemas"]["SessionBucket"][];
+            by_user: components["schemas"]["SessionBucket"][];
+            /** @description Les hores extres per projecte: per saber per a qui s'han fet. */
+            overtime_by_project: components["schemas"]["SessionBucket"][];
+        };
         ScopeSettings: {
             /**
              * @description Si aquest àmbit anota la dedicació i té Registre i Estadístiques. **Apagat per
@@ -5936,6 +5981,27 @@ export interface operations {
                 };
                 content: {
                     "text/csv": string;
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    sessionStats: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Les mètriques i els desglossaments. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionStats"];
                 };
             };
             401: components["responses"]["Unauthenticated"];

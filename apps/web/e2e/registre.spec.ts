@@ -151,6 +151,38 @@ test("l'exportació porta les columnes de sempre", async ({ page }) => {
   expect(fitxer.suggestedFilename()).toBe('registre.csv');
 });
 
+test('les Estadístiques diuen el mateix que la taula', async ({ page }) => {
+  const { scope, auth } = await prepara(page, 'Feina amb estadístiques');
+
+  const creada = await page.request.post('/api/v1/tasks', {
+    headers: { authorization: auth },
+    data: { scope_id: scope, title: 'Preparar la reunió' },
+  });
+  const taskId = ((await creada.json()) as { id: string }).id;
+
+  const inici = new Date();
+  inici.setHours(9, 0, 0, 0);
+  const fi = new Date();
+  fi.setHours(11, 0, 0, 0);
+  await page.request.post('/api/v1/sessions', {
+    headers: { authorization: auth },
+    data: { task_id: taskId, started_at: inici.toISOString(), ended_at: fi.toISOString() },
+  });
+
+  await page.goto(`/estadistiques?scopes=${scope}`);
+  await expect(page.getByTestId('estadistiques-screen')).toBeVisible();
+
+  // Dues hores, una tasca: el que diu la taula, dit de lluny.
+  await expect(page.getByTestId('stats-total')).toContainText('2.0 h');
+  await expect(page.getByTestId('stats-tasks')).toContainText('1');
+  await expect(page.getByTestId('stats-average')).toContainText('2h');
+
+  // I els desglossaments hi són, amb «Sense tipologia» com una fila més.
+  await expect(page.getByTestId('stats-evolution')).toBeVisible();
+  await expect(page.getByTestId('stats-by-type')).toContainText('Sense tipologia');
+  await expect(page.getByTestId('stats-by-person')).toContainText('Qui factura hores');
+});
+
 /** El bloc obert que acaba de deixar el tauler. */
 async function primerBloc(page: Page, auth: string): Promise<string> {
   const res = await page.request.get('/api/v1/sessions', { headers: { authorization: auth } });

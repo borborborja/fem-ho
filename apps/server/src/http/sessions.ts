@@ -10,6 +10,7 @@ import type { FastifyInstance } from 'fastify';
 import { auditedTransaction } from '../audit/audited-transaction.js';
 import {
   sessionReport,
+  sessionStats,
   type SessionEntry,
   type SessionFilters,
 } from '../services/session-report.js';
@@ -63,6 +64,12 @@ export function registerSessionRoutes(app: FastifyInstance): void {
         .send(`${BOM}${toCsv(report.data, profile.timezone)}`);
       return undefined;
     }),
+  );
+
+  app.get('/api/v1/sessions/stats', async (request, reply) =>
+    handle(app, request, reply, async (principal) =>
+      sessionStats(db().db, principal, await filtersOf(request, principal.userId)),
+    ),
   );
 
   app.post('/api/v1/sessions', async (request, reply) =>

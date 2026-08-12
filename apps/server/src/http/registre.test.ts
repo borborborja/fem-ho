@@ -299,3 +299,73 @@ describe('el CSV', () => {
     expect(linies[1]).toBe('2026-07-21,09:00,,Crear contenidor al NAS,,Borja,50');
   });
 });
+
+describe('les Estadístiques diuen el mateix que el Registre', () => {
+  it('les quatre targetes surten dels mateixos blocs', async () => {
+    const registre = await api('GET', '/api/v1/sessions?from=2026-07-01&to=2026-07-31');
+    const stats = await api('GET', '/api/v1/sessions/stats?from=2026-07-01&to=2026-07-31');
+    expect(stats.statusCode, stats.body).toBe(200);
+
+    const r = registre.json<Report>();
+    const s = stats.json<{
+      tasks: number;
+      minutes: number;
+      average_minutes: number;
+      projects: number;
+      evolution: { key: string; minutes: number }[];
+      weekly: boolean;
+      by_type: { key: string; minutes: number }[];
+      overtime_by_project: { key: string; overtime_minutes: number }[];
+    }>();
+
+    /**
+     * **Al minut.** Si les dues pantalles no quadren, la que es factura és la que et fa
+     * quedar malament; passen per la mateixa consulta justament per això.
+     */
+    expect(s.minutes).toBe(r.totals.minutes);
+    expect(s.tasks).toBe(r.totals.tasks);
+    expect(s.projects).toBe(r.totals.by_project.length);
+    expect(s.average_minutes).toBe(Math.round(r.totals.minutes / r.totals.tasks));
+  });
+
+  it("l'evolució porta els dies buits, que també són informació", async () => {
+    const stats = await api('GET', '/api/v1/sessions/stats?from=2026-07-19&to=2026-07-23');
+    const s = stats.json<{ evolution: { key: string; minutes: number }[]; weekly: boolean }>();
+
+    // Cinc dies demanats, cinc punts, encara que algun no tingui res.
+    expect(s.evolution.map((punt) => punt.key)).toEqual([
+      '2026-07-19',
+      '2026-07-20',
+      '2026-07-21',
+      '2026-07-22',
+      '2026-07-23',
+    ]);
+    expect(s.weekly).toBe(false);
+    expect(s.evolution.some((punt) => punt.minutes === 0)).toBe(true);
+  });
+
+  it('i passats els 70 dies, agrupa per setmanes', async () => {
+    /**
+     * Un any de punts diaris és una tanca, no una tendència. El llindar és el mateix de
+     * l'eina que això substitueix.
+     */
+    const stats = await api('GET', '/api/v1/sessions/stats?from=2026-05-01&to=2026-07-31');
+    const s = stats.json<{ evolution: { key: string }[]; weekly: boolean }>();
+
+    expect(s.weekly).toBe(true);
+    // 92 dies en cubetes de set: catorze punts, no noranta-dos.
+    expect(s.evolution.length).toBeLessThan(20);
+  });
+
+  it('«sense tipologia» és una fila més i no un forat', async () => {
+    const stats = await api('GET', '/api/v1/sessions/stats?from=2026-07-01&to=2026-07-31');
+    const s = stats.json<{ by_type: { key: string; minutes: number }[] }>();
+    expect(s.by_type.map((bucket) => bucket.key)).toContain('none');
+  });
+
+  it('i les hores extres es diuen per projecte, que és el que fa canviar alguna cosa', async () => {
+    const stats = await api('GET', '/api/v1/sessions/stats?from=2026-07-22&to=2026-07-22');
+    const s = stats.json<{ overtime_by_project: { overtime_minutes: number }[] }>();
+    expect(s.overtime_by_project[0]?.overtime_minutes).toBe(60);
+  });
+});
