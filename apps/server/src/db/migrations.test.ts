@@ -14,6 +14,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { sql } from 'kysely';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { dbBool } from './bool.js';
 import { connect, type Connection } from './connection.js';
 import { connectTestSchema, type TestSchema } from './test-postgres.js';
 import type { Engine } from './dialect.js';
@@ -265,6 +266,29 @@ describe('migrar una base que ja té dades', () => {
     // Les claus foranes han quedat enceses: el pragma es restaura passi el que passi.
     const pragma = await sql<{ foreign_keys: number }>`PRAGMA foreign_keys`.execute(conn.db);
     expect(Number(pragma.rows[0]?.foreign_keys)).toBe(1);
+  });
+
+  it("la 015 deixa el mode d'àmbits sense triar a qui ja tenia preferències", async () => {
+    /**
+     * **Aquest és el cas que protegeix a qui ja hi és.** La columna no porta `DEFAULT`: si
+     * en portés `'multi'`, ningú tindria mai `NULL` i el wizard no sabria a qui ha de
+     * sortir sense una segona columna. I si en portés `'single'`, a tothom li canviaria la
+     * barra un matí sense haver-ho demanat.
+     */
+    const ara = '2026-08-12T09:00:00.000Z';
+    await sql`
+      INSERT INTO user_settings (user_id, inbox_position, inbox_show_overdue, notify_prefs,
+                                 updated_at)
+      VALUES ('u1', 'left', ${dbBool(true)}, '{}', ${ara})
+    `.execute(conn.db);
+
+    const fila = await sql<{ scope_mode: string | null; inbox_position: string }>`
+      SELECT scope_mode, inbox_position FROM user_settings WHERE user_id = 'u1'
+    `.execute(conn.db);
+
+    expect(fila.rows[0]?.scope_mode).toBeNull();
+    // I la resta de preferències segueixen intactes: la migració només hi afegeix.
+    expect(fila.rows[0]?.inbox_position).toBe('left');
   });
 });
 

@@ -48,7 +48,16 @@ const PROXY = {
   '/api': API,
   '/info': API,
   '/healthz': API,
-  '/s/': API,
+  /*
+    El logo de la instància el serveix el servidor. **Sense això, en desenvolupament la
+    imatge es demanava a Vite**, que responia `index.html` per la seva regla de retorn a
+    l'app, i el logo sortia trencat amb el text alternatiu. A producció funcionava; és el
+    mateix desacord entre les dues disposicions que P22, per l'altra banda.
+  */
+  '/brand': API,
+  // `/s/{token}` és pàgina i endpoint, com `/setup` i `/invite`: el `GET` ha de pintar
+  // l'app —és l'enllaç que s'envia a algú de fora— i el `POST` ha d'arribar al servidor.
+  '/s/': pageOrApi,
   '/setup': pageOrApi,
   '/invite': pageOrApi,
 };

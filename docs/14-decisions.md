@@ -571,6 +571,307 @@ Tres coses que se'n deriven:
 
 ---
 
+### P14 · Arribar a Fet és completar-la, i el segell el posa `move`
+
+**La resolució: `POST /tasks/{id}/move` manté `completed_at`, i entrar a Fet fa tot el que
+vol dir «feta».**
+
+La columna Fet es calcula amb `status = 'done'` **i `completed_at` dins del dia de qui mira**
+(P2, `docs/14` línia 187). El segell només el posava `completeTask`, i `POST /complete` **no
+el crida cap client**: ni la web, ni Android, ni el CalDAV. Els dos gestos que la interfície
+ofereix per acabar una tasca —arrossegar-la a Fet i el commutador de la targeta— passen
+tots dos per `move`.
+
+O sigui que `completed_at` era `NULL` sempre, la columna Fet no podia ensenyar **res mai**, i
+la targeta que hi deixaves anar desapareixia de les quatre columnes: ja no era a Fent i
+encara no era enlloc. `DoneColumn.ts` era correcte i tenia les seves proves; el que li
+arribava era una llista buida. El defecte era la costura, com al calendari.
+
+Tres coses que se'n deriven:
+
+- **Entrar a Fet fa el mateix que el commutador**, i no una part: les subtasques cauen i, si
+  la tasca es repeteix, neix la següent. Que dependrés del gest seria el pitjor dels dos
+  móns —i `recurrence_mode = 'completion'` compta des de `completed_at`, que sense segell no
+  existeix.
+- **Sortir de Fet esborra el segell.** Una tasca que torna a Per fer no s'ha fet.
+- **El registre en diu «completed» i hi guarda el segell**, perquè desfer un moviment a Fet
+  no deixi la tasca fora de Fet i completada alhora (`docs/01` §7).
+
+La prova va per `move` a posta, i n'hi ha una al navegador que arriba fins a veure la targeta
+dins la columna: el que no es prova pel camí que la gent fa servir és el que es trenca.
+
+---
+
+### P15 · Les etiquetes existien a la base i enlloc més
+
+**La resolució: `Task` porta `label_ids`, la fitxa diu quines hi són, i se’n crea una des
+d’allà mateix.**
+
+`docs/02` §7 demana «Etiquetes» a la fitxa, i hi eren: un epígraf i, a sota, **res**. Tres
+defectes encadenats, cadascun amagant el següent:
+
+| | Què passava |
+| --- | --- |
+| Crear-ne una | **Cap pantalla en sabia**. Ni la fitxa ni Ajustos; només l'API |
+| Saber quines porta la tasca | `Task` no tenia `label_ids`: els xips es dibuixaven **iguals posats i no posats** |
+| Treure'n una | Clicar-la, `POST`, i **esperar que fallés** per caure al `DELETE` del `catch` |
+
+Amb zero etiquetes a l'àmbit —que és el cas de tothom, perquè no se'n podia fer cap— la
+secció no pintava ni l'estat buit. Totes les altres seccions de la fitxa en tenen un.
+
+Tres coses que se'n deriven:
+
+- **El xip diu l'estat, no l'acció**, igual que l'ull de la bústia (P12): ple si l'etiqueta
+  hi és, fantasma amb vora discontínua si no, i `aria-pressed` per a qui no la veu.
+- **L'etiqueta nova neix posada.** Si l'has escrita mirant aquesta tasca, és d'aquesta
+  tasca; crear-la i haver-la de clicar és un pas que no serveix per a res.
+- **Es crea des de la fitxa i no des d'Ajustos.** El moment en què vols una etiqueta és
+  mentre mires la tasca que la necessita, i anar a una altra pantalla i tornar és el camí
+  que fa que ningú n'usi.
+
+Un error va deixar de ser un senyal de control: `POST`-i-si-falla-`DELETE` volia dir que un
+tall de xarxa esborrava etiquetes que ningú havia tocat.
+
+---
+
+### P16 · La disset-ena comprovació: un `R.string` sense cadena no és un text que falta
+
+**La resolució: `android-strings-exist`, que llegeix el Kotlin i el `strings.xml` generat.**
+
+Tres vegades, i sempre igual: es reanomena una clau del catàleg —que és la font de
+`strings.xml` (`docs/03` §1)—, el Kotlin que la feia servir es queda enrere, i **l'APK
+deixa d'existir**. A la web una clau que falta s'ensenya crua i es corregeix; a Android és
+un `Unresolved reference` i no hi ha aplicació.
+
+El que ho feia invisible és que **res del que corre en aquest repositori ho mirava**:
+
+| | Per què no ho veia |
+| --- | --- |
+| `npm run check` | No tocava Kotlin |
+| `npm run test:android` | Només proves unitàries dels mòduls: no compila `:app` ni resol `R` |
+| Muntar l'APK | Vol l'SDK i un minut; no es fa a cada canvi |
+
+La comprovació nova costa mil·lisegons i no vol l'SDK. Passada sobre l'arbre d'abans de
+l'arranjament, marca la línia exacta.
+
+No mira cap altre recurs: `R.drawable` i `R.id` no surten d'un catàleg compartit i no
+tenen aquest problema. Una comprovació més gran per protegir una cosa que no ha fallat mai
+és cost sense benefici.
+
+---
+
+### P17 · El que es veu una sola vegada s’ha de poder copiar
+
+**La resolució: un botó de copiar al token d’API, a la URL d’MCP i a les dues de CalDAV.**
+
+`docs/02` §5 el demanava per a les URL de CalDAV i mai no s'havia fet: hi havia
+«seleccionar-la en enfocar-la», que ajuda i no és el mateix, perquè aquestes cadenes
+s'enganxen a **una altra aplicació**.
+
+El cas que ho fa greu és el token. Es veu **una sola vegada** —del hash no se'n pot treure
+(`docs/08` §5), i la pantalla mateixa ho avisa— i copiar-lo era seleccionar-lo a mà. Si
+t'equivoques d'un caràcter no ho saps fins que el client falla, i llavors ja no el pots
+tornar a veure: has de revocar-lo i fer-ne un altre.
+
+El botó diu **«Copiat»** un segon i vuit dècimes i torna a «Copia»: sense confirmació el
+porta-retalls no es veu i la gent el prem tres vegades per si de cas; quedant-s'hi, mentiria
+la propera vegada que el mirés.
+
+La prova comprova **el porta-retalls**, no el rètol. Un botó que diu «Copiat» sense haver
+copiat res és pitjor que no tenir-ne cap.
+
+---
+
+### P18 · El calendari no ensenyava cap tasca
+
+**La resolució: la graella pinta les tasques amb venciment, i `GET /tasks` guanya
+`due_from`/`due_to`.**
+
+«Has d'imaginar el calendari com l'organitzador de tasques de la setmana o el mes.» La
+graella només sabia d'esdeveniments i de correu: una tasca amb venciment el dia 20 **no
+sortia enlloc** —ni al mes, ni a la setmana, ni al dia—, i el rail tampoc, perquè el rail
+és la bústia i una tasca a «Per fer» no hi és. El calendari deia que el dia 20 no tenies
+res el dia que havies de fer la declaració de la renda.
+
+`docs/02` §5 ja ho demanava —el rail diu «llista d'esdeveniments **i tasques**»— i §8
+demanava punts al mini calendari del tauler general. Cap de les dues coses hi era, i
+`MonthView` sabia pintar-les des del primer dia: `dotsByDate` existia i **ningú n'hi
+donava cap**. El mateix patró que la columna Fet (P14) i que les etiquetes (P15): el
+component correcte, alimentat amb no res.
+
+Quatre decisions dins d'aquesta:
+
+- **`due_from`/`due_to` al servidor i no un filtre al client.** Baixar totes les tasques
+  per quedar-se amb les de trenta dies va bé fins que una casa en té dues mil. `due_date`
+  és data local sense fus (`docs/01` §11), o sigui que la comparació és de text i no hi
+  entra cap zona horària.
+- **`done` no hi entra.** El que ja has fet no és una cosa que t'esperi aquell dia, i el
+  mes s'ompliria del que ja no cal mirar. Es mira a la columna Fet, que té el seu selector.
+- **Una tasca no va difuminada.** El difuminat vol dir «això no és a la teva bústia»
+  (P12); una tasca amb data ja és teva i ja és a la teva llista.
+- **La setmana surt de la mateixa llista que el mes.** Pintava ocurrències filtrant-les
+  pel seu compte, i així és com dues vistes de la mateixa setmana acaben ensenyant coses
+  diferents.
+
+El rail es queda sent la bústia: la graella diu què passa aquell dia, i el rail és on
+tries què puja a la llista. Són dues preguntes i P4 les manté amb un sol component.
+
+---
+
+### P19 · Al telèfon la pàgina es movia de costat, i Ajustos no s’hi podia fer servir
+
+**La resolució: `width: 100%` al `main`, i a Ajustos el menú va a dalt.**
+
+Dues coses diferents, totes dues invisibles a una captura i totes dues evidents amb un
+número: `document.scrollWidth` contra `window.innerWidth`.
+
+**El tauler.** Les columnes es desplacen per dins —això és el disseny—, però el que es
+desplaçava era **el document sencer**: a 390px en feia 677, i la barra de dalt marxava de
+la vista en passar de columna. La causa és fina: `main` porta `margin: 0 auto`, i dins d'un
+contenidor de flex en columna el marge automàtic el dimensiona **per `fit-content`**, que
+agafa el màxim entre l'espai disponible i la **mida mínima del contingut** —amb el tauler a
+dins, les quatre columnes juntes—. El `minWidth: 0` que ja hi havia no ho tapa: aquell treu
+el mínim automàtic d'un ítem de flex, no la manera com `fit-content` es resol. Dir
+l'amplada sí.
+
+**Ajustos.** `220px 1fr` fixos: a 390 el contingut es quedava amb **cent deu píxels**. El
+text queia a una paraula per línia, el selector de seguretat ensenyava «TLS · p» i el botó
+«Afegeix el compte» era un cercle amb tres línies a dins. No és una pantalla incòmoda: és
+una pantalla que no es pot fer servir —i Ajustos al telèfon és justament on es configura el
+correu i els calendaris. Ara el menú va a dalt, en fila de xips, amb el desplaçament
+horitzontal **dins de la barra** i no de la pàgina.
+
+La prova mesura els dos números a les quatre pantalles. Cap captura ho hauria dit: una
+pàgina que es mou de costat es veu igual que una que no.
+
+---
+
+### P20 · La setmana al telèfon, i el parany del `1fr`
+
+**La resolució: `minmax(0, 1fr)` a la graella, i punts en comptes de títols al telèfon.**
+
+Dos defectes al mateix lloc.
+
+**El desbordament.** La setmana era `repeat(7, 1fr)`, i `1fr` és `minmax(auto, 1fr)`: la
+columna **no s'encongeix per sota del mínim del seu contingut**, i el contingut són
+pastilles amb `white-space: nowrap`. Un dia amb «Declaració de la renda» estirava la seva
+columna fins a **152px** mentre els dies buits en feien 53; a 390 la setmana ocupava 546 i
+**els tres últims dies queien fora de la pantalla**. És el mateix parany que `minWidth: 0`
+resol als contenidors de flex (P19), amb una altra cara.
+
+**El que quedava.** Amb les set columnes repartides, cadascuna fa quaranta-vuit píxels i el
+títol hi sortia com «D..»: una lletra i punts suspensius. Això no és informació retallada,
+és soroll ocupant el lloc de la informació — el mateix argument de P13 al revés. Al telèfon
+la setmana passa a **punts**, com ja fa el mes, i el detall del dia el dona el rail de sota,
+que és per a això.
+
+De passada, **l'ull de la bústia passa de 21 a 28 píxels**. Al ratolí s'encerta i al dit
+no, i aquest botó surt a cada fila de cada cita, cada correu i cada titular.
+
+---
+
+### P21 · Sense xarxa, el que escrivies desapareixia
+
+**La resolució: el camp es buida igual de ràpid, i el text torna si la crida no arriba.**
+
+L'afegida ràpida buida el camp en prémer `Enter` —és el que fa que encadenar tasques sigui
+instantani (`docs/02` §4)—, però el buidava **abans de saber si s'havia creat res**. Sense
+connexió: escrius una tasca, `Enter`, el camp queda net, la tasca no és a cap columna, i el
+que havies escrit **ja no existeix enlloc**. La píndola deia «Sense connexió» a baix a
+l'esquerra, que és cert i no és el mateix que dir-te que has perdut la frase.
+
+El camí ràpid no canvia: quan va bé, el camp es buida igual. Quan la promesa peta, el text
+torna i el camp diu per què — i **només si mentrestant no n'has escrit una altra**, perquè
+trepitjar el que estàs escrivint ara seria pitjor que perdre el d'abans.
+
+**El que això NO és.** No és la cua de sortida. `apps/web/src/sync/outbox.ts` existeix, està
+provat i **només el fa servir la pàgina de prova**: el tauler no hi enqueua res. Fer-ho de
+debò és una fita, no un retoc, i fer-ho a mitges seria pitjor que no fer-ho. El que aquí es
+tanca és la pèrdua silenciosa de dades, que no pot esperar-hi.
+
+L'error de crear deixa de portar els xips d'àmbit: oferir-te triar-ne un quan el que passa
+és que no hi ha xarxa diria que has triat malament.
+
+---
+
+### P22 · Els enllaços compartits no s’obrien
+
+**La resolució: `/s/` i `/invite/` surten de la llista de «això és de l'API».**
+
+`/s/{token}` és l'enllaç que envies a algú de fora i `/invite/{token}` el que envies a algú
+de casa. Totes dues són **una pàgina i un endpoint alhora**: el `POST` va al servidor i el
+`GET` ha de pintar l'app. Eren a `API_PREFIXES`, i el resultat és que obrir-les al navegador
+**descarregava un JSON de 404**. La funció de compartir —decisió 60 del brief, la fita F2
+sencera— no es podia fer servir.
+
+No cal res per distingir-ho: un `POST /s/:token` és una **ruta declarada** i no arriba mai
+al gestor de «no trobat»; el que hi arriba és un `GET` que ningú ha reclamat, i aquest és de
+l'app. El gestor ja tornava un 404 sec per als mètodes que no són `GET`. `/setup` funcionava
+així des del primer dia i el raonament era el mateix — escrit al seu comentari, i no aplicat
+als altres dos.
+
+**Per què cap prova ho veia, i què s'ha fet.** En desenvolupament la web i l'API són dos
+processos, i el proxy de Vite ja desviava el `GET` a `index.html` per a `/setup` i
+`/invite`: la suite del navegador provava una disposició que **a producció no existeix**, i
+`sharing.spec` obria una invitació i passava. La prova nova és de **servidor**, contra el
+que s'empaqueta a la imatge, amb una construcció de la web al costat perquè el retorn a
+l'app estigui registrat. Passada sobre l'arbre d'abans, falla als dos casos i passa als
+tres bons. I el proxy de Vite passa a tractar `/s/` com els altres dos, perquè les dues
+disposicions diguin el mateix.
+
+---
+
+### P23 · Dues coses de l'Admin
+
+**«Netejar instància» no deia quin nom escriure.** El servidor exigeix el nom exacte de la
+instància, i el camp el demanava a `/info` **en enfocar-lo**: fins que no hi clicaves, el
+marcador es llegia literalment «Escriu «» per confirmar». La mateixa pantalla ja cridava
+`/info` i **llençava el resultat**. Ara en surt el nom, i el botó només s'activa amb el nom
+exacte: deixar prémer per rebre un 422 és fer el camí llarg a qui ja s'ha equivocat.
+
+**`?tab=admin` sense ser administrador** pintava el panell amb un «Alguna cosa ha fallat» en
+vermell. El menú ja filtrava la pestanya —«ensenyar una pestanya que sempre dona 403 és una
+mala broma», diu el comentari— però la validació del paràmetre mirava la llista sencera i no
+la d'aquesta persona. Ara cau a General, com qualsevol pestanya que no existeix.
+
+---
+
+### P24 · El monoàmbit és una lent, no un model de dades diferent
+
+**La resolució: el mode canvia què posa la barra al davant, i res més.**
+
+Els àmbits són el primer dels tres trets que `instruccions.md` diu que no són opcionals, i
+per a molta gent són exactament el que vol. Per a qui fa servir l'eina per a **una sola
+cosa** són una barra amb un sol xip que no fa res, i això li tanca l'eina sense cap motiu
+tècnic.
+
+La temptació és fer-ne dos productes. El que ho fa barat i segur és no fer-ho: **tota tasca
+segueix vivint dins d'un àmbit** —la regla 1 es queda intacta—, els àmbits col·lectius, el
+CalDAV per àmbit i els tokens d'abast segueixen igual, i el que canvia és la barra. Per això
+la feina és un fitxer de política, una columna de preferència i un tros de `TopBar`, i no una
+migració de dades.
+
+**Dos qui decideixen, amb un ordre.** La persona tria com vol treballar; qui allotja la
+instància pot acotar-ho amb `FEMHO_SCOPE_MODE`. Un de sol no serviria: només la persona i una
+empresa no pot dir «aquí es treballa així»; només la instància i una casa on cadascú té el
+seu cap no pot deixar que cadascú ho vegi a la seva manera.
+
+**Acotar no esborra res.** La preferència de cada persona es conserva i deixa d'aplicar-se
+mentre duri l'acotació, o sigui que treure-la torna a deixar cadascú com estava. Fusionar
+àmbits «per simplificar» seria irreversible: tenen membres i CalDAV publicats.
+
+Tres coses que se'n deriven:
+
+- **`NULL` no vol dir `multi`.** Vol dir «no ho ha dit mai», i és el que fa sortir el wizard
+  a qui toca sense una segona columna. La columna no porta `DEFAULT` per això.
+- **El defecte és `multi`.** A qui ja fa servir l'app no se li canvia la barra un matí; el
+  que sí que passa és que **veurà la pregunta una vegada**, que és com s'assabenta que la
+  tria existeix.
+- **`#Àmbit` deixa de demanar-se sol.** No hi ha cap regla nova: l'afegida ràpida ja tria el
+  marcador segons quants àmbits hi ha actius. És el senyal que la lent és la mateixa app.
+
+---
+
 ## Part 3 — Fets sospitosos de `research/`
 
 El crític va marcar 7 afirmacions com a probablement inventades, obsoletes o internament incoherents. **Cap `docs/` en depèn.**

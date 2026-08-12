@@ -140,6 +140,22 @@ async function withAssignees(db: MigrationDb, rows: TaskRow[]): Promise<Task[]> 
     GROUP BY task_id
   `.execute(db);
 
+  /**
+   * **Les etiquetes de cada tasca**, i pel mateix motiu que els assignats: sense saber
+   * quines porta, la interfície no pot ensenyar quines hi són. La secció d'etiquetes de
+   * la fitxa pintava totes les de l'àmbit exactament iguals —posades i no posades— i
+   * l'única manera de treure'n una era clicar-la i esperar que el `POST` fallés.
+   */
+  const labelLinks = await sql<{ task_id: string; label_id: string }>`
+    SELECT task_id, label_id FROM task_labels WHERE task_id IN (${sql.join(ids)})
+  `.execute(db);
+  const labelsByTask = new Map<string, string[]>();
+  for (const link of labelLinks.rows) {
+    const list = labelsByTask.get(link.task_id) ?? [];
+    list.push(link.label_id);
+    labelsByTask.set(link.task_id, list);
+  }
+
   const listCounts = new Map(blocks.rows.map((row) => [row.task_id, Number(row.lists)]));
   const counts = new Map(
     progress.rows.map((row) => [row.task_id, { done: Number(row.done), total: Number(row.total) }]),
@@ -148,6 +164,7 @@ async function withAssignees(db: MigrationDb, rows: TaskRow[]): Promise<Task[]> 
   return rows.map((row) => ({
     ...row,
     assignee_ids: (byTask.get(row.id) ?? []).sort(),
+    label_ids: (labelsByTask.get(row.id) ?? []).sort(),
     progress: {
       ...(counts.get(row.id) ?? { done: 0, total: 0 }),
       lists: listCounts.get(row.id) ?? 0,
@@ -181,6 +198,20 @@ export interface ListTasksFilters {
   cursor?: string | undefined;
   /** Text a buscar. Es normalitza igual que `search_text` (docs/01 §11). */
   search?: string | undefined;
+  /**
+   * Finestra de venciment, inclosa als dos extrems. `YYYY-MM-DD`.
+   *
+   * És el que el calendari necessita per ser **l'organitzador de la setmana o el mes**:
+   * fins ara la graella només sabia d'esdeveniments i de correu, i una tasca amb data no
+   * sortia enlloc del calendari —ni al mes, ni a la setmana, ni al dia—. Es filtra al
+   * servidor i no al client perquè baixar totes les tasques per quedar-se amb les de
+   * trenta dies és la mena de cosa que va bé fins que una casa en té dues mil.
+   *
+   * `due_date` és **data local sense fus** (docs/01 §11): la comparació és de text i és
+   * correcta, i per això aquí no hi entra cap zona horària.
+   */
+  dueFrom?: string | undefined;
+  dueTo?: string | undefined;
 }
 
 export interface TaskPage {
@@ -214,6 +245,8 @@ export async function listTasks(
       AND scope_id IN (${sql.join(allowed)})
       AND status IN (${sql.join(statuses)})
       ${filters.projectId === undefined ? sql`` : sql`AND project_id = ${filters.projectId}`}
+      ${filters.dueFrom === undefined ? sql`` : sql`AND due_date >= ${filters.dueFrom}`}
+      ${filters.dueTo === undefined ? sql`` : sql`AND due_date <= ${filters.dueTo}`}
       ${
         cursor === null
           ? sql``
@@ -532,6 +565,23 @@ export async function moveTask(
 
   const status = input.status ?? current.status;
 
+  /**
+   * **Arribar a Fet ÉS completar-la.**
+   *
+   * `completed_at` només el segellava `completeTask`, i `POST /tasks/{id}/complete` no el
+   * crida ningú: ni la web, ni Android, ni el CalDAV. L'única manera d'acabar una tasca a
+   * la interfície —arrossegar-la a Fet, o el commutador de la targeta— passa per aquí.
+   * Resultat: la columna Fet, que filtra per `completed_at` dins del dia (docs/14 P?), no
+   * podia ensenyar **res mai**, i la targeta que hi deixaves anar desapareixia de les
+   * quatre columnes. Tot el codi de `DoneColumn.ts` estava bé i li arribava una llista
+   * buida: el defecte era la costura, com sempre.
+   *
+   * I si en surt, el segell s'esborra: una tasca que torna a Per fer no s'ha fet.
+   */
+  const entraAFet = status === 'done' && current.status !== 'done';
+  const surtDeFet = status !== 'done' && current.status === 'done';
+  const completedAt = entraAFet ? ctx.now : surtDeFet ? null : current.completed_at;
+
   let position = input.position;
   if (position === undefined) {
     const neighbour = async (neighbourId: string | null | undefined): Promise<string | null> => {
@@ -567,23 +617,39 @@ export async function moveTask(
 
   await sql`
     UPDATE tasks
-    SET status = ${status}, position = ${position}, updated_at = ${ctx.now},
-        version = version + 1
+    SET status = ${status}, position = ${position}, completed_at = ${completedAt},
+        updated_at = ${ctx.now}, version = version + 1
     WHERE id = ${id}
   `.execute(ctx.tx);
 
   // El registre guarda el valor anterior i el nou: és el que fa possible desfer un
-  // canvi autònom de la IA (docs/01 §7).
+  // canvi autònom de la IA (docs/01 §7). El segell hi va perquè, si no, desfer un
+  // moviment a Fet deixaria la tasca fora de Fet i completada.
   ctx.record({
     entityType: 'task',
     entityId: id,
     scopeId: current.scope_id,
-    verb: 'moved',
+    verb: entraAFet ? 'completed' : 'moved',
     changes: {
       status: { from: current.status, to: status },
       position: { from: current.position, to: position },
+      ...(entraAFet || surtDeFet
+        ? { completed_at: { from: current.completed_at, to: completedAt } }
+        : {}),
     },
   });
+
+  if (entraAFet) {
+    // La resta del que vol dir «feta», i el mateix ordre que a `completeTask`: les
+    // subtasques cauen amb ella i, si es repeteix, neix la següent. Una tasca que es
+    // repeteix i que s'acaba arrossegant-la ha de tornar igual que una que s'acaba
+    // amb el commutador; que depengui del gest seria el pitjor dels dos móns.
+    await sql`
+      UPDATE subtasks SET done = ${dbBool(true)}, updated_at = ${ctx.now}, version = version + 1
+      WHERE task_id = ${id} AND done = ${dbBool(false)} AND deleted_at IS NULL
+    `.execute(ctx.tx);
+    await createNextOccurrence(ctx, principal, id, current);
+  }
 
   const updated = await sql<TaskRow>`
     SELECT ${TASK_COLUMNS} FROM tasks WHERE id = ${id}

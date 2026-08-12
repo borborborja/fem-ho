@@ -20,6 +20,7 @@ const CHECKS = [
   { name: 'i18n-lint', script: 'i18n-lint.mjs', selfTest: true },
   { name: 'i18n-parity', script: 'i18n-parity.mjs', selfTest: true },
   { name: 'i18n-keys-exist', script: 'i18n-keys-exist.mjs', selfTest: true },
+  { name: 'android-strings-exist', script: 'android-strings-exist.mjs', selfTest: true },
   { name: 'no-pinned-from-research', script: 'no-pinned-from-research.mjs' },
   { name: 'no-ignored-sources', script: 'no-ignored-sources.mjs', selfTest: true },
   { name: 'env-documented', script: 'env-documented.mjs', selfTest: true },

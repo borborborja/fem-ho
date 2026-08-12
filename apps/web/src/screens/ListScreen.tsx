@@ -141,8 +141,16 @@ export function ListScreen({ checklistId, onOpenTask, onBack }: ListScreenProps)
         )}
       </div>
 
+      {/*
+        **El commutador diu què commuta.** Deia «En línia» i «En una secció» i prou: dues
+        opcions que no anomenen el seu subjecte. Qui arriba aquí no pot saber que parlen
+        dels ítems fets, i una tria que no s'entén no es fa —o es fa a l'atzar i es
+        desfà—. `docs/02` §6 ja ho escrivia amb el subjecte: «completats en línia» o «en
+        una secció "Completats"».
+      */}
       <div
         role="tablist"
+        aria-label={t('checklist.completedWhere')}
         data-testid="list-completed-toggle"
         style={{
           display: 'inline-flex',

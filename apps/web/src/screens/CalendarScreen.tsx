@@ -26,7 +26,8 @@ import { api } from '../app/api.js';
 import { v7 as uuidv7 } from 'uuid';
 import { useSession, useSessionData } from '../app/session.js';
 import { useApi } from '../app/useApi.js';
-import type { Calendar, EventOccurrence, Inbox, InboxMail } from '../app/types.js';
+import { useRouter } from '../app/router.js';
+import type { Calendar, EventOccurrence, Inbox, InboxMail, Task } from '../app/types.js';
 import { InboxRail } from '../board/InboxRail.js';
 import { ColumnQuickAdd } from '../board/ColumnQuickAdd.js';
 import { EventSheet } from './EventSheet.js';
@@ -78,7 +79,29 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
   const { updateSettings } = useSession();
   const mobile = useIsMobile();
   const [mode, setMode] = useState<Mode>('month');
-  const [selected, setSelected] = useState<string>(() => iso(new Date()));
+  /**
+   * El dia triat viu **també a l'adreça**.
+   *
+   * Era només estat de la pantalla: recarregaves —o tornaves enrere, o t'enviaves l'enllaç—
+   * i tornaves a avui. L'app ja posa els àmbits i els projectes a l'adreça; el dia que
+   * estàs mirant és de la mateixa família, i és el que fa que un enllaç a «el dimarts que
+   * ve» vulgui dir alguna cosa.
+   *
+   * S'escriu amb `replace`: navegar pel calendari és mirar, no anar a llocs, i omplir
+   * l'historial de dies faria que la fletxa d'enrere del navegador deixés de servir per
+   * sortir del calendari.
+   */
+  const { route, navigate } = useRouter();
+  const [selected, setSelectedState] = useState<string>(() => {
+    const fromUrl = route.query.get('date');
+    return fromUrl !== null && /^\d{4}-\d{2}-\d{2}$/u.test(fromUrl) ? fromUrl : iso(new Date());
+  });
+  const setSelected = (day: string): void => {
+    setSelectedState(day);
+    const query = new URLSearchParams(window.location.search);
+    query.set('date', day);
+    navigate(`${window.location.pathname}?${query.toString()}`, { replace: true });
+  };
   const [cursor, setCursor] = useState<Date>(() => new Date());
   /**
    * Quin esdeveniment s'ha obert.
@@ -145,6 +168,28 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
    * ítem d'RSS—, i per això surt com una cosa de tot el dia.
    */
   const mail = useApi<InboxMail[]>(`/api/v1/mail/messages?from=${from}&to=${to}${scopeQuery}`);
+
+  /**
+   * **Les tasques amb data.** El que faltava perquè això fos un calendari.
+   *
+   * La graella només sabia d'esdeveniments i de correu: una tasca amb venciment el dia 20
+   * no sortia **enlloc** del calendari —ni al mes, ni a la setmana, ni al dia— i el dia 20
+   * es veia buit. El rail tampoc, perquè el rail és la bústia i una tasca a «Per fer» no hi
+   * és. O sigui que el calendari deia que no tenies res el dia que havies de fer la
+   * declaració de la renda.
+   *
+   * `status` exclou `done`: el que ja has fet no és una cosa que t'espera aquell dia, i el
+   * mes s'ompliria del que ja no cal mirar. El que has fet es mira a la columna Fet, que
+   * per a això té el seu selector de dia.
+   */
+  const tasques = useApi<{ data: Task[] }>(
+    `/api/v1/tasks?due_from=${from}&due_to=${to}&status=inbox,todo,doing&limit=200${
+      activeScopeIds.length === 1 ? `&scope_id=${activeScopeIds[0] ?? ''}` : ''
+    }`,
+  );
+  const ambData = (tasques.data?.data ?? []).filter(
+    (task) => activeScopeIds.length === 0 || activeScopeIds.includes(task.scope_id),
+  );
 
   /** De quina mena és la font d'un calendari. `null` si és d'aquesta casa. */
   const menaDe = (calendarId: string | undefined): 'caldav' | 'ical' | 'rss' | null =>
@@ -235,10 +280,32 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
       });
     }
 
+    for (const task of ambData) {
+      const day = task.due_date;
+      if (day === null || day === undefined) continue;
+      posa(day, {
+        /**
+         * Una tasca amb hora va al seu lloc entre les cites; una de tot el dia, **al
+         * principi**: és el que has de fer aquell dia, i posar-la al final la deixaria
+         * amagada sota el `+N` justament els dies plens.
+         */
+        quan:
+          task.due_time === null || task.due_time === undefined
+            ? `${day}T00:00:00.000Z`
+            : `${day}T${task.due_time}:00.000Z`,
+        id: `task:${task.id}`,
+        title:
+          task.due_time === null || task.due_time === undefined
+            ? task.title
+            : `${task.due_time} ${task.title}`,
+        color: colorOf(task.scope_id),
+      });
+    }
+
     // Per hora dins del dia: és l'ordre en què passaran les coses.
     for (const day of Object.keys(map)) map[day]!.sort((a, b) => a.quan.localeCompare(b.quan));
     return map;
-  }, [occurrences, mailByDay, scopes, locale]);
+  }, [occurrences, mailByDay, ambData, scopes, locale]);
 
   const dotsByDate = useMemo<Record<string, string[]>>(() => {
     const map: Record<string, string[]> = {};
@@ -247,6 +314,13 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
       // El correu també hi posa punt: si no, un dia amb tres correus i cap cita es veuria
       // buit al mes, i el calendari deixaria de ser un mapa del que hi ha.
       ...mailByDay.map(({ item, day }) => ({ day, scope_id: item.scope_id })),
+      // I les tasques amb data: al mòbil el mes són punts, i un dia amb feina no pot
+      // sortir buit només perquè aquell dia no hi hagi cap cita.
+      ...ambData.flatMap((task) =>
+        task.due_date === null || task.due_date === undefined
+          ? []
+          : [{ day: task.due_date, scope_id: task.scope_id }],
+      ),
     ];
     for (const occurrence of punts) {
       const day = occurrence.day;
@@ -257,7 +331,7 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
       map[day] = list;
     }
     return map;
-  }, [occurrences, mailByDay, scopes]);
+  }, [occurrences, mailByDay, ambData, scopes]);
 
   /**
    * Els noms surten d'`Intl`, no del catàleg.
@@ -311,6 +385,23 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
           muted: !item.in_inbox,
           icon: <SourceIcon kind="mail" />,
         })),
+    )
+    .concat(
+      /*
+        **I les tasques que vencen aquell dia.** Sense `muted`: una tasca amb data és teva
+        i ja és a la teva llista; el difuminat vol dir «això no és a la teva bústia» i
+        aplicar-l'hi diria una cosa falsa. Sense icona de provinença pel mateix motiu.
+      */
+      ambData
+        .filter((task) => task.due_date === selected)
+        .map((task) => ({
+          id: `task:${task.id}`,
+          title: task.title,
+          color: colorOf(task.scope_id),
+          time: task.due_time ?? undefined,
+          muted: false,
+          icon: <SourceIcon kind={null} />,
+        })),
     );
 
   /** L'ocurrència oberta a la fitxa, per la clau que fa servir la graella. */
@@ -326,15 +417,19 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
         iso: key,
         weekday: weekdays[index] ?? '',
         number: date.getDate(),
-        items: occurrences
-          .filter((occurrence) => occurrence.starts_at.slice(0, 10) === key)
-          .map((occurrence) => ({
-            id: `${occurrence.event_id}@${occurrence.starts_at}`,
-            title: occurrence.summary,
-          })),
+        /*
+          De `itemsByDate` i no d'`occurrences`: és la mateixa llista que pinta el mes, ja
+          ordenada i amb el correu i les tasques a dins. Filtrar-ho aquí una segona vegada
+          era com el mes acabava ensenyant coses que la setmana callava.
+        */
+        items: (itemsByDate[key] ?? []).map((item) => ({
+          id: item.id,
+          title: item.title,
+          color: item.color,
+        })),
       };
     });
-  }, [selected, occurrences]);
+  }, [selected, itemsByDate, weekdays, start]);
 
   const position = mobile ? 'below' : (settings.inbox_position ?? 'right');
   const railFirst = position === 'left';
@@ -350,8 +445,9 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
     (
       dueDate: string | null,
       input: { title: string; scopeId: string; projectId: string | null; assigneeIds: string[] },
-    ) => {
-      void api
+    ) =>
+      // Es torna la promesa: si peta, el camp recupera el que havies escrit.
+      api
         .post('/api/v1/tasks', {
           id: uuidv7(),
           scope_id: input.scopeId,
@@ -365,9 +461,9 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
         .then(() => {
           inbox.reload();
           events.reload();
-        });
-    },
-    [inbox, events],
+          tasques.reload();
+        }),
+    [inbox, events, tasques],
   );
 
   /**
@@ -627,6 +723,12 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
           />
         ) : mode === 'week' ? (
           <WeekView
+            /*
+              Al telèfon, punts: el mateix criteri que la vista de mes. Set columnes de
+              quaranta-vuit píxels no hi caben els títols, i una lletra amb punts
+              suspensius ocupa el lloc de la informació sense ser-ho.
+            */
+            compact={mobile}
             days={weekDays}
             selectedDate={selected}
             onSelect={setSelected}

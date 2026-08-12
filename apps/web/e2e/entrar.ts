@@ -85,7 +85,36 @@ export async function enter(page: Page, who: Compte = ADMIN): Promise<void> {
   await page.locator('[data-testid="login-email"]').fill(who.email);
   await page.locator('[data-testid="login-password"]').fill(who.password);
   await page.locator('[data-testid="login-submit"]').click();
+  await passaElWizard(page);
   await expect(page.locator('[data-testid="topbar"]')).toBeVisible({ timeout: 15_000 });
+}
+
+/**
+ * La primera pregunta —«com reparteixes la feina»— surt a qui no l'ha contestada mai, i
+ * **això inclou tothom qui entra per primera vegada en una prova**.
+ *
+ * Es contesta «per àmbits», que és com funciona l'app de sempre: així la resta de la suite
+ * segueix provant el que provava. El monoàmbit i el wizard tenen les seves proves pròpies a
+ * `scope-mode.spec.ts` i `welcome.spec.ts`, que és on toca.
+ *
+ * **No s'esquiva desant la preferència per l'API abans d'entrar**: llavors cap prova
+ * passaria mai per aquesta pantalla i el dia que es trenqués no ho diria ningú.
+ */
+export async function passaElWizard(page: Page): Promise<void> {
+  // S'espera que aparegui **una de les dues**: comprovar-ho de seguida guanyaria la cursa a
+  // la sessió i diria que no hi ha wizard just abans que es pinti.
+  await expect
+    .poll(
+      async () =>
+        (await page.locator('[data-testid="welcome-multi"]').count()) +
+        (await page.locator('[data-testid="topbar"]').count()),
+      { timeout: 15_000, intervals: [100, 200, 400] },
+    )
+    .toBeGreaterThan(0);
+
+  const wizard = page.locator('[data-testid="welcome-multi"]');
+  if ((await wizard.count()) === 0) return;
+  await wizard.click();
 }
 
 /** El token de la sessió, per a les crides directes a l'API. */
@@ -125,12 +154,29 @@ export async function enterAsNew(page: Page, who: Compte): Promise<void> {
   await page.locator('[data-testid="register-password"]').fill(who.password);
   await page.locator('[data-testid="register-submit"]').click();
 
-  // Si ja existia d'una prova anterior del mateix fitxer, s'hi entra i prou.
-  if ((await page.locator('[data-testid="topbar"]').count()) === 0) {
+  // Registrar-se ja entra: el wizard de la primera pregunta surt aquí mateix.
+  await passaElWizard(page);
+
+  /**
+   * Si ja existia d'una prova anterior del mateix fitxer, el registre no entra i es queda
+   * al formulari: llavors s'hi entra pel login.
+   *
+   * **S'espera el tauler abans de decidir-ho.** Mirar-ho de seguida deia «no hi ha tauler»
+   * en el moment entre triar al wizard i que React repinti, i llavors anava a buscar un
+   * formulari de login que no hi era perquè la sessió ja estava oberta.
+   */
+  const hiHaTauler = await page
+    .locator('[data-testid="topbar"]')
+    .waitFor({ state: 'visible', timeout: 5_000 })
+    .then(() => true)
+    .catch(() => false);
+
+  if (!hiHaTauler) {
     await page.goto('/');
     await page.locator('[data-testid="login-email"]').fill(who.email);
     await page.locator('[data-testid="login-password"]').fill(who.password);
     await page.locator('[data-testid="login-submit"]').click();
+    await passaElWizard(page);
   }
   await expect(page.locator('[data-testid="topbar"]')).toBeVisible({ timeout: 15_000 });
 }

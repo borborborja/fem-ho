@@ -176,3 +176,25 @@ test("l'interruptor de la bústia surt on toca i comença on toca", async ({ pag
   await page.reload();
   await expect(page.locator(`[data-testid="source-inbox-${fetes.rss!}"]`)).toBeChecked();
 });
+
+test('la URL de CalDAV es copia amb un botó, i el botó ho diu', async ({ page, context }) => {
+  /**
+   * `docs/02` §5 demana **botó de copiar** i només hi havia «seleccionar-la en enfocar-la»,
+   * que ajuda i no és el mateix: aquesta URL s'enganxa a una altra aplicació, i fer-ho amb
+   * el teclat vol dir encertar el camp, `Cmd+C` i confiar-hi.
+   *
+   * Es comprova **el porta-retalls**, no el rètol: un botó que diu «Copiat» sense haver
+   * copiat res és pitjor que no tenir-ne cap.
+   */
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await enter(page);
+  await page.goto('/settings?tab=calendars');
+
+  const camp = page.locator('[data-testid^="caldav-"]').first();
+  const url = await camp.inputValue();
+  expect(url).toContain('/dav/calendars/');
+
+  await page.getByTestId('copy-button').first().click();
+  await expect(page.getByTestId('copy-button').first()).toHaveText('Copiat');
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(url);
+});

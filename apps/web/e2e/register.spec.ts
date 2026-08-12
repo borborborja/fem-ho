@@ -10,6 +10,7 @@
  */
 
 import { expect, test } from '@playwright/test';
+import { passaElWizard } from './entrar.js';
 
 test.describe.configure({ mode: 'serial' });
 
@@ -45,8 +46,16 @@ test('el formulari demana correu, nom i contrasenya, i deixa la sessió oberta',
   await form.locator('[data-testid="register-password"]').fill('la-contrasenya-de-prova');
   await form.locator('[data-testid="register-submit"]').click();
 
-  // **Sense passar pel login.** Qui acaba de posar la contrasenya ja ha demostrat que la
-  // sap; tornar-la a demanar és una pantalla de frec per res.
+  /**
+   * **Sense passar pel login.** Qui acaba de posar la contrasenya ja ha demostrat que la
+   * sap; tornar-la a demanar és una pantalla de frec per res.
+   *
+   * El que sí que hi ha és **la primera pregunta** —com reparteixes la feina—, que és una
+   * tria i no una porta: es contesta amb un clic i no torna a sortir mai més. Que surti
+   * aquí, abans de veure cap barra, és a posta: la barra és justament el que es tria.
+   */
+  await expect(page.locator('[data-testid="welcome-screen"]')).toBeVisible({ timeout: 15_000 });
+  await page.locator('[data-testid="welcome-multi"]').click();
   await expect(page.locator('[data-testid="topbar"]')).toBeVisible({ timeout: 15_000 });
 });
 
@@ -56,6 +65,7 @@ test('i ja té un àmbit propi on posar la primera tasca', async ({ page }) => {
   await page.locator('[data-testid="register-name"]').fill('Amb Àmbit');
   await page.locator('[data-testid="register-password"]').fill('la-contrasenya-de-prova');
   await page.locator('[data-testid="register-submit"]').click();
+  await passaElWizard(page);
   await expect(page.locator('[data-testid="topbar"]')).toBeVisible({ timeout: 15_000 });
 
   // Sense àmbit, la primera pantalla seria un tauler on l'afegida ràpida no té on posar res.

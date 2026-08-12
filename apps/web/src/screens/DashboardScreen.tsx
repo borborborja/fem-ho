@@ -64,7 +64,50 @@ export function DashboardScreen({ onOpenTask, onPickScope, onNewTask }: Dashboar
     [scopes, projects, people],
   );
 
+  const now = new Date();
+
   const data = dashboard.data;
+
+  /**
+   * **Els punts del mini calendari, que no els posava ningú.**
+   *
+   * `docs/02` §8 el descriu com «mes en curs **amb punts**», i `MonthView` sap pintar-los
+   * —`dotsByDate` hi és des del primer dia—: el que passava és que el tauler general no
+   * n'hi donava cap. El resultat era una graella de números amb el dia d'avui rodejat i
+   * cap informació, al mig d'una pantalla que existeix per donar-te'n d'una ullada.
+   *
+   * I un mes buit **enganya**: un dia sense punt es llegeix com «aquell dia no tinc res»,
+   * quan el que passava és que no s'havia mirat mai.
+   */
+  const [primer, ultim] = useMemo(() => {
+    const inici = new Date(now.getFullYear(), now.getMonth(), 1);
+    const fi = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    const dia = (date: Date): string =>
+      `${String(date.getFullYear())}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(
+        date.getDate(),
+      ).padStart(2, '0')}`;
+    return [dia(inici), dia(fi)];
+  }, [now]);
+
+  const delMes = useApi<{ data: Task[] }>(
+    settings.show_calendar_widget === false
+      ? null
+      : `/api/v1/tasks?due_from=${primer}&due_to=${ultim}&status=inbox,todo,doing&limit=200`,
+  );
+
+  const dotsByDate = useMemo<Record<string, string[]>>(() => {
+    const map: Record<string, string[]> = {};
+    for (const task of delMes.data?.data ?? []) {
+      const day = task.due_date;
+      if (day === null || day === undefined) continue;
+      const color = colorOf(task.scope_id);
+      const list = map[day] ?? [];
+      // Fins a 3 punts per dia i sense repetir el color d'un mateix àmbit (docs/02 §5).
+      if (!list.includes(color) && list.length < 3) list.push(color);
+      map[day] = list;
+    }
+    return map;
+  }, [delMes.data, scopes]);
 
   const taskRow = (task: Task) => (
     <TaskCard
@@ -87,8 +130,6 @@ export function DashboardScreen({ onOpenTask, onPickScope, onNewTask }: Dashboar
     </section>
   );
 
-  const now = new Date();
-
   return (
     <div
       data-testid="dashboard-screen"
@@ -104,8 +145,10 @@ export function DashboardScreen({ onOpenTask, onPickScope, onNewTask }: Dashboar
             scopeColors={Object.fromEntries(
               scopes.map((scope) => [scope.id, `var(${scope.color})`]),
             )}
-            onCreate={(task) => {
-              void api
+            // Sense `void`: la promesa torna al camp, que la fa servir per recuperar el
+            // text si la crida no arriba.
+            onCreate={(task) =>
+              api
                 .post('/api/v1/tasks', {
                   id: uuidv7(),
                   scope_id: task.scopeId,
@@ -114,8 +157,8 @@ export function DashboardScreen({ onOpenTask, onPickScope, onNewTask }: Dashboar
                 })
                 .then(() => {
                   dashboard.reload();
-                });
-            }}
+                })
+            }
           />
         </div>
         <button
@@ -202,6 +245,7 @@ export function DashboardScreen({ onOpenTask, onPickScope, onNewTask }: Dashboar
             weekStart={weekStart}
             weekdayLabels={{ days: weekdayNames(getLocale(), weekStart) }}
             today={now.toISOString().slice(0, 10)}
+            dotsByDate={dotsByDate}
           />
         </div>
       )}

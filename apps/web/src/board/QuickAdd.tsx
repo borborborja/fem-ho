@@ -22,13 +22,17 @@ export interface QuickAddProps {
   columnLabel: string;
   /** Colors dels àmbits, per als punts del desplegable. */
   scopeColors?: Record<string, string> | undefined;
+  /**
+   * Crear-la. **Si la promesa peta, el camp recupera el text**: sense això, el que has
+   * escrit desapareix i sembla creat.
+   */
   onCreate: (task: {
     title: string;
     scopeId: string;
     projectId: string | null;
     assigneeIds: string[];
     aiMode: 'manual' | 'assisted' | 'delegated';
-  }) => void;
+  }) => void | Promise<void>;
 }
 
 interface Suggestion {
@@ -58,6 +62,8 @@ export function QuickAdd({ context, columnLabel, scopeColors = {}, onCreate }: Q
   const [text, setText] = useState('');
   const [active, setActive] = useState(0);
   const [submitted, setSubmitted] = useState(false);
+  /** L'última creació no ha arribat al servidor i el text ha tornat al camp. */
+  const [fallada, setFallada] = useState(false);
   /**
    * Escape tanca el desplegable **sense tocar el text**. Abans hi afegia un espai per
    * tancar-lo, i era un error: canviar el que l'usuari ha escrit per tancar un menú és
@@ -151,14 +157,21 @@ export function QuickAdd({ context, columnLabel, scopeColors = {}, onCreate }: Q
     return false;
   };
 
-  const submit = (): void => {
-    setSubmitted(true);
-    // "Si hi ha més d'un àmbit actiu i no s'ha escrit #, NO ES CREA RES" (docs/02 §4).
-    if (parsed.error !== null || parsed.scopeId === null) return;
-
-    onCreate({
+  /**
+   * Crea i deixa el camp llest per a la següent.
+   *
+   * **El camp es buida de seguida i es torna a omplir si la crida falla.** Buidar-lo
+   * abans de saber-ho és el que fa que encadenar tasques sigui instantani (docs/02 §4);
+   * el que no pot passar és que si no hi ha xarxa —o el servidor diu que no— el text
+   * s'esfumi i sembli que s'ha creat. Passava: sense connexió escrivies una tasca,
+   * premies Enter, el camp es buidava, la tasca no era enlloc i **el que havies escrit
+   * ja no existia**.
+   */
+  const crear = (scopeId: string): void => {
+    const escrit = text;
+    const resultat = onCreate({
       title: parsed.title,
-      scopeId: parsed.scopeId,
+      scopeId,
       projectId: parsed.projectId,
       assigneeIds: parsed.assigneeIds,
       aiMode: parsed.aiMode,
@@ -167,11 +180,31 @@ export function QuickAdd({ context, columnLabel, scopeColors = {}, onCreate }: Q
     // El camp es buida i MANTÉ EL FOCUS, per poder-ne encadenar (docs/02 §4).
     setText('');
     setSubmitted(false);
+    setFallada(false);
     inputRef.current?.focus();
+
+    if (resultat instanceof Promise) {
+      void resultat.catch(() => {
+        // Només es recupera si mentrestant no s'ha escrit res més: si ja n'estàs
+        // escrivint una altra, trepitjar-la seria pitjor que perdre la primera.
+        setText((actual) => (actual === '' ? escrit : actual));
+        setFallada(true);
+        inputRef.current?.focus();
+      });
+    }
   };
 
-  const errorMessage =
-    submitted && parsed.error === 'scope-required'
+  const submit = (): void => {
+    setSubmitted(true);
+    // "Si hi ha més d'un àmbit actiu i no s'ha escrit #, NO ES CREA RES" (docs/02 §4).
+    if (parsed.error !== null || parsed.scopeId === null) return;
+    crear(parsed.scopeId);
+  };
+
+  const errorMessage = fallada
+    ? // No ha arribat al servidor: el text ha tornat i cal dir per què hi ha tornat.
+      t('board.quickAdd.failed')
+    : submitted && parsed.error === 'scope-required'
       ? t('board.quickAdd.scopeRequired', {
           scopes: context.scopes
             .filter((scope) => context.activeScopeIds.includes(scope.id))
@@ -188,34 +221,106 @@ export function QuickAdd({ context, columnLabel, scopeColors = {}, onCreate }: Q
     revertLabel: t('board.quickAdd.revert', { label: token.label }),
   }));
 
+  /**
+   * El text del camp **anuncia només el que serveix per a alguna cosa**.
+   *
+   * Deia sempre `#Àmbit @Persona`. A una casa amb un sol àmbit i sense ningú més, cap dels
+   * dos sigils fa res: `#` no cal —s'agafa l'únic àmbit— i `@` no té a qui assignar. A sobre
+   * el text no cabia i es tallava a mitja paraula, que és el que et fa pensar que una cosa
+   * està trencada abans d'haver-la fet servir.
+   *
+   * Amb dos àmbits actius sí que cal dir-ne un, i llavors el sigil és la manera ràpida.
+   */
+  const placeholder =
+    context.activeScopeIds.length > 1
+      ? t('board.quickAdd.placeholder.scope', { column: columnLabel })
+      : context.people.length > 1
+        ? t('board.quickAdd.placeholder.person', { column: columnLabel })
+        : t('board.quickAdd.placeholder.plain', { column: columnLabel });
+
+  /**
+   * Els àmbits per triar, quan la regla diu que en falta un.
+   *
+   * **Abans això era només una frase vermella** —«Indica l'àmbit amb #Personal, #Feina,
+   * #Família»— i la persona havia de tornar al camp, escriure una coixinet i encertar el
+   * nom. La regla del brief (línia 19) segueix igual: amb més d'un àmbit actiu **no es crea
+   * res** sense dir-ne un. El que canvia és que dir-lo costa un clic i no una relectura.
+   */
+  const perTriar =
+    // **Només quan el que falta és l'àmbit.** Si el que ha passat és que la crida ha
+    // fallat, oferir els àmbits diria que has triat malament quan el que passa és que no
+    // hi ha xarxa.
+    submitted && parsed.error === 'scope-required'
+      ? context.scopes.filter((scope) => context.activeScopeIds.includes(scope.id))
+      : [];
+
   return (
-    <QuickAddInput
-      inputRef={inputRef}
-      value={text}
-      onChange={(next) => {
-        setText(next);
-        setActive(0);
-        // Tornar a escriure reobre el desplegable: el descart val per a aquell moment,
-        // no per a la resta de la sessió.
-        setDismissed(false);
-        // L'error desapareix en tornar a escriure: no s'ha de quedar clavat.
-        if (submitted) setSubmitted(false);
-      }}
-      onSubmit={submit}
-      placeholder={t('board.quickAdd.placeholder', { column: columnLabel })}
-      tokens={chips}
-      onRevertToken={(chip) => {
-        const token = parsed.tokens.find(
-          (candidate) => candidate.start === chip.start && candidate.kind === chip.kind,
-        );
-        if (token !== undefined) setText(revertToken(text, token));
-        inputRef.current?.focus();
-      }}
-      error={errorMessage}
-      suggestions={suggestions}
-      activeSuggestion={active}
-      onSuggestionKeyDown={handleSuggestionKey}
-      onSuggestionPick={(suggestion) => pick(suggestion as Suggestion)}
-    />
+    <div style={{ display: 'grid', gap: 6, minWidth: 0 }}>
+      <QuickAddInput
+        inputRef={inputRef}
+        value={text}
+        onChange={(next) => {
+          setText(next);
+          setFallada(false);
+          setActive(0);
+          // Tornar a escriure reobre el desplegable: el descart val per a aquell moment,
+          // no per a la resta de la sessió.
+          setDismissed(false);
+          // L'error desapareix en tornar a escriure: no s'ha de quedar clavat.
+          if (submitted) setSubmitted(false);
+        }}
+        onSubmit={submit}
+        placeholder={placeholder}
+        tokens={chips}
+        onRevertToken={(chip) => {
+          const token = parsed.tokens.find(
+            (candidate) => candidate.start === chip.start && candidate.kind === chip.kind,
+          );
+          if (token !== undefined) setText(revertToken(text, token));
+          inputRef.current?.focus();
+        }}
+        error={errorMessage}
+        suggestions={suggestions}
+        activeSuggestion={active}
+        onSuggestionKeyDown={handleSuggestionKey}
+        onSuggestionPick={(suggestion) => pick(suggestion as Suggestion)}
+      />
+
+      {perTriar.length === 0 ? null : (
+        <div
+          data-testid="quick-add-scope-picker"
+          style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}
+        >
+          {perTriar.map((scope) => (
+            <button
+              key={scope.id}
+              type="button"
+              data-testid={`quick-add-scope-${scope.id}`}
+              onClick={() => crear(scope.id)}
+              className="plou-btn plou-btn-ghost"
+              style={{
+                fontSize: 11,
+                fontWeight: 700,
+                padding: '3px 10px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+              }}
+            >
+              <span
+                aria-hidden="true"
+                style={{
+                  width: 7,
+                  height: 7,
+                  borderRadius: '50%',
+                  background: scopeColors[scope.id] ?? 'var(--ink-faint)',
+                }}
+              />
+              {scope.name}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

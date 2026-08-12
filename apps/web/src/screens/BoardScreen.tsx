@@ -541,6 +541,9 @@ export function BoardScreen({
         // tauler quedaria arrapat a dalt amb el forat a sota.
         flex: 1,
         minHeight: 0,
+        // I al seu eix: un ítem de flex no s'encongeix per sota del contingut si no s'hi
+        // diu, i aquí el contingut és una fila de columnes.
+        minWidth: 0,
         gap: 16,
         // Contingut anterior amb opacitat mentre es revalida: res d'esquelets brillants,
         // que el design system prohibeix (docs/02 §12).
@@ -679,7 +682,8 @@ export function BoardScreen({
               status={status}
               context={context}
               scopes={scopes}
-              onCreate={(task) => void create(task, status)}
+              // Es torna la promesa: si peta, el camp recupera el que havies escrit.
+              onCreate={(task) => create(task, status)}
               // Des del tauler de la IA, el formulari s'obre ja amb els camps d'IA
               // desplegats: és l'únic peu que hi queda i seria absurd que no ho fes.
               onFullEdit={() => onNewTask(status, aiBoard)}

@@ -34,7 +34,7 @@ function applyLocale(value: unknown): void {
   setLocale(locale);
   document.documentElement.lang = locale;
 }
-import type { Project, Scope, UserProfile, UserSettings } from './types.js';
+import type { Info, Project, Scope, UserProfile, UserSettings } from './types.js';
 
 export interface SessionData {
   profile: UserProfile;
@@ -42,6 +42,15 @@ export interface SessionData {
   scopes: Scope[];
   projects: Project[];
   people: { id: string; name: string }[];
+  /**
+   * El que diu la instància: el nom, la marca i si deixa triar el mode d'àmbits.
+   *
+   * Va aquí i no a un `useApi` de cada pantalla perquè **el necessiten la barra, Ajustos i
+   * el wizard alhora**, i tres crides a la mateixa cosa és com les tres acaben dient coses
+   * diferents durant mig segon. És públic i barat: una crida més en paral·lel amb les
+   * altres quatre.
+   */
+  instance: Info;
 }
 
 export type SessionState =
@@ -67,11 +76,12 @@ interface SessionApi {
 const SessionContext = createContext<SessionApi | null>(null);
 
 async function fetchSession(): Promise<SessionData> {
-  const [bundle, scopes, projects, members] = await Promise.all([
+  const [bundle, scopes, projects, members, instance] = await Promise.all([
     api.get<{ profile: UserProfile; settings: UserSettings }>('/api/v1/auth/settings'),
     api.get<Scope[]>('/api/v1/scopes'),
     api.get<Project[]>('/api/v1/projects'),
     api.get<{ id: string; name: string }[]>('/api/v1/admin/users').catch(() => null),
+    api.get<Info>('/info'),
   ]);
 
   /**
@@ -101,7 +111,7 @@ async function fetchSession(): Promise<SessionData> {
     people = [...unics].map(([id, name]) => ({ id, name }));
   }
 
-  return { profile: bundle.profile, settings: bundle.settings, scopes, projects, people };
+  return { profile: bundle.profile, settings: bundle.settings, scopes, projects, people, instance };
 }
 
 export function SessionProvider({ children }: { children: ReactNode }) {

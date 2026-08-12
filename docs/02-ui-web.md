@@ -12,6 +12,27 @@ Arrel amb `data-theme` i `data-accent`, `min-height:100vh`, fons `var(--page-bg)
 
 Tres pantalles de primer nivell: **login**, **app** i **compartit públic**. Dins d'app: **tauler**, **dashboard global** i **ajustos**.
 
+### Multiàmbit i monoàmbit
+
+Fem-ho posa els **àmbits** a la barra com el primer eix de navegació. Qui fa servir l'eina
+per a **una sola cosa** —la seva feina, la seva empresa petita— hi té una barra amb un sol
+xip que no fa res, i el que li caldria a dalt són els **projectes**.
+
+El mode ho canvia, i **és una lent i no un model de dades diferent**: tota tasca segueix
+vivint dins d'un àmbit, i els àmbits col·lectius, el CalDAV per àmbit i els tokens d'abast
+segueixen igual per sota.
+
+| | Multiàmbit (per defecte) | Monoàmbit |
+| --- | --- | --- |
+| A l'esquerra del switch | res | **selector d'àmbit**, només si n'hi ha més d'un |
+| Després del switch | xips d'**àmbit**, amb el botonet de projectes | xips de **projecte** de l'àmbit on ets |
+| `?scopes=` | llista; buit vol dir tots | **un de sol** |
+| `#Àmbit` a l'afegida ràpida | es demana amb més d'un àmbit actiu | no cal mai |
+
+Qui el tria: **cada persona**, amb el wizard el primer cop (§13) i a Ajustos ▸ General
+sempre. Qui l'acota: **l'operador**, amb `FEMHO_SCOPE_MODE`; llavors el commutador
+d'Ajustos surt **desactivat amb el motiu**, i els àmbits que ja hi hagi no es toquen.
+
 Amplada màxima del contingut `1360px` (`--content-max`), centrada, amb 28px de padding lateral.
 
 ---
@@ -331,3 +352,21 @@ No s'activen mentre el focus és en un camp de text.
 **Error**: banda discreta a dalt amb `var(--danger-bg)` i botó de reintentar. Els errors de xarxa amb mutacions pendents no bloquegen: la cua es reintenta sola.
 
 **Offline**: pastilla persistent "Sense connexió · N canvis pendents". En recuperar-la, "Sincronitzat" 2 segons i desapareix.
+
+
+---
+
+## 13 · La primera pregunta
+
+Un compte nou —i qualsevol que no ho hagi dit mai— es troba **una pantalla i prou** abans de
+veure res: *com reparteixes la feina?* Dues targetes grosses, cadascuna amb **un dibuix de
+la barra que tindrà**, i una línia petita: «ho pots canviar sempre que vulguis a Ajustos».
+
+Tres coses que la defineixen:
+
+- **Va abans de la barra**, i sense barra al darrere: la barra és justament el que s'està
+  triant, i ensenyar-ne una de provisional faria que la tria semblés un filtre més.
+- **No es pot saltar.** No triar és el cas que això elimina. El que fa que triar no faci por
+  és que es desfà, i això ho diu la mateixa pantalla.
+- **No surt si no hi ha res a triar.** Amb `FEMHO_SCOPE_MODE` acotat, preguntar-ho seria
+  teatre.

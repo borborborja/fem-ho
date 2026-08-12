@@ -47,7 +47,19 @@ export function InboxEyeToggle({ visible, onToggle, testId }: InboxEyeToggleProp
       aria-label={label}
       title={label}
       style={{
-        padding: '3px 7px',
+        /**
+         * **Vint-i-vuit píxels de costat, no vint-i-un.**
+         *
+         * La icona en fa quinze i el farciment el deixava a 21 d'alt: al ratolí s'encerta
+         * i al dit no, i aquest botó surt a cada fila de cada cita, cada correu i cada
+         * titular. Vint-i-vuit segueix sent compacte i ja és una diana.
+         */
+        minWidth: 28,
+        minHeight: 28,
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 0,
         lineHeight: 0,
         color: 'var(--ink-soft)',
         flexShrink: 0,

@@ -32,6 +32,7 @@ import * as inboxSources from './migrations/011-inbox-sources.js';
 import * as taskProvenance from './migrations/012-task-provenance.js';
 import * as mailSources from './migrations/013-mail-sources.js';
 import * as mailVisibility from './migrations/014-mail-visibility.js';
+import * as scopeMode from './migrations/015-scope-mode.js';
 
 export interface Migration {
   name: string;
@@ -94,6 +95,8 @@ export const MIGRATIONS: Migration[] = [
     down: mailVisibility.down,
     needsForeignKeysOff: true,
   },
+  // Una columna a `user_settings`, com la 007: cap taula refeta, cap clau forana pel mig.
+  { name: '015-scope-mode', up: scopeMode.up, down: scopeMode.down },
 ];
 
 const MIGRATIONS_TABLE = 'schema_migrations';

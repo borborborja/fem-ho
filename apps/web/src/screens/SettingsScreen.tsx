@@ -9,7 +9,7 @@
  * wordmark i "‹ Tornar al tauler". Per això aquesta pantalla no munta `TopBar`.
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   DEFAULT_MAIL_TEMPLATE,
   dateTime,
@@ -21,10 +21,12 @@ import {
   weekdayNames,
 } from '@fem-ho/contracts';
 import { v7 as uuidv7 } from 'uuid';
-import { EmptyState } from '@fem-ho/design-system/femho';
-import { api, ApiError } from '../app/api.js';
+import { EmptyState, useIsMobile } from '@fem-ho/design-system/femho';
+import { api, ApiError, failureText } from '../app/api.js';
 import { Avatar } from '../app/Avatar.js';
+import { canChooseScopeMode, resolveScopeMode } from '../app/scope-mode.js';
 import { Chips } from '../app/Chips.js';
+import { Brand } from '../app/Brand.js';
 import { useRouter } from '../app/router.js';
 import { useSession, useSessionData } from '../app/session.js';
 import { useApi, useMutation } from '../app/useApi.js';
@@ -68,6 +70,7 @@ type Tab = (typeof TABS)[number];
 export function SettingsScreen() {
   const { profile } = useSessionData();
   const { navigate, route } = useRouter();
+  const mobile = useIsMobile();
 
   /**
    * La pestanya pot venir de la URL.
@@ -77,14 +80,22 @@ export function SettingsScreen() {
    * projectes són a "Àmbits". Un menú que promet una acció i et deixa a la porta d'un
    * edifici no ha fet la seva feina.
    */
-  const fromQuery = route.query.get('tab');
-  const [tab, setTab] = useState<Tab>(
-    TABS.includes(fromQuery as Tab) ? (fromQuery as Tab) : 'general',
-  );
-
   // Admin només per a administradors: amagar-la no és seguretat —el servidor ja hi posa
   // `users:manage`— però ensenyar una pestanya que sempre dona 403 és una mala broma.
   const tabs = TABS.filter((key) => key !== 'admin' || profile.role === 'admin');
+
+  /**
+   * La pestanya pot venir de la URL, **d'entre les que aquesta persona té**.
+   *
+   * Es validava contra la llista sencera i no contra la seva: `?tab=admin` sense ser
+   * administrador pintava el panell d'Admin amb un «Alguna cosa ha fallat» en vermell,
+   * que és la mateixa mala broma que el comentari de sobre evita al menú, per una altra
+   * porta. Ara cau a General, com qualsevol pestanya que no existeix.
+   */
+  const fromQuery = route.query.get('tab');
+  const [tab, setTab] = useState<Tab>(
+    tabs.includes(fromQuery as Tab) ? (fromQuery as Tab) : 'general',
+  );
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--page-bg)' }}>
@@ -108,18 +119,7 @@ export function SettingsScreen() {
             gap: 22,
           }}
         >
-          <span
-            style={{
-              fontSize: 24,
-              fontWeight: 900,
-              backgroundImage: 'var(--gradient-brand-text)',
-              WebkitBackgroundClip: 'text',
-              backgroundClip: 'text',
-              color: 'transparent',
-            }}
-          >
-            Fem-ho
-          </span>
+          <Brand />
           <button
             type="button"
             data-testid="settings-back"
@@ -138,19 +138,44 @@ export function SettingsScreen() {
         </div>
       </header>
 
+      {/*
+        **Al mòbil, el menú va a dalt i no al costat.**
+
+        Amb `220px 1fr` fixos, a una pantalla de 390 el contingut es quedava amb **cent
+        deu píxels**: el text queia a una paraula per línia, el selector de seguretat
+        ensenyava «TLS · p» i el botó «Afegeix el compte» era un cercle amb tres línies a
+        dins. No era una pantalla incòmoda, era una pantalla que no es pot fer servir —i
+        Ajustos al mòbil és justament on es configura el correu i els calendaris.
+
+        A dalt i en fila, amb desplaçament horitzontal **dins de la barra** i no de la
+        pàgina: el que no pot passar és que la pàgina sencera es mogui de costat.
+      */}
       <div
         data-testid="settings-screen"
         style={{
           maxWidth: 1100,
           margin: '0 auto',
-          padding: '24px 28px',
+          padding: mobile ? '16px 14px' : '24px 28px',
           display: 'grid',
-          gridTemplateColumns: '220px 1fr',
-          gap: 28,
+          gridTemplateColumns: mobile ? '1fr' : '220px 1fr',
+          gap: mobile ? 14 : 28,
           alignItems: 'start',
         }}
       >
-        <nav style={{ display: 'grid', gap: 2 }}>
+        <nav
+          style={
+            mobile
+              ? {
+                  display: 'flex',
+                  gap: 6,
+                  overflowX: 'auto',
+                  paddingBottom: 4,
+                  // Sense això, els xips s'encongeixen fins a partir el nom.
+                  scrollbarWidth: 'none',
+                }
+              : { display: 'grid', gap: 2 }
+          }
+        >
           {tabs.map((key) => (
             <button
               key={key}
@@ -161,7 +186,7 @@ export function SettingsScreen() {
               style={{
                 textAlign: 'left',
                 padding: '9px 12px',
-                borderRadius: 10,
+                borderRadius: mobile ? 100 : 10,
                 border: 'none',
                 cursor: 'pointer',
                 font: 'inherit',
@@ -169,6 +194,7 @@ export function SettingsScreen() {
                 fontWeight: tab === key ? 700 : 500,
                 background: tab === key ? 'var(--ghost-bg)' : 'transparent',
                 color: 'var(--ink)',
+                ...(mobile ? { flexShrink: 0, whiteSpace: 'nowrap' as const } : {}),
               }}
             >
               {t(`settings.tab.${key}`)}
@@ -281,7 +307,7 @@ function UpdateNotice() {
 }
 
 function GeneralTab() {
-  const { profile, settings } = useSessionData();
+  const { profile, settings, instance } = useSessionData();
   const weekStart = resolveWeekStart(settings.week_start, getLocale());
   // `/info` és públic i sense autenticar: el dret al codi el té qualsevol que hi arribi.
   const info = useApi<Info>('/info').data ?? { version: '', license: '', source_url: '' };
@@ -323,6 +349,45 @@ function GeneralTab() {
         treballa el cap de setmana el vol d'una manera i qui no, d'una altra, i tots dos
         poden tenir la mateixa llengua.
       */}
+      {/*
+        **Multiàmbit o monoàmbit.**
+
+        Va aquí i a dalt de tot de les preferències de disposició perquè és la que canvia
+        més coses de cop: què hi ha a la barra, i si el camp d'afegida demana `#Àmbit`.
+
+        Quan la instància ho ha decidit per tothom, surt **desactivat amb el motiu** i no
+        amagat: un ajust que desapareix fa pensar que l'app l'ha perdut, i qui l'ha buscat
+        a la documentació el ve a trobar aquí.
+      */}
+      <Group title={t('settings.scopeMode')}>
+        <Chips
+          testId="scope-mode"
+          groupLabel={t('settings.scopeMode')}
+          value={resolveScopeMode(instance, settings)}
+          disabled={!canChooseScopeMode(instance)}
+          options={[
+            {
+              key: 'multi' as const,
+              label: t('settings.scopeMode.multi'),
+              hint: t('settings.scopeMode.multi.hint'),
+            },
+            {
+              key: 'single' as const,
+              label: t('settings.scopeMode.single'),
+              hint: t('settings.scopeMode.single.hint'),
+            },
+          ]}
+          onChange={(value) => void updateSettings({ scope_mode: value })}
+        />
+        <p style={{ margin: 0, fontSize: 12, color: 'var(--ink-soft)', lineHeight: 1.5 }}>
+          {canChooseScopeMode(instance)
+            ? t('settings.scopeMode.help')
+            : t('settings.scopeMode.fixed', {
+                mode: t(`settings.scopeMode.${instance.scope_mode ?? 'both'}`),
+              })}
+        </p>
+      </Group>
+
       <Group title={t('settings.weekStart')}>
         <Chips
           testId="week-start"
@@ -1125,6 +1190,12 @@ function CalendarsTab() {
                     className="plou-input"
                     style={{ fontSize: 11.5 }}
                   />
+                  {/*
+                    El botó de copiar que `docs/02` §5 demana. Seleccionar-la en enfocar-la
+                    ajuda i no és el mateix: aquesta URL s'enganxa a una altra aplicació, i
+                    fer-ho amb el teclat vol dir encertar el camp, `Cmd+C` i confiar-hi.
+                  */}
+                  <CopyButton value={`${base}/dav/calendars/${scope.id}-${kind}/`} />
                 </div>
               ))}
             </div>
@@ -1355,27 +1426,39 @@ function McpTab() {
         <p style={{ margin: 0, fontSize: 12.5, color: 'var(--ink-soft)', lineHeight: 1.5 }}>
           {t('settings.mcpInstructions')}
         </p>
-        <input
-          readOnly
-          data-testid="mcp-url"
-          value={`${window.location.origin}/mcp`}
-          onFocus={(event) => event.currentTarget.select()}
-          className="plou-input"
-          style={{ fontSize: 12 }}
-        />
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <input
+            readOnly
+            data-testid="mcp-url"
+            value={`${window.location.origin}/mcp`}
+            onFocus={(event) => event.currentTarget.select()}
+            className="plou-input"
+            style={{ fontSize: 12 }}
+          />
+          <CopyButton value={`${window.location.origin}/mcp`} />
+        </div>
       </Group>
 
       <Group title={t('tokens.title')}>
         {created !== null ? (
           <div style={{ display: 'grid', gap: 6 }}>
-            <input
-              readOnly
-              data-testid="token-value"
-              value={created}
-              onFocus={(event) => event.currentTarget.select()}
-              className="plou-input"
-              style={{ fontSize: 12 }}
-            />
+            {/*
+              **Aquest és el que més falta feia.** Un token que només es veu una vegada, amb
+              un avís que del hash no se'n pot treure, i copiar-lo era seleccionar-lo a mà:
+              si t'equivoques d'un caràcter no ho saps fins que el client falla, i llavors
+              ja no el pots tornar a veure.
+            */}
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input
+                readOnly
+                data-testid="token-value"
+                value={created}
+                onFocus={(event) => event.currentTarget.select()}
+                className="plou-input"
+                style={{ fontSize: 12, flex: 1 }}
+              />
+              <CopyButton value={created} />
+            </div>
             {/* Un sol cop: del hash no se'n pot treure el token (docs/08 §5). */}
             <p style={{ margin: 0, fontSize: 11.5, color: 'var(--danger-text)' }}>
               {t('tokens.onceWarning')}
@@ -1712,14 +1795,28 @@ function ProfileTab() {
 }
 
 function AdminTab() {
+  const { instance } = useSessionData();
+  const [brandError, setBrandError] = useState<string | null>(null);
+  /** Amb el logo posat al `.env`, la pujada no serveix de res i es diu en comptes d'oferir-la. */
+  const fixatPelEntorn =
+    instance.logo_url !== null && !String(instance.logo_url ?? '').startsWith('/brand/');
   const users = useApi<AdminUser[]>('/api/v1/admin/users');
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
   const [invite, setInvite] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState('');
-  const [instanceName, setInstanceName] = useState('');
 
-  useApi<{ name: string }>('/info');
+  /**
+   * **El nom de la instància, per dir-lo abans que calgui escriure'l.**
+   *
+   * Es demanava `/info` **dues vegades**: una aquí, amb el resultat llençat, i una altra
+   * en enfocar el camp. Fins que no hi clicaves, el marcador deia literalment «Escriu «»
+   * per confirmar» —amb el nom buit—, o sigui que la instrucció que et diu què has
+   * d'escriure no ho deia. I el servidor exigeix el nom exacte: sense saber-lo, l'acció
+   * no es pot fer, no és que sigui perillosa.
+   */
+  const info = useApi<{ name: string }>('/info');
+  const instanceName = info.data?.name ?? '';
 
   const send = useMutation(async () => {
     const result = await api.post<{ invite_url: string }>('/api/v1/admin/users/invite', {
@@ -1798,6 +1895,74 @@ function AdminTab() {
         </button>
       </Group>
 
+      {/*
+        **La marca de la instància.**
+
+        Una eina autoallotjada que es desplega dins d'una empresa s'hi ha de poder
+        presentar. El nom ja el porta `FEMHO_INSTANCE_NAME`; això és el logo, que és el que
+        de debò la fa semblar seva.
+
+        Amb `FEMHO_LOGO_URL` posat, aquí es diu i no es deixa tocar: qui desplega amb un
+        `compose.yaml` immutable no vol que ningú l'hi canviï des de la pantalla.
+      */}
+      <Group title={t('settings.branding')}>
+        {instance.logo_url === null || instance.logo_url === undefined ? (
+          <EmptyState>{t('settings.branding.none')}</EmptyState>
+        ) : (
+          <img
+            src={instance.logo_url}
+            alt={instance.name}
+            data-testid="branding-preview"
+            style={{ height: 28, width: 'auto', maxWidth: 220 }}
+          />
+        )}
+
+        {fixatPelEntorn ? (
+          <p style={{ margin: 0, fontSize: 12, color: 'var(--ink-soft)' }}>
+            {t('settings.branding.fixed')}
+          </p>
+        ) : (
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <input
+              type="file"
+              data-testid="branding-file"
+              accept="image/svg+xml,image/png,image/webp"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file === undefined) return;
+                void api
+                  .upload('/api/v1/admin/branding/logo', file, { asImage: true })
+                  .then(() => window.location.reload())
+                  .catch((cause: unknown) => setBrandError(failureText(cause)));
+              }}
+              style={{ fontSize: 12 }}
+            />
+            {instance.logo_url === null || instance.logo_url === undefined ? null : (
+              <button
+                type="button"
+                className="plou-btn plou-btn-ghost"
+                data-testid="branding-remove"
+                onClick={() => {
+                  void api
+                    .delete('/api/v1/admin/branding/logo')
+                    .then(() => window.location.reload());
+                }}
+                style={{ fontSize: 12 }}
+              >
+                {t('settings.branding.remove')}
+              </button>
+            )}
+          </div>
+        )}
+        {brandError === null ? (
+          <p style={{ margin: 0, fontSize: 12, color: 'var(--ink-soft)' }}>
+            {t('settings.branding.help')}
+          </p>
+        ) : (
+          <p style={{ margin: 0, fontSize: 12, color: 'var(--danger-text)' }}>{brandError}</p>
+        )}
+      </Group>
+
       <Group title={t('settings.wipe')}>
         <p style={{ margin: 0, fontSize: 12.5, color: 'var(--danger-text)', lineHeight: 1.5 }}>
           {t('settings.wipeWarning')}
@@ -1808,16 +1973,16 @@ function AdminTab() {
           value={confirmation}
           placeholder={t('settings.wipeConfirm', { name: instanceName })}
           onChange={(event) => setConfirmation(event.target.value)}
-          onFocus={() => {
-            if (instanceName === '') {
-              void api.get<{ name: string }>('/info').then((info) => setInstanceName(info.name));
-            }
-          }}
         />
         <button
           type="button"
           data-testid="wipe-submit"
-          disabled={wipe.busy || confirmation === ''}
+          /*
+            **Amb el nom exacte, no amb qualsevol text.** El servidor ja ho exigeix i
+            tornava un 422; deixar prémer per rebre'l és fer el camí llarg a qui s'ha
+            equivocat, quan la pantalla ja sap la resposta.
+          */
+          disabled={wipe.busy || instanceName === '' || confirmation !== instanceName}
           onClick={() => void wipe.run()}
           style={{
             padding: '9px 16px',
@@ -1907,6 +2072,37 @@ function MailTab() {
   );
 }
 
+/**
+ * Copiar un text al porta-retalls, i **dir que s'ha copiat**.
+ *
+ * Sense la confirmació el botó no dona cap senyal —el porta-retalls no es veu— i la gent
+ * el prem tres vegades per si de cas. Torna a «Copia» sol perquè un botó que es queda dient
+ * «Copiat» menteix la propera vegada que el mires.
+ */
+function CopyButton({ value }: { value: string }) {
+  const [copiat, setCopiat] = useState(false);
+
+  useEffect(() => {
+    if (!copiat) return undefined;
+    const timer = setTimeout(() => setCopiat(false), 1800);
+    return () => clearTimeout(timer);
+  }, [copiat]);
+
+  return (
+    <button
+      type="button"
+      className="plou-btn plou-btn-ghost"
+      data-testid="copy-button"
+      onClick={() => {
+        void navigator.clipboard.writeText(value).then(() => setCopiat(true));
+      }}
+      style={{ fontSize: 11.5, flexShrink: 0 }}
+    >
+      {copiat ? t('tokens.copied') : t('tokens.copy')}
+    </button>
+  );
+}
+
 const camp = { display: 'grid', gap: 3, fontSize: 11.5, color: 'var(--ink-soft)' } as const;
 
 /** Quan es va llegir per última vegada, o que encara no s'ha llegit mai. */
@@ -1979,8 +2175,13 @@ function MailAccountRow({ account, onDone }: { account: MailAccount; onDone: () 
     >
       <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
         <strong style={{ fontSize: 13 }}>{account.name}</strong>
+        {/*
+          **Un punt volat i no una arrova.** L'usuari d'IMAP sol ser una adreça sencera, i
+          `jo@example.com@imap.example.com:993` es llegeix com una adreça mal escrita en
+          comptes de com «aquest usuari, en aquest servidor».
+        */}
         <span style={{ fontSize: 11.5, color: 'var(--ink-soft)' }}>
-          {account.username}@{account.host}:{account.port}
+          {account.username} · {account.host}:{account.port}
         </span>
       </div>
 
@@ -2008,7 +2209,14 @@ function MailAccountRow({ account, onDone }: { account: MailAccount; onDone: () 
             className="plou-input"
             data-testid={`mail-password-${account.id}`}
             value={password}
+            /*
+              Curt perquè **hi càpiga**: el text llarg es tallava a «Deixa-ho buit per r»,
+              i un camp que et parla a mitges és el que et fa pensar que això va malament
+              abans de fer-lo servir. La frase sencera va al `title`.
+            */
             placeholder={account.has_secret ? t('settings.mail.passwordKept') : ''}
+            title={account.has_secret ? t('settings.mail.passwordKept.long') : undefined}
+            style={{ minWidth: 190 }}
             onChange={(event) => setPassword(event.target.value)}
           />
         </Camp>
@@ -2304,7 +2512,18 @@ function MailRuleForm({ accounts, onDone }: { accounts: MailAccount[]; onDone: (
               data-testid="mail-rule-folder"
               value={folder}
               onChange={(event) => setFolder(event.target.value)}
-              placeholder={folders.loading ? t('settings.mail.loadingFolders') : ''}
+              /*
+                Si el servidor no ha contestat, **es diu**. El `error` ja venia a la
+                resposta i no es pintava enlloc: quedava un camp buit i mut, que sembla
+                que no hagi passat res quan el que passa és que no s'han pogut llegir.
+              */
+              placeholder={
+                folders.loading
+                  ? t('settings.mail.loadingFolders')
+                  : folders.data?.error != null
+                    ? t('settings.mail.foldersFailed')
+                    : t('settings.mail.folderPlaceholder')
+              }
             />
           ) : (
             <select

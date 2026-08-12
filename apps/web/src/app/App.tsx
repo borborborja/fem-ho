@@ -12,6 +12,7 @@ import { t } from '@fem-ho/contracts';
 import { SyncPill } from '@fem-ho/design-system/femho';
 import { match, useRouter } from './router.js';
 import { useSession, useSessionData } from './session.js';
+import { needsScopeModeWizard, resolveScopeMode } from './scope-mode.js';
 import { installShortcuts } from './shortcuts.js';
 import { TopBar } from './TopBar.js';
 import type { Agent, Checklist } from './types.js';
@@ -29,6 +30,7 @@ import { PublicShareScreen } from '../screens/PublicShareScreen.js';
 import { CommandPalette } from '../screens/CommandPalette.js';
 import { SearchScreen } from '../screens/SearchScreen.js';
 import { SettingsScreen } from '../screens/SettingsScreen.js';
+import { WelcomeScreen } from '../screens/WelcomeScreen.js';
 import { TaskModal } from '../screens/TaskModal.js';
 import { ShareTaskDialog } from '../screens/ShareTaskDialog.js';
 import { ProofRoute } from '../proof/ProofRoute.js';
@@ -96,7 +98,8 @@ export function App() {
 
 function AppShell() {
   const { route, navigate } = useRouter();
-  const { scopes } = useSessionData();
+  const { scopes, settings, instance } = useSessionData();
+  const mode = resolveScopeMode(instance, settings);
 
   /**
    * Els àmbits actius viuen a la URL i no a l'estat.
@@ -105,10 +108,27 @@ function AppShell() {
    * és el que la gent espera d'una web. Sense `scopes` a la query, s'agafen tots.
    */
   const fromQuery = route.query.get('scopes');
-  const activeScopeIds =
+  const demanats =
     fromQuery === null || fromQuery === ''
-      ? scopes.map((scope) => scope.id)
+      ? []
       : fromQuery.split(',').filter((id) => scopes.some((scope) => scope.id === id));
+
+  /**
+   * **En monoàmbit sempre n'hi ha exactament un.**
+   *
+   * Sense res a l'adreça, el primer; amb una llista, el primer que hi sigui de debò. Que
+   * n'hi hagi sempre un i només un és el que fa que la resta de l'app hi caigui sola: el
+   * calendari, la bústia i el cercador ja filtren per `activeScopeIds`, i l'afegida ràpida
+   * deixa de demanar `#Àmbit` perquè ja en sap el destí.
+   *
+   * En multiàmbit, res canvia: buit vol dir tots, com sempre.
+   */
+  const activeScopeIds =
+    mode === 'single'
+      ? [demanats[0] ?? scopes[0]?.id].filter((id): id is string => id !== undefined)
+      : demanats.length === 0
+        ? scopes.map((scope) => scope.id)
+        : demanats;
 
   /**
    * Els projectes que es veuen, **buit vol dir tots**.
@@ -229,6 +249,15 @@ function AppShell() {
     });
   }, [navigate, scopes, activeScopeIds, setQuery]);
 
+  /**
+   * **La primera pregunta va abans que res, i abans que Ajustos.**
+   *
+   * Es pinta sencera i sense barra: la barra és justament el que s'està triant, i
+   * ensenyar-ne una de provisional al darrere faria que la tria semblés un filtre més.
+   * Surt només a qui no ho ha dit mai i quan hi ha res a triar (`app/scope-mode.ts`).
+   */
+  if (needsScopeModeWizard(instance, settings)) return <WelcomeScreen />;
+
   // Ajustos no porta ni switch de vista ni chips d'àmbit (docs/02 §9), i per tant no
   // porta `TopBar`: es pinta sencera.
   if (route.path === '/settings') return <SettingsScreen />;
@@ -236,7 +265,28 @@ function AppShell() {
   const view: 'tasks' | 'calendar' = route.path === '/calendar' ? 'calendar' : 'tasks';
   const list = match('/lists/:id', route.path);
 
-  const fullHeight = list === null && view === 'tasks' && route.path === '/';
+  /**
+   * **Alçada exacta quan el que es pinta és el tauler**, i no quan la ruta és `/`.
+   *
+   * Deia `route.path === '/'`, i el tauler també es pinta a qualsevol altra ruta que no
+   * sigui Ajustos, el cercador o el tauler general —`/board`, o el que sigui que algú
+   * escrigui—. Allà les columnes no es desplaçaven per dins: amb vint-i-cinc tasques, la
+   * pàgina creixia fins a **2.168 píxels** i el camp d'afegida ràpida quedava mil dos-cents
+   * per sota de la vista.
+   *
+   * No es notava perquè el commutador de dalt porta a `/`. **I les proves de navegador
+   * anaven a `/board`**, o sigui que comprovaven una disposició que ningú fa servir.
+   *
+   * Es deriva del que es pinta i no de la ruta: així una ruta nova no torna a obrir el
+   * forat.
+   */
+  const showsBoard =
+    list === null &&
+    view === 'tasks' &&
+    route.path !== '/search' &&
+    route.path !== '/dashboard' &&
+    route.path !== '/settings';
+  const fullHeight = showsBoard;
 
   return (
     <div
@@ -279,6 +329,22 @@ function AppShell() {
         ref={boardRef}
         style={{
           maxWidth: 'var(--content-max, 1360px)',
+          /**
+           * **`width: 100%` amb `margin: 0 auto`, i no només el marge.**
+           *
+           * `margin-inline: auto` dins d'un contenidor de flex en columna deixa l'element
+           * dimensionat **pel contingut** i no per la finestra: `fit-content` agafa el
+           * màxim entre l'espai disponible i la mida mínima del contingut, i amb el tauler
+           * a dins aquesta mínima són les quatre columnes juntes. A 390px de pantalla el
+           * `main` en feia 575 i **la pàgina sencera es desplaçava de costat**, amb la
+           * barra de dalt marxant de la vista en passar de columna.
+           *
+           * El `minWidth: 0` de sota no ho tapa: aquell treu el mínim automàtic d'un ítem
+           * de flex, no la manera com `fit-content` es resol. El que ho fixa és dir
+           * l'amplada.
+           */
+          width: '100%',
+          boxSizing: 'border-box',
           margin: '0 auto',
           padding: '20px 28px calc(28px + env(safe-area-inset-bottom, 0px))',
           /**

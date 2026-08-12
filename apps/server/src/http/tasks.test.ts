@@ -18,6 +18,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import type { LightMyRequestResponse } from 'fastify';
 import { comparePositions } from '@fem-ho/contracts';
+import { dbBool } from '../db/bool.js';
 import { buildApp } from '../app.js';
 import { loadConfig } from '../config.js';
 import { hashPassword } from '../auth/password.js';
@@ -325,6 +326,79 @@ describe('completar', () => {
       SELECT COUNT(*) AS n FROM subtasks WHERE task_id = ${id} AND done = 0
     `.execute(conn.db);
     expect(Number(pendents.rows[0]?.n)).toBe(0);
+  });
+
+  /**
+   * **Arrossegar a Fet segella `completed_at`, i treure-la l'esborra.**
+   *
+   * `POST /complete` el segellava i **no el crida cap client**: la web, arrossegant o amb
+   * el commutador de la targeta, sempre passa per `/move`. Com que la columna Fet filtra
+   * per `completed_at` dins del dia, no hi podia sortir res mai i la targeta que hi
+   * deixaves anar es perdia de vista. La prova va per `/move` a posta: és el camí que la
+   * gent fa servir, i el que no es prova és el que es trenca.
+   */
+  /**
+   * **La finestra de venciment**, que és el que fa que el calendari pugui ser
+   * l'organitzador de la setmana o el mes. Sense això la graella només sabia
+   * d'esdeveniments i de correu, i una tasca amb data no sortia enlloc del calendari.
+   */
+  it('les tasques es poden demanar per finestra de venciment', async () => {
+    const scope = (
+      await api('POST', '/api/v1/scopes', { name: 'Agenda', color: '--femho-scope-4' })
+    ).json<{ id: string }>().id;
+
+    for (const [title, due] of [
+      ['Abans', '2026-07-31'],
+      ['El primer dia', '2026-08-01'],
+      ['Al mig', '2026-08-15'],
+      ['L últim dia', '2026-08-31'],
+      ['Després', '2026-09-01'],
+    ] as const) {
+      await api('POST', '/api/v1/tasks', { scope_id: scope, title, due_date: due });
+    }
+    // Una sense data no hi entra: no venç cap dia.
+    await api('POST', '/api/v1/tasks', { scope_id: scope, title: 'Sense data' });
+
+    const res = await api(
+      'GET',
+      `/api/v1/tasks?scope_id=${scope}&due_from=2026-08-01&due_to=2026-08-31`,
+    );
+    expect(res.statusCode).toBe(200);
+    const titles = res
+      .json<{ data: { title: string }[] }>()
+      .data.map((task) => task.title)
+      .sort();
+
+    // Els dos extrems hi entren: una finestra de mes que es deixés el dia 31 seria
+    // exactament la mena de defecte que ningú veu fins que arriba el dia 31.
+    expect(titles).toEqual(['Al mig', 'El primer dia', 'L últim dia']);
+  });
+
+  it('moure una tasca a Fet la marca feta, i treure-la la desmarca', async () => {
+    const scope = (
+      await api('POST', '/api/v1/scopes', { name: 'Moguda', color: '--femho-scope-4' })
+    ).json<{ id: string }>().id;
+    const id = (
+      await api('POST', '/api/v1/tasks', { scope_id: scope, title: 'Per arrossegar' })
+    ).json<{ id: string }>().id;
+
+    await sql`
+      INSERT INTO subtasks (id, task_id, title, done, position, created_at, updated_at, version)
+      VALUES (${uuidv7()}, ${id}, 'Una subtasca', ${dbBool(false)}, 'a1', ${NOW}, ${NOW}, 1)
+    `.execute(conn.db);
+
+    const fet = await api('POST', `/api/v1/tasks/${id}/move`, { status: 'done' });
+    expect(fet.statusCode).toBe(200);
+    expect(fet.json<{ completed_at: string | null }>().completed_at).toBeTruthy();
+
+    // I «feta» vol dir el mateix vingui d'on vingui: les subtasques també cauen.
+    const pendents2 = await sql<{ n: number }>`
+      SELECT COUNT(*) AS n FROM subtasks WHERE task_id = ${id} AND done = ${dbBool(false)}
+    `.execute(conn.db);
+    expect(Number(pendents2.rows[0]?.n)).toBe(0);
+
+    const tornada = await api('POST', `/api/v1/tasks/${id}/move`, { status: 'todo' });
+    expect(tornada.json<{ completed_at: string | null }>().completed_at).toBeNull();
   });
 });
 

@@ -255,9 +255,16 @@ export const api = {
    * `FormData` construït a mà no passaria. Per això no va per `request()`, que serialitza
    * el cos a JSON.
    */
-  upload: async <T>(path: string, file: File): Promise<T> => {
+  upload: async <T>(path: string, file: File, options?: { asImage?: boolean }): Promise<T> => {
     const url = `${path}${path.includes('?') ? '&' : '?'}filename=${encodeURIComponent(file.name)}`;
-    const headers: Record<string, string> = { 'content-type': 'application/octet-stream' };
+    /**
+     * **El logo va amb el seu tipus i no com a octets.** Els adjunts són qualsevol cosa i
+     * el tipus el guarda la fila; el logo, en canvi, el servidor l'ha de rebutjar si no és
+     * una de les tres imatges que accepta, i per fer-ho ha de saber què és.
+     */
+    const headers: Record<string, string> = {
+      'content-type': options?.asImage === true ? file.type : 'application/octet-stream',
+    };
 
     const send = async (): Promise<Response> => {
       if (tokens !== null) headers.authorization = `Bearer ${tokens.access_token}`;

@@ -66,7 +66,8 @@ export interface WeekDay {
   iso: string;
   weekday: string;
   number: number;
-  items: { id: string; title: string }[];
+  /** `color` només el fa servir la vista compacta, per als punts. */
+  items: { id: string; title: string; color?: string | undefined }[];
 }
 
 export interface WeekViewProps {
@@ -83,6 +84,14 @@ export interface WeekViewProps {
   onSelect?: ((iso: string) => void) | undefined;
   /** Frase sencera, mai un guió (docs/00). */
   emptyLabel: string;
+  /**
+   * Punts en comptes de títols, per al telèfon.
+   *
+   * A 390px una columna de set fa quaranta-vuit píxels: el títol hi surt com una lletra
+   * amb punts suspensius, que ocupa el lloc de la informació sense ser-ho. És el mateix
+   * criteri que la vista de mes ja aplica (P13).
+   */
+  compact?: boolean | undefined;
 }
 
 export interface DayItem {

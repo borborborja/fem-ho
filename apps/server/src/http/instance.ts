@@ -7,6 +7,7 @@
  */
 
 import type { FastifyInstance } from 'fastify';
+import { logoUrl } from './branding.js';
 import type { components } from '@fem-ho/contracts';
 import { sql } from 'kysely';
 import { setupIsOpen } from '../services/setup.js';
@@ -42,6 +43,15 @@ export function registerInstanceRoutes(app: FastifyInstance): void {
       name: app.config.instanceName,
       version: app.config.version,
       registration: app.config.registration,
+      /**
+       * **Públic a posta.** El wizard i Ajustos l'han de saber abans de preguntar res: si
+       * l'operador ja ha decidit com es treballa aquí, preguntar-ho igualment seria
+       * teatre. No diu res de ningú —és una propietat de la instància, com el nom.
+       */
+      scope_mode: app.config.scopeMode,
+      // D'on surt el logo, si n'hi ha. Qui pinta la marca no ha de saber si ve del `.env`
+      // o d'una pujada: `/info` ja ho ha resolt.
+      logo_url: logoUrl(app),
       setup_required: setupRequired,
       /**
        * D'on surt el codi d'aquesta instància.
