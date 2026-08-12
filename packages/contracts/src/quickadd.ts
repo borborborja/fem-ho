@@ -38,6 +38,13 @@ export interface QuickAddContext {
   scopes: QuickAddScope[];
   people: QuickAddPerson[];
   /**
+   * Les tipologies triables amb `$`, dels àmbits actius.
+   *
+   * Buit vol dir que cap àmbit actiu en fa servir, i llavors `$` no és un sigil: és un
+   * dòlar dins d'un títol, que és el que ha de continuar sent per a qui no les té.
+   */
+  taskTypes?: { id: string; name: string; scopeId: string }[];
+  /**
    * Els àmbits actius a la barra superior. Amb més d'un i sense `#`, no es crea res i
    * es demana l'àmbit; amb un de sol, s'agafa aquell (docs/02 §4).
    */
@@ -46,7 +53,7 @@ export interface QuickAddContext {
 
 /** Un tros reconegut del text, que la interfície pinta com a xip reversible. */
 export interface QuickAddToken {
-  kind: 'scope' | 'project' | 'person' | 'aiMode';
+  kind: 'scope' | 'project' | 'person' | 'aiMode' | 'taskType';
   /** El text literal que ocupava, sigil inclòs. Tornar-lo a posar desfà el xip. */
   raw: string;
   /** Posició dins del text original, per poder-hi pintar el xip al lloc. */
@@ -66,6 +73,8 @@ export interface QuickAddResult {
   projectId: string | null;
   assigneeIds: string[];
   aiMode: 'manual' | 'assisted' | 'delegated';
+  /** La tipologia, si s'ha escrit amb `$`. */
+  taskTypeId: string | null;
   tokens: QuickAddToken[];
   error: QuickAddErrorCode | null;
 }
@@ -134,6 +143,7 @@ export function parseQuickAdd(text: string, context: QuickAddContext): QuickAddR
   let projectId: string | null = null;
   const assigneeIds: string[] = [];
   let aiMode: 'manual' | 'assisted' | 'delegated' = 'manual';
+  let taskTypeId: string | null = null;
 
   let i = 0;
   let plainFrom = 0;
@@ -207,6 +217,32 @@ export function parseQuickAdd(text: string, context: QuickAddContext): QuickAddR
       }
     }
 
+    /**
+     * `$Tipologia` — en què es va anar el temps.
+     *
+     * **`$` i no `#`** perquè `#` ja és l'àmbit i el projecte. És el mateix sigil que fa
+     * servir l'eina d'on ve aquesta funció, i per la mateixa raó: era el que quedava lliure.
+     */
+    if (char === '$') {
+      const type = matchLongest(text, i + 1, context.taskTypes ?? []);
+      if (type !== null) {
+        flushPlain(i);
+        const end = i + 1 + type.length;
+        tokens.push({
+          kind: 'taskType',
+          raw: text.slice(i, end),
+          start: i,
+          end,
+          id: type.id,
+          label: type.name,
+        });
+        taskTypeId = type.id;
+        i = end;
+        plainFrom = i;
+        continue;
+      }
+    }
+
     if (char === '!') {
       // `!ia` i `!ia:delegada` (docs/09 §2). Sense el sigil, tota tasca neix `manual`.
       const match = /^!ia(?::([\p{L}]+))?/u.exec(text.slice(i));
@@ -246,7 +282,7 @@ export function parseQuickAdd(text: string, context: QuickAddContext): QuickAddR
   const error: QuickAddErrorCode | null =
     scopeId === null ? 'scope-required' : title === '' ? 'empty-title' : null;
 
-  return { title, scopeId, projectId, assigneeIds, aiMode, tokens, error };
+  return { title, scopeId, projectId, assigneeIds, aiMode, taskTypeId, tokens, error };
 }
 
 /**
@@ -259,6 +295,6 @@ export function parseQuickAdd(text: string, context: QuickAddContext): QuickAddR
  * corregir-ho, en comptes de quedar-se amb un forat.
  */
 export function revertToken(text: string, token: QuickAddToken): string {
-  const plain = token.raw.replace(/^[#@!]/, '').replace(/^ia:?/, '');
+  const plain = token.raw.replace(/^[#@!$]/, '').replace(/^ia:?/, '');
   return text.slice(0, token.start) + plain + text.slice(token.end);
 }

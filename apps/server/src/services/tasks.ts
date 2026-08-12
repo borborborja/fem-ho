@@ -29,6 +29,8 @@ import { listInboxEvents, type InboxEvent } from './events.js';
 import { listInboxMail, type InboxMail } from './mail.js';
 import { refusalError, refuseTaskWrite, type WriteIntent } from '../policy/ai-writes.js';
 import { clearAttention } from './attention.js';
+import { settingsOf } from './scope-settings.js';
+import { assertTypeInScope } from './task-types.js';
 import { closeSession, openSession } from './sessions.js';
 import { leaseOf, releaseIfHeld } from './leases.js';
 import { assertScopeAccess, listScopes } from './scopes.js';
@@ -69,6 +71,8 @@ export interface TaskRow {
    * ha de poder respondre el tauler sense llegir els comentaris de tres-centes targetes.
    */
   needs_attention: boolean;
+  /** En què es va anar el temps: la tipologia, si l'àmbit en fa servir. */
+  task_type_id: string | null;
   /** Des de quan. Una pregunta de fa deu minuts i una de fa tres dies no diuen el mateix. */
   attention_asked_at: string | null;
   /**
@@ -121,7 +125,7 @@ const TASK_COLUMNS = sql`
   deadline, completed_at, view_mode, ai_mode, delegate_agent_id,
   rrule, recurrence_mode, recurrence_parent_id, source_kind,
   needs_attention, attention_asked_at, last_activity_at, ai_last_read_at, ai_last_read_by,
-  created_by,
+  task_type_id, created_by,
   created_at, updated_at, version
 `;
 
@@ -406,6 +410,8 @@ export interface CreateTaskInput {
   due_date?: string | undefined;
   due_time?: string | undefined;
   assignee_ids?: string[] | undefined;
+  /** En què es va anar el temps. Obligatòria als àmbits que ho demanin. */
+  task_type_id?: string | undefined;
   /**
    * De quin esdeveniment ve, si ve d'algun.
    *
@@ -450,6 +456,30 @@ export async function createTask(
   }
 
   const scope = await assertScopeAccess(ctx.tx, principal, input.scope_id);
+
+  /**
+   * **La tipologia, quan l'àmbit l'exigeix.**
+   *
+   * Es comprova en **crear**, que és el que va demanar qui ho farà servir: si es demanés en
+   * completar, hi hauria tasques a mig fer que un dia no es podrien acabar sense una
+   * decisió que ja no recorda ningú. L'error diu que en falta una, i la pantalla ofereix
+   * les que hi ha —rebutjar sense oferir seria una porta tancada.
+   */
+  const config = await settingsOf(ctx.tx, input.scope_id);
+  // `!= null` i no `!== undefined`: pel camí del sync arriba la fila sencera de l'altra
+  // banda, amb `task_type_id: null`, i «no en té» no és «en té una que es diu null».
+  if (input.task_type_id != null && input.task_type_id !== '') {
+    await assertTypeInScope(ctx.tx, input.scope_id, input.task_type_id);
+  } else if (config.task_types_enabled && config.task_type_required) {
+    throw new PolicyError(
+      'task-type-required',
+      'Task type required',
+      422,
+      `Tasks in ${scope.name} need a task type.`,
+      { name: scope.name, scope_id: input.scope_id },
+    );
+  }
+
   const id = input.id ?? uuidv7();
 
   const existing = await sql<TaskRow>`
@@ -545,14 +575,14 @@ export async function createTask(
     INSERT INTO tasks (id, scope_id, project_id, title, description, status, position,
                        due_date, due_time, view_mode, ai_mode, origin, search_text,
                        event_calendar_id, event_uid, event_recurrence_id, source_kind,
-                       created_by, created_at, updated_at, version)
+                       task_type_id, created_by, created_at, updated_at, version)
     VALUES (${id}, ${input.scope_id}, ${input.project_id ?? null}, ${input.title.trim()},
             ${input.description ?? null}, ${status}, ${position}, ${input.due_date ?? null},
             ${input.due_time ?? null}, 'card', 'manual', 'native',
             ${normalizeForSearch(input.title, input.description)},
             ${input.source_event?.calendar_id ?? null}, ${input.source_event?.uid ?? null},
             ${input.source_event?.recurrence_id ?? null}, ${sourceKind},
-            ${principal.userId}, ${ctx.now}, ${ctx.now}, 1)
+            ${input.task_type_id ?? null}, ${principal.userId}, ${ctx.now}, ${ctx.now}, 1)
     ON CONFLICT (id) DO NOTHING
   `.execute(ctx.tx);
 
@@ -1125,6 +1155,8 @@ export interface UpdateTaskInput {
   deadline?: string | null | undefined;
   /** `null` la treu del projecte i la torna a l'espai general de l'àmbit. */
   project_id?: string | null | undefined;
+  /** `null` o buit la deixen sense tipologia. */
+  task_type_id?: string | null | undefined;
   /** RFC 5545. `null` deixa de repetir-se. */
   rrule?: string | null | undefined;
   /** `schedule` compta des del venciment; `completion`, des que es fa (docs/01 §4). */
@@ -1169,6 +1201,13 @@ export async function updateTask(
     }
     fields.title = input.title.trim();
   }
+  if (input.task_type_id !== undefined) {
+    if (input.task_type_id !== null && input.task_type_id !== '') {
+      await assertTypeInScope(ctx.tx, before.scope_id, input.task_type_id);
+    }
+    fields.task_type_id = input.task_type_id === '' ? null : input.task_type_id;
+  }
+
   for (const key of [
     'description',
     'due_date',

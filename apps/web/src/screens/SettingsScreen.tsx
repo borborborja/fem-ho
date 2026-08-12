@@ -34,6 +34,8 @@ import type {
   AdminUser,
   Agent,
   ApiTokenSummary,
+  ScopeSettings,
+  TaskType,
   Calendar,
   Info,
   MailAccount,
@@ -690,6 +692,7 @@ function ScopeRow({ scope, onDone }: { scope: Scope; onDone: () => Promise<void>
   const [color, setColor] = useState(scope.color);
   const [kind, setKind] = useState<'individual' | 'collective'>(scope.kind);
   const [openMembers, setOpenMembers] = useState(false);
+  const [openTracking, setOpenTracking] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const save = useMutation(async () => {
@@ -743,6 +746,16 @@ function ScopeRow({ scope, onDone }: { scope: Scope; onDone: () => Promise<void>
             style={LINK_BUTTON}
           >
             {t('settings.members')}
+          </button>
+        ) : null}
+        {isOwner ? (
+          <button
+            type="button"
+            data-testid={`scope-tracking-${scope.id}`}
+            onClick={() => setOpenTracking(!openTracking)}
+            style={LINK_BUTTON}
+          >
+            {t('settings.tracking')}
           </button>
         ) : null}
       </div>
@@ -801,6 +814,205 @@ function ScopeRow({ scope, onDone }: { scope: Scope; onDone: () => Promise<void>
       ) : null}
 
       {openMembers ? <MembersList scopeId={scope.id} canManage={isOwner} /> : null}
+      {openTracking ? <TrackingSettings scopeId={scope.id} /> : null}
+    </div>
+  );
+}
+
+/**
+ * Com es comporta un àmbit: el registre de dedicació, l'horari i les tipologies.
+ *
+ * Va aquí i no a una pestanya pròpia perquè és **d'aquest àmbit**: qui fa servir Fem-ho per
+ * a casa no ho ha de veure mai, i qui factura hores ho troba on ja és per canviar el nom i
+ * el color.
+ */
+function TrackingSettings({ scopeId }: { scopeId: string }) {
+  const settings = useApi<ScopeSettings>(`/api/v1/scopes/${scopeId}/settings`);
+  const types = useApi<{ data: TaskType[] }>(`/api/v1/task-types?scope_id=${scopeId}`);
+  const [nou, setNou] = useState('');
+  const [recuperats, setRecuperats] = useState<number | null>(null);
+
+  const config = settings.data;
+
+  const desa = (canvis: Record<string, unknown>): void => {
+    void api
+      .patch<{ backfilled: number }>(`/api/v1/scopes/${scopeId}/settings`, canvis)
+      .then((resposta) => {
+        // **Es diu quants blocs s'han recuperat.** Encendre-ho i trobar-se el Registre ple
+        // sense explicació faria pensar que l'app s'ho ha inventat; el que ha passat és que
+        // ja ho sabíem de l'historial.
+        if (resposta.backfilled > 0) setRecuperats(resposta.backfilled);
+        settings.reload();
+      });
+  };
+
+  if (config === undefined) return null;
+
+  return (
+    <div style={{ paddingLeft: 18, display: 'grid', gap: 10 }}>
+      <Toggle
+        testId={`tracking-on-${scopeId}`}
+        label={t('settings.trackingOn')}
+        checked={config.time_tracking}
+        onChange={(value) => desa({ time_tracking: value })}
+      />
+      <p style={HINT}>{t('settings.trackingHelp')}</p>
+      {recuperats === null ? null : (
+        <p
+          data-testid={`tracking-backfilled-${scopeId}`}
+          style={{ ...HINT, color: 'var(--kicker)' }}
+        >
+          {t('settings.trackingBackfilled', { count: recuperats })}
+        </p>
+      )}
+
+      {config.time_tracking ? (
+        <>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 12, color: 'var(--ink-soft)' }}>
+              {t('settings.workHours')}
+            </span>
+            <input
+              type="time"
+              className="plou-input"
+              data-testid={`work-start-${scopeId}`}
+              value={config.work_start}
+              onChange={(event) => desa({ work_start: event.target.value })}
+              style={{ width: 'auto' }}
+            />
+            <input
+              type="time"
+              className="plou-input"
+              data-testid={`work-end-${scopeId}`}
+              value={config.work_end}
+              onChange={(event) => desa({ work_end: event.target.value })}
+              style={{ width: 'auto' }}
+            />
+          </div>
+
+          {/* Els dies laborables, en l'ordre en què es diuen: de dilluns a diumenge. */}
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].map((dia, index) => (
+              <label
+                key={dia}
+                style={{ display: 'flex', gap: 4, alignItems: 'center', fontSize: 12 }}
+              >
+                <input
+                  type="checkbox"
+                  data-testid={`work-day-${scopeId}-${dia}`}
+                  checked={config.work_days[index] === '1'}
+                  onChange={(event) => {
+                    const dies = config.work_days.split('');
+                    dies[index] = event.target.checked ? '1' : '0';
+                    desa({ work_days: dies.join('') });
+                  }}
+                />
+                {t(`settings.day.${dia}`)}
+              </label>
+            ))}
+          </div>
+
+          <Toggle
+            testId={`overtime-${scopeId}`}
+            label={t('settings.overtimeVisible')}
+            checked={config.overtime_visible}
+            onChange={(value) => desa({ overtime_visible: value })}
+          />
+
+          <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12 }}>
+            {t('settings.longSession')}
+            <input
+              type="number"
+              className="plou-input"
+              data-testid={`long-session-${scopeId}`}
+              value={config.long_session_hours}
+              min={1}
+              max={168}
+              onChange={(event) => desa({ long_session_hours: Number(event.target.value) })}
+              style={{ width: 80 }}
+            />
+          </label>
+        </>
+      ) : null}
+
+      {/*
+        **La nomenclatura.** Només canvia la paraula de la interfície: el camp segueix sent
+        `project_id` a la base, a l'API i a les tools (regla 3).
+      */}
+      <Chips
+        testId={`project-noun-${scopeId}`}
+        value={config.project_noun}
+        options={[
+          { key: 'project' as const, label: t('settings.noun.project') },
+          { key: 'client' as const, label: t('settings.noun.client') },
+        ]}
+        onChange={(value) => desa({ project_noun: value })}
+      />
+
+      <Toggle
+        testId={`types-on-${scopeId}`}
+        label={t('settings.typesOn')}
+        checked={config.task_types_enabled}
+        onChange={(value) => desa({ task_types_enabled: value })}
+      />
+
+      {config.task_types_enabled ? (
+        <>
+          <Toggle
+            testId={`types-required-${scopeId}`}
+            label={t('settings.typesRequired')}
+            checked={config.task_type_required}
+            onChange={(value) => desa({ task_type_required: value })}
+          />
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {(types.data?.data ?? []).map((type) => (
+              <span
+                key={type.id}
+                data-testid={`task-type-${type.id}`}
+                className="plou-tag"
+                style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}
+              >
+                {type.name}
+                <button
+                  type="button"
+                  data-testid={`task-type-delete-${type.id}`}
+                  onClick={() => {
+                    void api.delete(`/api/v1/task-types/${type.id}`).then(() => types.reload());
+                  }}
+                  style={{ ...LINK_BUTTON, color: 'var(--danger-text)' }}
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input
+              className="plou-input"
+              data-testid={`task-type-name-${scopeId}`}
+              value={nou}
+              placeholder={t('settings.typeNew')}
+              onChange={(event) => setNou(event.target.value)}
+            />
+            <button
+              type="button"
+              className="plou-btn plou-btn-ghost"
+              data-testid={`task-type-add-${scopeId}`}
+              disabled={nou.trim() === ''}
+              onClick={() => {
+                void api
+                  .post('/api/v1/task-types', { scope_id: scopeId, name: nou.trim() })
+                  .then(() => {
+                    setNou('');
+                    types.reload();
+                  });
+              }}
+            >
+              {t('nav.create')}
+            </button>
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }

@@ -55,7 +55,19 @@
         "name": "Anna Maria"
       }
     ],
-    "activeScopeIds": ["scope-personal", "scope-feina", "scope-familia"]
+    "activeScopeIds": ["scope-personal", "scope-feina", "scope-familia"],
+    "taskTypes": [
+      {
+        "id": "type-contingut",
+        "name": "Contingut",
+        "scopeId": "scope-feina"
+      },
+      {
+        "id": "type-reunio",
+        "name": "Reunió",
+        "scopeId": "scope-feina"
+      }
+    ]
   },
   "cases": [
     {
@@ -275,6 +287,45 @@
       "expect": {
         "scopeId": "scope-personal",
         "projectId": null,
+        "error": null
+      }
+    },
+    {
+      "name": "$Tipologia la classifica i surt del titol",
+      "input": "#Feina Enviar la factura $Contingut",
+      "expect": {
+        "title": "Enviar la factura",
+        "scopeId": "scope-feina",
+        "projectId": null,
+        "assigneeIds": [],
+        "aiMode": "manual",
+        "taskTypeId": "type-contingut",
+        "error": null
+      }
+    },
+    {
+      "name": "amb accents i majuscules, la mateixa tipologia",
+      "input": "#Feina $reunio Parlar amb l'Anna",
+      "expect": {
+        "title": "Parlar amb l'Anna",
+        "scopeId": "scope-feina",
+        "projectId": null,
+        "assigneeIds": [],
+        "aiMode": "manual",
+        "taskTypeId": "type-reunio",
+        "error": null
+      }
+    },
+    {
+      "name": "un dolar que no es cap tipologia es queda al titol",
+      "input": "#Feina Cobrar $500 del client",
+      "expect": {
+        "title": "Cobrar $500 del client",
+        "scopeId": "scope-feina",
+        "projectId": null,
+        "assigneeIds": [],
+        "aiMode": "manual",
+        "taskTypeId": null,
         "error": null
       }
     }

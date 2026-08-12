@@ -1,7 +1,7 @@
 import type * as React from 'react';
 
 export interface QuickAddChip {
-  kind: 'scope' | 'project' | 'person' | 'aiMode';
+  kind: 'scope' | 'project' | 'person' | 'aiMode' | 'taskType';
   start: number;
   end: number;
   /** El que es veu al xip. */

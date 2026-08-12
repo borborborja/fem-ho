@@ -12,6 +12,10 @@ type S = components['schemas'];
 
 export type Task = S['Task'];
 export type Scope = S['Scope'];
+/** Com es comporta un àmbit: registre, horari, tipologies i com se'n diu d'un projecte. */
+export type ScopeSettings = S['ScopeSettings'];
+/** En què es va anar el temps. **No és una etiqueta**: n'hi ha una per tasca (P27). */
+export type TaskType = S['TaskType'];
 export type Project = S['Project'];
 export type Label = S['Label'];
 export type Member = S['Member'];

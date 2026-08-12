@@ -26,7 +26,15 @@ import { api, failureText } from '../app/api.js';
 import { Attachments } from '../app/Attachments.js';
 import { useSessionData } from '../app/session.js';
 import { useApi, useMutation } from '../app/useApi.js';
-import type { ActivityEntry, Checklist, Comment, Label, Subtask, Task } from '../app/types.js';
+import type {
+  ActivityEntry,
+  Checklist,
+  Comment,
+  Label,
+  Subtask,
+  Task,
+  TaskType,
+} from '../app/types.js';
 
 /**
  * Els verbs que l'historial sap traduir.
@@ -157,6 +165,7 @@ export function TaskModal({
   const [takeOverError, setTakeOverError] = useState<string | null>(null);
   const [activityFilter, setActivityFilter] = useState<'all' | 'ai' | 'human'>('all');
   const labels = useApi<Label[]>('/api/v1/labels');
+  const taskTypes = useApi<{ data: TaskType[] }>('/api/v1/task-types');
   /** El nom que s'està escrivint per a una etiqueta nova; `null` si no n'hi ha cap. */
   const [newLabel, setNewLabel] = useState<string | null>(null);
 
@@ -255,6 +264,9 @@ export function TaskModal({
   const data = task.data;
   const scope = scopes.find((candidate) => candidate.id === data?.scope_id);
   const scopeLabels = (labels.data ?? []).filter((entry) => entry.scope_id === data?.scope_id);
+  const scopeTypes = (taskTypes.data?.data ?? []).filter(
+    (type) => type.scope_id === data?.scope_id,
+  );
 
   /**
    * Quan s'ensenya la conversa amb la IA.
@@ -641,6 +653,40 @@ export function TaskModal({
                  desapareixia sense que ningú ho hagués demanat. Ara la decisió la pren
                  l'estat que ja se sap, i un error és un error.
             */}
+            {/*
+              **La tipologia: una i tancada.** Surt només si l'àmbit en fa servir, i és un
+              desplegable i no uns xips com les etiquetes justament perquè es vegi que se
+              n'hi posa **una**: uns xips convidarien a marcar-ne dues i llavors la
+              pregunta «quantes n'hi pot haver» tornaria a estar oberta.
+            */}
+            {scopeTypes.length === 0 ? null : (
+              <section style={{ display: 'grid', gap: 6 }} data-testid="task-type">
+                {label(t('task.taskType'))}
+                <select
+                  className="plou-input"
+                  data-testid="task-type-select"
+                  value={data?.task_type_id ?? ''}
+                  onChange={(event) => {
+                    void api
+                      .patch(`/api/v1/tasks/${taskId ?? ''}`, {
+                        task_type_id: event.target.value === '' ? null : event.target.value,
+                      })
+                      .then(() => {
+                        task.reload();
+                        onChanged();
+                      });
+                  }}
+                >
+                  <option value="">{t('stats.noType')}</option>
+                  {scopeTypes.map((type) => (
+                    <option key={type.id} value={type.id}>
+                      {type.name}
+                    </option>
+                  ))}
+                </select>
+              </section>
+            )}
+
             <section style={{ display: 'grid', gap: 6 }}>
               {label(t('task.labels'))}
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>

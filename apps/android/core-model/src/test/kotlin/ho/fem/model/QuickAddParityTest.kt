@@ -64,7 +64,17 @@ class QuickAddParityTest {
                 )
             }
 
-        return QuickAddContext(scopes, people, activeScopeIds)
+        val taskTypes =
+            (node["taskTypes"] as? JsonArray ?: JsonArray(emptyList())).map {
+                val type = it.jsonObject
+                QuickAddTaskType(
+                    id = type["id"]!!.jsonPrimitive.content,
+                    name = type["name"]!!.jsonPrimitive.content,
+                    scopeId = type["scopeId"]!!.jsonPrimitive.content,
+                )
+            }
+
+        return QuickAddContext(scopes, people, activeScopeIds, taskTypes)
     }
 
     /** Compara el resultat amb el que diu el fixture, camp a camp i només els que hi són. */
@@ -88,6 +98,10 @@ class QuickAddParityTest {
         }
 
         expect["aiMode"]?.let { assertEquals(it.jsonPrimitive.content, result.aiMode.wire, "$name · mode d'IA") }
+
+        expect["taskTypeId"]?.let {
+            assertEquals(nullable(it), result.taskTypeId, "$name · tipologia")
+        }
 
         expect["error"]?.let { assertEquals(nullable(it), result.error?.wire, "$name · error") }
     }

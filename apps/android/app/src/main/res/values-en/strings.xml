@@ -346,6 +346,13 @@
     <string name="settings_credits">Fem-ho © 2026 Borja Balsera · The design system is Plou, from a separate product and under its own terms · Roboto typeface (SIL Open Font License) · See the NOTICE file in the repository</string>
     <string name="settings_currentpassword">Current password</string>
     <string name="settings_dashboarditems">What shows in the overview</string>
+    <string name="settings_day_fri">Fr</string>
+    <string name="settings_day_mon">Mo</string>
+    <string name="settings_day_sat">Sa</string>
+    <string name="settings_day_sun">Su</string>
+    <string name="settings_day_thu">Th</string>
+    <string name="settings_day_tue">Tu</string>
+    <string name="settings_day_wed">We</string>
     <string name="settings_empty_agents">You have not created any agent yet.</string>
     <string name="settings_empty_calendars">This scope has no calendars yet.</string>
     <string name="settings_empty_shares">You have not created any share link yet. You make one by opening a task and pressing “Share”.</string>
@@ -376,6 +383,7 @@
     <string name="settings_inviterevoke">Revoke</string>
     <string name="settings_inviterole">What they can do</string>
     <string name="settings_language">Language</string>
+    <string name="settings_longsession">Flag for review from (hours)</string>
     <string name="settings_mail_accounts">Accounts</string>
     <string name="settings_mail_add">Add the account</string>
     <string name="settings_mail_addrule">Map the folder</string>
@@ -429,6 +437,9 @@
     <string name="settings_newproject">New project</string>
     <string name="settings_newscope">+ New scope</string>
     <string name="settings_noprojects">No projects in this scope.</string>
+    <string name="settings_noun_client">Clients</string>
+    <string name="settings_noun_project">Projects</string>
+    <string name="settings_overtimevisible">Show time outside hours as overtime</string>
     <string name="settings_passwordchanged">Password changed. The other sessions were closed.</string>
     <string name="settings_profileemail">Email</string>
     <string name="settings_profilename">Name</string>
@@ -506,6 +517,13 @@
     <string name="settings_theme_system">System</string>
     <string name="settings_timezone">Time zone</string>
     <string name="settings_title">Settings</string>
+    <string name="settings_tracking">Time log</string>
+    <string name="settings_trackingbackfilled">{count} time blocks recovered from the history.</string>
+    <string name="settings_trackinghelp">When a task goes through “Doing”, the time it spends there is logged. Turning this on recovers what is already in the history.</string>
+    <string name="settings_trackingon">Log time in this scope</string>
+    <string name="settings_typenew">New type</string>
+    <string name="settings_typeson">Use task types</string>
+    <string name="settings_typesrequired">Required to create a task</string>
     <string name="settings_update_available">Version {version} is out.</string>
     <string name="settings_update_see">See what changed</string>
     <string name="settings_update_unreachable">Could not check whether there is a newer version.</string>
@@ -515,6 +533,7 @@
     <string name="settings_wipe">Wipe the instance</string>
     <string name="settings_wipeconfirm">Type “{name}” to confirm</string>
     <string name="settings_wipewarning">This deletes every task, event, list and the history. The accounts stay.</string>
+    <string name="settings_workhours">Working hours</string>
     <string name="setup_name">Your name</string>
     <string name="setup_scope_family">Family</string>
     <string name="setup_scope_personal">Personal</string>
@@ -644,6 +663,7 @@
     <string name="task_share">Share</string>
     <string name="task_status">Status</string>
     <string name="task_subtasks">Subtasks</string>
+    <string name="task_tasktype">Type</string>
     <string name="task_title">Title</string>
     <string name="tokens_aiowned">AI credential for “{name}”</string>
     <string name="tokens_aiownedgo">Go to the agent</string>

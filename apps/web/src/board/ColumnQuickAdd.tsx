@@ -20,6 +20,8 @@ export interface ColumnQuickAddProps {
     projectId: string | null;
     assigneeIds: string[];
     aiMode: 'manual' | 'assisted' | 'delegated';
+    /** La tipologia escrita amb `$`, si l'àmbit en fa servir. */
+    taskTypeId: string | null;
   }) => void;
   onFullEdit: () => void;
 }

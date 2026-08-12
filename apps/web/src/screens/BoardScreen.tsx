@@ -310,6 +310,16 @@ export function BoardScreen({
    * d'allà, però la banda que diu «aquests àmbits no tenen ningú» s'ha de poder pintar tan
    * aviat com s'hi entra, sense un salt de contingut.
    */
+  /**
+   * Les tipologies dels àmbits actius, per al sigil `$`.
+   *
+   * Van al context del parser i no a una crida de l'afegida ràpida: el parser és pur i
+   * compartit amb Android, i el que ha de rebre són els noms que pot reconèixer.
+   */
+  const taskTypes = useApi<{ data: { id: string; name: string; scope_id: string }[] }>(
+    '/api/v1/task-types',
+  );
+
   const coverage = useApi<{
     data: { scope_id: string; agent: { id: string; name: string; enabled: boolean } | null }[];
   }>('/api/v1/ai/coverage');
@@ -501,8 +511,11 @@ export function BoardScreen({
       })),
       people,
       activeScopeIds,
+      taskTypes: (taskTypes.data?.data ?? [])
+        .filter((type) => activeScopeIds.includes(type.scope_id))
+        .map((type) => ({ id: type.id, name: type.name, scopeId: type.scope_id })),
     }),
-    [activeScopes, projects, people, activeScopeIds],
+    [activeScopes, projects, people, activeScopeIds, taskTypes.data],
   );
 
   const move = async (taskId: string, status: TaskStatus): Promise<void> => {
@@ -583,6 +596,7 @@ export function BoardScreen({
       projectId: string | null;
       assigneeIds: string[];
       aiMode: 'manual' | 'assisted' | 'delegated';
+      taskTypeId: string | null;
     },
     status: TaskStatus = 'inbox',
   ): Promise<void> => {
@@ -595,6 +609,7 @@ export function BoardScreen({
       title: input.title,
       status,
       assignee_ids: input.assigneeIds.length > 0 ? input.assigneeIds : undefined,
+      task_type_id: input.taskTypeId ?? undefined,
     });
     refresh();
   };

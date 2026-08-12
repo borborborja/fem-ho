@@ -346,6 +346,13 @@
     <string name="settings_credits">Fem-ho © 2026 Borja Balsera · El sistema de disseny és Plou, d’un producte a part i amb condicions pròpies · Tipografia Roboto (SIL Open Font License) · Vegeu el fitxer NOTICE del repositori</string>
     <string name="settings_currentpassword">Contrasenya actual</string>
     <string name="settings_dashboarditems">Què es veu al tauler general</string>
+    <string name="settings_day_fri">dv</string>
+    <string name="settings_day_mon">dl</string>
+    <string name="settings_day_sat">ds</string>
+    <string name="settings_day_sun">dg</string>
+    <string name="settings_day_thu">dj</string>
+    <string name="settings_day_tue">dt</string>
+    <string name="settings_day_wed">dc</string>
     <string name="settings_empty_agents">Encara no has creat cap agent.</string>
     <string name="settings_empty_calendars">Aquest àmbit encara no té cap calendari.</string>
     <string name="settings_empty_shares">Encara no has creat cap enllaç compartit. Se’n fa un obrint una tasca i prement «Compartir».</string>
@@ -376,6 +383,7 @@
     <string name="settings_inviterevoke">Revocar</string>
     <string name="settings_inviterole">Què podrà fer</string>
     <string name="settings_language">Idioma</string>
+    <string name="settings_longsession">Marca per revisar a partir de (hores)</string>
     <string name="settings_mail_accounts">Comptes</string>
     <string name="settings_mail_add">Afegeix el compte</string>
     <string name="settings_mail_addrule">Mapa la carpeta</string>
@@ -429,6 +437,9 @@
     <string name="settings_newproject">Projecte nou</string>
     <string name="settings_newscope">+ Nou àmbit</string>
     <string name="settings_noprojects">Cap projecte en aquest àmbit.</string>
+    <string name="settings_noun_client">Clients</string>
+    <string name="settings_noun_project">Projectes</string>
+    <string name="settings_overtimevisible">Ensenyar les hores fora d\'horari com a extres</string>
     <string name="settings_passwordchanged">Contrasenya canviada. S\'han tancat les altres sessions.</string>
     <string name="settings_profileemail">Correu</string>
     <string name="settings_profilename">Nom</string>
@@ -506,6 +517,13 @@
     <string name="settings_theme_system">Sistema</string>
     <string name="settings_timezone">Fus horari</string>
     <string name="settings_title">Ajustos</string>
+    <string name="settings_tracking">Registre</string>
+    <string name="settings_trackingbackfilled">S\'han recuperat {count} blocs de dedicació de l\'historial.</string>
+    <string name="settings_trackinghelp">Quan una tasca passa per «Fent», el temps que hi està queda registrat. En activar-ho es recupera el que ja hi ha a l\'historial.</string>
+    <string name="settings_trackingon">Anotar la dedicació d\'aquest àmbit</string>
+    <string name="settings_typenew">Nova tipologia</string>
+    <string name="settings_typeson">Fer servir tipologies de tasca</string>
+    <string name="settings_typesrequired">Obligatòria per crear una tasca</string>
     <string name="settings_update_available">Hi ha la versió {version}.</string>
     <string name="settings_update_see">Veure què ha canviat</string>
     <string name="settings_update_unreachable">No s\'ha pogut consultar si hi ha una versió més nova.</string>
@@ -515,6 +533,7 @@
     <string name="settings_wipe">Netejar instància</string>
     <string name="settings_wipeconfirm">Escriu «{name}» per confirmar</string>
     <string name="settings_wipewarning">Això esborra totes les tasques, esdeveniments, llistes i l\'historial. Els comptes es queden.</string>
+    <string name="settings_workhours">Horari laboral</string>
     <string name="setup_name">El teu nom</string>
     <string name="setup_scope_family">Família</string>
     <string name="setup_scope_personal">Personal</string>
@@ -644,6 +663,7 @@
     <string name="task_share">Compartir</string>
     <string name="task_status">Estat</string>
     <string name="task_subtasks">Subtasques</string>
+    <string name="task_tasktype">Tipologia</string>
     <string name="task_title">Títol</string>
     <string name="tokens_aiowned">Credencial d\'IA de «{name}»</string>
     <string name="tokens_aiownedgo">Anar a l\'agent</string>

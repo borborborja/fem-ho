@@ -1765,6 +1765,96 @@ paths:
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
 
+  /task-types:
+    get:
+      tags: [scopes]
+      operationId: listTaskTypes
+      summary: Les tipologies de tasca
+      description: |
+        **En què** es va anar el temps: «Contingut», «Reunió», «Gravació». Són d'àmbit i
+        **tancades** —les manté qui mana a l'àmbit—, que és el que les distingeix d'una
+        etiqueta i el que fa que les Estadístiques per tipologia vulguin dir alguna cosa.
+      parameters: [{ name: scope_id, in: query, schema: { type: string } }]
+      responses:
+        '200':
+          description: Les tipologies visibles.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/TaskType' } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+    post:
+      tags: [scopes]
+      operationId: createTaskType
+      summary: Crear-ne una
+      description: |
+        Només qui pot els ajustos de l'àmbit. **Idempotent pel nom**: crear dues vegades
+        «Contingut» a la mateixa pantalla és un doble clic, no una intenció.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [scope_id, name]
+              properties:
+                scope_id: { type: string }
+                name: { type: string, minLength: 1 }
+                color: { type: string }
+                position: { type: string }
+      responses:
+        '201':
+          description: La tipologia.
+          content: { application/json: { schema: { $ref: '#/components/schemas/TaskType' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403':
+          description: Qui ho demana no mana en aquest àmbit.
+          content:
+            { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+        '422':
+          description: Falta l'àmbit o el nom.
+          content:
+            { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+
+  /task-types/{id}:
+    patch:
+      tags: [scopes]
+      operationId: updateTaskType
+      summary: Reanomenar-la o canviar-ne el color
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                color: { type: string }
+                position: { type: string }
+      responses:
+        '200':
+          description: La tipologia.
+          content: { application/json: { schema: { $ref: '#/components/schemas/TaskType' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [scopes]
+      operationId: deleteTaskType
+      summary: Esborrar-la
+      description: |
+        **La feina feta no es toca**: les tasques que la portaven es queden sense tipologia i
+        el que ja hi ha registrat segueix comptant sota «Sense tipologia». Esborrar una
+        manera de classificar no ha de fer desaparèixer les hores classificades.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '204': { description: Esborrada. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   /scopes/settings:
     get:
       tags: [scopes]
@@ -5481,6 +5571,11 @@ components:
         locked_by_agent_id:
           type: [string, 'null']
           description: Quin agent la té. `null` amb `locked_until` ple vol dir una persona.
+        task_type_id:
+          type: [string, 'null']
+          description: |
+            En què es va anar el temps. **No és una etiqueta**: n'hi ha una i prou, la manté
+            qui mana a l'àmbit, i pot ser obligatòria.
         needs_attention:
           type: boolean
           description: |
@@ -5651,6 +5746,17 @@ components:
           items: { $ref: '#/components/schemas/SessionBucket' }
           description: "Les hores extres per projecte: per saber per a qui s'han fet."
 
+    TaskType:
+      type: object
+      additionalProperties: false
+      required: [id, scope_id, name, color, position]
+      properties:
+        id: { type: string }
+        scope_id: { type: string }
+        name: { type: string }
+        color: { type: string }
+        position: { type: string }
+
     ScopeSettings:
       type: object
       additionalProperties: false
@@ -5737,6 +5843,7 @@ components:
         assignee_ids:
           type: array
           items: { type: string }
+        task_type_id: { type: string }
         source_event:
           type: object
           additionalProperties: false

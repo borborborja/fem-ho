@@ -140,6 +140,7 @@ export function registerTaskRoutes(app: FastifyInstance): void {
             assignee_ids: Array.isArray(input.assignee_ids)
               ? input.assignee_ids.filter((v): v is string => typeof v === 'string')
               : undefined,
+            task_type_id: str(input.task_type_id),
             source_event: sourceEvent(input.source_event),
           },
           db().engine,
@@ -167,6 +168,7 @@ export function registerTaskRoutes(app: FastifyInstance): void {
           due_time: nullable(input, 'due_time'),
           deadline: nullable(input, 'deadline'),
           project_id: nullable(input, 'project_id'),
+          task_type_id: nullable(input, 'task_type_id'),
           rrule: nullable(input, 'rrule'),
           recurrence_mode:
             input.recurrence_mode === 'schedule' || input.recurrence_mode === 'completion'

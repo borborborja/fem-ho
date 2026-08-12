@@ -997,6 +997,56 @@ export interface paths {
         patch: operations["updateSession"];
         trace?: never;
     };
+    "/task-types": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Les tipologies de tasca
+         * @description **En què** es va anar el temps: «Contingut», «Reunió», «Gravació». Són d'àmbit i
+         *     **tancades** —les manté qui mana a l'àmbit—, que és el que les distingeix d'una
+         *     etiqueta i el que fa que les Estadístiques per tipologia vulguin dir alguna cosa.
+         */
+        get: operations["listTaskTypes"];
+        put?: never;
+        /**
+         * Crear-ne una
+         * @description Només qui pot els ajustos de l'àmbit. **Idempotent pel nom**: crear dues vegades
+         *     «Contingut» a la mateixa pantalla és un doble clic, no una intenció.
+         */
+        post: operations["createTaskType"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/task-types/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Esborrar-la
+         * @description **La feina feta no es toca**: les tasques que la portaven es queden sense tipologia i
+         *     el que ja hi ha registrat segueix comptant sota «Sense tipologia». Esborrar una
+         *     manera de classificar no ha de fer desaparèixer les hores classificades.
+         */
+        delete: operations["deleteTaskType"];
+        options?: never;
+        head?: never;
+        /** Reanomenar-la o canviar-ne el color */
+        patch: operations["updateTaskType"];
+        trace?: never;
+    };
     "/scopes/settings": {
         parameters: {
             query?: never;
@@ -3775,6 +3825,11 @@ export interface components {
             /** @description Quin agent la té. `null` amb `locked_until` ple vol dir una persona. */
             locked_by_agent_id?: string | null;
             /**
+             * @description En què es va anar el temps. **No és una etiqueta**: n'hi ha una i prou, la manté
+             *     qui mana a l'àmbit, i pot ser obligatòria.
+             */
+            task_type_id?: string | null;
+            /**
              * @description Si un agent espera resposta teva **ara**. Viu a la tasca i no al comentari que
              *     la pregunta: «quines esperen resposta» és el que ha de poder respondre el
              *     tauler sense llegir els comentaris de tres-centes targetes.
@@ -3887,6 +3942,13 @@ export interface components {
             /** @description Les hores extres per projecte: per saber per a qui s'han fet. */
             overtime_by_project: components["schemas"]["SessionBucket"][];
         };
+        TaskType: {
+            id: string;
+            scope_id: string;
+            name: string;
+            color: string;
+            position: string;
+        };
         ScopeSettings: {
             /**
              * @description Si aquest àmbit anota la dedicació i té Registre i Estadístiques. **Apagat per
@@ -3949,6 +4011,7 @@ export interface components {
             due_date?: string;
             due_time?: string;
             assignee_ids?: string[];
+            task_type_id?: string;
             /**
              * @description De quin esdeveniment surt aquesta tasca.
              *
@@ -6071,6 +6134,133 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+        };
+    };
+    listTaskTypes: {
+        parameters: {
+            query?: {
+                scope_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Les tipologies visibles. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["TaskType"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    createTaskType: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    scope_id: string;
+                    name: string;
+                    color?: string;
+                    position?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description La tipologia. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskType"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            /** @description Qui ho demana no mana en aquest àmbit. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Falta l'àmbit o el nom. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    deleteTaskType: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Esborrada. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateTaskType: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    name?: string;
+                    color?: string;
+                    position?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description La tipologia. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskType"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
         };
     };
     listScopeSettings: {

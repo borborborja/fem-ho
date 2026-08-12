@@ -31,6 +31,12 @@ import {
   type MemberRow,
 } from '../services/scopes.js';
 import { settingsOf, settingsOfMany, updateScopeSettings } from '../services/scope-settings.js';
+import {
+  createTaskType,
+  deleteTaskType,
+  listTaskTypes,
+  updateTaskType,
+} from '../services/task-types.js';
 import { backfillSessions } from '../services/sessions.js';
 import { body, handle, nullable, query, str } from './handle.js';
 
@@ -92,6 +98,53 @@ export function registerScopeRoutes(app: FastifyInstance, instanceSecret: () => 
           kind: input.kind === 'individual' || input.kind === 'collective' ? input.kind : undefined,
         }),
       );
+    }),
+  );
+
+  // ------------------------------------------------------- tipologies de tasca
+
+  app.get('/api/v1/task-types', async (request, reply) =>
+    handle(app, request, reply, async (principal) => ({
+      data: await listTaskTypes(db().db, principal, str(query(request).scope_id)),
+    })),
+  );
+
+  app.post('/api/v1/task-types', async (request, reply) =>
+    handle(app, request, reply, async (principal) => {
+      const input = body(request);
+      const created = await auditedTransaction(db().db, principal, (ctx) =>
+        createTaskType(ctx, principal, {
+          scope_id: str(input.scope_id),
+          name: str(input.name),
+          color: str(input.color),
+          position: str(input.position),
+        }),
+      );
+      void reply.code(201);
+      return created;
+    }),
+  );
+
+  app.patch<{ Params: { id: string } }>('/api/v1/task-types/:id', async (request, reply) =>
+    handle(app, request, reply, async (principal) => {
+      const input = body(request);
+      return auditedTransaction(db().db, principal, (ctx) =>
+        updateTaskType(ctx, principal, request.params.id, {
+          name: str(input.name),
+          color: str(input.color),
+          position: str(input.position),
+        }),
+      );
+    }),
+  );
+
+  app.delete<{ Params: { id: string } }>('/api/v1/task-types/:id', async (request, reply) =>
+    handle(app, request, reply, async (principal) => {
+      await auditedTransaction(db().db, principal, (ctx) =>
+        deleteTaskType(ctx, principal, request.params.id),
+      );
+      void reply.code(204).send();
+      return undefined;
     }),
   );
 

@@ -346,6 +346,13 @@
     <string name="settings_credits">Fem-ho © 2026 Borja Balsera · El sistema de diseño es Plou, de un producto aparte y con condiciones propias · Tipografía Roboto (SIL Open Font License) · Ved el fichero NOTICE del repositorio</string>
     <string name="settings_currentpassword">Contraseña actual</string>
     <string name="settings_dashboarditems">Qué se ve en la vista general</string>
+    <string name="settings_day_fri">vi</string>
+    <string name="settings_day_mon">lu</string>
+    <string name="settings_day_sat">sá</string>
+    <string name="settings_day_sun">do</string>
+    <string name="settings_day_thu">ju</string>
+    <string name="settings_day_tue">ma</string>
+    <string name="settings_day_wed">mi</string>
     <string name="settings_empty_agents">Todavía no has creado ningún agente.</string>
     <string name="settings_empty_calendars">Este ámbito todavía no tiene ningún calendario.</string>
     <string name="settings_empty_shares">Todavía no has creado ningún enlace compartido. Se crea abriendo una tarea y pulsando «Compartir».</string>
@@ -376,6 +383,7 @@
     <string name="settings_inviterevoke">Revocar</string>
     <string name="settings_inviterole">Qué podrá hacer</string>
     <string name="settings_language">Idioma</string>
+    <string name="settings_longsession">Marca para revisar a partir de (horas)</string>
     <string name="settings_mail_accounts">Cuentas</string>
     <string name="settings_mail_add">Añadir la cuenta</string>
     <string name="settings_mail_addrule">Mapear la carpeta</string>
@@ -429,6 +437,9 @@
     <string name="settings_newproject">Proyecto nuevo</string>
     <string name="settings_newscope">+ Nuevo ámbito</string>
     <string name="settings_noprojects">Ningún proyecto en este ámbito.</string>
+    <string name="settings_noun_client">Clientes</string>
+    <string name="settings_noun_project">Proyectos</string>
+    <string name="settings_overtimevisible">Mostrar las horas fuera de horario como extra</string>
     <string name="settings_passwordchanged">Contraseña cambiada. Se han cerrado las otras sesiones.</string>
     <string name="settings_profileemail">Correo</string>
     <string name="settings_profilename">Nombre</string>
@@ -506,6 +517,13 @@
     <string name="settings_theme_system">Sistema</string>
     <string name="settings_timezone">Zona horaria</string>
     <string name="settings_title">Ajustes</string>
+    <string name="settings_tracking">Registro</string>
+    <string name="settings_trackingbackfilled">Se han recuperado {count} bloques de dedicación del historial.</string>
+    <string name="settings_trackinghelp">Cuando una tarea pasa por «Haciendo», el tiempo que está ahí queda registrado. Al activarlo se recupera lo que ya hay en el historial.</string>
+    <string name="settings_trackingon">Anotar la dedicación de este ámbito</string>
+    <string name="settings_typenew">Nueva tipología</string>
+    <string name="settings_typeson">Usar tipologías de tarea</string>
+    <string name="settings_typesrequired">Obligatoria para crear una tarea</string>
     <string name="settings_update_available">Está la versión {version}.</string>
     <string name="settings_update_see">Ver qué ha cambiado</string>
     <string name="settings_update_unreachable">No se ha podido consultar si hay una versión más nueva.</string>
@@ -515,6 +533,7 @@
     <string name="settings_wipe">Vaciar instancia</string>
     <string name="settings_wipeconfirm">Escribe «{name}» para confirmar</string>
     <string name="settings_wipewarning">Esto borra todas las tareas, eventos, listas y el historial. Las cuentas se quedan.</string>
+    <string name="settings_workhours">Horario laboral</string>
     <string name="setup_name">Tu nombre</string>
     <string name="setup_scope_family">Familia</string>
     <string name="setup_scope_personal">Personal</string>
@@ -644,6 +663,7 @@
     <string name="task_share">Compartir</string>
     <string name="task_status">Estado</string>
     <string name="task_subtasks">Subtareas</string>
+    <string name="task_tasktype">Tipología</string>
     <string name="task_title">Título</string>
     <string name="tokens_aiowned">Credencial de IA de «{name}»</string>
     <string name="tokens_aiownedgo">Ir al agente</string>
