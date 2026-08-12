@@ -115,7 +115,7 @@ Les dotze seccions de `docs/02`:
 | §6 Vista de llista senzilla | fet |
 | §7 Modal d'edició completa | fet menys el commutador de context per a la IA; **les etiquetes eren un epígraf buit** fins a P15, i l'estat no s'hi podia canviar |
 | §8 Tauler general | fet; el mini calendari no tenia els punts que `docs/02` §8 demana (P18) |
-| §9 Ajustos | fet, les vuit pestanyes |
+| §9 Ajustos | fet, les vuit pestanyes; l'Admin i el camp de netejar la instància es van arreglar a P23 |
 | §10 Responsive | fet; el kanban del mòbil es va **arreglar** en ajustar-se al disseny, i a P19 la pàgina va deixar de moure's de costat i Ajustos va passar a ser usable al telèfon |
 | §11 Dreceres de teclat | fet, amb la paleta d'ordres |
 | §12 Estats buits, càrrega i error | fet. **La cua de sortida (`sync/outbox.ts`) no la fa servir cap pantalla de debò**, només la de prova: el tauler no enqueua res sense xarxa. El que sí que està tancat és que no es perdi el que escrius (P21) |

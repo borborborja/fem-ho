@@ -78,14 +78,22 @@ export function SettingsScreen() {
    * projectes són a "Àmbits". Un menú que promet una acció i et deixa a la porta d'un
    * edifici no ha fet la seva feina.
    */
-  const fromQuery = route.query.get('tab');
-  const [tab, setTab] = useState<Tab>(
-    TABS.includes(fromQuery as Tab) ? (fromQuery as Tab) : 'general',
-  );
-
   // Admin només per a administradors: amagar-la no és seguretat —el servidor ja hi posa
   // `users:manage`— però ensenyar una pestanya que sempre dona 403 és una mala broma.
   const tabs = TABS.filter((key) => key !== 'admin' || profile.role === 'admin');
+
+  /**
+   * La pestanya pot venir de la URL, **d'entre les que aquesta persona té**.
+   *
+   * Es validava contra la llista sencera i no contra la seva: `?tab=admin` sense ser
+   * administrador pintava el panell d'Admin amb un «Alguna cosa ha fallat» en vermell,
+   * que és la mateixa mala broma que el comentari de sobre evita al menú, per una altra
+   * porta. Ara cau a General, com qualsevol pestanya que no existeix.
+   */
+  const fromQuery = route.query.get('tab');
+  const [tab, setTab] = useState<Tab>(
+    tabs.includes(fromQuery as Tab) ? (fromQuery as Tab) : 'general',
+  );
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--page-bg)' }}>
@@ -1762,9 +1770,18 @@ function AdminTab() {
   const [name, setName] = useState('');
   const [invite, setInvite] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState('');
-  const [instanceName, setInstanceName] = useState('');
 
-  useApi<{ name: string }>('/info');
+  /**
+   * **El nom de la instància, per dir-lo abans que calgui escriure'l.**
+   *
+   * Es demanava `/info` **dues vegades**: una aquí, amb el resultat llençat, i una altra
+   * en enfocar el camp. Fins que no hi clicaves, el marcador deia literalment «Escriu «»
+   * per confirmar» —amb el nom buit—, o sigui que la instrucció que et diu què has
+   * d'escriure no ho deia. I el servidor exigeix el nom exacte: sense saber-lo, l'acció
+   * no es pot fer, no és que sigui perillosa.
+   */
+  const info = useApi<{ name: string }>('/info');
+  const instanceName = info.data?.name ?? '';
 
   const send = useMutation(async () => {
     const result = await api.post<{ invite_url: string }>('/api/v1/admin/users/invite', {
@@ -1853,16 +1870,16 @@ function AdminTab() {
           value={confirmation}
           placeholder={t('settings.wipeConfirm', { name: instanceName })}
           onChange={(event) => setConfirmation(event.target.value)}
-          onFocus={() => {
-            if (instanceName === '') {
-              void api.get<{ name: string }>('/info').then((info) => setInstanceName(info.name));
-            }
-          }}
         />
         <button
           type="button"
           data-testid="wipe-submit"
-          disabled={wipe.busy || confirmation === ''}
+          /*
+            **Amb el nom exacte, no amb qualsevol text.** El servidor ja ho exigeix i
+            tornava un 422; deixar prémer per rebre'l és fer el camí llarg a qui s'ha
+            equivocat, quan la pantalla ja sap la resposta.
+          */
+          disabled={wipe.busy || instanceName === '' || confirmation !== instanceName}
           onClick={() => void wipe.run()}
           style={{
             padding: '9px 16px',

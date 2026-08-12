@@ -794,6 +794,48 @@ L'error de crear deixa de portar els xips d'àmbit: oferir-te triar-ne un quan e
 
 ---
 
+### P22 · Els enllaços compartits no s’obrien
+
+**La resolució: `/s/` i `/invite/` surten de la llista de «això és de l'API».**
+
+`/s/{token}` és l'enllaç que envies a algú de fora i `/invite/{token}` el que envies a algú
+de casa. Totes dues són **una pàgina i un endpoint alhora**: el `POST` va al servidor i el
+`GET` ha de pintar l'app. Eren a `API_PREFIXES`, i el resultat és que obrir-les al navegador
+**descarregava un JSON de 404**. La funció de compartir —decisió 60 del brief, la fita F2
+sencera— no es podia fer servir.
+
+No cal res per distingir-ho: un `POST /s/:token` és una **ruta declarada** i no arriba mai
+al gestor de «no trobat»; el que hi arriba és un `GET` que ningú ha reclamat, i aquest és de
+l'app. El gestor ja tornava un 404 sec per als mètodes que no són `GET`. `/setup` funcionava
+així des del primer dia i el raonament era el mateix — escrit al seu comentari, i no aplicat
+als altres dos.
+
+**Per què cap prova ho veia, i què s'ha fet.** En desenvolupament la web i l'API són dos
+processos, i el proxy de Vite ja desviava el `GET` a `index.html` per a `/setup` i
+`/invite`: la suite del navegador provava una disposició que **a producció no existeix**, i
+`sharing.spec` obria una invitació i passava. La prova nova és de **servidor**, contra el
+que s'empaqueta a la imatge, amb una construcció de la web al costat perquè el retorn a
+l'app estigui registrat. Passada sobre l'arbre d'abans, falla als dos casos i passa als
+tres bons. I el proxy de Vite passa a tractar `/s/` com els altres dos, perquè les dues
+disposicions diguin el mateix.
+
+---
+
+### P23 · Dues coses de l'Admin
+
+**«Netejar instància» no deia quin nom escriure.** El servidor exigeix el nom exacte de la
+instància, i el camp el demanava a `/info` **en enfocar-lo**: fins que no hi clicaves, el
+marcador es llegia literalment «Escriu «» per confirmar». La mateixa pantalla ja cridava
+`/info` i **llençava el resultat**. Ara en surt el nom, i el botó només s'activa amb el nom
+exacte: deixar prémer per rebre un 422 és fer el camí llarg a qui ja s'ha equivocat.
+
+**`?tab=admin` sense ser administrador** pintava el panell amb un «Alguna cosa ha fallat» en
+vermell. El menú ja filtrava la pestanya —«ensenyar una pestanya que sempre dona 403 és una
+mala broma», diu el comentari— però la validació del paràmetre mirava la llista sencera i no
+la d'aquesta persona. Ara cau a General, com qualsevol pestanya que no existeix.
+
+---
+
 ## Part 3 — Fets sospitosos de `research/`
 
 El crític va marcar 7 afirmacions com a probablement inventades, obsoletes o internament incoherents. **Cap `docs/` en depèn.**

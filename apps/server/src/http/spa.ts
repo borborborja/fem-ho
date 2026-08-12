@@ -26,8 +26,24 @@ import { fileURLToPath } from 'node:url';
 import fastifyStatic from '@fastify/static';
 import type { FastifyInstance } from 'fastify';
 
-/** Prefixos que són del servidor i no de l'app. */
-const API_PREFIXES = ['/api/', '/mcp', '/s/', '/dav/', '/healthz', '/readyz', '/info', '/invite/'];
+/**
+ * Prefixos que són del servidor i no de l'app.
+ *
+ * **`/s/` i `/invite/` no hi són, i és el punt de tot això.** Són *alhora* una pàgina i un
+ * endpoint: el `POST` va al servidor i el `GET` ha de pintar l'app. Hi eren, i el resultat
+ * era que **obrir un enllaç compartit al navegador descarregava un JSON de 404** —el que
+ * envies al lampista, el que fa que la funció existeixi—, i el mateix amb una invitació.
+ *
+ * No cal fer res més per distingir-ho: un `POST /s/:token` és una **ruta declarada** i mai
+ * no arriba aquí; el que hi arriba és un `GET` que ningú ha reclamat, i aquest és de l'app.
+ * `/setup` ja funcionava així des del primer dia, i el raonament era el mateix.
+ *
+ * **Cap prova del navegador ho podia veure**: en desenvolupament la web i l'API són dos
+ * processos i el proxy de Vite ja desviava el `GET` a `index.html`, o sigui que la suite
+ * provava una disposició que a producció no existeix. Aquesta llista, en canvi, és el que
+ * corre a la imatge.
+ */
+const API_PREFIXES = ['/api/', '/mcp', '/dav/', '/healthz', '/readyz', '/info'];
 
 /**
  * On és la construcció de la web.

@@ -48,7 +48,9 @@ const PROXY = {
   '/api': API,
   '/info': API,
   '/healthz': API,
-  '/s/': API,
+  // `/s/{token}` és pàgina i endpoint, com `/setup` i `/invite`: el `GET` ha de pintar
+  // l'app —és l'enllaç que s'envia a algú de fora— i el `POST` ha d'arribar al servidor.
+  '/s/': pageOrApi,
   '/setup': pageOrApi,
   '/invite': pageOrApi,
 };
