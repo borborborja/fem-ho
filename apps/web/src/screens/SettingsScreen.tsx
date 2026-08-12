@@ -9,7 +9,7 @@
  * wordmark i "‹ Tornar al tauler". Per això aquesta pantalla no munta `TopBar`.
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   DEFAULT_MAIL_TEMPLATE,
   dateTime,
@@ -1125,6 +1125,12 @@ function CalendarsTab() {
                     className="plou-input"
                     style={{ fontSize: 11.5 }}
                   />
+                  {/*
+                    El botó de copiar que `docs/02` §5 demana. Seleccionar-la en enfocar-la
+                    ajuda i no és el mateix: aquesta URL s'enganxa a una altra aplicació, i
+                    fer-ho amb el teclat vol dir encertar el camp, `Cmd+C` i confiar-hi.
+                  */}
+                  <CopyButton value={`${base}/dav/calendars/${scope.id}-${kind}/`} />
                 </div>
               ))}
             </div>
@@ -1355,27 +1361,39 @@ function McpTab() {
         <p style={{ margin: 0, fontSize: 12.5, color: 'var(--ink-soft)', lineHeight: 1.5 }}>
           {t('settings.mcpInstructions')}
         </p>
-        <input
-          readOnly
-          data-testid="mcp-url"
-          value={`${window.location.origin}/mcp`}
-          onFocus={(event) => event.currentTarget.select()}
-          className="plou-input"
-          style={{ fontSize: 12 }}
-        />
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <input
+            readOnly
+            data-testid="mcp-url"
+            value={`${window.location.origin}/mcp`}
+            onFocus={(event) => event.currentTarget.select()}
+            className="plou-input"
+            style={{ fontSize: 12 }}
+          />
+          <CopyButton value={`${window.location.origin}/mcp`} />
+        </div>
       </Group>
 
       <Group title={t('tokens.title')}>
         {created !== null ? (
           <div style={{ display: 'grid', gap: 6 }}>
-            <input
-              readOnly
-              data-testid="token-value"
-              value={created}
-              onFocus={(event) => event.currentTarget.select()}
-              className="plou-input"
-              style={{ fontSize: 12 }}
-            />
+            {/*
+              **Aquest és el que més falta feia.** Un token que només es veu una vegada, amb
+              un avís que del hash no se'n pot treure, i copiar-lo era seleccionar-lo a mà:
+              si t'equivoques d'un caràcter no ho saps fins que el client falla, i llavors
+              ja no el pots tornar a veure.
+            */}
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input
+                readOnly
+                data-testid="token-value"
+                value={created}
+                onFocus={(event) => event.currentTarget.select()}
+                className="plou-input"
+                style={{ fontSize: 12, flex: 1 }}
+              />
+              <CopyButton value={created} />
+            </div>
             {/* Un sol cop: del hash no se'n pot treure el token (docs/08 §5). */}
             <p style={{ margin: 0, fontSize: 11.5, color: 'var(--danger-text)' }}>
               {t('tokens.onceWarning')}
@@ -1907,6 +1925,37 @@ function MailTab() {
   );
 }
 
+/**
+ * Copiar un text al porta-retalls, i **dir que s'ha copiat**.
+ *
+ * Sense la confirmació el botó no dona cap senyal —el porta-retalls no es veu— i la gent
+ * el prem tres vegades per si de cas. Torna a «Copia» sol perquè un botó que es queda dient
+ * «Copiat» menteix la propera vegada que el mires.
+ */
+function CopyButton({ value }: { value: string }) {
+  const [copiat, setCopiat] = useState(false);
+
+  useEffect(() => {
+    if (!copiat) return undefined;
+    const timer = setTimeout(() => setCopiat(false), 1800);
+    return () => clearTimeout(timer);
+  }, [copiat]);
+
+  return (
+    <button
+      type="button"
+      className="plou-btn plou-btn-ghost"
+      data-testid="copy-button"
+      onClick={() => {
+        void navigator.clipboard.writeText(value).then(() => setCopiat(true));
+      }}
+      style={{ fontSize: 11.5, flexShrink: 0 }}
+    >
+      {copiat ? t('tokens.copied') : t('tokens.copy')}
+    </button>
+  );
+}
+
 const camp = { display: 'grid', gap: 3, fontSize: 11.5, color: 'var(--ink-soft)' } as const;
 
 /** Quan es va llegir per última vegada, o que encara no s'ha llegit mai. */
@@ -1979,8 +2028,13 @@ function MailAccountRow({ account, onDone }: { account: MailAccount; onDone: () 
     >
       <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
         <strong style={{ fontSize: 13 }}>{account.name}</strong>
+        {/*
+          **Un punt volat i no una arrova.** L'usuari d'IMAP sol ser una adreça sencera, i
+          `jo@example.com@imap.example.com:993` es llegeix com una adreça mal escrita en
+          comptes de com «aquest usuari, en aquest servidor».
+        */}
         <span style={{ fontSize: 11.5, color: 'var(--ink-soft)' }}>
-          {account.username}@{account.host}:{account.port}
+          {account.username} · {account.host}:{account.port}
         </span>
       </div>
 
@@ -2008,7 +2062,14 @@ function MailAccountRow({ account, onDone }: { account: MailAccount; onDone: () 
             className="plou-input"
             data-testid={`mail-password-${account.id}`}
             value={password}
+            /*
+              Curt perquè **hi càpiga**: el text llarg es tallava a «Deixa-ho buit per r»,
+              i un camp que et parla a mitges és el que et fa pensar que això va malament
+              abans de fer-lo servir. La frase sencera va al `title`.
+            */
             placeholder={account.has_secret ? t('settings.mail.passwordKept') : ''}
+            title={account.has_secret ? t('settings.mail.passwordKept.long') : undefined}
+            style={{ minWidth: 190 }}
             onChange={(event) => setPassword(event.target.value)}
           />
         </Camp>
@@ -2304,7 +2365,18 @@ function MailRuleForm({ accounts, onDone }: { accounts: MailAccount[]; onDone: (
               data-testid="mail-rule-folder"
               value={folder}
               onChange={(event) => setFolder(event.target.value)}
-              placeholder={folders.loading ? t('settings.mail.loadingFolders') : ''}
+              /*
+                Si el servidor no ha contestat, **es diu**. El `error` ja venia a la
+                resposta i no es pintava enlloc: quedava un camp buit i mut, que sembla
+                que no hagi passat res quan el que passa és que no s'han pogut llegir.
+              */
+              placeholder={
+                folders.loading
+                  ? t('settings.mail.loadingFolders')
+                  : folders.data?.error != null
+                    ? t('settings.mail.foldersFailed')
+                    : t('settings.mail.folderPlaceholder')
+              }
             />
           ) : (
             <select

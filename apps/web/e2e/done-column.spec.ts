@@ -58,3 +58,35 @@ test('una tasca acabada apareix a Fet, i no es perd pel camí', async ({ page })
   const fet = page.locator('[data-column-status="done"]');
   await expect(fet.getByText('Treure les escombraries')).toBeVisible();
 });
+
+test('i des de la fitxa, que és on s’acaba mirant una tasca', async ({ page }) => {
+  /**
+   * `docs/02` §7 demana l'estat a la fitxa i no hi era: obries «Edició completa» i l'única
+   * cosa que no s'hi podia editar era **on és la tasca**. Al tauler s'arrossega; al mòbil,
+   * que és on més s'obre la fitxa, arrossegar és el gest incòmode.
+   */
+  await enterAsNew(page, {
+    name: 'Fitxa',
+    email: 'fitxa-estat@example.com',
+    password: 'la-contrasenya-de-prova',
+  });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+
+  const camp = page.locator('[data-testid="quick-add-todo"] input[role="combobox"]');
+  await camp.fill('Canviar la bombeta');
+  await camp.press('Enter');
+
+  await page.locator('[data-testid^="task-"]').first().hover();
+  await page.getByTestId('card-edit').first().click();
+
+  // On és ara, dit pel control i no endevinat.
+  await expect(page.getByTestId('task-status-todo')).toHaveAttribute('aria-pressed', 'true');
+
+  await page.getByTestId('task-status-done').click();
+  await expect(page.getByTestId('task-status-done')).toHaveAttribute('aria-pressed', 'true');
+
+  // I en tancar la fitxa, la targeta és a Fet: el mateix camí i el mateix segell.
+  await page.keyboard.press('Escape');
+  await expect(page.locator('[data-column-status="done"]')).toContainText('Canviar la bombeta');
+});

@@ -242,6 +242,15 @@ test('un token es mostra un sol cop', async ({ page }) => {
   await expect(camp).toBeVisible();
   expect(await camp.inputValue()).toContain('femho_pat_');
 
+  /**
+   * **I es pot copiar d'un clic**, que és el que li faltava. Un token que només es veu una
+   * vegada i que s'havia de seleccionar a mà: si t'equivocaves d'un caràcter no ho sabies
+   * fins que el client fallava, i llavors ja no el podies tornar a veure.
+   */
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.getByTestId('copy-button').last().click();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(await camp.inputValue());
+
   // Recarregar la pàgina el perd per sempre: del hash no se'n pot treure.
   await page.reload();
   await page.locator('[data-testid="settings-tab-mcp"]').click();

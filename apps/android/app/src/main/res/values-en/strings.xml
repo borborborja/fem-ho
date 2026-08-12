@@ -311,6 +311,8 @@
     <string name="settings_mail_empty">No mail account yet.</string>
     <string name="settings_mail_firstrun">The first read of a folder ingests nothing: it starts from now.</string>
     <string name="settings_mail_folder">Folder</string>
+    <string name="settings_mail_folderplaceholder">Folder name</string>
+    <string name="settings_mail_foldersfailed">Could not read them. Type it.</string>
     <string name="settings_mail_host">IMAP server</string>
     <string name="settings_mail_inboxvisible">Shows in the Tasks inbox</string>
     <string name="settings_mail_intro">Mail accounts are yours, not the household\'s: nobody else sees them, not even the admin.</string>
@@ -320,7 +322,8 @@
     <string name="settings_mail_neverpolled">Not read yet.</string>
     <string name="settings_mail_nottouched">Nothing marks your mail as read.</string>
     <string name="settings_mail_password">Password</string>
-    <string name="settings_mail_passwordkept">Saved. Leave empty to keep it.</string>
+    <string name="settings_mail_passwordkept">Saved. Leave it blank.</string>
+    <string name="settings_mail_passwordkept_long">Already saved. Leave the field blank to keep it.</string>
     <string name="settings_mail_pickfolder">Pick a folder…</string>
     <string name="settings_mail_port">Port</string>
     <string name="settings_mail_project">Project</string>
@@ -536,9 +539,11 @@
     <string name="task_scope">Scope</string>
     <string name="task_send">Send</string>
     <string name="task_share">Share</string>
+    <string name="task_status">Status</string>
     <string name="task_subtasks">Subtasks</string>
     <string name="task_title">Title</string>
     <string name="tokens_capabilities">Capabilities</string>
+    <string name="tokens_copied">Copied</string>
     <string name="tokens_copy">Copy</string>
     <string name="tokens_create">Create a token</string>
     <string name="tokens_lastused">Last used</string>

@@ -311,6 +311,8 @@
     <string name="settings_mail_empty">Encara no hi ha cap compte de correu.</string>
     <string name="settings_mail_firstrun">La primera lectura d’una carpeta no ingereix res: es comença des d’ara.</string>
     <string name="settings_mail_folder">Carpeta</string>
+    <string name="settings_mail_folderplaceholder">Nom de la carpeta</string>
+    <string name="settings_mail_foldersfailed">No s’han pogut llegir. Escriu-la.</string>
     <string name="settings_mail_host">Servidor IMAP</string>
     <string name="settings_mail_inboxvisible">Surt a l’inbox de Tasques</string>
     <string name="settings_mail_intro">Els comptes de correu són teus i no de la casa: ningú més els veu, ni l’administrador.</string>
@@ -320,7 +322,8 @@
     <string name="settings_mail_neverpolled">Encara no s’ha llegit.</string>
     <string name="settings_mail_nottouched">Res marca els teus correus com a llegits.</string>
     <string name="settings_mail_password">Contrasenya</string>
-    <string name="settings_mail_passwordkept">Desada. Deixa-ho buit per no tocar-la.</string>
+    <string name="settings_mail_passwordkept">Desada. Deixa-la buida.</string>
+    <string name="settings_mail_passwordkept_long">Ja hi és desada. Deixa el camp buit per no tocar-la.</string>
     <string name="settings_mail_pickfolder">Tria una carpeta…</string>
     <string name="settings_mail_port">Port</string>
     <string name="settings_mail_project">Projecte</string>
@@ -536,9 +539,11 @@
     <string name="task_scope">Àmbit</string>
     <string name="task_send">Envia</string>
     <string name="task_share">Compartir</string>
+    <string name="task_status">Estat</string>
     <string name="task_subtasks">Subtasques</string>
     <string name="task_title">Títol</string>
     <string name="tokens_capabilities">Capacitats</string>
+    <string name="tokens_copied">Copiat</string>
     <string name="tokens_copy">Copia</string>
     <string name="tokens_create">Crea un token</string>
     <string name="tokens_lastused">Últim ús</string>

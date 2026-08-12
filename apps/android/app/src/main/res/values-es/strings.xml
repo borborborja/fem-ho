@@ -311,6 +311,8 @@
     <string name="settings_mail_empty">Todavía no hay ninguna cuenta de correo.</string>
     <string name="settings_mail_firstrun">La primera lectura de una carpeta no ingiere nada: se empieza desde ahora.</string>
     <string name="settings_mail_folder">Carpeta</string>
+    <string name="settings_mail_folderplaceholder">Nombre de la carpeta</string>
+    <string name="settings_mail_foldersfailed">No se han podido leer. Escríbela.</string>
     <string name="settings_mail_host">Servidor IMAP</string>
     <string name="settings_mail_inboxvisible">Sale en el inbox de Tareas</string>
     <string name="settings_mail_intro">Las cuentas de correo son tuyas y no de la casa: nadie más las ve, ni el administrador.</string>
@@ -320,7 +322,8 @@
     <string name="settings_mail_neverpolled">Todavía no se ha leído.</string>
     <string name="settings_mail_nottouched">Nada marca tus correos como leídos.</string>
     <string name="settings_mail_password">Contraseña</string>
-    <string name="settings_mail_passwordkept">Guardada. Déjalo vacío para no tocarla.</string>
+    <string name="settings_mail_passwordkept">Guardada. Déjala vacía.</string>
+    <string name="settings_mail_passwordkept_long">Ya está guardada. Deja el campo vacío para no tocarla.</string>
     <string name="settings_mail_pickfolder">Elige una carpeta…</string>
     <string name="settings_mail_port">Puerto</string>
     <string name="settings_mail_project">Proyecto</string>
@@ -536,9 +539,11 @@
     <string name="task_scope">Ámbito</string>
     <string name="task_send">Envía</string>
     <string name="task_share">Compartir</string>
+    <string name="task_status">Estado</string>
     <string name="task_subtasks">Subtareas</string>
     <string name="task_title">Título</string>
     <string name="tokens_capabilities">Capacidades</string>
+    <string name="tokens_copied">Copiado</string>
     <string name="tokens_copy">Copia</string>
     <string name="tokens_create">Crea un token</string>
     <string name="tokens_lastused">Último uso</string>

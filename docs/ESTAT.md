@@ -3,7 +3,7 @@
 Què hi ha, què s'ha verificat i **què encara no hi és**. Es manté al dia amb el codi:
 una llista d'estat que exagera és pitjor que no tenir-ne cap.
 
-Data de l'última verificació completa: **2026-08-06**.
+Data de l'última verificació completa: **2026-08-12**.
 
 ---
 
@@ -111,9 +111,9 @@ Les dotze seccions de `docs/02`:
 | §2 Login | fet |
 | §3 Barra superior | fet, les vuit peces |
 | §4 Kanban | fet, amb arrossegament de ratolí i de teclat; **la columna Fet no ensenyava res** fins que `move` va segellar `completed_at` (P14) |
-| §5 Calendari | fet: mes, setmana, dia i rail configurable |
+| §5 Calendari | fet: mes, setmana, dia i rail configurable; les URL de CalDAV ja tenen el botó de copiar |
 | §6 Vista de llista senzilla | fet |
-| §7 Modal d'edició completa | fet menys el commutador de context per a la IA; **les etiquetes eren un epígraf buit** fins a P15 |
+| §7 Modal d'edició completa | fet menys el commutador de context per a la IA; **les etiquetes eren un epígraf buit** fins a P15, i l'estat no s'hi podia canviar |
 | §8 Tauler general | fet |
 | §9 Ajustos | fet, les vuit pestanyes |
 | §10 Responsive | fet; el kanban del mòbil es va **arreglar** en ajustar-se al disseny |

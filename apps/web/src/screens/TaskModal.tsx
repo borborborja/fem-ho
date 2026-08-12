@@ -369,6 +369,57 @@ export function TaskModal({
               </label>
             </div>
 
+            {/*
+              **La columna, des de la fitxa.** `docs/02` §7 la demana i no hi era: obries
+              «Edició completa» i l'única cosa que no s'hi podia editar era on és la tasca.
+              Al tauler s'arrossega, però la fitxa és on s'acaba mirant una tasca al mòbil,
+              i allà arrossegar és el gest incòmode.
+
+              Va per `/move` i no per `PATCH`: el contracte ho diu explícitament —«Per
+              moure-la, `/move`»— perquè moure implica una posició, i un `PATCH` que
+              canviés `status` deixaria la tasca amb la posició d'una altra columna.
+            */}
+            {creating ? null : (
+              <div style={{ display: 'grid', gap: 5 }}>
+                {label(t('task.status'))}
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {(['inbox', 'todo', 'doing', 'done'] as const).map((option) => {
+                    const actual = data?.status === option;
+                    return (
+                      <button
+                        key={option}
+                        type="button"
+                        data-testid={`task-status-${option}`}
+                        aria-pressed={actual}
+                        onClick={() => {
+                          if (actual) return;
+                          void api
+                            .post(`/api/v1/tasks/${taskId}/move`, { status: option })
+                            .then(() => {
+                              task.reload();
+                              onChanged();
+                            });
+                        }}
+                        style={{
+                          padding: '6px 12px',
+                          borderRadius: 100,
+                          cursor: actual ? 'default' : 'pointer',
+                          font: 'inherit',
+                          fontSize: 12,
+                          fontWeight: actual ? 700 : 500,
+                          border: '1px solid var(--card-border)',
+                          background: actual ? 'var(--ghost-bg)' : 'transparent',
+                          color: 'var(--ink)',
+                        }}
+                      >
+                        {t(`board.column.${option}`)}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <label style={{ display: 'grid', gap: 5 }}>
                 {label(t('task.dueDate'))}

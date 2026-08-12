@@ -660,6 +660,28 @@ tenen aquest problema. Una comprovació més gran per protegir una cosa que no h
 
 ---
 
+### P17 · El que es veu una sola vegada s’ha de poder copiar
+
+**La resolució: un botó de copiar al token d’API, a la URL d’MCP i a les dues de CalDAV.**
+
+`docs/02` §5 el demanava per a les URL de CalDAV i mai no s'havia fet: hi havia
+«seleccionar-la en enfocar-la», que ajuda i no és el mateix, perquè aquestes cadenes
+s'enganxen a **una altra aplicació**.
+
+El cas que ho fa greu és el token. Es veu **una sola vegada** —del hash no se'n pot treure
+(`docs/08` §5), i la pantalla mateixa ho avisa— i copiar-lo era seleccionar-lo a mà. Si
+t'equivoques d'un caràcter no ho saps fins que el client falla, i llavors ja no el pots
+tornar a veure: has de revocar-lo i fer-ne un altre.
+
+El botó diu **«Copiat»** un segon i vuit dècimes i torna a «Copia»: sense confirmació el
+porta-retalls no es veu i la gent el prem tres vegades per si de cas; quedant-s'hi, mentiria
+la propera vegada que el mirés.
+
+La prova comprova **el porta-retalls**, no el rètol. Un botó que diu «Copiat» sense haver
+copiat res és pitjor que no tenir-ne cap.
+
+---
+
 ## Part 3 — Fets sospitosos de `research/`
 
 El crític va marcar 7 afirmacions com a probablement inventades, obsoletes o internament incoherents. **Cap `docs/` en depèn.**
