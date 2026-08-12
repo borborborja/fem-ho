@@ -7,6 +7,7 @@
 
 import type { FastifyInstance } from 'fastify';
 import { auditedTransaction } from '../audit/audited-transaction.js';
+import { createToken, listTokens } from '../services/tokens.js';
 import {
   agentScopeAvailability,
   createAgent,
@@ -80,6 +81,46 @@ export function registerAgentRoutes(app: FastifyInstance): void {
           all_scopes: input.all_scopes === true,
         }),
       );
+    }),
+  );
+
+  /**
+   * Les credencials d'un agent.
+   *
+   * **Va sota l'agent i no a `/tokens`** perquè aquí ja se sap de qui és: la ruta comprova
+   * que l'agent sigui d'aquesta persona, i el servei de tokens rep l'identificador ja
+   * validat. Per la porta general caldria acceptar-hi un agent qualsevol i tornar-lo a
+   * comprovar allà, que és la mena de comprovació que un dia falta.
+   *
+   * Les capacitats són **les que un agent necessita i cap més**: llegir i escriure tasques
+   * i llegir el calendari. Res de gestionar usuaris, ni tokens, ni la instància.
+   */
+  app.post<{ Params: { id: string } }>(
+    '/api/v1/ai/agents/:id/credentials',
+    async (request, reply) =>
+      handle(app, request, reply, async (principal) => {
+        const agent = await getAgent(db().db, principal, request.params.id);
+        const input = body(request);
+
+        const result = await auditedTransaction(db().db, principal, (ctx) =>
+          createToken(ctx, principal, {
+            name: str(input.name) ?? `${agent.name}`,
+            capabilities: ['tasks:read', 'tasks:write', 'calendar:read'],
+            ai_agent_id: agent.id,
+            expires_at: typeof input.expires_at === 'string' ? input.expires_at : null,
+          }),
+        );
+
+        void reply.code(201);
+        return result;
+      }),
+  );
+
+  app.get<{ Params: { id: string } }>('/api/v1/ai/agents/:id/credentials', async (request, reply) =>
+    handle(app, request, reply, async (principal) => {
+      const agent = await getAgent(db().db, principal, request.params.id);
+      const totes = await listTokens(db().db, principal);
+      return { data: totes.filter((token) => token.ai_agent_id === agent.id) };
     }),
   );
 

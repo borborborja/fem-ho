@@ -141,16 +141,19 @@ describe("l'abast d'un agent", () => {
      * token (`policy/resolve.ts`), i per això val per a totes les tools alhora: si es fes a
      * `next_task`, `list_tasks` i `get_task` en tindrien una còpia cadascuna.
      */
-    await api('POST', '/api/v1/tasks', {
-      scope_id: casa,
-      title: 'Una de casa',
-      ai_mode: 'delegated',
-    });
-    await api('POST', '/api/v1/tasks', {
-      scope_id: feina,
-      title: 'Una de feina',
-      ai_mode: 'delegated',
-    });
+    /**
+     * **Es deleguen en dos passos, com al producte.** Tota tasca neix `manual` (`docs/09`
+     * §2): crear-la ja delegada seria un camí que la interfície no fa, i provar-lo seria
+     * provar una cosa que no passa.
+     */
+    for (const [scopeId, title] of [
+      [casa, 'Una de casa'],
+      [feina, 'Una de feina'],
+    ] as const) {
+      const creada = await api('POST', '/api/v1/tasks', { scope_id: scopeId, title });
+      const id = creada.json<{ id: string }>().id;
+      await api('POST', `/api/v1/tasks/${id}/ai-mode`, { ai_mode: 'delegated' });
+    }
 
     // Hermes porta Feina; Codex, Casa. Una credencial d'agent es fa a la fase següent, o
     // sigui que aquí es comprova el que la sustenta: l'assignació i la seva exclusivitat.
@@ -158,6 +161,65 @@ describe("l'abast d'un agent", () => {
       SELECT scope_id FROM agent_scopes WHERE agent_id = ${hermes}
     `.execute(conn.db);
     expect(seus.rows.map((row) => row.scope_id)).toEqual([feina]);
+  });
+
+  it('amb la seva credencial, agafa feina del seu àmbit i de cap altre', async () => {
+    /**
+     * **Aquesta és la prova que diu que tot això serveix d'alguna cosa.** Fins ara no es
+     * podia crear cap credencial d'agent —`createToken` mai no escrivia `ai_agent_id`— i
+     * per tant `next_task` era inabastable: el terreny hi era i la porta era tapiada.
+     */
+    const credencial = await api('POST', `/api/v1/ai/agents/${hermes}/credentials`, {
+      name: 'Hermes al portàtil',
+    });
+    expect(credencial.statusCode, credencial.body).toBe(201);
+    const token = credencial.json<{ token: string; summary: { ai_agent_id: string } }>();
+    expect(token.summary.ai_agent_id).toBe(hermes);
+
+    const comAgent = { authorization: `Bearer ${token.token}` };
+
+    // Diu qui és: un agent, no la persona en nom de qui actua.
+    const qui = await app.inject({ method: 'GET', url: '/api/v1/auth/me', headers: comAgent });
+    expect(qui.json<{ agent_id: string | null }>().agent_id).toBe(hermes);
+
+    // I la feina que li toca és la del seu àmbit. Hi ha una tasca delegada a cada un.
+    const seguent = await app.inject({
+      method: 'GET',
+      url: '/api/v1/ai/next-task',
+      headers: comAgent,
+    });
+    expect(seguent.statusCode, seguent.body).toBe(200);
+
+    /**
+     * L'endpoint REST torna **la reserva**, no la tasca sencera: el traspàs ric —amb les
+     * instruccions d'àmbit i de projecte i els adjunts— és la tool `next_task` d'MCP
+     * (`docs/09` §4). Aquí es demana la tasca reservada, cosa que de passada comprova que
+     * l'agent la pot llegir amb la seva credencial.
+     */
+    const reservada = seguent.json<{ task: { taskId: string } | null }>().task;
+    expect(reservada).not.toBeNull();
+
+    const tasca = await app.inject({
+      method: 'GET',
+      url: `/api/v1/tasks/${reservada!.taskId}`,
+      headers: comAgent,
+    });
+    expect(tasca.json<{ scope_id: string; title: string }>()).toMatchObject({
+      scope_id: feina,
+      title: 'Una de feina',
+    });
+
+    /**
+     * I **no la de l'altre àmbit**: la de casa és de Codex. Amb la seva reserva presa, la
+     * següent crida no torna la de casa sinó res, que és el que ha de passar quan un agent
+     * s'ha quedat sense feina seva.
+     */
+    const cap = await app.inject({
+      method: 'GET',
+      url: '/api/v1/ai/next-task',
+      headers: comAgent,
+    });
+    expect(cap.json<{ task: unknown }>().task).toBeNull();
   });
 
   it('la base no deixa que un àmbit tingui dos agents ni escrivint-hi directament', async () => {

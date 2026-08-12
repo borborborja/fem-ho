@@ -1486,6 +1486,35 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/ai/agents/{id}/credentials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Les credencials d'aquest agent */
+        get: operations["listAgentCredentials"];
+        put?: never;
+        /**
+         * Una credencial per a aquest agent
+         * @description Qui la faci servir **actua com aquest agent**: els seus àmbits, i la
+         *     responsabilitat de la persona en nom de qui actua (D5).
+         *
+         *     Va sota l'agent i no a `/tokens` perquè aquí ja se sap de qui és. Les capacitats
+         *     són les que un agent necessita i cap més —llegir i escriure tasques, llegir el
+         *     calendari—: ni usuaris, ni tokens, ni instància.
+         *
+         *     **El testimoni sencer surt una sola vegada**, com als tokens d'API: del hash no se'n
+         *     pot treure.
+         */
+        post: operations["createAgentCredential"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/ai/agents/{id}/scope-availability": {
         parameters: {
             query?: never;
@@ -2912,6 +2941,19 @@ export interface components {
             /** @description Els primers caràcters, per poder-lo reconèixer a la llista. */
             token_prefix: string;
             capabilities: string[];
+            /**
+             * @description De quin agent és aquesta credencial, o `null` si és teva.
+             *
+             *     La pantalla d'MCP i API les ensenya **en només lectura i amb un botó que hi
+             *     porta**: sense això hi hauria credencials que existeixen i no surten enlloc
+             *     d'on la gent les busca, i qui en volgués revocar una no sabria on anar.
+             */
+            ai_agent_id: string | null;
+            /**
+             * @description Va **buida a les credencials d'agent**: els àmbits els hereten de l'agent, i
+             *     copiar-los aquí voldria dir que el dia que se li canviïn a l'agent la
+             *     credencial es quedaria apuntant als d'abans.
+             */
             scope_ids: string[];
             /** Format: date-time */
             created_at: string;
@@ -6663,6 +6705,67 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+        };
+    };
+    listAgentCredentials: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Les credencials, sense el testimoni. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ApiTokenSummary"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    createAgentCredential: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    name?: string;
+                    /** Format: date-time */
+                    expires_at?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Creada. El testimoni sencer va aquí i enlloc més. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        token: string;
+                        summary: components["schemas"]["ApiTokenSummary"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
         };
     };
     agentScopeAvailability: {

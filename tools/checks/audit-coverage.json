@@ -19,6 +19,7 @@
     "completeTask": "apps/server/src/http/tasks.test.ts · \"marca la tasca i les seves subtasques\"",
     "convertMailMessage": "apps/server/src/http/mail.test.ts · \"un correu de la bústia es fa tasca, i dues vegades dona la mateixa\"",
     "createAgent": "apps/server/src/http/api-surface.test.ts · \"se'n pot crear un, i queda registrat\"",
+    "createAgentCredential": "apps/server/src/http/agent-scopes.test.ts · \"amb la seva credencial, agafa feina del seu àmbit i de cap altre\"",
     "createApiToken": "apps/server/src/http/tokens.test.ts · \"la creació queda a activity_log sense el token a dins\"",
     "createCalendar": "apps/server/src/http/api-surface.test.ts · \"se'n pot crear un, i queda registrat\"",
     "createChecklist": "apps/server/src/http/checklists.test.ts · \"es pot crear una llista dins d'una tasca\"",

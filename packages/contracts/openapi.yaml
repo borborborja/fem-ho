@@ -2513,6 +2513,65 @@ paths:
           content:
             { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
 
+  /ai/agents/{id}/credentials:
+    post:
+      tags: [ai]
+      operationId: createAgentCredential
+      summary: Una credencial per a aquest agent
+      description: |
+        Qui la faci servir **actua com aquest agent**: els seus àmbits, i la
+        responsabilitat de la persona en nom de qui actua (D5).
+
+        Va sota l'agent i no a `/tokens` perquè aquí ja se sap de qui és. Les capacitats
+        són les que un agent necessita i cap més —llegir i escriure tasques, llegir el
+        calendari—: ni usuaris, ni tokens, ni instància.
+
+        **El testimoni sencer surt una sola vegada**, com als tokens d'API: del hash no se'n
+        pot treure.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                name: { type: string }
+                expires_at: { type: [string, 'null'], format: date-time }
+      responses:
+        '201':
+          description: Creada. El testimoni sencer va aquí i enlloc més.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [token, summary]
+                properties:
+                  token: { type: string }
+                  summary: { $ref: '#/components/schemas/ApiTokenSummary' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    get:
+      tags: [ai]
+      operationId: listAgentCredentials
+      summary: Les credencials d'aquest agent
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '200':
+          description: Les credencials, sense el testimoni.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/ApiTokenSummary' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   /ai/agents/{id}/scope-availability:
     get:
       tags: [ai]
@@ -4367,7 +4426,7 @@ components:
 
     ApiTokenSummary:
       type: object
-      required: [id, name, token_prefix, capabilities, scope_ids, created_at]
+      required: [id, name, token_prefix, capabilities, ai_agent_id, scope_ids, created_at]
       properties:
         id: { type: string }
         name: { type: string }
@@ -4377,9 +4436,21 @@ components:
         capabilities:
           type: array
           items: { type: string }
+        ai_agent_id:
+          type: [string, 'null']
+          description: |
+            De quin agent és aquesta credencial, o `null` si és teva.
+
+            La pantalla d'MCP i API les ensenya **en només lectura i amb un botó que hi
+            porta**: sense això hi hauria credencials que existeixen i no surten enlloc
+            d'on la gent les busca, i qui en volgués revocar una no sabria on anar.
         scope_ids:
           type: array
           items: { type: string }
+          description: |
+            Va **buida a les credencials d'agent**: els àmbits els hereten de l'agent, i
+            copiar-los aquí voldria dir que el dia que se li canviïn a l'agent la
+            credencial es quedaria apuntant als d'abans.
         created_at: { type: string, format: date-time }
         expires_at: { type: [string, 'null'], format: date-time }
         last_used_at: { type: [string, 'null'], format: date-time }
