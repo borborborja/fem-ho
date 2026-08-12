@@ -571,6 +571,37 @@ Tres coses que se'n deriven:
 
 ---
 
+### P14 · Arribar a Fet és completar-la, i el segell el posa `move`
+
+**La resolució: `POST /tasks/{id}/move` manté `completed_at`, i entrar a Fet fa tot el que
+vol dir «feta».**
+
+La columna Fet es calcula amb `status = 'done'` **i `completed_at` dins del dia de qui mira**
+(P2, `docs/14` línia 187). El segell només el posava `completeTask`, i `POST /complete` **no
+el crida cap client**: ni la web, ni Android, ni el CalDAV. Els dos gestos que la interfície
+ofereix per acabar una tasca —arrossegar-la a Fet i el commutador de la targeta— passen
+tots dos per `move`.
+
+O sigui que `completed_at` era `NULL` sempre, la columna Fet no podia ensenyar **res mai**, i
+la targeta que hi deixaves anar desapareixia de les quatre columnes: ja no era a Fent i
+encara no era enlloc. `DoneColumn.ts` era correcte i tenia les seves proves; el que li
+arribava era una llista buida. El defecte era la costura, com al calendari.
+
+Tres coses que se'n deriven:
+
+- **Entrar a Fet fa el mateix que el commutador**, i no una part: les subtasques cauen i, si
+  la tasca es repeteix, neix la següent. Que dependrés del gest seria el pitjor dels dos
+  móns —i `recurrence_mode = 'completion'` compta des de `completed_at`, que sense segell no
+  existeix.
+- **Sortir de Fet esborra el segell.** Una tasca que torna a Per fer no s'ha fet.
+- **El registre en diu «completed» i hi guarda el segell**, perquè desfer un moviment a Fet
+  no deixi la tasca fora de Fet i completada alhora (`docs/01` §7).
+
+La prova va per `move` a posta, i n'hi ha una al navegador que arriba fins a veure la targeta
+dins la columna: el que no es prova pel camí que la gent fa servir és el que es trenca.
+
+---
+
 ## Part 3 — Fets sospitosos de `research/`
 
 El crític va marcar 7 afirmacions com a probablement inventades, obsoletes o internament incoherents. **Cap `docs/` en depèn.**

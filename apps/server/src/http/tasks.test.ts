@@ -18,6 +18,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import type { LightMyRequestResponse } from 'fastify';
 import { comparePositions } from '@fem-ho/contracts';
+import { dbBool } from '../db/bool.js';
 import { buildApp } from '../app.js';
 import { loadConfig } from '../config.js';
 import { hashPassword } from '../auth/password.js';
@@ -325,6 +326,42 @@ describe('completar', () => {
       SELECT COUNT(*) AS n FROM subtasks WHERE task_id = ${id} AND done = 0
     `.execute(conn.db);
     expect(Number(pendents.rows[0]?.n)).toBe(0);
+  });
+
+  /**
+   * **Arrossegar a Fet segella `completed_at`, i treure-la l'esborra.**
+   *
+   * `POST /complete` el segellava i **no el crida cap client**: la web, arrossegant o amb
+   * el commutador de la targeta, sempre passa per `/move`. Com que la columna Fet filtra
+   * per `completed_at` dins del dia, no hi podia sortir res mai i la targeta que hi
+   * deixaves anar es perdia de vista. La prova va per `/move` a posta: és el camí que la
+   * gent fa servir, i el que no es prova és el que es trenca.
+   */
+  it('moure una tasca a Fet la marca feta, i treure-la la desmarca', async () => {
+    const scope = (
+      await api('POST', '/api/v1/scopes', { name: 'Moguda', color: '--femho-scope-4' })
+    ).json<{ id: string }>().id;
+    const id = (
+      await api('POST', '/api/v1/tasks', { scope_id: scope, title: 'Per arrossegar' })
+    ).json<{ id: string }>().id;
+
+    await sql`
+      INSERT INTO subtasks (id, task_id, title, done, position, created_at, updated_at, version)
+      VALUES (${uuidv7()}, ${id}, 'Una subtasca', ${dbBool(false)}, 'a1', ${NOW}, ${NOW}, 1)
+    `.execute(conn.db);
+
+    const fet = await api('POST', `/api/v1/tasks/${id}/move`, { status: 'done' });
+    expect(fet.statusCode).toBe(200);
+    expect(fet.json<{ completed_at: string | null }>().completed_at).toBeTruthy();
+
+    // I «feta» vol dir el mateix vingui d'on vingui: les subtasques també cauen.
+    const pendents2 = await sql<{ n: number }>`
+      SELECT COUNT(*) AS n FROM subtasks WHERE task_id = ${id} AND done = ${dbBool(false)}
+    `.execute(conn.db);
+    expect(Number(pendents2.rows[0]?.n)).toBe(0);
+
+    const tornada = await api('POST', `/api/v1/tasks/${id}/move`, { status: 'todo' });
+    expect(tornada.json<{ completed_at: string | null }>().completed_at).toBeNull();
   });
 });
 

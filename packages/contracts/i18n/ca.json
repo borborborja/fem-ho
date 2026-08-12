@@ -281,7 +281,7 @@
   "settings.dashboardItems": "Què es veu al tauler general",
   "settings.empty.agents": "Encara no has creat cap agent.",
   "settings.empty.calendars": "Aquest àmbit encara no té cap calendari.",
-  "settings.empty.shares": "Encara no has creat cap enllaç compartit.",
+  "settings.empty.shares": "Encara no has creat cap enllaç compartit. Se’n fa un obrint una tasca i prement «Compartir».",
   "settings.enableAi": "Activar l'usuari IA",
   "settings.events.onDelete": "En esborrar una tasca feta des d'una cita",
   "settings.events.onDelete.hide": "La cita es queda fora",

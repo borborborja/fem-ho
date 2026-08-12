@@ -274,7 +274,7 @@
     <string name="settings_dashboarditems">Què es veu al tauler general</string>
     <string name="settings_empty_agents">Encara no has creat cap agent.</string>
     <string name="settings_empty_calendars">Aquest àmbit encara no té cap calendari.</string>
-    <string name="settings_empty_shares">Encara no has creat cap enllaç compartit.</string>
+    <string name="settings_empty_shares">Encara no has creat cap enllaç compartit. Se’n fa un obrint una tasca i prement «Compartir».</string>
     <string name="settings_enableai">Activar l\'usuari IA</string>
     <string name="settings_events_ondelete">En esborrar una tasca feta des d\'una cita</string>
     <string name="settings_events_ondelete_hide">La cita es queda fora</string>

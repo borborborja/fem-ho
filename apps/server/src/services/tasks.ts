@@ -532,6 +532,23 @@ export async function moveTask(
 
   const status = input.status ?? current.status;
 
+  /**
+   * **Arribar a Fet ÉS completar-la.**
+   *
+   * `completed_at` només el segellava `completeTask`, i `POST /tasks/{id}/complete` no el
+   * crida ningú: ni la web, ni Android, ni el CalDAV. L'única manera d'acabar una tasca a
+   * la interfície —arrossegar-la a Fet, o el commutador de la targeta— passa per aquí.
+   * Resultat: la columna Fet, que filtra per `completed_at` dins del dia (docs/14 P?), no
+   * podia ensenyar **res mai**, i la targeta que hi deixaves anar desapareixia de les
+   * quatre columnes. Tot el codi de `DoneColumn.ts` estava bé i li arribava una llista
+   * buida: el defecte era la costura, com sempre.
+   *
+   * I si en surt, el segell s'esborra: una tasca que torna a Per fer no s'ha fet.
+   */
+  const entraAFet = status === 'done' && current.status !== 'done';
+  const surtDeFet = status !== 'done' && current.status === 'done';
+  const completedAt = entraAFet ? ctx.now : surtDeFet ? null : current.completed_at;
+
   let position = input.position;
   if (position === undefined) {
     const neighbour = async (neighbourId: string | null | undefined): Promise<string | null> => {
@@ -567,23 +584,39 @@ export async function moveTask(
 
   await sql`
     UPDATE tasks
-    SET status = ${status}, position = ${position}, updated_at = ${ctx.now},
-        version = version + 1
+    SET status = ${status}, position = ${position}, completed_at = ${completedAt},
+        updated_at = ${ctx.now}, version = version + 1
     WHERE id = ${id}
   `.execute(ctx.tx);
 
   // El registre guarda el valor anterior i el nou: és el que fa possible desfer un
-  // canvi autònom de la IA (docs/01 §7).
+  // canvi autònom de la IA (docs/01 §7). El segell hi va perquè, si no, desfer un
+  // moviment a Fet deixaria la tasca fora de Fet i completada.
   ctx.record({
     entityType: 'task',
     entityId: id,
     scopeId: current.scope_id,
-    verb: 'moved',
+    verb: entraAFet ? 'completed' : 'moved',
     changes: {
       status: { from: current.status, to: status },
       position: { from: current.position, to: position },
+      ...(entraAFet || surtDeFet
+        ? { completed_at: { from: current.completed_at, to: completedAt } }
+        : {}),
     },
   });
+
+  if (entraAFet) {
+    // La resta del que vol dir «feta», i el mateix ordre que a `completeTask`: les
+    // subtasques cauen amb ella i, si es repeteix, neix la següent. Una tasca que es
+    // repeteix i que s'acaba arrossegant-la ha de tornar igual que una que s'acaba
+    // amb el commutador; que depengui del gest seria el pitjor dels dos móns.
+    await sql`
+      UPDATE subtasks SET done = ${dbBool(true)}, updated_at = ${ctx.now}, version = version + 1
+      WHERE task_id = ${id} AND done = ${dbBool(false)} AND deleted_at IS NULL
+    `.execute(ctx.tx);
+    await createNextOccurrence(ctx, principal, id, current);
+  }
 
   const updated = await sql<TaskRow>`
     SELECT ${TASK_COLUMNS} FROM tasks WHERE id = ${id}

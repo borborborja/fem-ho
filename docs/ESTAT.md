@@ -110,7 +110,7 @@ Les dotze seccions de `docs/02`:
 | §1 Estructura general | fet |
 | §2 Login | fet |
 | §3 Barra superior | fet, les vuit peces |
-| §4 Kanban | fet, amb arrossegament de ratolí i de teclat |
+| §4 Kanban | fet, amb arrossegament de ratolí i de teclat; **la columna Fet no ensenyava res** fins que `move` va segellar `completed_at` (P14) |
 | §5 Calendari | fet: mes, setmana, dia i rail configurable |
 | §6 Vista de llista senzilla | fet |
 | §7 Modal d'edició completa | fet menys el commutador de context per a la IA |

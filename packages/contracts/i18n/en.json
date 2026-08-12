@@ -280,7 +280,7 @@
   "settings.dashboardItems": "What shows in the overview",
   "settings.empty.agents": "You have not created any agent yet.",
   "settings.empty.calendars": "This scope has no calendars yet.",
-  "settings.empty.shares": "You have not created any share link yet.",
+  "settings.empty.shares": "You have not created any share link yet. You make one by opening a task and pressing “Share”.",
   "settings.enableAi": "Turn on the AI user",
   "settings.events.onDelete": "When you delete a task made from an event",
   "settings.events.onDelete.hide": "The event stays out",

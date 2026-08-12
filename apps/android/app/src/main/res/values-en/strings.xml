@@ -274,7 +274,7 @@
     <string name="settings_dashboarditems">What shows in the overview</string>
     <string name="settings_empty_agents">You have not created any agent yet.</string>
     <string name="settings_empty_calendars">This scope has no calendars yet.</string>
-    <string name="settings_empty_shares">You have not created any share link yet.</string>
+    <string name="settings_empty_shares">You have not created any share link yet. You make one by opening a task and pressing “Share”.</string>
     <string name="settings_enableai">Turn on the AI user</string>
     <string name="settings_events_ondelete">When you delete a task made from an event</string>
     <string name="settings_events_ondelete_hide">The event stays out</string>

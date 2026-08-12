@@ -274,7 +274,7 @@
     <string name="settings_dashboarditems">Qué se ve en la vista general</string>
     <string name="settings_empty_agents">Todavía no has creado ningún agente.</string>
     <string name="settings_empty_calendars">Este ámbito todavía no tiene ningún calendario.</string>
-    <string name="settings_empty_shares">Todavía no has creado ningún enlace compartido.</string>
+    <string name="settings_empty_shares">Todavía no has creado ningún enlace compartido. Se crea abriendo una tarea y pulsando «Compartir».</string>
     <string name="settings_enableai">Activar el usuario IA</string>
     <string name="settings_events_ondelete">Al borrar una tarea hecha desde una cita</string>
     <string name="settings_events_ondelete_hide">La cita se queda fuera</string>
