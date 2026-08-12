@@ -511,11 +511,16 @@
     <string name="task_empty_activity">Encara no ha passat res en aquesta tasca.</string>
     <string name="task_empty_attachments">Cap fitxer adjunt.</string>
     <string name="task_empty_comments">Encara no hi ha cap comentari.</string>
+    <string name="task_empty_labels">Aquest àmbit encara no té cap etiqueta.</string>
     <string name="task_empty_subtasks">Aquesta tasca no té subtasques.</string>
+    <string name="task_label_add">Posar aquesta etiqueta</string>
+    <string name="task_label_remove">Treure aquesta etiqueta</string>
     <string name="task_labels">Etiquetes</string>
     <string name="task_new">Nova tasca</string>
     <string name="task_newchecklist">+ Nova llista</string>
     <string name="task_newcomment">Escriu un comentari…</string>
+    <string name="task_newlabel">+ Nova etiqueta</string>
+    <string name="task_newlabel_placeholder">Nom de l’etiqueta</string>
     <string name="task_newsubtask">+ Afegir subtasca…</string>
     <string name="task_noproject">Espai general</string>
     <string name="task_project">Projecte</string>

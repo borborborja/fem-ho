@@ -511,11 +511,16 @@
     <string name="task_empty_activity">Nothing has happened in this task yet.</string>
     <string name="task_empty_attachments">No files attached.</string>
     <string name="task_empty_comments">No comments yet.</string>
+    <string name="task_empty_labels">This scope has no labels yet.</string>
     <string name="task_empty_subtasks">This task has no subtasks.</string>
+    <string name="task_label_add">Add this label</string>
+    <string name="task_label_remove">Remove this label</string>
     <string name="task_labels">Labels</string>
     <string name="task_new">New task</string>
     <string name="task_newchecklist">+ New list</string>
     <string name="task_newcomment">Write a comment…</string>
+    <string name="task_newlabel">+ New label</string>
+    <string name="task_newlabel_placeholder">Label name</string>
     <string name="task_newsubtask">+ Add subtask…</string>
     <string name="task_noproject">General space</string>
     <string name="task_project">Project</string>

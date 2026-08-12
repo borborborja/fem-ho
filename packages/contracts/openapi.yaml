@@ -4812,6 +4812,12 @@ components:
           type: array
           items: { type: string }
           description: Persones. El brief demana "persona o persones".
+        label_ids:
+          type: array
+          items: { type: string }
+          description: |
+            Les etiquetes que porta. Hi és pel mateix motiu que `assignee_ids`: sense
+            saber quines té, la fitxa no pot ensenyar quines hi són ni treure'n cap.
         created_by: { type: string }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }

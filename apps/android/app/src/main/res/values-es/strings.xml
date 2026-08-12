@@ -511,11 +511,16 @@
     <string name="task_empty_activity">Todavía no ha pasado nada en esta tarea.</string>
     <string name="task_empty_attachments">Ningún archivo adjunto.</string>
     <string name="task_empty_comments">Todavía no hay ningún comentario.</string>
+    <string name="task_empty_labels">Este ámbito todavía no tiene ninguna etiqueta.</string>
     <string name="task_empty_subtasks">Esta tarea no tiene subtareas.</string>
+    <string name="task_label_add">Poner esta etiqueta</string>
+    <string name="task_label_remove">Quitar esta etiqueta</string>
     <string name="task_labels">Etiquetas</string>
     <string name="task_new">Nueva tarea</string>
     <string name="task_newchecklist">+ Nueva lista</string>
     <string name="task_newcomment">Escribe un comentario…</string>
+    <string name="task_newlabel">+ Nueva etiqueta</string>
+    <string name="task_newlabel_placeholder">Nombre de la etiqueta</string>
     <string name="task_newsubtask">+ Añadir subtarea…</string>
     <string name="task_noproject">Espacio general</string>
     <string name="task_project">Proyecto</string>

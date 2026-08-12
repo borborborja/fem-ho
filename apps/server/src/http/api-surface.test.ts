@@ -1100,6 +1100,29 @@ describe('tasques que es repeteixen', () => {
     expect(Number(assignats.rows[0]?.n)).toBeGreaterThan(0);
   });
 
+  /**
+   * **I arrossegant-la a Fet també**, que és l'únic camí que la interfície fa servir.
+   *
+   * Les tres proves de sobre van per `/complete`, un endpoint que no crida cap client: si
+   * la repetició només hi hagués funcionat, ningú n'hauria vist mai la segona instància.
+   */
+  it('i arrossegant-la a Fet, que és el que fa la interfície', async () => {
+    const taskId = await novaTasca('Cada dimarts');
+    await api('PATCH', `/api/v1/tasks/${taskId}`, {
+      due_date: '2026-08-04',
+      rrule: 'FREQ=WEEKLY',
+      recurrence_mode: 'schedule',
+    });
+
+    await api('POST', `/api/v1/tasks/${taskId}/move`, { status: 'done' });
+
+    const seguent = await sql<{ due_date: string; status: string }>`
+      SELECT due_date, status FROM tasks WHERE recurrence_parent_id = ${taskId}
+    `.execute(conn.db);
+    expect(seguent.rows).toHaveLength(1);
+    expect(seguent.rows[0]?.due_date).toBe('2026-08-11');
+  });
+
   it('una tasca que NO es repeteix no genera res', async () => {
     const taskId = await novaTasca('Una sola vegada');
     await api('POST', `/api/v1/tasks/${taskId}/complete`);

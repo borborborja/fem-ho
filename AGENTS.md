@@ -94,7 +94,7 @@ Casos reals, tots del mateix repositori:
 
 ---
 
-## 4 · Les setze comprovacions permanents
+## 4 · Les disset comprovacions permanents
 
 `npm run check`. Cadascuna impedeix **una manera concreta de trencar el producte sense que
 res falli**, i totes tenen `--self-test`.
@@ -107,6 +107,7 @@ res falli**, i totes tenen `--self-test`.
 | `i18n-lint`               | Text escrit al codi en comptes del catàleg                                |
 | `i18n-parity`             | Una clau o un marcador `{x}` que falti en un idioma                       |
 | `i18n-keys-exist`         | Una errata a `t('...')`, que compila i s'ensenya crua                     |
+| `android-strings-exist`   | Un `R.string` sense cadena: no és un text que falta, és un APK que no és  |
 | `no-pinned-from-research` | Una versió sense procedència registrada                                   |
 | `no-ignored-sources`      | Codi que `.gitignore` s'empassa i que qui cloni no tindrà                 |
 | `contrast-check`          | Contrast per sota de l'AA als vuit temes                                  |
@@ -119,7 +120,7 @@ res falli**, i totes tenen `--self-test`.
 | `mail-invariants`         | Apagar la verificació TLS, marcar el correu d'algú, o desduplicar per UID |
 
 **Si arregles un defecte que cap comprovació hauria vist, afegeix-ne una.** És el criteri
-que ha fet créixer la llista de vuit a setze.
+que ha fet créixer la llista de vuit a disset.
 
 ---
 
@@ -160,7 +161,7 @@ apps/web         React + Vite, PWA amb cua de sortida
 apps/android     nou mòduls (§8)
 packages/contracts       openapi.yaml, catàlegs, parser, índex fraccional, dates
 packages/design-system   Plou vendoritzat + els components de Fem-ho
-tools/checks     les setze comprovacions
+tools/checks     les disset comprovacions
 tools/gen        generació de tokens a Compose i a recursos
 tools/i18n       generació dels strings.xml
 docs/            quinze documents normatius + ESTAT.md

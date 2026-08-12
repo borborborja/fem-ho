@@ -602,6 +602,64 @@ dins la columna: el que no es prova pel camí que la gent fa servir és el que e
 
 ---
 
+### P15 · Les etiquetes existien a la base i enlloc més
+
+**La resolució: `Task` porta `label_ids`, la fitxa diu quines hi són, i se’n crea una des
+d’allà mateix.**
+
+`docs/02` §7 demana «Etiquetes» a la fitxa, i hi eren: un epígraf i, a sota, **res**. Tres
+defectes encadenats, cadascun amagant el següent:
+
+| | Què passava |
+| --- | --- |
+| Crear-ne una | **Cap pantalla en sabia**. Ni la fitxa ni Ajustos; només l'API |
+| Saber quines porta la tasca | `Task` no tenia `label_ids`: els xips es dibuixaven **iguals posats i no posats** |
+| Treure'n una | Clicar-la, `POST`, i **esperar que fallés** per caure al `DELETE` del `catch` |
+
+Amb zero etiquetes a l'àmbit —que és el cas de tothom, perquè no se'n podia fer cap— la
+secció no pintava ni l'estat buit. Totes les altres seccions de la fitxa en tenen un.
+
+Tres coses que se'n deriven:
+
+- **El xip diu l'estat, no l'acció**, igual que l'ull de la bústia (P12): ple si l'etiqueta
+  hi és, fantasma amb vora discontínua si no, i `aria-pressed` per a qui no la veu.
+- **L'etiqueta nova neix posada.** Si l'has escrita mirant aquesta tasca, és d'aquesta
+  tasca; crear-la i haver-la de clicar és un pas que no serveix per a res.
+- **Es crea des de la fitxa i no des d'Ajustos.** El moment en què vols una etiqueta és
+  mentre mires la tasca que la necessita, i anar a una altra pantalla i tornar és el camí
+  que fa que ningú n'usi.
+
+Un error va deixar de ser un senyal de control: `POST`-i-si-falla-`DELETE` volia dir que un
+tall de xarxa esborrava etiquetes que ningú havia tocat.
+
+---
+
+### P16 · La disset-ena comprovació: un `R.string` sense cadena no és un text que falta
+
+**La resolució: `android-strings-exist`, que llegeix el Kotlin i el `strings.xml` generat.**
+
+Tres vegades, i sempre igual: es reanomena una clau del catàleg —que és la font de
+`strings.xml` (`docs/03` §1)—, el Kotlin que la feia servir es queda enrere, i **l'APK
+deixa d'existir**. A la web una clau que falta s'ensenya crua i es corregeix; a Android és
+un `Unresolved reference` i no hi ha aplicació.
+
+El que ho feia invisible és que **res del que corre en aquest repositori ho mirava**:
+
+| | Per què no ho veia |
+| --- | --- |
+| `npm run check` | No tocava Kotlin |
+| `npm run test:android` | Només proves unitàries dels mòduls: no compila `:app` ni resol `R` |
+| Muntar l'APK | Vol l'SDK i un minut; no es fa a cada canvi |
+
+La comprovació nova costa mil·lisegons i no vol l'SDK. Passada sobre l'arbre d'abans de
+l'arranjament, marca la línia exacta.
+
+No mira cap altre recurs: `R.drawable` i `R.id` no surten d'un catàleg compartit i no
+tenen aquest problema. Una comprovació més gran per protegir una cosa que no ha fallat mai
+és cost sense benefici.
+
+---
+
 ## Part 3 — Fets sospitosos de `research/`
 
 El crític va marcar 7 afirmacions com a probablement inventades, obsoletes o internament incoherents. **Cap `docs/` en depèn.**

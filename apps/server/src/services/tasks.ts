@@ -140,6 +140,22 @@ async function withAssignees(db: MigrationDb, rows: TaskRow[]): Promise<Task[]> 
     GROUP BY task_id
   `.execute(db);
 
+  /**
+   * **Les etiquetes de cada tasca**, i pel mateix motiu que els assignats: sense saber
+   * quines porta, la interfície no pot ensenyar quines hi són. La secció d'etiquetes de
+   * la fitxa pintava totes les de l'àmbit exactament iguals —posades i no posades— i
+   * l'única manera de treure'n una era clicar-la i esperar que el `POST` fallés.
+   */
+  const labelLinks = await sql<{ task_id: string; label_id: string }>`
+    SELECT task_id, label_id FROM task_labels WHERE task_id IN (${sql.join(ids)})
+  `.execute(db);
+  const labelsByTask = new Map<string, string[]>();
+  for (const link of labelLinks.rows) {
+    const list = labelsByTask.get(link.task_id) ?? [];
+    list.push(link.label_id);
+    labelsByTask.set(link.task_id, list);
+  }
+
   const listCounts = new Map(blocks.rows.map((row) => [row.task_id, Number(row.lists)]));
   const counts = new Map(
     progress.rows.map((row) => [row.task_id, { done: Number(row.done), total: Number(row.total) }]),
@@ -148,6 +164,7 @@ async function withAssignees(db: MigrationDb, rows: TaskRow[]): Promise<Task[]> 
   return rows.map((row) => ({
     ...row,
     assignee_ids: (byTask.get(row.id) ?? []).sort(),
+    label_ids: (labelsByTask.get(row.id) ?? []).sort(),
     progress: {
       ...(counts.get(row.id) ?? { done: 0, total: 0 }),
       lists: listCounts.get(row.id) ?? 0,

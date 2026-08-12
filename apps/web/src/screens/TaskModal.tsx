@@ -144,6 +144,8 @@ export function TaskModal({
   const [newComment, setNewComment] = useState('');
   const [activityFilter, setActivityFilter] = useState<'all' | 'ai' | 'human'>('all');
   const labels = useApi<Label[]>('/api/v1/labels');
+  /** El nom que s'està escrivint per a una etiqueta nova; `null` si no n'hi ha cap. */
+  const [newLabel, setNewLabel] = useState<string | null>(null);
 
   useEffect(() => {
     if (creating && draft === null) {
@@ -239,6 +241,7 @@ export function TaskModal({
 
   const data = task.data;
   const scope = scopes.find((candidate) => candidate.id === data?.scope_id);
+  const scopeLabels = (labels.data ?? []).filter((entry) => entry.scope_id === data?.scope_id);
 
   const label = (text: string) => (
     <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--ink-soft)' }}>{text}</span>
@@ -544,27 +547,46 @@ export function TaskModal({
               </section>
             )}
 
+            {/*
+              **Les etiquetes, que abans eren un epígraf i res més.**
+
+              Hi havia tres coses trencades alhora, i cadascuna amagava la següent:
+
+              1. Ningú pot crear una etiqueta enlloc de l'aplicació. Amb zero etiquetes a
+                 l'àmbit, la secció pintava el títol i **cap contingut**: ni estat buit ni
+                 camí. Totes les altres seccions de la fitxa en tenen un.
+              2. Els xips es dibuixaven **iguals si l'etiqueta hi era i si no**, o sigui
+                 que no es podia saber quines porta la tasca. Ara ho diu `label_ids`, que
+                 hi és per això.
+              3. Treure'n una era clicar-la i **esperar que el `POST` fallés** per caure al
+                 `DELETE` del `catch`. Amb un tall de xarxa o un 403, l'etiqueta
+                 desapareixia sense que ningú ho hagués demanat. Ara la decisió la pren
+                 l'estat que ja se sap, i un error és un error.
+            */}
             <section style={{ display: 'grid', gap: 6 }}>
               {label(t('task.labels'))}
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
                 {/*
                   Només les etiquetes de l'àmbit de la tasca: una d'un altre àmbit el
                   servidor la rebutja amb un 422, i oferir-la seria oferir un error.
                 */}
-                {(labels.data ?? [])
-                  .filter((entry) => entry.scope_id === data?.scope_id)
-                  .map((entry) => (
+                {scopeLabels.map((entry) => {
+                  const posada = (data?.label_ids ?? []).includes(entry.id);
+                  return (
                     <button
                       key={entry.id}
                       type="button"
                       data-testid={`task-label-${entry.id}`}
+                      aria-pressed={posada}
+                      title={posada ? t('task.label.remove') : t('task.label.add')}
                       onClick={() => {
-                        void api
-                          .post(`/api/v1/tasks/${taskId}/labels/${entry.id}`)
-                          .catch(() => api.delete(`/api/v1/tasks/${taskId}/labels/${entry.id}`))
-                          .then(() => {
-                            onChanged();
-                          });
+                        const url = `/api/v1/tasks/${taskId}/labels/${entry.id}`;
+                        void (posada ? api.delete(url) : api.post(url)).then(() => {
+                          // La fitxa també: `label_ids` viu a la tasca, i sense
+                          // rellegir-la el xip es queda com estava.
+                          task.reload();
+                          onChanged();
+                        });
                       }}
                       style={{
                         padding: '4px 10px',
@@ -572,16 +594,69 @@ export function TaskModal({
                         cursor: 'pointer',
                         font: 'inherit',
                         fontSize: 11,
-                        border: 'none',
-                        background: 'var(--tag-bg)',
-                        color: 'var(--tag-text)',
+                        // Posada: plena i amb el color de l'etiqueta a la vora esquerra.
+                        // No posada: fantasma. Es distingeixen sense llegir-les.
+                        border: posada ? 'none' : '1px dashed var(--card-border)',
+                        background: posada ? 'var(--tag-bg)' : 'transparent',
+                        color: posada ? 'var(--tag-text)' : 'var(--ink-soft)',
                         borderLeft: `3px solid var(${entry.color})`,
                       }}
                     >
                       {entry.name}
                     </button>
-                  ))}
+                  );
+                })}
+
+                {/*
+                  I el camí per fer-ne una, que és el que faltava. Va aquí i no a Ajustos
+                  perquè el moment en què vols una etiqueta és mentre mires la tasca que
+                  la necessita; anar-la a crear a una altra pantalla i tornar és el
+                  camí que fa que ningú n'usi.
+                */}
+                {newLabel === null ? (
+                  <button
+                    type="button"
+                    className="plou-btn plou-btn-ghost"
+                    data-testid="task-label-new"
+                    onClick={() => setNewLabel('')}
+                    style={{ fontSize: 11, padding: '4px 10px' }}
+                  >
+                    {t('task.newLabel')}
+                  </button>
+                ) : (
+                  <input
+                    className="plou-input"
+                    autoFocus
+                    data-testid="task-label-name"
+                    placeholder={t('task.newLabel.placeholder')}
+                    value={newLabel}
+                    onChange={(event) => setNewLabel(event.target.value)}
+                    onBlur={() => setNewLabel(null)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Escape') setNewLabel(null);
+                      if (event.key !== 'Enter') return;
+                      const name = newLabel.trim();
+                      if (name === '' || data?.scope_id === undefined) return;
+                      setNewLabel(null);
+                      void api
+                        .post<Label>('/api/v1/labels', { scope_id: data.scope_id, name })
+                        .then(async (creada) => {
+                          // Neix posada: si l'has escrita mirant aquesta tasca, és
+                          // d'aquesta tasca. Crear-la i haver-la de clicar seria un pas
+                          // de més que no serveix per a res.
+                          await api.post(`/api/v1/tasks/${taskId}/labels/${creada.id}`);
+                          labels.reload();
+                          task.reload();
+                          onChanged();
+                        });
+                    }}
+                    style={{ fontSize: 11, padding: '4px 10px', width: 150 }}
+                  />
+                )}
               </div>
+              {scopeLabels.length === 0 && newLabel === null ? (
+                <EmptyState>{t('task.empty.labels')}</EmptyState>
+              ) : null}
             </section>
 
             <section style={{ display: 'grid', gap: 4 }}>

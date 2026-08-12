@@ -348,7 +348,14 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: (
     // Els textos es resolen aquí i no dins dels callbacks: `stringResource` és
     // `@Composable` i no es pot cridar des d'una lambda que no ho és.
     val quickAddError = stringResource(R.string.board_quickadd_scoperequiredprefix)
-    val columnAddTemplate = stringResource(R.string.board_quickadd_placeholder)
+    /**
+     * El camp anuncia **només el sigil que serveix per a alguna cosa**, amb la mateixa
+     * regla que la web: amb un sol àmbit actiu `#` no cal —s'agafa l'únic— i sense ningú
+     * més `@` no té a qui assignar. Tres claus i no una perquè el text canvia sencer.
+     */
+    val quickAddPlain = stringResource(R.string.board_quickadd_placeholder_plain)
+    val quickAddScope = stringResource(R.string.board_quickadd_placeholder_scope)
+    val quickAddPerson = stringResource(R.string.board_quickadd_placeholder_person)
     val listsCollapsed = stringResource(R.string.card_lists_collapsed)
     val listsExpandedLabel = stringResource(R.string.card_lists_expanded)
     val addToggleLabel = stringResource(R.string.card_add)
@@ -368,7 +375,14 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: (
     ).mapValues { (_, name) ->
         // El catàleg porta `{column}` literal: la substitució és aquí, com a la web, i
         // no amb `%1$s`, que faria divergir el text de les dues apps.
-        columnAddTemplate.replace("{column}", name)
+        val actius = if (active.isEmpty()) scopes.map { it.id } else active.toList()
+        val plantilla =
+            when {
+                actius.size > 1 -> quickAddScope
+                people.size > 1 -> quickAddPerson
+                else -> quickAddPlain
+            }
+        plantilla.replace("{column}", name)
     }
     val manualLabel = stringResource(R.string.ai_mode_manual)
     val assistedLabel = stringResource(R.string.ai_mode_assisted)

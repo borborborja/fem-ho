@@ -15,7 +15,7 @@ npm run typecheck        # 0 errors
 npm run lint             # 0 errors
 npm test                 # unitàries, SQLite
 npm run test:postgres    # unitàries, Postgres (cal FEMHO_TEST_POSTGRES_URL)
-npm run check            # les 12 comprovacions permanents
+npm run check            # les 17 comprovacions permanents
 npm run e2e              # navegador, contra un servidor real
 npm run test:android     # Kotlin pur, sense emulador
 npm run android:build    # APK de depuració
@@ -113,7 +113,7 @@ Les dotze seccions de `docs/02`:
 | §4 Kanban | fet, amb arrossegament de ratolí i de teclat; **la columna Fet no ensenyava res** fins que `move` va segellar `completed_at` (P14) |
 | §5 Calendari | fet: mes, setmana, dia i rail configurable |
 | §6 Vista de llista senzilla | fet |
-| §7 Modal d'edició completa | fet menys el commutador de context per a la IA |
+| §7 Modal d'edició completa | fet menys el commutador de context per a la IA; **les etiquetes eren un epígraf buit** fins a P15 |
 | §8 Tauler general | fet |
 | §9 Ajustos | fet, les vuit pestanyes |
 | §10 Responsive | fet; el kanban del mòbil es va **arreglar** en ajustar-se al disseny |

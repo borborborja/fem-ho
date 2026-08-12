@@ -3290,6 +3290,11 @@ export interface components {
             };
             /** @description Persones. El brief demana "persona o persones". */
             assignee_ids?: string[];
+            /**
+             * @description Les etiquetes que porta. Hi és pel mateix motiu que `assignee_ids`: sense
+             *     saber quines té, la fitxa no pot ensenyar quines hi són ni treure'n cap.
+             */
+            label_ids?: string[];
             created_by?: string;
             /** Format: date-time */
             created_at: string;
