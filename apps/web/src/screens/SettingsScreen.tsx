@@ -1214,9 +1214,40 @@ function MembersList({ scopeId, canManage }: { scopeId: string; canManage: boole
             data-testid={`member-${member.id}`}
             style={{ fontSize: 12.5, color: 'var(--ink-soft)', display: 'flex', gap: 8 }}
           >
-            <span>
-              {member.name ?? member.user_id ?? ''} · {t(`settings.role.${member.role}`)}
-            </span>
+            <span>{member.name ?? member.user_id ?? ''}</span>
+
+            {/*
+              **El rol es canvia aquí**, i fins avui no es podia: el `PATCH` existia des del
+              primer dia i no el cridava ningú, o sigui que l'única manera d'elevar algú era
+              fer-lo propietari —i llavors també podia esborrar l'àmbit sencer.
+
+              El propietari no es toca des d'aquí: treure-se'l a un mateix per descuit deixa
+              l'àmbit sense qui el governi, i el servidor ja ho impedeix quan és l'últim.
+            */}
+            {canManage && member.role !== 'owner' ? (
+              <select
+                className="plou-input"
+                data-testid={`member-role-${member.id}`}
+                value={member.role}
+                onChange={(event) => {
+                  void api
+                    .patch(`/api/v1/scopes/${scopeId}/members/${member.id}`, {
+                      role: event.target.value,
+                    })
+                    .then(() => members.reload());
+                }}
+                style={{ width: 'auto', fontSize: 12, padding: '2px 8px' }}
+              >
+                {(['admin', 'collaborator', 'viewer'] as const).map((role) => (
+                  <option key={role} value={role}>
+                    {t(`settings.role.${role}`)}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <span style={{ color: 'var(--ink-faint)' }}>{t(`settings.role.${member.role}`)}</span>
+            )}
+
             {canManage && member.role !== 'owner' ? (
               <button
                 type="button"

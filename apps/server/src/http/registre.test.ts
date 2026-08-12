@@ -369,3 +369,44 @@ describe('les Estadístiques diuen el mateix que el Registre', () => {
     expect(s.overtime_by_project[0]?.overtime_minutes).toBe(60);
   });
 });
+
+describe("l'administrador de l'àmbit", () => {
+  it('elevat a admin, veu el registre de tothom', async () => {
+    /**
+     * **Fins avui l'única manera d'elevar algú era fer-lo propietari**, i llavors també
+     * podia esborrar l'àmbit sencer. Aquest rol és exactament el que faltava: mana i no
+     * s'ho pot endur.
+     */
+    const membres = await api('GET', `/api/v1/scopes/${scopeId}/members`);
+    const marta = membres
+      .json<{ id: string; user_id: string | null }[]>()
+      .find((row) => row.user_id === martaId);
+
+    const pujada = await api('PATCH', `/api/v1/scopes/${scopeId}/members/${marta?.id ?? ''}`, {
+      role: 'admin',
+    });
+    expect(pujada.statusCode, pujada.body).toBe(200);
+
+    const tots = await api(
+      'GET',
+      '/api/v1/sessions?from=2026-07-01&to=2026-07-31',
+      undefined,
+      comMarta,
+    );
+    const report = tots.json<Report>();
+    expect(report.totals.by_user.length).toBeGreaterThan(1);
+  });
+
+  it("i pot configurar l'àmbit, però no esborrar-lo", async () => {
+    const config = await api(
+      'PATCH',
+      `/api/v1/scopes/${scopeId}/settings`,
+      { long_session_hours: 10 },
+      comMarta,
+    );
+    expect(config.statusCode, config.body).toBe(200);
+
+    const esborrat = await api('DELETE', `/api/v1/scopes/${scopeId}`, undefined, comMarta);
+    expect(esborrat.statusCode).toBe(403);
+  });
+});

@@ -37,6 +37,7 @@ import * as agentScopes from './migrations/016-agent-scopes.js';
 import * as attention from './migrations/017-attention.js';
 import * as activityTrace from './migrations/018-activity-trace.js';
 import * as timeTracking from './migrations/019-time-tracking.js';
+import * as scopeAdmin from './migrations/020-scope-admin.js';
 
 export interface Migration {
   name: string;
@@ -107,6 +108,13 @@ export const MIGRATIONS: Migration[] = [
   { name: '018-activity-trace', up: activityTrace.up, down: activityTrace.down },
   // Taules noves i una columna: cap refet, i per tant cap `needsForeignKeysOff`.
   { name: '019-time-tracking', up: timeTracking.up, down: timeTracking.down },
+  // Refà `scope_members` per ampliar-ne el `CHECK`: cal apagar les claus foranes.
+  {
+    name: '020-scope-admin',
+    up: scopeAdmin.up,
+    down: scopeAdmin.down,
+    needsForeignKeysOff: true,
+  },
 ];
 
 const MIGRATIONS_TABLE = 'schema_migrations';
