@@ -5119,6 +5119,28 @@ components:
                 Quants blocs desplegables té la targeta: un per les subtasques, si en té,
                 i un per cada llista. És el número del commutador "Llistes (2)", que
                 compta blocs i no ítems.
+        last_activity_at:
+          type: [string, 'null']
+          format: date-time
+          description: |
+            L'última cosa que li ha passat a la tasca, sigui qui sigui qui la va fer.
+
+            **No és `updated_at`**: aquell és l'última escriptura a la fila i no veu el que
+            passa al voltant —un comentari, una reserva, una pregunta—. És el que fa que la
+            targeta del kanban d'IA pugui dir «fa 5 min» o «fa tres dies», que és la
+            diferència entre un agent que hi treballa i un que no hi és.
+        ai_last_read_at:
+          type: [string, 'null']
+          format: date-time
+          description: |
+            Quan un agent la va llegir per última vegada. Respon «t'ha llegit la resposta?»
+            sense haver-li de preguntar.
+
+            **Les lectures no van a l'historial**: un agent que consulta cada minut hi
+            deixaria mil files al dia i taparia el que sí que va fer.
+        ai_last_read_by:
+          type: [string, 'null']
+          description: Quin agent la va llegir.
         locked_until:
           type: [string, 'null']
           format: date-time

@@ -70,6 +70,18 @@ export interface TaskRow {
   needs_attention: boolean;
   /** Des de quan. Una pregunta de fa deu minuts i una de fa tres dies no diuen el mateix. */
   attention_asked_at: string | null;
+  /**
+   * L'última cosa que li ha passat, sigui qui sigui qui la va fer.
+   *
+   * **No és `updated_at`**: aquell és l'última escriptura a la fila i no veu el que passa
+   * al voltant —un comentari, una reserva, una pregunta—. Això és el que fa que la targeta
+   * pugui dir «fa 5 min» o «fa tres dies», que és la diferència entre un agent que hi
+   * treballa i un que no hi és.
+   */
+  last_activity_at: string | null;
+  /** Quan un agent la va llegir per última vegada, i quin. `null` si cap. */
+  ai_last_read_at: string | null;
+  ai_last_read_by: string | null;
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -107,7 +119,8 @@ const TASK_COLUMNS = sql`
   id, scope_id, project_id, title, description, status, position, due_date, due_time,
   deadline, completed_at, view_mode, ai_mode, delegate_agent_id,
   rrule, recurrence_mode, recurrence_parent_id, source_kind,
-  needs_attention, attention_asked_at, created_by,
+  needs_attention, attention_asked_at, last_activity_at, ai_last_read_at, ai_last_read_by,
+  created_by,
   created_at, updated_at, version
 `;
 
@@ -226,6 +239,26 @@ export async function getTask(db: MigrationDb, principal: Principal, id: string)
   // L'abast es comprova SEMPRE, i l'error diu on és la tasca perquè qui el rebi pugui
   // corregir en comptes de reintentar (docs/05 §2).
   await assertScopeAccess(db, principal, row.scope_id, { type: 'La tasca', id });
+
+  /**
+   * **Que un agent l'ha llegida es guarda.** És el que respon «t'ha llegit la resposta?»
+   * sense haver-li de preguntar, i és mitja explicació quan una tasca porta dies quieta.
+   *
+   * Va aquí, en un camí de lectura, i no és cap incoherència: `resolve.ts` ja fa el mateix
+   * amb `api_tokens.last_used_at`. **No toca `updated_at` ni `version`**: llegir no és un
+   * canvi de la tasca i no ha de viatjar pel sync ni marcar-la com a modificada. I no va a
+   * l'historial perquè un agent que consulta cada minut hi deixaria mil files al dia i
+   * taparia el que sí que va fer.
+   */
+  if (principal.kind === 'agent' && principal.agentId !== undefined) {
+    const ara = new Date().toISOString();
+    await sql`
+      UPDATE tasks SET ai_last_read_at = ${ara}, ai_last_read_by = ${principal.agentId}
+      WHERE id = ${id}
+    `.execute(db);
+    row.ai_last_read_at = ara;
+    row.ai_last_read_by = principal.agentId;
+  }
 
   const [task] = await withAssignees(db, [row]);
   if (task === undefined) throw notFound('task', id);

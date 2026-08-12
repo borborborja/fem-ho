@@ -12,7 +12,14 @@
  */
 
 import { useEffect, useState } from 'react';
-import { dateTime, getLocale, shortTime, t, type TaskStatus } from '@fem-ho/contracts';
+import {
+  dateTime,
+  getLocale,
+  relativeTime,
+  shortTime,
+  t,
+  type TaskStatus,
+} from '@fem-ho/contracts';
 import { v7 as uuidv7 } from 'uuid';
 import { ActivityTimeline, ChecklistRow, EmptyState } from '@fem-ho/design-system/femho';
 import { api, failureText } from '../app/api.js';
@@ -1080,6 +1087,25 @@ export function TaskModal({
 
             <section style={{ display: 'grid', gap: 6 }}>
               {label(t('task.activity'))}
+
+              {/*
+                **Quan la va llegir l'agent**, que és la pregunta que l'historial no responia:
+                els verbs diuen què ha fet, i el silenci no distingeix «encara no ha tornat»
+                de «ho ha llegit i no hi ha res a fer». Les lectures no hi entren com a files
+                —un agent que consulta cada minut n'hi deixaria mil al dia— i per això va
+                aquí a sobre, com un fet de la tasca i no com un esdeveniment.
+              */}
+              {data?.ai_last_read_at == null ? null : (
+                <p
+                  data-testid="task-ai-read-at"
+                  title={dateTime(getLocale(), new Date(data.ai_last_read_at))}
+                  style={{ margin: 0, fontSize: 11.5, color: 'var(--ink-faint)' }}
+                >
+                  {t('ai.readAt', {
+                    when: relativeTime(getLocale(), new Date(data.ai_last_read_at), new Date()),
+                  })}
+                </p>
+              )}
               {(activity.data?.data ?? []).length === 0 ? (
                 <EmptyState>{t('task.empty.activity')}</EmptyState>
               ) : (

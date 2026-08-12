@@ -218,6 +218,20 @@ async function writeEntry(
        ${principal.label ?? null}, ${principal.source}, ${entry.verb},
        ${entry.changes === undefined ? null : JSON.stringify(entry.changes)}, ${now})
   `.execute(tx);
+
+  /**
+   * **L'última cosa que li ha passat a la tasca**, aquí i no a cada servei.
+   *
+   * `updated_at` és l'última escriptura **a la fila** i per tant no veu el que passa al
+   * voltant: un comentari, una reserva, una pregunta. La targeta del kanban d'IA ha de
+   * poder dir «fa 5 min» o «fa tres dies», que és la diferència entre un agent que hi
+   * treballa i un que no hi és. Es manté al mateix lloc que registra el rastre, o sigui
+   * que un verb nou hi entra sol; i no toca `version`, perquè no és un canvi de la tasca
+   * que ningú hagi de sincronitzar.
+   */
+  if (entry.entityType === 'task') {
+    await sql`UPDATE tasks SET last_activity_at = ${now} WHERE id = ${entry.entityId}`.execute(tx);
+  }
 }
 
 /**

@@ -313,6 +313,26 @@ describe('migrar una base que ja té dades', () => {
     // I «des de quan» és nul mentre no hi hagi cap pregunta: no és una data d'estrena.
     expect(fila.rows[0]?.attention_asked_at).toBeNull();
   });
+
+  it('la 018 no inventa activitat ni lectures a les tasques que ja hi eren', async () => {
+    /**
+     * **Una data falsa és pitjor que un buit.** Si `last_activity_at` naixés amb la data de
+     * la migració, totes les tasques d'una casa dirien «fa 5 min» el dia que s'actualitza,
+     * i la marca —que existeix per distingir el que es mou del que porta dies quiet—
+     * naixeria mentint. La interfície ja sap què fer amb un nul; amb una data inventada no.
+     */
+    const fila = await sql<{
+      last_activity_at: string | null;
+      ai_last_read_at: string | null;
+      ai_last_read_by: string | null;
+    }>`
+      SELECT last_activity_at, ai_last_read_at, ai_last_read_by FROM tasks WHERE id = 't1'
+    `.execute(conn.db);
+
+    expect(fila.rows[0]?.last_activity_at).toBeNull();
+    expect(fila.rows[0]?.ai_last_read_at).toBeNull();
+    expect(fila.rows[0]?.ai_last_read_by).toBeNull();
+  });
 });
 
 /** Aplica les migracions fins a una concreta, per poder simular una base ja desplegada. */

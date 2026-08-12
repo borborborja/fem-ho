@@ -45,6 +45,7 @@
   "ai.proof.openTask": "Open the task",
   "ai.proof.taskTitle": "Prepare Monday's meeting",
   "ai.proof.toggleLease": "Claim",
+  "ai.readAt": "The agent read this {when}.",
   "ai.status.configuredButUnused": "There are model credentials, and nothing uses them yet.",
   "ai.status.credentialsWithoutProvider": "There is a key or a model configured without a provider: they will not be used.",
   "ai.takeOver.action": "I'll take it",

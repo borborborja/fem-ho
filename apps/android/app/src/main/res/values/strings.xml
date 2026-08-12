@@ -39,6 +39,7 @@
     <string name="ai_proof_opentask">Obre la tasca</string>
     <string name="ai_proof_tasktitle">Preparar la reunió de dilluns</string>
     <string name="ai_proof_togglelease">Reserva</string>
+    <string name="ai_readat">L\'agent ho va llegir {when}.</string>
     <string name="ai_status_configuredbutunused">Hi ha credencials d’un model, i encara no hi ha res que les faci servir.</string>
     <string name="ai_status_credentialswithoutprovider">Hi ha una clau o un model configurats sense proveïdor: no es faran servir.</string>
     <string name="ai_takeover_action">Ho agafo jo</string>

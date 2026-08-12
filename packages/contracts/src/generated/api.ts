@@ -3496,6 +3496,27 @@ export interface components {
             };
             /**
              * Format: date-time
+             * @description L'última cosa que li ha passat a la tasca, sigui qui sigui qui la va fer.
+             *
+             *     **No és `updated_at`**: aquell és l'última escriptura a la fila i no veu el que
+             *     passa al voltant —un comentari, una reserva, una pregunta—. És el que fa que la
+             *     targeta del kanban d'IA pugui dir «fa 5 min» o «fa tres dies», que és la
+             *     diferència entre un agent que hi treballa i un que no hi és.
+             */
+            last_activity_at?: string | null;
+            /**
+             * Format: date-time
+             * @description Quan un agent la va llegir per última vegada. Respon «t'ha llegit la resposta?»
+             *     sense haver-li de preguntar.
+             *
+             *     **Les lectures no van a l'historial**: un agent que consulta cada minut hi
+             *     deixaria mil files al dia i taparia el que sí que va fer.
+             */
+            ai_last_read_at?: string | null;
+            /** @description Quin agent la va llegir. */
+            ai_last_read_by?: string | null;
+            /**
+             * Format: date-time
              * @description Fins quan la té reservada un agent, o `null` si està lliure. **No és una
              *     columna de `tasks`**: és la reserva viva (`task_leases`), que existia per evitar
              *     que dos agents fessin la mateixa feina i que ara també fa de pany.

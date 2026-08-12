@@ -39,6 +39,7 @@
     <string name="ai_proof_opentask">Open the task</string>
     <string name="ai_proof_tasktitle">Prepare Monday\'s meeting</string>
     <string name="ai_proof_togglelease">Claim</string>
+    <string name="ai_readat">The agent read this {when}.</string>
     <string name="ai_status_configuredbutunused">There are model credentials, and nothing uses them yet.</string>
     <string name="ai_status_credentialswithoutprovider">There is a key or a model configured without a provider: they will not be used.</string>
     <string name="ai_takeover_action">I\'ll take it</string>

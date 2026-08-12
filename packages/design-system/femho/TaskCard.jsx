@@ -147,6 +147,13 @@ export function TaskCard({
    * la miri ha de saber per què no la pot moure abans de provar-ho, no després.
    */
   lockLabel,
+  /**
+   * Quan va passar l'última cosa, ja escrit: «fa 5 min» dins del dia i la data passat el
+   * dia. Ve fet de fora perquè el format depèn de l'idioma i el design system no en té.
+   */
+  activityLabel,
+  /** La data completa, per al `title`: el relatiu s'entén d'un cop d'ull, l'exacte convida. */
+  activityTitle,
   dragging = false,
   onOpen,
   onToggleDone,
@@ -450,6 +457,16 @@ export function TaskCard({
                     />
                   </svg>
                   {aiModeLabel}
+                </span>
+              ) : null}
+
+              {activityLabel ? (
+                <span
+                  data-testid="task-activity-at"
+                  title={activityTitle}
+                  style={{ fontSize: 10.5, color: 'var(--ink-faint)' }}
+                >
+                  {activityLabel}
                 </span>
               ) : null}
 

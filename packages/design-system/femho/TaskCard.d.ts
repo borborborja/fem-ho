@@ -57,6 +57,10 @@ export interface TaskCardProps extends React.HTMLAttributes<HTMLDivElement> {
    * saber per què no es pot moure abans de provar-ho és mitja explicació.
    */
   lockLabel?: string | undefined;
+  /** Quan va passar l'última cosa, ja escrit («fa 5 min», o la data passat el dia). */
+  activityLabel?: string | undefined;
+  /** La data completa, per al `title` de la marca de temps. */
+  activityTitle?: string | undefined;
   /** Només a les targetes de l'Inbox (docs/02 §4). */
   /**
    * La fletxa de la barra dreta: mou la targeta una columna endavant.

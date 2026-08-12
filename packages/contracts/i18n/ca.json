@@ -46,6 +46,7 @@
   "ai.proof.openTask": "Obre la tasca",
   "ai.proof.taskTitle": "Preparar la reunió de dilluns",
   "ai.proof.toggleLease": "Reserva",
+  "ai.readAt": "L'agent ho va llegir {when}.",
   "ai.status.configuredButUnused": "Hi ha credencials d’un model, i encara no hi ha res que les faci servir.",
   "ai.status.credentialsWithoutProvider": "Hi ha una clau o un model configurats sense proveïdor: no es faran servir.",
   "ai.takeOver.action": "Ho agafo jo",

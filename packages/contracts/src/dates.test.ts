@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest';
 import {
   longDay,
   monthName,
+  relativeTime,
   resolveWeekStart,
   shortTime,
   startOfWeek,
@@ -81,5 +82,37 @@ describe('les hores', () => {
     expect(shortTime('ca', tarda)).toBe('15:30');
     expect(shortTime('es', tarda)).toBe('15:30');
     expect(shortTime('en', tarda)).toMatch(/3:30\s?PM/u);
+  });
+});
+
+describe('temps relatiu', () => {
+  const ara = new Date('2026-08-12T12:00:00.000Z');
+  const fa = (ms: number): Date => new Date(ara.getTime() - ms);
+
+  it('menys d’un minut és «ara»: «fa 12 segons» no ajuda ningú', () => {
+    expect(relativeTime('ca', fa(12_000), ara)).toContain('ara');
+  });
+
+  it('minuts i hores, en català i amb el plural fet per CLDR', () => {
+    expect(relativeTime('ca', fa(5 * 60_000), ara)).toMatch(/5 min/u);
+    expect(relativeTime('ca', fa(3 * 3600_000), ara)).toMatch(/3 h/u);
+  });
+
+  it('a 23 h encara diu l’estona; a 25 h diu la data', () => {
+    /**
+     * **El llindar és un dia i no és estètica.** Dins del dia el que informa és quanta
+     * estona fa; passat el dia, «fa 37 h» obliga a fer un càlcul que una data ja porta fet.
+     */
+    expect(relativeTime('ca', fa(23 * 3600_000), ara)).toMatch(/23 h/u);
+
+    const ahir = relativeTime('ca', fa(25 * 3600_000), ara);
+    expect(ahir).not.toMatch(/\bh\b/u);
+    expect(ahir).toContain('11'); // 11/08, el dia d'abans
+  });
+
+  it('cada idioma ho diu a la seva manera, i cap text viu al catàleg', () => {
+    const enAngles = relativeTime('en', fa(2 * 3600_000), ara);
+    expect(enAngles).toMatch(/2 hr/u);
+    expect(enAngles).not.toBe(relativeTime('ca', fa(2 * 3600_000), ara));
   });
 });

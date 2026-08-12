@@ -216,8 +216,9 @@ test("una tasca que l'agent té a les mans no es toca, i quan la deixa te la pot
     data: { ai_mode: 'delegated' },
   });
 
-  // L'agent l'agafa i hi treballa: reserva, la mou i hi deixa el que ha trobat.
+  // L'agent l'agafa i hi treballa: reserva, la llegeix, la mou i hi deixa el que ha trobat.
   await page.request.post(`/api/v1/ai/tasks/${tascaId}/claim`, { headers: comAgent });
+  await page.request.get(`/api/v1/tasks/${tascaId}`, { headers: comAgent });
   await page.request.post(`/api/v1/tasks/${tascaId}/move`, {
     headers: comAgent,
     data: { status: 'doing' },
@@ -234,6 +235,14 @@ test("una tasca que l'agent té a les mans no es toca, i quan la deixa te la pot
   const targeta = page.locator('[data-testid^="task-"]', { hasText: 'Migrar el servidor' }).first();
   await expect(targeta.getByTestId('task-locked')).toContainText("L'agent hi treballa");
 
+  /**
+   * I **quan va passar l'última cosa**. Acaba de passar, o sigui que ho diu en relatiu; la
+   * data completa hi és al `title`, que és el que convida a mirar-la quan ja fa dies.
+   */
+  const marca = targeta.getByTestId('task-activity-at');
+  await expect(marca).toContainText('ara');
+  expect(await marca.getAttribute('title')).toMatch(/\d/u);
+
   // I dins, no hi ha botó de reclamar-la: hi ha l'explicació i l'hora en què es deixa anar.
   await targeta.getByText('Migrar el servidor').click();
   await expect(page.getByTestId('task-locked-notice')).toBeVisible();
@@ -249,6 +258,10 @@ test("una tasca que l'agent té a les mans no es toca, i quan la deixa te la pot
   await page.reload();
   await page.getByTestId('ai-board-toggle').click();
   await targeta.getByText('Migrar el servidor').click();
+
+  // I la fitxa diu quan la va llegir l'agent, que és el que l'historial no responia: els
+  // verbs diuen què ha fet, i el silenci no distingeix «no ha tornat» de «ho ha llegit».
+  await expect(page.getByTestId('task-ai-read-at')).toContainText('llegir');
 
   await page.getByTestId('task-take-over').click();
   await page.getByTestId('task-take-over-doing').click();

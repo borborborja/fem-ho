@@ -63,6 +63,14 @@ function toBoardTask(
   initials: string | undefined,
   assignedToOther: boolean,
   collective: boolean,
+  /**
+   * Si s'hi ha de veure quan va passar l'última cosa.
+   *
+   * **Només al tauler d'IA.** Allà el silenci és informació —«fa tres dies» vol dir que
+   * l'agent no hi ha tornat—; al tauler humà seria una data més a cada targeta sense res a
+   * dir, perquè de les teves ja saps quan les vas tocar.
+   */
+  showActivity: boolean,
 ): BoardTask {
   return {
     id: task.id,
@@ -86,6 +94,7 @@ function toBoardTask(
     aiMode: task.ai_mode,
     needsAttention: task.needs_attention,
     lockedUntil: task.locked_until,
+    lastActivityAt: showActivity ? task.last_activity_at : null,
     progress: task.progress,
   };
 }
@@ -368,6 +377,7 @@ export function BoardScreen({
             initialsOf(assignees),
             assignees.length > 0 && !assignees.includes(profile.id),
             scopes.find((scope) => scope.id === task.scope_id)?.kind === 'collective',
+            aiBoard,
           );
           const moved = optimistic[task.id];
           return moved === undefined ? card : { ...card, status: moved };
@@ -428,6 +438,7 @@ export function BoardScreen({
             initialsOf(assignees),
             assignees.length > 0 && !assignees.includes(profile.id),
             scopes.find((scope) => scope.id === task.scope_id)?.kind === 'collective',
+            aiBoard,
           );
           const moved = optimistic[task.id];
           return moved === undefined ? card : { ...card, status: moved };
