@@ -11,6 +11,8 @@
     <string name="activity_filter_all">Everything</string>
     <string name="activity_filter_human">People only</string>
     <string name="activity_undo">Undo</string>
+    <string name="activity_verb_answered">you replied</string>
+    <string name="activity_verb_asked">asked you</string>
     <string name="activity_verb_cascade_complete">was completed in cascade</string>
     <string name="activity_verb_claimed">claimed the task</string>
     <string name="activity_verb_commented">commented</string>
@@ -24,6 +26,10 @@
     <string name="activity_verb_token_created">created a token</string>
     <string name="activity_verb_token_revoked">revoked a token</string>
     <string name="activity_verb_updated">changed</string>
+    <string name="ai_attention_attachhint">Anything you attach to the task reaches it along with the work.</string>
+    <string name="ai_attention_card">Waiting on you</string>
+    <string name="ai_attention_pending">{count} tasks are waiting for your reply</string>
+    <string name="ai_attention_waiting">The agent needs a reply from you to carry on. It goes away when you answer.</string>
     <string name="ai_mode_assisted">Assisted</string>
     <string name="ai_mode_cycle">Change the AI mode</string>
     <string name="ai_mode_delegated">AI</string>
@@ -519,8 +525,10 @@
     <string name="sync_title">Sync</string>
     <string name="task_activity">History</string>
     <string name="task_addattachment">Attach a file</string>
+    <string name="task_aiconversation">Conversation with the AI</string>
     <string name="task_aiinstructions">Instructions for the AI</string>
     <string name="task_aimode">AI mode</string>
+    <string name="task_aireply">Reply to the agent…</string>
     <string name="task_assignees">Assigned to</string>
     <string name="task_attachmentlink">External link</string>
     <string name="task_attachments">Attachments</string>
@@ -534,6 +542,7 @@
     <string name="task_duetime">Time</string>
     <string name="task_edit">Edit task</string>
     <string name="task_empty_activity">Nothing has happened in this task yet.</string>
+    <string name="task_empty_aiconversation">Nothing said yet.</string>
     <string name="task_empty_attachments">No files attached.</string>
     <string name="task_empty_comments">No comments yet.</string>
     <string name="task_empty_labels">This scope has no labels yet.</string>

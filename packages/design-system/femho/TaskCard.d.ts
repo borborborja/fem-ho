@@ -47,6 +47,11 @@ export interface TaskCardProps extends React.HTMLAttributes<HTMLDivElement> {
   aiMode?: 'manual' | 'assisted' | 'delegated' | undefined;
   /** El text del distintiu, traduït. El color no és mai l'únic senyal. */
   aiModeLabel?: string | undefined;
+  /**
+   * «Espera resposta teva», traduït. Amb text, la targeta va destacada i el diu; sense
+   * text no hi ha res a destacar, perquè un color sol no és cap avís (docs/04 §8).
+   */
+  attentionLabel?: string | undefined;
   /** Només a les targetes de l'Inbox (docs/02 §4). */
   /**
    * La fletxa de la barra dreta: mou la targeta una columna endavant.

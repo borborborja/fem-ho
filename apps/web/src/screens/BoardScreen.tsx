@@ -84,6 +84,7 @@ function toBoardTask(
     assignedToOther,
     time: task.due_time ?? undefined,
     aiMode: task.ai_mode,
+    needsAttention: task.needs_attention,
     progress: task.progress,
   };
 }

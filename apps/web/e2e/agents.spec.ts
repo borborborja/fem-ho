@@ -18,7 +18,7 @@
  */
 
 import { expect, test, type Page } from '@playwright/test';
-import { enterAsNew } from './entrar.js';
+import { enterAsNew, token } from './entrar.js';
 
 test.describe.configure({ mode: 'serial' });
 
@@ -121,4 +121,67 @@ test('la credencial de l’agent surt una sola vegada, i es veu a MCP i API amb 
   // I el botó porta a l'agent, que és on sí que s'hi toca.
   await page.locator('[data-testid^="token-ai-go-"]').first().click();
   await expect(page.locator(`[data-testid="agent-credential-new-${idHermes}"]`)).toBeVisible();
+});
+
+test("l'agent pregunta, es veu sense entrar-hi, i la marca marxa quan respons", async ({
+  page,
+}) => {
+  await enterAsNew(page, COMPTE);
+  await obreIA(page);
+
+  const hermes = page.locator('[data-testid^="agent-"]', { hasText: 'Hermes' }).first();
+  const idHermes = (await hermes.getAttribute('data-testid'))!.replace('agent-', '');
+  await page.locator(`[data-testid="agent-credential-new-${idHermes}"]`).click();
+  const credencial = await page
+    .locator(`[data-testid="agent-credential-value-${idHermes}"]`)
+    .inputValue();
+  const comAgent = { authorization: `Bearer ${credencial}` };
+
+  /**
+   * **La tasca es prepara per l'API i la pregunta la fa l'agent de debò**, amb la seva
+   * credencial. Fer-ho tot per la pantalla provaria la pantalla dues vegades; el que aquí
+   * s'ha de provar és que el que fa un agent de fora arribi a qui mira l'app.
+   */
+  const meu = { authorization: `Bearer ${await token(page)}` };
+  const ambits = await page.request.get('/api/v1/scopes', { headers: meu });
+  const ambit = ((await ambits.json()) as { id: string; name: string }[]).find(
+    (scope) => scope.name === 'Feina delegada',
+  )!;
+
+  const creada = await page.request.post('/api/v1/tasks', {
+    headers: meu,
+    data: { scope_id: ambit.id, title: 'Enviar la factura' },
+  });
+  const tascaId = ((await creada.json()) as { id: string }).id;
+  await page.request.post(`/api/v1/tasks/${tascaId}/ai-mode`, {
+    headers: meu,
+    data: { ai_mode: 'delegated' },
+  });
+
+  const pregunta = await page.request.post(`/api/v1/ai/tasks/${tascaId}/ask-user`, {
+    headers: comAgent,
+    data: { question: 'A quin dels dos correus?' },
+  });
+  expect(pregunta.status()).toBe(201);
+
+  // **Es veu sense entrar a la tasca**: el punt va al commutador que hi porta.
+  await page.goto(`/?scopes=${ambit.id}`);
+  await expect(page.getByTestId('ai-attention-count')).toHaveText('1');
+
+  // I al kanban de la IA, la targeta destacada **amb text**, no només amb color.
+  await page.getByTestId('ai-board-toggle').click();
+  const targeta = page.locator('[data-testid^="task-"]', { hasText: 'Enviar la factura' }).first();
+  await expect(targeta.getByTestId('task-attention')).toContainText('Espera resposta');
+
+  // S'obre, s'hi respon, i la marca marxa: no hi ha cap botó de «vist».
+  await targeta.getByText('Enviar la factura').click();
+  await expect(page.getByTestId('task-attention-notice')).toBeVisible();
+  await expect(page.getByTestId('task-ai-message')).toContainText('A quin dels dos correus?');
+
+  await page.getByTestId('task-new-comment').fill('Al de la gestoria.');
+  await page.getByTestId('task-ai-conversation').getByRole('button', { name: 'Envia' }).click();
+  await expect(page.getByTestId('task-attention-notice')).toHaveCount(0);
+
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('ai-attention-count')).toHaveCount(0);
 });

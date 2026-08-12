@@ -36,6 +36,9 @@ const VERBS = [
   'reopened',
   'cascade_complete',
   'commented',
+  // La pregunta d'un agent i la resposta que el desencalla.
+  'asked',
+  'answered',
   'refreshed',
   'deleted',
   'claimed',
@@ -242,6 +245,9 @@ export function TaskModal({
   const data = task.data;
   const scope = scopes.find((candidate) => candidate.id === data?.scope_id);
   const scopeLabels = (labels.data ?? []).filter((entry) => entry.scope_id === data?.scope_id);
+
+  /** La tasca és de la IA: delegada o assistida. En `manual` no hi ha cap agent al darrere. */
+  const ia = data !== undefined && data.ai_mode !== 'manual';
 
   const label = (text: string) => (
     <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--ink-soft)' }}>{text}</span>
@@ -858,13 +864,68 @@ export function TaskModal({
               <Attachments parent="tasks" parentId={taskId} label={label} />
             )}
 
-            <section style={{ display: 'grid', gap: 6 }}>
-              {label(t('task.comments'))}
+            {/*
+              **La conversa amb l'agent és la mateixa que la de comentaris, no una de nova.**
+
+              Amb una pestanya IA a part hi hauria dos llocs on mirar què s'ha dit d'aquesta
+              tasca, i el dia que algú respongués al lloc equivocat l'agent es quedaria
+              esperant. El que canvia quan la tasca no és `manual` és **el que s'hi veu**:
+              qui parla, quina pregunta espera resposta, i que el que adjuntis aquí sota li
+              arriba amb el traspàs.
+            */}
+            <section
+              data-testid={ia ? 'task-ai-conversation' : 'task-comments'}
+              style={{ display: 'grid', gap: 6 }}
+            >
+              {label(ia ? t('task.aiConversation') : t('task.comments'))}
+
+              {/*
+                L'avís, amb icona i text i no només color (docs/04 §8). Marxa quan respons:
+                no hi ha cap botó de «vist», perquè el que desencalla l'agent és la
+                resposta.
+              */}
+              {data?.needs_attention === true ? (
+                <p
+                  data-testid="task-attention-notice"
+                  style={{
+                    margin: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '7px 11px',
+                    borderRadius: 12,
+                    background: 'var(--gradient-wash-warm)',
+                    border: '1px solid var(--plou-orange)',
+                    fontSize: 12,
+                    color: 'var(--ink)',
+                  }}
+                >
+                  <span aria-hidden="true">⚠</span>
+                  {t('ai.attention.waiting')}
+                </p>
+              ) : null}
+
               {(comments.data ?? []).length === 0 ? (
-                <EmptyState>{t('task.empty.comments')}</EmptyState>
+                <EmptyState>
+                  {t(ia ? 'task.empty.aiConversation' : 'task.empty.comments')}
+                </EmptyState>
               ) : (
                 (comments.data ?? []).map((comment) => (
-                  <div key={comment.id} style={{ fontSize: 12.5, color: 'var(--ink)' }}>
+                  <div
+                    key={comment.id}
+                    data-testid={comment.agent_id === null ? undefined : 'task-ai-message'}
+                    style={{
+                      fontSize: 12.5,
+                      color: 'var(--ink)',
+                      ...(comment.agent_id === null
+                        ? {}
+                        : {
+                            padding: '7px 11px',
+                            borderRadius: 12,
+                            background: 'var(--gradient-wash-cool)',
+                          }),
+                    }}
+                  >
                     <strong style={{ fontWeight: 700 }}>
                       {comment.guest_name ??
                         people.find((person) => person.id === comment.author_id)?.name ??
@@ -879,7 +940,7 @@ export function TaskModal({
                   className="plou-input"
                   data-testid="task-new-comment"
                   value={newComment}
-                  placeholder={t('task.newComment')}
+                  placeholder={t(ia ? 'task.aiReply' : 'task.newComment')}
                   onChange={(event) => setNewComment(event.target.value)}
                 />
                 <button
@@ -893,12 +954,36 @@ export function TaskModal({
                         setNewComment('');
                         comments.reload();
                         activity.reload();
+                        /**
+                         * **I la tasca**, perquè respondre li baixa la marca d'atenció i
+                         * l'avís es llegeix de la tasca. Sense això l'avís es quedava a la
+                         * pantalla amb la marca ja baixada: qui respon veuria que segueix
+                         * esperant-lo i tornaria a respondre.
+                         */
+                        task.reload();
+                        /**
+                         * I si el que s'acaba de respondre era una pregunta d'un agent,
+                         * **també ho ha de saber la barra**: el punt del commutador d'IA i
+                         * la targeta destacada són fora d'aquest modal, i deixar-los amb el
+                         * comptador vell diria que encara t'esperen quan ja no.
+                         */
+                        if (data?.needs_attention === true) onChanged();
                       });
                   }}
                 >
                   {t('task.send')}
                 </button>
               </div>
+              {/*
+                **El que adjuntis li arriba.** L'adjunt ja hi era just a sobre i el traspàs
+                el porta com a enllaç a recurs (docs/09 §4); el que faltava era dir-ho, que
+                és el que fa que algú l'hi enviï en comptes d'enganxar-hi una URL.
+              */}
+              {ia ? (
+                <p style={{ margin: 0, fontSize: 11.5, color: 'var(--ink-faint)' }}>
+                  {t('ai.attention.attachHint')}
+                </p>
+              ) : null}
             </section>
 
             <section style={{ display: 'grid', gap: 6 }}>

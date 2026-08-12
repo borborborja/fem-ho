@@ -169,6 +169,14 @@ function AppShell() {
   const aiEnabled = (agents.data ?? []).some((agent) => agent.enabled);
 
   /**
+   * Quantes tasques esperen resposta.
+   *
+   * Es torna a demanar amb `reloadKey`, que és el que puja quan una fitxa canvia: respondre
+   * a la pestanya IA baixa la marca, i el punt ha de marxar sense recarregar la pàgina.
+   */
+  const attention = useApi<{ count: number }>('/api/v1/ai/attention', [reloadKey]);
+
+  /**
    * El gir del tauler.
    *
    * Mig gir cap a fora, es canvia el contingut amagat de perfil, i mig gir cap a dins.
@@ -322,6 +330,7 @@ function AppShell() {
         onScopeWarning={setWarning}
         aiEnabled={aiEnabled}
         aiBoardActive={aiBoard}
+        attentionCount={attention.data?.count ?? 0}
         onToggleAiBoard={toggleAiBoard}
       />
 

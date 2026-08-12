@@ -15,7 +15,7 @@ import {
   type SourceKind,
   type TaskStatus,
 } from '@fem-ho/contracts';
-import { dbBool } from '../db/bool.js';
+import { dbBool, isTrue } from '../db/bool.js';
 import type { AuditContext } from '../audit/audited-transaction.js';
 import type { MigrationDb } from '../db/migration-db.js';
 import { PolicyError, missingCapability, notFound } from '../policy/errors.js';
@@ -27,6 +27,7 @@ import { clampInt } from '../util/clamp.js';
 import { localDayBounds } from '../time/local-day.js';
 import { listInboxEvents, type InboxEvent } from './events.js';
 import { listInboxMail, type InboxMail } from './mail.js';
+import { clearAttention } from './attention.js';
 import { assertScopeAccess, listScopes } from './scopes.js';
 
 export interface TaskRow {
@@ -58,6 +59,15 @@ export interface TaskRow {
    * mirar una columna més.
    */
   source_kind: SourceKind | null;
+  /**
+   * Si un agent espera resposta teva **ara**.
+   *
+   * Viu a la tasca i no al comentari que la pregunta: «quines esperen resposta» és el que
+   * ha de poder respondre el tauler sense llegir els comentaris de tres-centes targetes.
+   */
+  needs_attention: boolean;
+  /** Des de quan. Una pregunta de fa deu minuts i una de fa tres dies no diuen el mateix. */
+  attention_asked_at: string | null;
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -83,7 +93,8 @@ export interface Task extends TaskRow {
 const TASK_COLUMNS = sql`
   id, scope_id, project_id, title, description, status, position, due_date, due_time,
   deadline, completed_at, view_mode, ai_mode, delegate_agent_id,
-  rrule, recurrence_mode, recurrence_parent_id, source_kind, created_by,
+  rrule, recurrence_mode, recurrence_parent_id, source_kind,
+  needs_attention, attention_asked_at, created_by,
   created_at, updated_at, version
 `;
 
@@ -163,6 +174,8 @@ async function withAssignees(db: MigrationDb, rows: TaskRow[]): Promise<Task[]> 
 
   return rows.map((row) => ({
     ...row,
+    // SQLite dona 0/1 i Postgres un booleà: qui ho llegeix ha de rebre sempre un booleà.
+    needs_attention: isTrue(row.needs_attention),
     assignee_ids: (byTask.get(row.id) ?? []).sort(),
     label_ids: (labelsByTask.get(row.id) ?? []).sort(),
     progress: {
@@ -212,6 +225,8 @@ export interface ListTasksFilters {
    */
   dueFrom?: string | undefined;
   dueTo?: string | undefined;
+  /** Només les que esperen resposta. És el que compta el punt del commutador d'IA. */
+  needsAttention?: boolean | undefined;
 }
 
 export interface TaskPage {
@@ -247,6 +262,7 @@ export async function listTasks(
       ${filters.projectId === undefined ? sql`` : sql`AND project_id = ${filters.projectId}`}
       ${filters.dueFrom === undefined ? sql`` : sql`AND due_date >= ${filters.dueFrom}`}
       ${filters.dueTo === undefined ? sql`` : sql`AND due_date <= ${filters.dueTo}`}
+      ${filters.needsAttention === true ? sql`AND needs_attention = ${dbBool(true)}` : sql``}
       ${
         cursor === null
           ? sql``
@@ -685,6 +701,13 @@ export async function completeTask(
         version = version + 1
     WHERE id = ${id}
   `.execute(ctx.tx);
+
+  /**
+   * **Una tasca feta ja no espera resposta.** Si la marca hi quedés, el punt del
+   * commutador comptaria una pregunta d'una tasca que ja no és a cap columna oberta, i
+   * l'única manera de treure'l seria respondre-hi una cosa que ja no cal.
+   */
+  await clearAttention(ctx, id);
 
   // Les subtasques cauen amb la tasca. La cascada AMUNT —marcar l'últim ítem d'una
   // llista marca la subtasca i la tasca— arriba a M8, que és quan hi ha llistes.

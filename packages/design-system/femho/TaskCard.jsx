@@ -137,6 +137,11 @@ export function TaskCard({
   onEdit,
   editLabel,
   hasUnseenAiChange = false,
+  /**
+   * «Espera resposta teva». Si hi ha text, la targeta va destacada **i el diu**: el color
+   * mai és l'únic senyal (docs/04 §8), i «destacada» sense saber per què no és cap avís.
+   */
+  attentionLabel,
   dragging = false,
   onOpen,
   onToggleDone,
@@ -175,9 +180,13 @@ export function TaskCard({
       }}
       style={{
         background: 'var(--card-bg)',
-        border: '1px solid var(--card-border)',
+        border: attentionLabel ? '1px solid var(--plou-orange)' : '1px solid var(--card-border)',
+        // L'anell, i no un fons de color: el fons taparia el distintiu d'IA i el progrés,
+        // que segueixen sent el que diu de què va la targeta.
+        boxShadow: attentionLabel
+          ? '0 0 0 2px var(--plou-orange), var(--card-shadow)'
+          : 'var(--card-shadow)',
         borderRadius: 16,
-        boxShadow: 'var(--card-shadow)',
         display: 'flex',
         overflow: 'hidden',
         position: 'relative',
@@ -352,6 +361,34 @@ export function TaskCard({
 
               {/* `manual` NO pinta res: és el cas normal i no ha d'ocupar espai
                   (docs/09 §3). El color no és mai l'únic senyal, per això hi ha text. */}
+              {attentionLabel ? (
+                <span
+                  data-testid="task-attention"
+                  style={{
+                    fontSize: 10.5,
+                    fontWeight: 700,
+                    padding: '3px 9px',
+                    borderRadius: 100,
+                    background: 'var(--plou-orange)',
+                    color: 'var(--on-brand)',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 4,
+                  }}
+                >
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path
+                      d="M12 9v4m0 4h.01M10.3 3.9 2.4 17.5A1.9 1.9 0 0 0 4 20.4h16a1.9 1.9 0 0 0 1.6-2.9L13.7 3.9a1.9 1.9 0 0 0-3.4 0Z"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                  {attentionLabel}
+                </span>
+              ) : null}
+
               {aiMode !== 'manual' && aiModeLabel ? (
                 <span
                   data-testid={`ai-mode-${aiMode}`}

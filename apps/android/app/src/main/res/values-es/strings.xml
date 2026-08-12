@@ -11,6 +11,8 @@
     <string name="activity_filter_all">Todo</string>
     <string name="activity_filter_human">Solo personas</string>
     <string name="activity_undo">Deshacer</string>
+    <string name="activity_verb_answered">has respondido</string>
+    <string name="activity_verb_asked">te ha preguntado</string>
     <string name="activity_verb_cascade_complete">se ha completado en cascada</string>
     <string name="activity_verb_claimed">ha reservado la tarea</string>
     <string name="activity_verb_commented">ha comentado</string>
@@ -24,6 +26,10 @@
     <string name="activity_verb_token_created">ha creado un token</string>
     <string name="activity_verb_token_revoked">ha revocado un token</string>
     <string name="activity_verb_updated">ha cambiado</string>
+    <string name="ai_attention_attachhint">Lo que adjuntes a la tarea le llega con el trabajo.</string>
+    <string name="ai_attention_card">Espera respuesta</string>
+    <string name="ai_attention_pending">{count} tareas esperan tu respuesta</string>
+    <string name="ai_attention_waiting">El agente espera una respuesta tuya para poder seguir. Se va cuando respondas.</string>
     <string name="ai_mode_assisted">Con ayuda</string>
     <string name="ai_mode_cycle">Cambia el modo de IA</string>
     <string name="ai_mode_delegated">IA</string>
@@ -519,8 +525,10 @@
     <string name="sync_title">Sincronización</string>
     <string name="task_activity">Historial</string>
     <string name="task_addattachment">Adjuntar un archivo</string>
+    <string name="task_aiconversation">Conversación con la IA</string>
     <string name="task_aiinstructions">Instrucciones para la IA</string>
     <string name="task_aimode">Modo de IA</string>
+    <string name="task_aireply">Responde al agente…</string>
     <string name="task_assignees">Asignada a</string>
     <string name="task_attachmentlink">Enlace externo</string>
     <string name="task_attachments">Adjuntos</string>
@@ -534,6 +542,7 @@
     <string name="task_duetime">Hora</string>
     <string name="task_edit">Editar tarea</string>
     <string name="task_empty_activity">Todavía no ha pasado nada en esta tarea.</string>
+    <string name="task_empty_aiconversation">Todavía no os habéis dicho nada.</string>
     <string name="task_empty_attachments">Ningún archivo adjunto.</string>
     <string name="task_empty_comments">Todavía no hay ningún comentario.</string>
     <string name="task_empty_labels">Este ámbito todavía no tiene ninguna etiqueta.</string>

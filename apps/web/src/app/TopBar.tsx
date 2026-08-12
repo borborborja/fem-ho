@@ -101,6 +101,13 @@ export interface TopBarProps {
    */
   aiEnabled?: boolean;
   aiBoardActive?: boolean;
+  /**
+   * Quantes tasques esperen resposta teva.
+   *
+   * Va al commutador d'IA i no a una safata a part: el lloc on s'hi va és el kanban de la
+   * IA, i un avís que no és al botó que hi porta fa fer un pas de més per res.
+   */
+  attentionCount?: number;
   onToggleAiBoard?: () => void;
 }
 
@@ -116,6 +123,7 @@ export function TopBar({
   onScopeWarning,
   aiEnabled = false,
   aiBoardActive = false,
+  attentionCount = 0,
   onToggleAiBoard,
 }: TopBarProps) {
   const { profile, scopes, projects, settings, instance } = useSessionData();
@@ -649,11 +657,41 @@ export function TopBar({
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
+                position: 'relative',
                 background: aiBoardActive ? 'var(--gradient-brand-2stop)' : 'var(--tag-bg)',
                 color: aiBoardActive ? 'var(--on-brand)' : 'var(--ink-soft)',
               }}
             >
               <RobotIcon />
+              {/*
+                **El punt d'atenció, amb el recompte.** És el germà del punt de canvi
+                autònom no vist, amb una diferència que és tota la gràcia: aquell marxa
+                mirant-lo i aquest **no marxa fins que respons**.
+              */}
+              {attentionCount > 0 ? (
+                <span
+                  data-testid="ai-attention-count"
+                  aria-label={t('ai.attention.pending', { count: attentionCount })}
+                  title={t('ai.attention.pending', { count: attentionCount })}
+                  style={{
+                    position: 'absolute',
+                    top: -3,
+                    right: -3,
+                    minWidth: 16,
+                    height: 16,
+                    padding: '0 4px',
+                    borderRadius: 100,
+                    background: 'var(--plou-orange)',
+                    color: 'var(--on-brand)',
+                    fontSize: 10,
+                    fontWeight: 800,
+                    display: 'grid',
+                    placeItems: 'center',
+                  }}
+                >
+                  {attentionCount}
+                </span>
+              ) : null}
             </button>
           ) : null}
 

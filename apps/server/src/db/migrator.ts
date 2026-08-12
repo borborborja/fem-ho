@@ -34,6 +34,7 @@ import * as mailSources from './migrations/013-mail-sources.js';
 import * as mailVisibility from './migrations/014-mail-visibility.js';
 import * as scopeMode from './migrations/015-scope-mode.js';
 import * as agentScopes from './migrations/016-agent-scopes.js';
+import * as attention from './migrations/017-attention.js';
 
 export interface Migration {
   name: string;
@@ -100,6 +101,7 @@ export const MIGRATIONS: Migration[] = [
   { name: '015-scope-mode', up: scopeMode.up, down: scopeMode.down },
   // Taula nova i una columna: cap refet, cap clau forana que hi apunti des de fora.
   { name: '016-agent-scopes', up: agentScopes.up, down: agentScopes.down },
+  { name: '017-attention', up: attention.up, down: attention.down },
 ];
 
 const MIGRATIONS_TABLE = 'schema_migrations';

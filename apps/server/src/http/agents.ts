@@ -17,6 +17,8 @@ import {
   setAgentScopes,
   updateAgent,
 } from '../services/agents.js';
+import { askUser } from '../services/comments.js';
+import { listTasks } from '../services/tasks.js';
 import { claim, leaseOf, nextTask, release } from '../services/leases.js';
 import { body, handle, query, str } from './handle.js';
 
@@ -92,8 +94,14 @@ export function registerAgentRoutes(app: FastifyInstance): void {
    * validat. Per la porta general caldria acceptar-hi un agent qualsevol i tornar-lo a
    * comprovar allà, que és la mena de comprovació que un dia falta.
    *
-   * Les capacitats són **les que un agent necessita i cap més**: llegir i escriure tasques
-   * i llegir el calendari. Res de gestionar usuaris, ni tokens, ni la instància.
+   * Les capacitats són **les que un agent necessita i cap més**, i cadascuna té la seva
+   * feina: les tasques i les llistes perquè pugui treballar, els comentaris perquè és la
+   * via principal per reportar i per preguntar (docs/09 §6), els adjunts en lectura perquè
+   * el traspàs els porta com a enllaç, i el calendari en lectura perquè hi ha feina que
+   * depèn del dia. Res de gestionar usuaris, ni tokens, ni la instància, ni el correu.
+   *
+   * **Els noms surten de `CAPABILITIES`.** Aquí hi havia un `calendar:read` que no existeix
+   * enlloc: no donava cap error i el que feia era no donar cap permís de calendari.
    */
   app.post<{ Params: { id: string } }>(
     '/api/v1/ai/agents/:id/credentials',
@@ -105,7 +113,16 @@ export function registerAgentRoutes(app: FastifyInstance): void {
         const result = await auditedTransaction(db().db, principal, (ctx) =>
           createToken(ctx, principal, {
             name: str(input.name) ?? `${agent.name}`,
-            capabilities: ['tasks:read', 'tasks:write', 'calendar:read'],
+            capabilities: [
+              'tasks:read',
+              'tasks:write',
+              'checklists:read',
+              'checklists:write',
+              'comments:read',
+              'comments:write',
+              'attachments:read',
+              'events:read',
+            ],
             ai_agent_id: agent.id,
             expires_at: typeof input.expires_at === 'string' ? input.expires_at : null,
           }),
@@ -160,6 +177,24 @@ export function registerAgentRoutes(app: FastifyInstance): void {
     }),
   );
 
+  /**
+   * **Quantes tasques esperen resposta**, per al punt del commutador d'IA.
+   *
+   * Un recompte i els identificadors, i prou: la barra no ha de baixar-se les tasques
+   * senceres per pintar un punt, i els identificadors hi són perquè qui vulgui saltar-hi
+   * no hagi de buscar-les una per una.
+   */
+  app.get('/api/v1/ai/attention', async (request, reply) =>
+    handle(app, request, reply, async (principal) => {
+      const found = await listTasks(db().db, principal, {
+        needsAttention: true,
+        statuses: ['inbox', 'todo', 'doing'],
+        limit: 200,
+      });
+      return { count: found.data.length, task_ids: found.data.map((task) => task.id) };
+    }),
+  );
+
   app.post<{ Params: { id: string } }>('/api/v1/ai/tasks/:id/claim', async (request, reply) =>
     handle(app, request, reply, async (principal) =>
       auditedTransaction(db().db, principal, (ctx) => claim(ctx, principal, request.params.id)),
@@ -175,6 +210,21 @@ export function registerAgentRoutes(app: FastifyInstance): void {
       );
       void reply.code(204).send();
       return undefined;
+    }),
+  );
+
+  /**
+   * **La pregunta que atura l'agent.** Un comentari amb conseqüència: surt a la conversa i
+   * a l'historial com tota la resta, i la tasca passa a demanar atenció. La tool `ask_user`
+   * d'MCP és el mateix camí; això és perquè un agent que no parla MCP també hi arribi.
+   */
+  app.post<{ Params: { id: string } }>('/api/v1/ai/tasks/:id/ask-user', async (request, reply) =>
+    handle(app, request, reply, async (principal) => {
+      const created = await auditedTransaction(db().db, principal, (ctx) =>
+        askUser(ctx, principal, request.params.id, String(body(request).question ?? '')),
+      );
+      void reply.code(201);
+      return created;
     }),
   );
 

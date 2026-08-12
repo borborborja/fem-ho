@@ -1596,6 +1596,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/ai/attention": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Quantes tasques esperen resposta
+         * @description El que necessita el punt del commutador d'IA: un recompte i els identificadors.
+         *     La barra no s'ha de baixar les tasques senceres per pintar un punt.
+         *
+         *     Només compta les columnes obertes: una tasca feta ja no espera res.
+         */
+        get: operations["listAttention"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ai/tasks/{id}/ask-user": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preguntar i quedar-se esperant
+         * @description És un comentari **amb conseqüència**: la pregunta surt a la conversa i a
+         *     l'historial com tota la resta, i la tasca passa a demanar atenció —punt al
+         *     commutador d'IA i targeta destacada al kanban.
+         *
+         *     **Només un agent.** La marca vol dir «un agent espera una resposta teva»; si la
+         *     pogués aixecar qualsevol, deixaria de voler dir això.
+         *
+         *     La baixa **respondre-hi**, i completar la tasca. No hi ha cap «vist»: el que
+         *     desencalla l'agent és la resposta, i marcar-ho com a vist deixaria la pantalla
+         *     neta amb l'agent esperant per sempre.
+         */
+        post: operations["askUser"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/ai/tasks/{id}/lease": {
         parameters: {
             query?: never;
@@ -2495,6 +2547,12 @@ export interface components {
             task_id: string;
             author_id?: string | null;
             author_name?: string | null;
+            /**
+             * @description Quin agent ho ha dit, si ho ha dit un agent. Un agent actua **en nom d'una
+             *     persona** (D5) i per tant `author_id` és la persona: sense això, saber qui
+             *     parla voldria dir mirar si l'etiqueta comença per «IA · ».
+             */
+            agent_id?: string | null;
             /** @description Present quan el comentari ve d'un enllaç compartit. */
             guest_name?: string | null;
             body: string;
@@ -3407,6 +3465,19 @@ export interface components {
                  */
                 lists: number;
             };
+            /**
+             * @description Si un agent espera resposta teva **ara**. Viu a la tasca i no al comentari que
+             *     la pregunta: «quines esperen resposta» és el que ha de poder respondre el
+             *     tauler sense llegir els comentaris de tres-centes targetes.
+             */
+            needs_attention: boolean;
+            /**
+             * Format: date-time
+             * @description Des de quan. Una pregunta de fa deu minuts i una de fa tres dies no volen dir
+             *     el mateix, i **no s'esborra en respondre**: quan va preguntar segueix sent
+             *     cert després.
+             */
+            attention_asked_at?: string | null;
             /** @description Persones. El brief demana "persona o persones". */
             assignee_ids?: string[];
             /**
@@ -6891,6 +6962,69 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+        };
+    };
+    listAttention: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description El recompte i els identificadors. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        count: number;
+                        task_ids: string[];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    askUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    question: string;
+                };
+            };
+        };
+        responses: {
+            /** @description La pregunta, com a comentari. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Comment"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            /** @description Qui ho demana no és un agent. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            404: components["responses"]["NotFound"];
         };
     };
     getLease: {

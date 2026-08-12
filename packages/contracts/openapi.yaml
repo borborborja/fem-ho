@@ -2673,6 +2673,66 @@ paths:
           content:
             { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
 
+  /ai/attention:
+    get:
+      tags: [tasks]
+      operationId: listAttention
+      summary: Quantes tasques esperen resposta
+      description: |
+        El que necessita el punt del commutador d'IA: un recompte i els identificadors.
+        La barra no s'ha de baixar les tasques senceres per pintar un punt.
+
+        Només compta les columnes obertes: una tasca feta ja no espera res.
+      responses:
+        '200':
+          description: El recompte i els identificadors.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [count, task_ids]
+                properties:
+                  count: { type: integer }
+                  task_ids: { type: array, items: { type: string } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+
+  /ai/tasks/{id}/ask-user:
+    post:
+      tags: [tasks]
+      operationId: askUser
+      summary: Preguntar i quedar-se esperant
+      description: |
+        És un comentari **amb conseqüència**: la pregunta surt a la conversa i a
+        l'historial com tota la resta, i la tasca passa a demanar atenció —punt al
+        commutador d'IA i targeta destacada al kanban.
+
+        **Només un agent.** La marca vol dir «un agent espera una resposta teva»; si la
+        pogués aixecar qualsevol, deixaria de voler dir això.
+
+        La baixa **respondre-hi**, i completar la tasca. No hi ha cap «vist»: el que
+        desencalla l'agent és la resposta, i marcar-ho com a vist deixaria la pantalla
+        neta amb l'agent esperant per sempre.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [question]
+              properties:
+                question: { type: string, minLength: 1 }
+      responses:
+        '201':
+          description: La pregunta, com a comentari.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Comment' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403':
+          description: Qui ho demana no és un agent.
+          content:
+            { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   /ai/tasks/{id}/lease:
     get:
       tags: [tasks]
@@ -3866,6 +3926,12 @@ components:
         task_id: { type: string }
         author_id: { type: [string, 'null'] }
         author_name: { type: [string, 'null'] }
+        agent_id:
+          type: [string, 'null']
+          description: |
+            Quin agent ho ha dit, si ho ha dit un agent. Un agent actua **en nom d'una
+            persona** (D5) i per tant `author_id` és la persona: sense això, saber qui
+            parla voldria dir mirar si l'etiqueta comença per «IA · ».
         guest_name:
           type: [string, 'null']
           description: Present quan el comentari ve d'un enllaç compartit.
@@ -4927,7 +4993,19 @@ components:
       type: object
       additionalProperties: false
       required:
-        [id, scope_id, title, status, position, ai_mode, view_mode, created_at, updated_at, version]
+        [
+          id,
+          scope_id,
+          title,
+          status,
+          position,
+          ai_mode,
+          view_mode,
+          needs_attention,
+          created_at,
+          updated_at,
+          version,
+        ]
       properties:
         id: { type: string }
         scope_id: { type: string }
@@ -5000,6 +5078,19 @@ components:
                 Quants blocs desplegables té la targeta: un per les subtasques, si en té,
                 i un per cada llista. És el número del commutador "Llistes (2)", que
                 compta blocs i no ítems.
+        needs_attention:
+          type: boolean
+          description: |
+            Si un agent espera resposta teva **ara**. Viu a la tasca i no al comentari que
+            la pregunta: «quines esperen resposta» és el que ha de poder respondre el
+            tauler sense llegir els comentaris de tres-centes targetes.
+        attention_asked_at:
+          type: [string, 'null']
+          format: date-time
+          description: |
+            Des de quan. Una pregunta de fa deu minuts i una de fa tres dies no volen dir
+            el mateix, i **no s'esborra en respondre**: quan va preguntar segueix sent
+            cert després.
         assignee_ids:
           type: array
           items: { type: string }

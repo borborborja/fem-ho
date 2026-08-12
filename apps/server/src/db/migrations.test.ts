@@ -14,7 +14,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { sql } from 'kysely';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { dbBool } from './bool.js';
+import { dbBool, isTrue } from './bool.js';
 import { connect, type Connection } from './connection.js';
 import { connectTestSchema, type TestSchema } from './test-postgres.js';
 import type { Engine } from './dialect.js';
@@ -289,6 +289,29 @@ describe('migrar una base que ja té dades', () => {
     expect(fila.rows[0]?.scope_mode).toBeNull();
     // I la resta de preferències segueixen intactes: la migració només hi afegeix.
     expect(fila.rows[0]?.inbox_position).toBe('left');
+  });
+
+  it('la 017 no fa que cap tasca que ja hi era demani atenció', async () => {
+    /**
+     * **El defecte importa perquè el senyal serveixi de res.** Si les tasques d'abans
+     * naixessin marcades, el primer que veuria qui actualitza és un punt d'atenció amb
+     * tres-centes tasques a sota, i el senyal quedaria cremat el mateix dia que arriba.
+     */
+    const ara = '2026-08-12T09:30:00.000Z';
+    await sql`
+      INSERT INTO tasks (id, scope_id, title, status, position, view_mode, ai_mode,
+                         created_by, created_at, updated_at, version)
+      VALUES ('t1', 's1', 'Una de sempre', 'todo', 'a1', 'card', 'manual', 'u1',
+              ${ara}, ${ara}, 1)
+    `.execute(conn.db);
+
+    const fila = await sql<{ needs_attention: number; attention_asked_at: string | null }>`
+      SELECT needs_attention, attention_asked_at FROM tasks WHERE id = 't1'
+    `.execute(conn.db);
+
+    expect(isTrue(fila.rows[0]?.needs_attention)).toBe(false);
+    // I «des de quan» és nul mentre no hi hagi cap pregunta: no és una data d'estrena.
+    expect(fila.rows[0]?.attention_asked_at).toBeNull();
   });
 });
 

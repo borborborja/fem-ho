@@ -21,7 +21,7 @@ import type { Connection } from '../db/connection.js';
 import { PolicyError } from '../policy/errors.js';
 import type { Principal } from '../policy/principal.js';
 import { claim, leaseOf, nextTask, release } from '../services/leases.js';
-import { addComment } from '../services/comments.js';
+import { addComment, askUser } from '../services/comments.js';
 import { listEventOccurrences } from '../services/events.js';
 import { updateChecklistItem } from '../services/checklists.js';
 import { listProjects, listScopes } from '../services/scopes.js';
@@ -58,7 +58,7 @@ function fail(message: string): ToolResult {
 }
 
 /**
- * Construeix el servidor amb les 16 tools registrades.
+ * Construeix el servidor amb les 17 tools registrades.
  *
  * El principal es fixa aquí i no per crida: cada petició HTTP construeix el seu servidor
  * amb el seu token resolt, que és el que fa que el mode sense estat funcioni sense cap
@@ -238,6 +238,13 @@ function buildHandlers(
       ok(
         await write(async (ctx) =>
           addComment(ctx, principal, String(args.task_id), String(args.body)),
+        ),
+      ),
+
+    ask_user: async (args) =>
+      ok(
+        await write(async (ctx) =>
+          askUser(ctx, principal, String(args.task_id), String(args.question)),
         ),
       ),
 

@@ -33,6 +33,11 @@ export type AuditVerb =
   // Un comentari. És la via principal perquè un agent reporti (docs/09 §6), i per tant
   // ha de sortir a l'historial de la tasca com qualsevol altre gest.
   | 'commented'
+  // Un agent que no pot seguir sense tu, i la resposta que el desencalla. Són dos verbs i
+  // no un de sol amb un valor: a l'historial el que es llegeix és «t'ha preguntat» i «li
+  // has respost», que és exactament el que ha passat.
+  | 'asked'
+  | 'answered'
   // Un refresc d'un origen extern. Es distingeix d'una edició perquè no l'ha fet ningú
   // d'aquí: ve d'un calendari de fora, i a l'historial s'ha de poder llegir així.
   | 'refreshed'

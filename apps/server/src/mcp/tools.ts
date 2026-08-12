@@ -1,12 +1,14 @@
 /**
- * Les **16 tools** d'MCP (docs/08 §3).
+ * Les **17 tools** d'MCP (docs/08 §3).
  *
  * **Sense prefix, verb primer** (D6): els clients ja fan namespace pel seu compte —a
  * Claude una tool acaba sent `mcp__femho__list_tasks`— i posar-hi un `femho_` a sobre
  * malgasta tokens a cada nom, a cada crida i a cada finestra de context.
  *
- * **Setze i no més.** Una definició de tool ocupa entre 100 i 500 tokens; amb catàlegs
- * de 40, una part gran de la finestra de context se'n va en metadades abans de començar.
+ * **Disset i les justes.** Una definició de tool ocupa entre 100 i 500 tokens; amb catàlegs
+ * de 40, una part gran de la finestra de context se'n va en metadades abans de començar. La
+ * darrera que hi ha entrat, `ask_user`, és la que evita el pitjor error d'un agent que
+ * treballa sol: endevinar en comptes de preguntar.
  *
  * **Cap tool d'esborrar.** Un agent no esborra res: com a molt marca i comenta.
  *
@@ -63,6 +65,17 @@ export const TOOLS: ToolSpec[] = [
     description:
       'Adds a comment to a task. **This is the main way for an agent to report** what it has done or what it is missing in order to continue.',
     inputSchema: { task_id: taskId, body: z.string().describe('The comment text.') },
+    annotations: CREATE,
+  },
+  {
+    name: 'ask_user',
+    title: 'Ask the person and wait',
+    description:
+      "Asks a question and **stops on this task until someone answers**. Use it instead of guessing: the question shows up in the task and the person sees a mark without having to open it. The mark goes away when a person replies — there is no 'seen' button.",
+    inputSchema: {
+      task_id: taskId,
+      question: z.string().describe('What you need in order to carry on. One concrete question.'),
+    },
     annotations: CREATE,
   },
   {
@@ -210,9 +223,9 @@ export const TOOLS: ToolSpec[] = [
 
 /** Comprovació d'invariants del catàleg. Es crida en construir el servidor. */
 export function assertCatalogue(tools: ToolSpec[] = TOOLS): void {
-  if (tools.length !== 16) {
+  if (tools.length !== 17) {
     throw new Error(
-      `El catàleg ha de tenir 16 tools i en té ${String(tools.length)} (docs/08 §3).`,
+      `El catàleg ha de tenir 17 tools i en té ${String(tools.length)} (docs/08 §3).`,
     );
   }
 

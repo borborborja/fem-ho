@@ -172,6 +172,7 @@ export function BoardCard({
             : undefined
       }
       hasUnseenAiChange={task.hasUnseenAiChange ?? false}
+      attentionLabel={task.needsAttention === true ? t('ai.attention.card') : undefined}
       checklistProgress={
         progress.total > 0
           ? t('checklist.count', { done: progress.done, total: progress.total })

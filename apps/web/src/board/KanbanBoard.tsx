@@ -34,6 +34,8 @@ export interface BoardTask {
   time?: string | undefined;
   aiMode?: 'manual' | 'assisted' | 'delegated' | undefined;
   hasUnseenAiChange?: boolean | undefined;
+  /** Un agent espera resposta teva. La targeta va destacada i ho diu. */
+  needsAttention?: boolean | undefined;
   /** Subtasques i ítems de llista, comptats junts. Ve de `/board` com a agregat. */
   progress?: { done: number; total: number; lists: number } | undefined;
   /**

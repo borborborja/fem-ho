@@ -15,6 +15,7 @@
     "addComment": "apps/server/src/http/api-surface.test.ts · \"es poden escriure i llegir, i surten a l'historial\"",
     "addMember": "apps/server/src/http/api-surface.test.ts · \"s'hi pot afegir una persona a un de col·lectiu\"",
     "addTaskLabel": "apps/server/src/http/api-surface.test.ts · \"es pot posar i treure d'una tasca\"",
+    "askUser": "apps/server/src/http/attention.test.ts · \"un agent pregunta i la tasca demana atenció\"",
     "claimTask": "apps/server/src/http/api-surface.test.ts · \"reservar deixa rastre, i alliberar sense motiu es rebutja\"",
     "completeTask": "apps/server/src/http/tasks.test.ts · \"marca la tasca i les seves subtasques\"",
     "convertMailMessage": "apps/server/src/http/mail.test.ts · \"un correu de la bústia es fa tasca, i dues vegades dona la mateixa\"",

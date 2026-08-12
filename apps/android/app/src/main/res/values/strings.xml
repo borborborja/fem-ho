@@ -11,6 +11,8 @@
     <string name="activity_filter_all">Tot</string>
     <string name="activity_filter_human">Només persones</string>
     <string name="activity_undo">Desfés</string>
+    <string name="activity_verb_answered">has respost</string>
+    <string name="activity_verb_asked">t\'ha preguntat</string>
     <string name="activity_verb_cascade_complete">s\'ha completat en cascada</string>
     <string name="activity_verb_claimed">ha reservat la tasca</string>
     <string name="activity_verb_commented">ha comentat</string>
@@ -24,6 +26,10 @@
     <string name="activity_verb_token_created">ha creat un token</string>
     <string name="activity_verb_token_revoked">ha revocat un token</string>
     <string name="activity_verb_updated">ha canviat</string>
+    <string name="ai_attention_attachhint">El que adjuntis a la tasca li arriba amb la feina.</string>
+    <string name="ai_attention_card">Espera resposta</string>
+    <string name="ai_attention_pending">{count} tasques esperen resposta teva</string>
+    <string name="ai_attention_waiting">L\'agent espera una resposta teva per poder seguir. Marxa quan responguis.</string>
     <string name="ai_mode_assisted">Amb ajuda</string>
     <string name="ai_mode_cycle">Canvia el mode d\'IA</string>
     <string name="ai_mode_delegated">IA</string>
@@ -519,8 +525,10 @@
     <string name="sync_title">Sincronització</string>
     <string name="task_activity">Historial</string>
     <string name="task_addattachment">Adjuntar un fitxer</string>
+    <string name="task_aiconversation">Conversa amb la IA</string>
     <string name="task_aiinstructions">Instruccions per a la IA</string>
     <string name="task_aimode">Mode d\'IA</string>
+    <string name="task_aireply">Respon a l\'agent…</string>
     <string name="task_assignees">Assignat a</string>
     <string name="task_attachmentlink">Enllaç extern</string>
     <string name="task_attachments">Adjunts</string>
@@ -534,6 +542,7 @@
     <string name="task_duetime">Hora</string>
     <string name="task_edit">Editar tasca</string>
     <string name="task_empty_activity">Encara no ha passat res en aquesta tasca.</string>
+    <string name="task_empty_aiconversation">Encara no us heu dit res.</string>
     <string name="task_empty_attachments">Cap fitxer adjunt.</string>
     <string name="task_empty_comments">Encara no hi ha cap comentari.</string>
     <string name="task_empty_labels">Aquest àmbit encara no té cap etiqueta.</string>
