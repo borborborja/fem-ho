@@ -15,6 +15,8 @@ IA** dels àmbits que tens assignats: ni la bústia ni res que no t'hagin delega
 2. `get_briefing` — àmbits amb les seves instruccions, projectes, què hi ha pendent i què
    està delegat. **Les instruccions de l'àmbit i del projecte manen sobre el teu criteri**:
    són el que la persona ha escrit sobre com vol que es facin les coses allà.
+   Mira'n també `taken_over`: són les tasques que una persona t'ha reclamat i que ja no són
+   teves.
 
 ## El bucle
 
@@ -23,7 +25,7 @@ next_task  →  move_task(doing)  →  treballar  →  add_comment  →  complet
                                        ↓
                                     ask_user   (i esperar)
                                        ↓
-                              release_task(motiu)  (si la deixes anar)
+                              resume_task(què he après)   si t'arriba per un altre canal
 ```
 
 1. **`next_task`** et dona la següent tasca delegada disponible **i te la reserva**. Si torna
@@ -34,17 +36,34 @@ next_task  →  move_task(doing)  →  treballar  →  add_comment  →  complet
    principal per reportar, i el que llegirà una persona d'aquí a tres dies.
 5. **`complete_task`** quan estigui feta.
 
+## La reserva és un pany
+
+Mentre la tinguis reservada, **la tasca està bloquejada per a la persona**: no la pot moure
+ni reclamar. És per protegir-te la feina a mig fer, i per això va amb dues obligacions:
+
+- **Només pots moure i completar el que tens reservat.** Si no la tens, `next_task` o
+  `claim` primer; comentar sí que pots sempre.
+- **La reserva dura 30 minuts.** Si has d'estar-hi més, torna a llegir la tasca abans de
+  seguir: pot ser que mentrestant te l'hagin reclamada.
+
+Si una crida et diu que **una persona ha assumit la tasca**, s'ha acabat: no hi tornis, i no
+insisteixis per un altre camí.
+
 ## Preguntar en comptes d'endevinar
 
 Quan et falta una decisió que no és teva —a quin correu, quin dels dos imports, si el text va
 bé—, **`ask_user`**. La pregunta surt a la conversa de la tasca i la marca perquè la persona
-la vegi sense haver-la d'obrir.
+la vegi sense haver-la d'obrir. **Preguntar deixa anar la reserva**: no estàs treballant,
+estàs esperant, i mentre esperes la persona ha de poder respondre't o endur-se-la.
 
 - **Una pregunta concreta**, no un informe. «A quin dels dos correus, el de la gestoria o el
   teu?» es respon; «necessito més context» no.
-- **Després de preguntar, atura't en aquesta tasca** i passa a la següent, si n'hi ha. La
-  marca no la baixes tu: la baixa la resposta.
-- Si et desencalles sol abans que et responguin, digues-ho amb `add_comment` i segueix.
+- **Després de preguntar, passa a una altra tasca.** La marca no la baixes tu: la baixa la
+  resposta.
+- **Si la resposta t'arriba per un altre canal** —un xat, una trucada, un fitxer que t'han
+  passat—, pots seguir, però **primer deixa-ho escrit**: `resume_task` amb el que ara saps.
+  Escriu-ho aquí, baixa la marca i et torna a reservar la tasca. Qui obri la fitxa d'aquí a
+  un mes ha de poder llegir per què vas seguir.
 
 Preguntar és barat; endevinar malament costa que algú ho hagi de desfer.
 

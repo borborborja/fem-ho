@@ -2714,6 +2714,27 @@ paths:
           content:
             { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
 
+  /ai/skill:
+    get:
+      tags: [tasks]
+      operationId: getAgentSkill
+      summary: El full d'instruccions de l'agent
+      description: |
+        El text que se li dona a l'agent perquè sàpiga com comportar-se: quin bucle segueix,
+        què vol dir el pany, i quan preguntar en comptes d'endevinar. En l'idioma de qui el
+        demana, o el que digui `lang`.
+
+        **No porta cap credencial.** La que en porta és la configuració d'MCP —el
+        `.mcp.json`—, i la pantalla ho diu al costat: són dos fitxers i no un justament
+        perquè «quin dels dos és el secret» tingui resposta.
+      parameters:
+        - { name: lang, in: query, required: false, schema: { type: string, enum: [ca, en, es] } }
+      responses:
+        '200':
+          description: El full, en Markdown.
+          content: { text/markdown: { schema: { type: string } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+
   /ai/coverage:
     get:
       tags: [tasks]
@@ -2810,6 +2831,47 @@ paths:
           content:
             { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
         '404': { $ref: '#/components/responses/NotFound' }
+
+  /ai/tasks/{id}/resume:
+    post:
+      tags: [tasks]
+      operationId: resumeTask
+      summary: Seguir després de saber-ho per un altre canal
+      description: |
+        L'agent viu fora de Fem-ho i la persona també: la resposta que desencalla una
+        tasca pot arribar per un xat, per veu o en un document. El que no pot passar és
+        que la tasca segueixi el seu curs i **aquí no en quedi res**.
+
+        Per això `learned` és obligatori i s'escriu com a comentari **abans** de baixar la
+        marca d'atenció: primer es documenta, després es desbloqueja. Una crida que només
+        baixés la marca seria el botó de «vist» que `ask_user` evita, amb l'agent fent-se'l
+        a ell mateix.
+
+        Torna a reservar la tasca: si segueix, hi torna a ser a dins i el pany ho ha de dir.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [learned]
+              properties:
+                learned: { type: string, minLength: 1 }
+      responses:
+        '201':
+          description: El que ha après, com a comentari.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Comment' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403':
+          description: Qui ho demana no és un agent, o la tasca ja és d'una persona.
+          content:
+            { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422':
+          description: No ha dit què ha après.
+          content:
+            { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
 
   /ai/tasks/{id}/lease:
     get:

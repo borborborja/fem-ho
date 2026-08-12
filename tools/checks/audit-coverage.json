@@ -65,6 +65,7 @@
     "removeAssignee": "apps/server/src/http/api-surface.test.ts · \"i qui sí, sí, amb rastre\"",
     "removeMember": "apps/server/src/http/api-surface.test.ts · \"i un membre normal sí\"",
     "removeTaskLabel": "apps/server/src/http/api-surface.test.ts · \"es pot posar i treure d'una tasca\"",
+    "resumeTask": "apps/server/src/http/attention.test.ts · \"l'agent torna havent-ho sabut per un altre canal\"",
     "revokeApiToken": "apps/server/src/http/tokens.test.ts · \"deixa el token inservible i queda a l'historial\"",
     "revokeScopeInvite": "apps/server/src/services/grants.test.ts · \"un convit inventat i un de gastat responen igual\"",
     "revokeShare": "apps/server/src/http/shares.test.ts · \"un enllaç revocat deixa de servir\"",

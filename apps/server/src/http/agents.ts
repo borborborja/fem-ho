@@ -18,9 +18,11 @@ import {
   setAgentScopes,
   updateAgent,
 } from '../services/agents.js';
-import { askUser } from '../services/comments.js';
+import { askUser, resumeTask } from '../services/comments.js';
 import { listTasks } from '../services/tasks.js';
 import { claim, leaseOf, nextTask, release } from '../services/leases.js';
+import { getProfile } from '../services/users.js';
+import { AGENT_SKILL } from '../ai/skill.generated.js';
 import { body, handle, query, str } from './handle.js';
 
 export function registerAgentRoutes(app: FastifyInstance): void {
@@ -186,6 +188,25 @@ export function registerAgentRoutes(app: FastifyInstance): void {
   );
 
   /**
+   * **El full d'instruccions de l'agent, en el teu idioma.**
+   *
+   * `text/markdown` i no JSON: es copia i es baixa tal com és, i el que se n'ha de fer és
+   * enganxar-lo a l'agent. **No porta cap credencial** —això és el `.mcp.json`, que sí que
+   * en porta i ho diu en vermell—, i per això aquesta ruta no revela res que no sigui el
+   * mateix text per a tothom.
+   */
+  app.get('/api/v1/ai/skill', async (request, reply) =>
+    handle(app, request, reply, async (principal) => {
+      const demanat = str(query(request).lang);
+      const profile = await getProfile(db().db, principal.userId);
+      const lang = demanat ?? profile.locale ?? 'ca';
+      const text = AGENT_SKILL[lang === 'en' || lang === 'es' ? lang : 'ca'];
+      void reply.type('text/markdown; charset=utf-8').send(text);
+      return undefined;
+    }),
+  );
+
+  /**
    * **Quins àmbits tenen agent.** Ho fa servir el tauler d'IA per dir, en el moment de
    * deixar-hi una tasca, que allà no la farà ningú.
    */
@@ -240,6 +261,20 @@ export function registerAgentRoutes(app: FastifyInstance): void {
     handle(app, request, reply, async (principal) => {
       const created = await auditedTransaction(db().db, principal, (ctx) =>
         askUser(ctx, principal, request.params.id, String(body(request).question ?? '')),
+      );
+      void reply.code(201);
+      return created;
+    }),
+  );
+
+  /**
+   * **L'agent torna.** El que ha sabut per un altre canal es deixa escrit aquí, i llavors
+   * la marca d'atenció cau: primer es documenta, després es desbloqueja.
+   */
+  app.post<{ Params: { id: string } }>('/api/v1/ai/tasks/:id/resume', async (request, reply) =>
+    handle(app, request, reply, async (principal) => {
+      const created = await auditedTransaction(db().db, principal, (ctx) =>
+        resumeTask(ctx, principal, request.params.id, String(body(request).learned ?? '')),
       );
       void reply.code(201);
       return created;

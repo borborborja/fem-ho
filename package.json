@@ -15,10 +15,12 @@
     "packages/design-system"
   ],
   "scripts": {
+    "agent:skill": "node tools/gen/agent-skill.mjs",
     "android:build": "cd apps/android && ANDROID_HOME=\"${ANDROID_HOME:-$HOME/Android/Sdk}\" ./gradlew assembleDebug --console=plain",
     "android:tokens": "node tools/gen/tokens-compose.mjs",
     "build": "npm run build --workspace @fem-ho/contracts && npm run build --workspace @fem-ho/server && npm run build --workspace @fem-ho/web",
     "check": "node tools/checks/run-all.mjs",
+    "check:agent-skill": "node tools/checks/agent-skill.mjs",
     "check:android-strings-exist": "node tools/checks/android-strings-exist.mjs",
     "check:audit-coverage": "node tools/checks/audit-coverage.mjs",
     "check:contrast": "node tools/checks/contrast-check.mjs",

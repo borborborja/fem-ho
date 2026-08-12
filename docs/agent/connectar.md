@@ -89,5 +89,15 @@ hi ha pendent i què està delegat, en una crida en comptes de sis.
 ## 5 · Com s'ha de comportar
 
 El que fa que un agent sigui útil i no perillós no és el transport sinó el **bucle**: quan
-agafa feina, quan la deixa anar, i **quan pregunta en comptes d'endevinar**. Això és
-[`SKILL.md`](SKILL.md), i es pot donar tal qual a l'agent com a instruccions.
+agafa feina, quan la deixa anar, i **quan pregunta en comptes d'endevinar**. És el full
+d'instruccions —[`skill/ca.md`](skill/ca.md), amb [`es`](skill/es.md) i [`en`](skill/en.md)—
+i es pot donar tal qual a l'agent.
+
+**Des de l'app també.** A Ajustos ▸ Usuari IA, dins de l'agent, hi ha «Com s'hi connecta»
+amb l'URL d'MCP, el `.mcp.json` fet i el full d'instruccions **en l'idioma de l'app**, per
+copiar i per baixar. Els textos són els mateixos fitxers d'aquí: una comprovació permanent
+(`npm run check:agent-skill`) impedeix que divergeixin.
+
+**Quin dels dos és el secret.** El `.mcp.json` **porta la credencial**: qui el tingui pot
+llegir i escriure les teves tasques, i per això només surt sencer al moment de crear-la.
+El full d'instruccions no en porta cap i es pot passar per on sigui.

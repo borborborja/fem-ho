@@ -105,10 +105,10 @@ afterAll(async () => {
 });
 
 describe('el catàleg', () => {
-  it('són DISSET, ni una més', () => {
+  it('són DIVUIT, ni una més', () => {
     // "Una definició de tool ocupa entre 100 i 500 tokens" (docs/08 §3). La disciplina
     // de nombre és el que evita que la finestra de context se'n vagi en metadades.
-    expect(TOOLS).toHaveLength(17);
+    expect(TOOLS).toHaveLength(18);
     expect(() => assertCatalogue()).not.toThrow();
   });
 
@@ -143,6 +143,7 @@ describe('el catàleg', () => {
       'add',
       // `ask_user`: el verb és preguntar, i el que segueix és a qui.
       'ask',
+      'resume',
       'next',
       'release',
     ];
@@ -208,12 +209,12 @@ describe('AQUEST és el detall que decideix si el servidor sembla trencat', () =
 });
 
 describe('tools/list', () => {
-  it('les serveix totes disset i en aquest ordre', async () => {
+  it('les serveix totes divuit i en aquest ordre', async () => {
     const response = await rpc('tools/list');
     expect(response.status).toBe(200);
 
     const tools = (result(response.body).tools ?? []) as { name: string }[];
-    expect(tools).toHaveLength(17);
+    expect(tools).toHaveLength(18);
     expect(tools.map((tool) => tool.name)).toEqual(TOOLS.map((tool) => tool.name));
   });
 

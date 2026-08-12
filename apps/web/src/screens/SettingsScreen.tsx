@@ -1631,6 +1631,39 @@ function AiTab() {
 }
 
 /**
+ * La configuració d'MCP, feta.
+ *
+ * Amb el testimoni sencer si s'acaba de crear, i amb un forat si no: **del hash no se'n pot
+ * treure**, i un fitxer que sembla complet i porta una credencial inventada faria perdre
+ * mitja tarda a qui l'enganxi.
+ */
+function mcpJson(token: string | null): string {
+  return `${JSON.stringify(
+    {
+      mcpServers: {
+        'fem-ho': {
+          type: 'http',
+          url: `${window.location.origin}/mcp`,
+          headers: { Authorization: `Bearer ${token ?? 'ENGANXA-HI-LA-CREDENCIAL'}` },
+        },
+      },
+    },
+    null,
+    2,
+  )}\n`;
+}
+
+/** Baixar un text com a fitxer, sense passar pel servidor: ja el tenim aquí. */
+function baixa(name: string, text: string, type: string): void {
+  const url = URL.createObjectURL(new Blob([text], { type }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = name;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+/**
  * Un agent: què pot fer, **d'on agafa feina**, i amb què s'hi connecta.
  *
  * Els tres blocs són el que cal per posar-lo a treballar, i van junts perquè és una sola
@@ -1807,6 +1840,67 @@ function AgentRow({
             </p>
           </div>
         )}
+
+        {/*
+          **Com s'hi connecta**, i quin dels dos fitxers és el secret.
+
+          Són dos a posta: la configuració d'MCP **porta la credencial** —qui la tingui pot
+          llegir i escriure les teves tasques— i el full d'instruccions no en porta cap. Amb
+          un sol fitxer, «això es pot passar per un xat?» no tindria resposta.
+        */}
+        <div style={{ display: 'grid', gap: 6, marginTop: 4 }}>
+          <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--ink-soft)' }}>
+            {t('settings.agentConnect')}
+          </span>
+
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <input
+              readOnly
+              className="plou-input"
+              data-testid={`agent-mcp-url-${agent.id}`}
+              value={`${window.location.origin}/mcp`}
+              onFocus={(event) => event.currentTarget.select()}
+              style={{ fontSize: 12 }}
+            />
+            <CopyButton value={`${window.location.origin}/mcp`} />
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <CopyButton value={mcpJson(nova)} />
+            <button
+              type="button"
+              className="plou-btn plou-btn-ghost"
+              data-testid={`agent-mcp-download-${agent.id}`}
+              onClick={() => baixa('mcp.json', mcpJson(nova), 'application/json')}
+              style={{ fontSize: 11.5 }}
+            >
+              {t('settings.agentDownloadMcp')}
+            </button>
+            <span style={{ fontSize: 11.5, color: 'var(--danger-text)', fontWeight: 600 }}>
+              <span aria-hidden="true">⚠ </span>
+              {nova === null ? t('settings.agentMcpNoToken') : t('settings.agentMcpHasToken')}
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              className="plou-btn plou-btn-ghost"
+              data-testid={`agent-skill-download-${agent.id}`}
+              onClick={() => {
+                void api
+                  .text('/api/v1/ai/skill')
+                  .then((text) => baixa('fem-ho.skill.md', text, 'text/markdown'));
+              }}
+              style={{ fontSize: 11.5 }}
+            >
+              {t('settings.agentDownloadSkill')}
+            </button>
+            <span style={{ fontSize: 11.5, color: 'var(--ink-faint)' }}>
+              {t('settings.agentSkillNoToken')}
+            </span>
+          </div>
+        </div>
 
         <button
           type="button"

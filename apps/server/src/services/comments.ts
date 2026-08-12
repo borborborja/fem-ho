@@ -15,7 +15,7 @@ import type { MigrationDb } from '../db/migration-db.js';
 import { PolicyError, missingCapability, notFound } from '../policy/errors.js';
 import { hasCapability, type Principal } from '../policy/principal.js';
 import { clearAttention, raiseAttention } from './attention.js';
-import { releaseIfHeld } from './leases.js';
+import { claim, releaseIfHeld } from './leases.js';
 import { assertScopeAccess } from './scopes.js';
 
 export interface Comment {
@@ -178,6 +178,73 @@ export async function askUser(
     entityId: taskId,
     scopeId: task.rows[0]?.scope_id ?? null,
     verb: 'asked',
+  });
+
+  return comment;
+}
+
+/**
+ * L'agent torna a la feina després d'assabentar-se'n per un altre canal.
+ *
+ * **Passa i no és cap trampa.** L'agent viu fora de Fem-ho i tu també: la resposta que
+ * desencalla una tasca pot arribar per Telegram, per veu o en un document que li has
+ * passat. El que no pot passar és que la tasca segueixi el seu curs i **aquí no en quedi
+ * res**: qui obri la fitxa d'aquí a un mes ha de poder llegir per què va seguir.
+ *
+ * Per això `learned` és obligatori i s'escriu com a comentari **abans** de baixar la marca:
+ * primer es documenta, després es desbloqueja. Una tool que només baixés la marca seria
+ * exactament el botó de «vist» que `ask_user` evita, amb l'agent fent-se'l a ell mateix.
+ *
+ * I torna a reservar la tasca: si segueix, hi torna a ser a dins, i el pany ho ha de dir.
+ */
+export async function resumeTask(
+  ctx: AuditContext,
+  principal: Principal,
+  taskId: string,
+  learned: string,
+): Promise<Comment> {
+  if (principal.kind !== 'agent') {
+    throw new PolicyError(
+      'not-an-agent',
+      'Not an agent',
+      403,
+      'Only an agent can resume a task: this is how it records what it learned elsewhere.',
+    );
+  }
+
+  if (learned.trim() === '') {
+    throw new PolicyError(
+      'learned-required',
+      'Nothing recorded',
+      422,
+      'Say what you learned before carrying on: the mark is cleared by the record, not by wanting it gone.',
+    );
+  }
+
+  const task = await sql<{ scope_id: string; ai_mode: string }>`
+    SELECT scope_id, ai_mode FROM tasks WHERE id = ${taskId} AND deleted_at IS NULL
+  `.execute(ctx.tx);
+  const row = task.rows[0];
+  if (row === undefined) throw notFound('task', taskId);
+
+  if (row.ai_mode === 'manual') {
+    throw new PolicyError(
+      'human-took-over',
+      'Taken over by a person',
+      403,
+      'A person has taken this task over: it is no longer yours. Do not keep working on it.',
+    );
+  }
+
+  const comment = await addComment(ctx, principal, taskId, learned);
+  await clearAttention(ctx, taskId);
+  await claim(ctx, principal, taskId);
+
+  ctx.record({
+    entityType: 'task',
+    entityId: taskId,
+    scopeId: row.scope_id,
+    verb: 'resumed',
   });
 
   return comment;

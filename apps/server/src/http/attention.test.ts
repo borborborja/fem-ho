@@ -182,6 +182,55 @@ describe('un agent pregunta i la tasca demana atenció', () => {
     expect(await espera(id)).toBe(false);
   });
 
+  it("l'agent torna havent-ho sabut per un altre canal", async () => {
+    /**
+     * **Passa i no és cap trampa.** L'agent viu fora de Fem-ho i la persona també: la
+     * resposta pot arribar per un xat o en un document. El que no pot passar és que la
+     * tasca segueixi el seu curs i aquí no en quedi res.
+     */
+    const id = await tascaDelegada('Renovar el domini');
+    await api(
+      'POST',
+      `/api/v1/ai/tasks/${id}/ask-user`,
+      { question: 'Amb quina targeta?' },
+      comAgent,
+    );
+    expect(await espera(id)).toBe(true);
+
+    const res = await api(
+      'POST',
+      `/api/v1/ai/tasks/${id}/resume`,
+      { learned: "M'has passat la targeta per xat: la de l'empresa." },
+      comAgent,
+    );
+    expect(res.statusCode, res.body).toBe(201);
+
+    // La marca cau **perquè ha quedat escrit**, no perquè l'agent la volgués treure.
+    expect(await espera(id)).toBe(false);
+    const comentaris = await api('GET', `/api/v1/tasks/${id}/comments`);
+    expect(comentaris.json<{ body: string }[]>().map((c) => c.body)).toContain(
+      "M'has passat la targeta per xat: la de l'empresa.",
+    );
+
+    const historial = await api('GET', `/api/v1/tasks/${id}/activity`);
+    expect(historial.json<{ data: { verb: string }[] }>().data.map((e) => e.verb)).toContain(
+      'resumed',
+    );
+
+    // I hi torna a ser a dins: si segueix, la tasca torna a estar bloquejada.
+    const tasca = await api('GET', `/api/v1/tasks/${id}`);
+    expect(tasca.json<{ locked_until: string | null }>().locked_until).not.toBeNull();
+  });
+
+  it('i no pot tornar sense dir què ha après: seria un «vist» que es fa ell mateix', async () => {
+    const id = await tascaDelegada('Comprar el regal');
+    await api('POST', `/api/v1/ai/tasks/${id}/ask-user`, { question: 'De quant?' }, comAgent);
+
+    const res = await api('POST', `/api/v1/ai/tasks/${id}/resume`, { learned: '  ' }, comAgent);
+    expect(res.statusCode).toBe(422);
+    expect(await espera(id)).toBe(true);
+  });
+
   it('una pregunta buida no és cap pregunta', async () => {
     const id = await tascaDelegada('Res a dir');
     const res = await api('POST', `/api/v1/ai/tasks/${id}/ask-user`, { question: '  ' }, comAgent);

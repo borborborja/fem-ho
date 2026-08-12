@@ -41,6 +41,9 @@ export type AuditVerb =
   // Una persona s'ha endut una tasca que era de la IA. És el que llegeix l'agent per saber
   // per què la seva següent escriptura ha fallat.
   | 'taken_over'
+  // L'agent ha sabut per un altre canal el que li faltava, ho ha deixat escrit aquí i
+  // segueix. Sense el verb, l'historial diria que la marca va marxar sola.
+  | 'resumed'
   // Un refresc d'un origen extern. Es distingeix d'una edició perquè no l'ha fet ningú
   // d'aquí: ve d'un calendari de fora, i a l'historial s'ha de poder llegir així.
   | 'refreshed'

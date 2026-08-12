@@ -1,11 +1,11 @@
 /**
- * Les **17 tools** d'MCP (docs/08 §3).
+ * Les **18 tools** d'MCP (docs/08 §3).
  *
  * **Sense prefix, verb primer** (D6): els clients ja fan namespace pel seu compte —a
  * Claude una tool acaba sent `mcp__femho__list_tasks`— i posar-hi un `femho_` a sobre
  * malgasta tokens a cada nom, a cada crida i a cada finestra de context.
  *
- * **Disset i les justes.** Una definició de tool ocupa entre 100 i 500 tokens; amb catàlegs
+ * **Divuit i les justes.** Una definició de tool ocupa entre 100 i 500 tokens; amb catàlegs
  * de 40, una part gran de la finestra de context se'n va en metadades abans de començar. La
  * darrera que hi ha entrat, `ask_user`, és la que evita el pitjor error d'un agent que
  * treballa sol: endevinar en comptes de preguntar.
@@ -185,6 +185,19 @@ export const TOOLS: ToolSpec[] = [
     annotations: MODIFY,
   },
   {
+    name: 'resume_task',
+    title: 'Carry on after learning something elsewhere',
+    description:
+      'Records what you learned outside Fem-ho —a chat, a call, a file you were given— and **clears the waiting mark**, then claims the task again. Say what you learned: the record is what clears the mark, not wanting it gone. Use it when the answer to your `ask_user` reached you by another channel.',
+    inputSchema: {
+      task_id: taskId,
+      learned: z
+        .string()
+        .describe('What you now know that you did not know when you asked. In one paragraph.'),
+    },
+    annotations: CREATE,
+  },
+  {
     name: 'search_tasks',
     title: 'Search tasks',
     description: 'Text search over titles and descriptions.',
@@ -223,9 +236,9 @@ export const TOOLS: ToolSpec[] = [
 
 /** Comprovació d'invariants del catàleg. Es crida en construir el servidor. */
 export function assertCatalogue(tools: ToolSpec[] = TOOLS): void {
-  if (tools.length !== 17) {
+  if (tools.length !== 18) {
     throw new Error(
-      `El catàleg ha de tenir 17 tools i en té ${String(tools.length)} (docs/08 §3).`,
+      `El catàleg ha de tenir 18 tools i en té ${String(tools.length)} (docs/08 §3).`,
     );
   }
 

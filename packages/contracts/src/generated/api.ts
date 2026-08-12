@@ -1625,6 +1625,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/ai/skill": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * El full d'instruccions de l'agent
+         * @description El text que se li dona a l'agent perquè sàpiga com comportar-se: quin bucle segueix,
+         *     què vol dir el pany, i quan preguntar en comptes d'endevinar. En l'idioma de qui el
+         *     demana, o el que digui `lang`.
+         *
+         *     **No porta cap credencial.** La que en porta és la configuració d'MCP —el
+         *     `.mcp.json`—, i la pantalla ho diu al costat: són dos fitxers i no un justament
+         *     perquè «quin dels dos és el secret» tingui resposta.
+         */
+        get: operations["getAgentSkill"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/ai/coverage": {
         parameters: {
             query?: never;
@@ -1694,6 +1720,35 @@ export interface paths {
          *     neta amb l'agent esperant per sempre.
          */
         post: operations["askUser"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ai/tasks/{id}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Seguir després de saber-ho per un altre canal
+         * @description L'agent viu fora de Fem-ho i la persona també: la resposta que desencalla una
+         *     tasca pot arribar per un xat, per veu o en un document. El que no pot passar és
+         *     que la tasca segueixi el seu curs i **aquí no en quedi res**.
+         *
+         *     Per això `learned` és obligatori i s'escriu com a comentari **abans** de baixar la
+         *     marca d'atenció: primer es documenta, després es desbloqueja. Una crida que només
+         *     baixés la marca seria el botó de «vist» que `ask_user` evita, amb l'agent fent-se'l
+         *     a ell mateix.
+         *
+         *     Torna a reservar la tasca: si segueix, hi torna a ser a dins i el pany ho ha de dir.
+         */
+        post: operations["resumeTask"];
         delete?: never;
         options?: never;
         head?: never;
@@ -7098,6 +7153,29 @@ export interface operations {
             };
         };
     };
+    getAgentSkill: {
+        parameters: {
+            query?: {
+                lang?: "ca" | "en" | "es";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description El full, en Markdown. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/markdown": string;
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
     listAgentCoverage: {
         parameters: {
             query?: never;
@@ -7189,6 +7267,54 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
+        };
+    };
+    resumeTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    learned: string;
+                };
+            };
+        };
+        responses: {
+            /** @description El que ha après, com a comentari. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Comment"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            /** @description Qui ho demana no és un agent, o la tasca ja és d'una persona. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            /** @description No ha dit què ha après. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     getLease: {

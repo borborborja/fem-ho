@@ -112,6 +112,23 @@ test('la credencial de l’agent surt una sola vegada, i es veu a MCP i API amb 
   expect(qui.status()).toBe(200);
   expect(((await qui.json()) as { agent_id: string | null }).agent_id).toBe(idHermes);
 
+  /**
+   * **I què és el secret, dit.** Són dos fitxers a posta: el `.mcp.json` porta la credencial
+   * i el full d'instruccions no en porta cap. Amb un de sol, «això es pot passar per un
+   * xat?» no tindria resposta.
+   */
+  await expect(page.getByTestId(`agent-mcp-url-${idHermes}`)).toHaveValue(/\/mcp$/u);
+  await expect(page.getByTestId(`agent-mcp-download-${idHermes}`)).toBeVisible();
+  await expect(page.getByTestId(`agent-skill-download-${idHermes}`)).toBeVisible();
+  await expect(hermes).toContainText('Porta la credencial');
+  await expect(hermes).toContainText('No porta cap credencial');
+
+  // I el full es baixa de debò, en l'idioma de l'app, i és el que se li dona a l'agent.
+  const baixada = page.waitForEvent('download');
+  await page.getByTestId(`agent-skill-download-${idHermes}`).click();
+  const fitxer = await baixada;
+  expect(fitxer.suggestedFilename()).toBe('fem-ho.skill.md');
+
   // A MCP i API hi surt —és on la gent busca els tokens— però no s'hi toca.
   await page.locator('[data-testid="settings-tab-mcp"]').click();
   const marca = page.locator('[data-testid^="token-ai-"]').first();
