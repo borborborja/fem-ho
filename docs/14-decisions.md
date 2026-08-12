@@ -968,6 +968,62 @@ fent-se'l a ell mateix.
 
 ---
 
+### P27 · La dedicació s'anota sola, el projecte és l'eix, i una tipologia no és una etiqueta
+
+**La resolució: Fem-ho guarda temps treballat, i el guarda com a blocs que obre i tanca el
+tauler.**
+
+Ve de substituir una eina que algú fa servir cada dia i que té dues pantalles que Fem-ho no
+tenia: un **Registre** i unes **Estadístiques**. Allà el temps viu dins de cada tasca
+(`minutes` més una llista de sessions, mantingudes redundants pel navegador) i tot el càlcul
+es fa al client amb la taula sencera baixada.
+
+**Un bloc per estada, i cap acumulat.** Podria ser una columna `minutes` a `tasks` i seria
+més barat de sumar; llavors una tasca que torna de Fet a Fent hauria de fondre's amb el que
+ja hi havia i **el cronograma no existiria**: per pintar un dia en blocs cal saber quan va
+començar i quan va acabar cada estada, no quant sumen totes. Per això la suma es calcula
+sempre dels blocs: guardar el total i els trams és guardar el mateix número dues vegades.
+
+**No hi ha cronòmetre.** El gest que ja fas per dir «hi estic» —moure la targeta a Fent— és
+el que compta les hores. Un botó de començar i aturar és una cosa més per recordar-se, i el
+que passa amb les coses que s'han de recordar és que un dia no te'n recordes i el número
+queda fals sense que res ho digui.
+
+**El passat es reconstrueix, i amb una frontera estricta.** `activity_log` guarda cada
+entrada i sortida de Fent des del primer dia, o sigui que encendre el Registre a un àmbit
+que fa mesos que funciona no comença de zero. Però **sense sortida no hi ha bloc**: tancar-lo
+amb el següent rastre que hi hagi donaria una suposició amb pinta de mesura. L'excepció és la
+tasca que s'està fent ara, que no és cap forat.
+
+**Els oblits no es retallen.** Una targeta que es queda a Fent tota la nit **hi ha estat**;
+el bloc es marca per revisar i s'ajusta arrossegant-lo. Escurçar-lo automàticament diria una
+cosa que no va passar sense dir quina part.
+
+**El projecte és l'eix, i pot dir-se «client».** L'eina d'origen ho organitza tot per
+client, que és un `string` copiat a cada tasca. Aquí això ja existeix i es diu projecte: les
+tasques sense projecte —l'espai general de l'àmbit— són l'«Intern» de sempre. El que
+s'afegeix és **la paraula**, per àmbit, i només la paraula: el camp segueix sent `project_id`
+a la base, a l'API i a les tools (regla 3).
+
+**Una tipologia no és una etiqueta**, encara que s'hi assembli molt. D'una tipologia n'hi ha
+**una** per tasca, la manté **qui mana a l'àmbit** i pot ser **obligatòria**; una etiqueta és
+lliure, en pots posar les que vulguis i qualsevol en crea des de la fitxa. Amb una sola
+taula, «quantes n'hi pot haver» dependria d'un indicador i cada lloc que les toca hauria de
+preguntar-s'ho; i l'historial no en guardaria quina hi havia abans, perquè `setTaskLabel`
+registra dos booleans i no diu **quina** etiqueta. El sigil és `$` perquè `#` ja és l'àmbit i
+el projecte.
+
+**Les hores extres no es desen.** Són una lectura del bloc contra l'horari d'aquell moment;
+desar-les voldria dir que canviar l'horari deixés el passat dient una cosa que ja no és
+certa. I es diuen **per projecte**, perquè «he fet quaranta hores extres» no fa canviar res i
+«les he fetes totes per a un client» sí.
+
+**I la configuració va per àmbit, amb la fila absent com a cas normal.** Qui fa servir Fem-ho
+per a casa no ha de veure mai res d'això: la migració que crea la taula no encén res a ningú,
+i els valors vius són els de `policy/scope-settings.ts`.
+
+---
+
 ## Part 3 — Fets sospitosos de `research/`
 
 El crític va marcar 7 afirmacions com a probablement inventades, obsoletes o internament incoherents. **Cap `docs/` en depèn.**

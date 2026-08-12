@@ -91,7 +91,7 @@ que no tenir-ne cap.
 
 ## Servidor
 
-Complet respecte de `docs/05` §4: **106 rutes**. Autenticació amb refresc rotatiu,
+Complet respecte de `docs/05` §4: **més de 120 rutes**. Autenticació amb refresc rotatiu,
 capa de política única, `activity_log` dins de la mateixa transacció que el canvi,
 sincronització amb cursor, CalDAV en port propi, MCP amb 18 tools, compartits,
 notificacions i administració.
@@ -375,6 +375,35 @@ i mentre duri.
 
 El que encara no hi ha: el contenidor que ho automatitzi tot sol, i el pany i el botó de
 reclamar a Android.
+
+---
+
+## El Registre i les Estadístiques
+
+Fem-ho **no havia guardat mai temps treballat**. Ara sí, i s'anota sol: moure una targeta a
+Fent obre un bloc i treure-la'n el tanca; anar de Fet a Fent en fa **dos**, que és el que fa
+possible el cronograma. No hi ha cap cronòmetre a prémer.
+
+S'activa **per àmbit** i la fila de configuració absent vol dir «apagat»: qui fa servir
+Fem-ho per a casa no en veu res. En activar-lo, el passat es reconstrueix de l'historial —que
+guarda cada entrada i sortida de Fent des del primer dia—, i es diu quants blocs s'han
+recuperat.
+
+| Pantalla | Què hi ha |
+| --- | --- |
+| **Registre ▸ Taula** | Files agrupades per dia amb el total del dia, pastilles per persona i per projecte, filtres de període, projecte, persona i cerca, i exportació CSV amb BOM |
+| **Registre ▸ Cronograma** | Un dia, una fila per projecte, blocs arrossegables amb ajust a 5 min i zoom |
+| **Estadístiques** | Quatre targetes, evolució amb cubetes de setmana passats 70 dies, i desglossaments per tipologia, projecte i persona |
+
+Les **hores extres** surten de creuar cada bloc amb l'horari laboral de l'àmbit, i es diuen
+**per projecte**. No es desen enlloc: canviar l'horari no ha de deixar el passat dient una
+cosa que ja no és certa.
+
+**Qui veu què**: cadascú els seus blocs; el propietari i l'**administrador** de l'àmbit —un
+rol que torna, ara amb poders propis— els de tothom.
+
+El que encara no hi ha: la migració de les dades de l'eina que això substitueix, i el
+Registre a Android.
 
 ---
 
