@@ -30,6 +30,8 @@ import {
   updateScope,
   type MemberRow,
 } from '../services/scopes.js';
+import { settingsOf, updateScopeSettings } from '../services/scope-settings.js';
+import { backfillSessions } from '../services/sessions.js';
 import { body, handle, nullable, query, str } from './handle.js';
 
 const ROLES: MemberRow['role'][] = [...SCOPE_ROLES];
@@ -91,6 +93,39 @@ export function registerScopeRoutes(app: FastifyInstance, instanceSecret: () => 
         }),
       );
     }),
+  );
+
+  /**
+   * **Com es comporta l'àmbit**: el registre de dedicació, l'horari laboral, les tipologies i
+   * com se'n diu, d'un projecte, en aquesta casa.
+   *
+   * Separat de `PATCH /scopes/:id` perquè són coses de vides diferents: el nom i el color els
+   * mira tothom qui pinta un xip, i això només qui obre el Registre. Junts, la pantalla
+   * d'edició d'un àmbit hauria d'enviar deu camps per canviar-ne el color.
+   */
+  app.get<{ Params: { id: string } }>('/api/v1/scopes/:id/settings', async (request, reply) =>
+    handle(app, request, reply, async (principal) => {
+      await getScope(db().db, principal, request.params.id);
+      return settingsOf(db().db, request.params.id);
+    }),
+  );
+
+  app.patch<{ Params: { id: string } }>('/api/v1/scopes/:id/settings', async (request, reply) =>
+    handle(app, request, reply, async (principal) =>
+      auditedTransaction(db().db, principal, async (ctx) => {
+        const desat = await updateScopeSettings(ctx, principal, request.params.id, body(request));
+
+        /**
+         * **Encendre el registre recupera el passat.** Les dades ja hi eren —l'historial
+         * guarda cada entrada i sortida de Fent des del primer dia—, o sigui que estrenar-lo
+         * amb les taules buides seria amagar una cosa que tenim. És idempotent: tornar-ho a
+         * encendre no duplica res.
+         */
+        const recuperats = desat.time_tracking ? await backfillSessions(ctx, request.params.id) : 0;
+
+        return { ...desat, backfilled: recuperats };
+      }),
+    ),
   );
 
   app.delete<{ Params: { id: string } }>('/api/v1/scopes/:id', async (request, reply) =>

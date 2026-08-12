@@ -36,6 +36,7 @@ import * as scopeMode from './migrations/015-scope-mode.js';
 import * as agentScopes from './migrations/016-agent-scopes.js';
 import * as attention from './migrations/017-attention.js';
 import * as activityTrace from './migrations/018-activity-trace.js';
+import * as timeTracking from './migrations/019-time-tracking.js';
 
 export interface Migration {
   name: string;
@@ -104,6 +105,8 @@ export const MIGRATIONS: Migration[] = [
   { name: '016-agent-scopes', up: agentScopes.up, down: agentScopes.down },
   { name: '017-attention', up: attention.up, down: attention.down },
   { name: '018-activity-trace', up: activityTrace.up, down: activityTrace.down },
+  // Taules noves i una columna: cap refet, i per tant cap `needsForeignKeysOff`.
+  { name: '019-time-tracking', up: timeTracking.up, down: timeTracking.down },
 ];
 
 const MIGRATIONS_TABLE = 'schema_migrations';

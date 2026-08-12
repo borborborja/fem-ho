@@ -29,6 +29,7 @@ import { listInboxEvents, type InboxEvent } from './events.js';
 import { listInboxMail, type InboxMail } from './mail.js';
 import { refusalError, refuseTaskWrite, type WriteIntent } from '../policy/ai-writes.js';
 import { clearAttention } from './attention.js';
+import { closeSession, openSession } from './sessions.js';
 import { leaseOf, releaseIfHeld } from './leases.js';
 import { assertScopeAccess, listScopes } from './scopes.js';
 
@@ -757,6 +758,20 @@ export async function moveTask(
     },
   });
 
+  /**
+   * **La dedicació s'anota aquí i enlloc més.**
+   *
+   * Entrar a Fent obre un bloc i sortir-ne el tanca. Va a `moveTask` perquè és l'únic camí
+   * pel qual una tasca canvia de columna —el tauler, la fletxa de la targeta, el commutador
+   * i l'MCP hi passen tots—, i posar-ho a cada cridador seria posar-ho a quatre llocs perquè
+   * un dia en falti un.
+   */
+  if (status === 'doing' && current.status !== 'doing') {
+    await openSession(ctx, principal.userId, current);
+  } else if (status !== 'doing' && current.status === 'doing') {
+    await closeSession(ctx, id);
+  }
+
   if (entraAFet) {
     // La resta del que vol dir «feta», i el mateix ordre que a `completeTask`: les
     // subtasques cauen amb ella i, si es repeteix, neix la següent. Una tasca que es
@@ -880,6 +895,10 @@ export async function completeTask(
    * l'única manera de treure'l seria respondre-hi una cosa que ja no cal.
    */
   await clearAttention(ctx, id);
+
+  // I si venia de Fent, el bloc de dedicació es tanca: acabar-la per aquí o arrossegant-la
+  // ha de deixar el mateix rastre.
+  if (current.status === 'doing') await closeSession(ctx, id);
 
   // Les subtasques cauen amb la tasca. La cascada AMUNT —marcar l'últim ítem d'una
   // llista marca la subtasca i la tasca— arriba a M8, que és quan hi ha llistes.

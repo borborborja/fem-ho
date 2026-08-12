@@ -87,6 +87,7 @@
     "updateProfile": "apps/server/src/http/api-surface.test.ts · \"es poden canviar el tema i l'accent\"",
     "updateProject": "apps/server/src/http/api-surface.test.ts · \"es pot arxivar i desarxivar, i queda a l'historial\"",
     "updateScope": "apps/server/src/http/api-surface.test.ts · \"es pot canviar el nom, i queda a l'historial\"",
+    "updateScopeSettings": "apps/server/src/http/time-tracking.test.ts · \"encendre el registre recupera el passat i queda dit\"",
     "updateShare": "apps/server/src/http/api-surface.test.ts · \"es pot canviar el permís sense canviar el token\"",
     "updateSubtask": "apps/server/src/http/api-surface.test.ts · \"marcar-la és `completed` i desmarcar-la `reopened`\"",
     "updateTask": "apps/server/src/http/api-surface.test.ts · \"es pot editar, i el canvi queda amb el valor anterior i el nou\"; la repetició, a \"amb `schedule`, la següent surt del VENCIMENT anterior\"",

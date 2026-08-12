@@ -333,6 +333,25 @@ describe('migrar una base que ja té dades', () => {
     expect(fila.rows[0]?.ai_last_read_at).toBeNull();
     expect(fila.rows[0]?.ai_last_read_by).toBeNull();
   });
+
+  it('la 019 no encén el registre a cap àmbit que ja hi era', async () => {
+    /**
+     * **La fila absent és el cas normal, i és el que fa que això sigui segur.** Si crear la
+     * taula hagués sembrat una fila per àmbit —o pitjor, amb `time_tracking` a cert—, qui
+     * actualitzi es trobaria l'endemà una funció nova encesa a tot arreu i el tauler ple de
+     * columnes que no ha demanat.
+     */
+    const files = await sql<{ n: number }>`SELECT COUNT(*) AS n FROM scope_settings`.execute(
+      conn.db,
+    );
+    expect(Number(files.rows[0]?.n)).toBe(0);
+
+    // I cap tasca no neix amb tipologia: la columna hi és i és nul·la.
+    const tasca = await sql<{ task_type_id: string | null }>`
+      SELECT task_type_id FROM tasks WHERE id = 't1'
+    `.execute(conn.db);
+    expect(tasca.rows[0]?.task_type_id).toBeNull();
+  });
 });
 
 /** Aplica les migracions fins a una concreta, per poder simular una base ja desplegada. */

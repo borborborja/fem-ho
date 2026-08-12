@@ -883,6 +883,40 @@ export interface paths {
         patch: operations["updateScope"];
         trace?: never;
     };
+    "/scopes/{id}/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Com es comporta aquest àmbit
+         * @description El registre de dedicació, l'horari laboral, les tipologies i com se'n diu d'un
+         *     projecte en aquesta casa.
+         *
+         *     **Separat de l'àmbit** perquè són coses de vides diferents: el nom i el color els
+         *     mira tothom qui pinta un xip, i això només qui obre el Registre. La fila pot no
+         *     existir: llavors torna els valors per defecte, que és el que fa que la funció neixi
+         *     apagada a tothom.
+         */
+        get: operations["getScopeSettings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Canviar com es comporta l'àmbit
+         * @description Només qui pot els ajustos de l'àmbit. El que no s'entengui **es deixa com estava**:
+         *     desar-hi un valor inventat seria pitjor que ignorar-lo.
+         *
+         *     En encendre `time_tracking` es reconstrueix la dedicació del passat des de
+         *     l'historial i es diu quants blocs s'han recuperat (`backfilled`). És idempotent.
+         */
+        patch: operations["updateScopeSettings"];
+        trace?: never;
+    };
     "/scopes/{id}/members": {
         parameters: {
             query?: never;
@@ -3632,6 +3666,52 @@ export interface components {
             updated_at: string;
             version: number;
         };
+        ScopeSettings: {
+            /**
+             * @description Si aquest àmbit anota la dedicació i té Registre i Estadístiques. **Apagat per
+             *     defecte**: és una funció de nínxol i encendre-la a tothom ompliria de columnes
+             *     una app que per a la majoria és una llista de coses a fer.
+             */
+            time_tracking: boolean;
+            /** @description Hora de paret local, `HH:MM`. */
+            work_start: string;
+            work_end: string;
+            /**
+             * @description Set caràcters començant en dilluns: `1111100` és de dilluns a divendres. Es
+             *     llegeix d'un cop d'ull en un bolcat de la base, cosa que una màscara de bits no fa.
+             */
+            work_days: string;
+            /** @description Ensenyar el que cau fora de l'horari com a hores extres. */
+            overtime_visible: boolean;
+            /**
+             * @description A partir d'aquí, un bloc surt marcat per revisar. No es retalla ni s'esborra: una
+             *     targeta oblidada a Fent **hi ha estat**, i escurçar-la diria una cosa que no va
+             *     passar sense dir quina part.
+             */
+            long_session_hours: number;
+            /**
+             * @description Com se'n diu, d'un projecte, en aquest àmbit. **És només la paraula de la
+             *     interfície**: el camp segueix sent `project_id` a la base, a l'API i a les tools
+             *     (regla 3).
+             * @enum {string}
+             */
+            project_noun: "project" | "client";
+            task_types_enabled: boolean;
+            /** @description I no s'hi pot crear cap tasca sense dir-ne la tipologia. */
+            task_type_required: boolean;
+        };
+        ScopeSettingsInput: {
+            time_tracking?: boolean;
+            work_start?: string;
+            work_end?: string;
+            work_days?: string;
+            overtime_visible?: boolean;
+            long_session_hours?: number;
+            /** @enum {string} */
+            project_noun?: "project" | "client";
+            task_types_enabled?: boolean;
+            task_type_required?: boolean;
+        };
         TaskInput: {
             id?: string;
             /** @description Obligatori. Mai una tasca sense àmbit (docs/01 §4). */
@@ -5588,6 +5668,70 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getScopeSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description La configuració viva. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScopeSettings"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateScopeSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScopeSettingsInput"];
+            };
+        };
+        responses: {
+            /** @description La configuració desada. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScopeSettings"] & {
+                        /** @description Blocs de dedicació recuperats de l'historial. */
+                        backfilled?: number;
+                    };
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            /** @description Qui ho demana no mana en aquest àmbit. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             404: components["responses"]["NotFound"];
         };
     };

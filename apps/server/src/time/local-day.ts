@@ -130,3 +130,46 @@ export function localDayLengthHours(timezone: string, date: PlainDate): number {
   const { startUTC, endUTC } = localDayBounds(timezone, date);
   return (Date.parse(endUTC) - Date.parse(startUTC)) / 3_600_000;
 }
+
+/**
+ * L'instant UTC d'una hora de paret d'un dia local: `('Europe/Madrid', '2026-08-12', '09:00')`.
+ *
+ * Ho necessita l'horari laboral, que es diu en hores de paret —«de nou a sis»— i s'ha de
+ * comparar amb blocs que es guarden en UTC. Reaprofita la conversió que ja fa
+ * `localDayBounds`, amb les seves dues passades i el seu criteri per als salts d'hora.
+ */
+export function localTimeToInstant(timezone: string, date: PlainDate, time: string): Instant {
+  const d = DATE_RE.exec(date);
+  if (d === null) {
+    throw new Error(`localTimeToInstant espera una data YYYY-MM-DD, i ha rebut "${date}"`);
+  }
+  const t = /^(\d{2}):(\d{2})$/.exec(time);
+  if (t === null) {
+    throw new Error(`localTimeToInstant espera una hora HH:MM, i ha rebut "${time}"`);
+  }
+
+  return wallClockToUTC(
+    timezone,
+    Number(d[1]),
+    Number(d[2]),
+    Number(d[3]),
+    Number(t[1]),
+    Number(t[2]),
+  ).toISOString();
+}
+
+/**
+ * El dia de la setmana local, **començant en dilluns**: 0 = dilluns … 6 = diumenge.
+ *
+ * En dilluns i no en diumenge perquè és l'ordre en què s'escriuen els dies laborables
+ * (`scope_settings.work_days`, `'1111100'`), i perquè és el primer dia de la setmana als tres
+ * idiomes de la casa.
+ */
+export function localWeekdayOf(timezone: string, at: Date): number {
+  const name = new Intl.DateTimeFormat('en-US', { timeZone: timezone, weekday: 'short' }).format(
+    at,
+  );
+  const index = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].indexOf(name);
+  if (index < 0) throw new Error(`Dia de la setmana no reconegut: "${name}"`);
+  return index;
+}

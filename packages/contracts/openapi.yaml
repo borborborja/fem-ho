@@ -1621,6 +1621,62 @@ paths:
           content:
             { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
 
+  /scopes/{id}/settings:
+    get:
+      tags: [scopes]
+      operationId: getScopeSettings
+      summary: Com es comporta aquest àmbit
+      description: |
+        El registre de dedicació, l'horari laboral, les tipologies i com se'n diu d'un
+        projecte en aquesta casa.
+
+        **Separat de l'àmbit** perquè són coses de vides diferents: el nom i el color els
+        mira tothom qui pinta un xip, i això només qui obre el Registre. La fila pot no
+        existir: llavors torna els valors per defecte, que és el que fa que la funció neixi
+        apagada a tothom.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '200':
+          description: La configuració viva.
+          content: { application/json: { schema: { $ref: '#/components/schemas/ScopeSettings' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [scopes]
+      operationId: updateScopeSettings
+      summary: Canviar com es comporta l'àmbit
+      description: |
+        Només qui pot els ajustos de l'àmbit. El que no s'entengui **es deixa com estava**:
+        desar-hi un valor inventat seria pitjor que ignorar-lo.
+
+        En encendre `time_tracking` es reconstrueix la dedicació del passat des de
+        l'historial i es diu quants blocs s'han recuperat (`backfilled`). És idempotent.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ScopeSettingsInput' }
+      responses:
+        '200':
+          description: La configuració desada.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ScopeSettings'
+                  - type: object
+                    properties:
+                      backfilled:
+                        type: integer
+                        description: Blocs de dedicació recuperats de l'historial.
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403':
+          description: Qui ho demana no mana en aquest àmbit.
+          content:
+            { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   /scopes/{id}/members:
     get:
       tags: [scopes]
@@ -5280,6 +5336,70 @@ components:
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
         version: { type: integer }
+
+    ScopeSettings:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          time_tracking,
+          work_start,
+          work_end,
+          work_days,
+          overtime_visible,
+          long_session_hours,
+          project_noun,
+          task_types_enabled,
+          task_type_required,
+        ]
+      properties:
+        time_tracking:
+          type: boolean
+          description: |
+            Si aquest àmbit anota la dedicació i té Registre i Estadístiques. **Apagat per
+            defecte**: és una funció de nínxol i encendre-la a tothom ompliria de columnes
+            una app que per a la majoria és una llista de coses a fer.
+        work_start: { type: string, description: 'Hora de paret local, `HH:MM`.' }
+        work_end: { type: string }
+        work_days:
+          type: string
+          description: |
+            Set caràcters començant en dilluns: `1111100` és de dilluns a divendres. Es
+            llegeix d'un cop d'ull en un bolcat de la base, cosa que una màscara de bits no fa.
+        overtime_visible:
+          type: boolean
+          description: Ensenyar el que cau fora de l'horari com a hores extres.
+        long_session_hours:
+          type: integer
+          description: |
+            A partir d'aquí, un bloc surt marcat per revisar. No es retalla ni s'esborra: una
+            targeta oblidada a Fent **hi ha estat**, i escurçar-la diria una cosa que no va
+            passar sense dir quina part.
+        project_noun:
+          type: string
+          enum: [project, client]
+          description: |
+            Com se'n diu, d'un projecte, en aquest àmbit. **És només la paraula de la
+            interfície**: el camp segueix sent `project_id` a la base, a l'API i a les tools
+            (regla 3).
+        task_types_enabled: { type: boolean }
+        task_type_required:
+          type: boolean
+          description: I no s'hi pot crear cap tasca sense dir-ne la tipologia.
+
+    ScopeSettingsInput:
+      type: object
+      additionalProperties: false
+      properties:
+        time_tracking: { type: boolean }
+        work_start: { type: string }
+        work_end: { type: string }
+        work_days: { type: string }
+        overtime_visible: { type: boolean }
+        long_session_hours: { type: integer }
+        project_noun: { type: string, enum: [project, client] }
+        task_types_enabled: { type: boolean }
+        task_type_required: { type: boolean }
 
     TaskInput:
       type: object
