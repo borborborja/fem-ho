@@ -913,7 +913,58 @@ d'IA i a la targeta sense obrir res.
 **El transport és MCP i el comportament és un skill.** La pregunta de partida era «un skill o
 un MCP?» i té resposta perquè són coses diferents: l'MCP és per on parla —i ja hi era—, i el
 skill és el full que li diu quin bucle segueix i quan preguntar en comptes d'endevinar. És
-`docs/agent/SKILL.md`.
+`docs/agent/skill/` —en català, castellà i anglès—, i l'app el reparteix en l'idioma de qui
+el demana.
+
+---
+
+### P26 · El kanban d'IA vol dir «fes-ho», i la reserva és el pany
+
+**La resolució: deixar una targeta al tauler de la IA la delega, i mentre l'agent hi
+treballi ningú l'hi treu.**
+
+Provant P25 va sortir el forat que ho invalidava tot: arrossegar al tauler de la IA posava
+`assisted`, i `next_task` només reparteix `delegated`. **El que hi deixaves no l'agafava cap
+agent, mai**, i res ho deia. El gest promet una cosa i el servidor en feia una altra, que és
+la mateixa família de defecte que la columna Fet buida (P14) i les etiquetes que no es podien
+treure (P15): peces senceres i ben provades cosides al no-res.
+
+Els tres modes es queden —el brief els demana i el sigil `!ia:ajuda` en fabrica—, però **la
+interfície només produeix `manual` i `delegated`**. «Amb ajuda» no és el que passa quan
+arrossegues una tasca al tauler de la IA: el que passa és que vols que ho faci.
+
+**La reserva era mig concepte.** Existia per evitar que dos agents fessin la mateixa feina i
+**cap escriptura la mirava**: una persona podia endur-se una tasca mentre l'agent hi
+treballava, i un agent podia seguir movent una que ja no era seva. Ara mana, i mana als dos
+sentits:
+
+- **Una persona no mou ni reclama una tasca bloquejada.** El `409` diu qui la té i quants
+  minuts queden: un «no» amb final és una espera, un «no» sol és una porta.
+- **Un agent només mou i completa el que té reservat**, i mai una tasca `manual`. Això últim
+  **és** l'avís de la reclamació: un protocol de consulta no té timbre, i el que en fa és que
+  la següent cosa que provi digui exactament què ha passat.
+- **Comentar no es bloqueja mai.** Un agent que no pot dir què li passa s'atura en silenci, i
+  una persona que no pot respondre deixa l'agent esperant per sempre.
+- **Preguntar deixa anar el pany.** Qui espera no treballa. Si `ask_user` no desbloquegés, la
+  pregunta et deixaria la tasca tancada precisament quan et toca a tu.
+
+**Reclamar-la no esborra res.** Comentaris, adjunts i historial són de la tasca i no del mode,
+i són justament el que fa que valgui la pena reclamar-la: el que l'agent ja hi ha esbrinat. La
+conversa amb la IA es queda a la fitxa encara que la tasca passi a `manual`.
+
+**Sense forçat.** El pany caduca sol als 30 minuts. Un botó de «desbloqueja-la igualment»
+seria exactament la manera de trencar-li la feina a mig fer a l'agent, que és el que això
+evita.
+
+**Que se sàpiga què ha fet i quan.** `last_activity_at` la manté la capa d'auditoria —un sol
+lloc, per on passa tota escriptura— i **no és `updated_at`**, que no veu els comentaris ni les
+reserves. Les lectures d'un agent es guarden en una columna i **no a l'historial**: un agent
+que consulta cada minut hi deixaria mil files al dia i taparia el que sí que va fer.
+
+**I que l'agent pugui tornar.** La resposta pot arribar-li per un xat o en un document: passa
+i no és cap trampa. `resume_task` exigeix escriure què ha après **abans** de baixar la marca,
+perquè una crida que només la baixés seria el botó de «vist» que `ask_user` evita, amb l'agent
+fent-se'l a ell mateix.
 
 ---
 

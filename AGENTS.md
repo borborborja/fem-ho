@@ -94,7 +94,7 @@ Casos reals, tots del mateix repositori:
 
 ---
 
-## 4 · Les disset comprovacions permanents
+## 4 · Les divuit comprovacions permanents
 
 `npm run check`. Cadascuna impedeix **una manera concreta de trencar el producte sense que
 res falli**, i totes tenen `--self-test`.
@@ -118,9 +118,10 @@ res falli**, i totes tenen `--self-test`.
 | `env-documented`          | Una opció documentada que el codi no llegeix, o a l'inrevés               |
 | `scope-predicate`         | Una segona còpia de «qui pertany a un àmbit», que divergiria              |
 | `mail-invariants`         | Apagar la verificació TLS, marcar el correu d'algú, o desduplicar per UID |
+| `agent-skill`             | Que el full d'instruccions que reparteix l'app divergeixi del de `docs/`  |
 
 **Si arregles un defecte que cap comprovació hauria vist, afegeix-ne una.** És el criteri
-que ha fet créixer la llista de vuit a disset.
+que ha fet créixer la llista de vuit a divuit.
 
 ---
 
@@ -161,7 +162,7 @@ apps/web         React + Vite, PWA amb cua de sortida
 apps/android     nou mòduls (§8)
 packages/contracts       openapi.yaml, catàlegs, parser, índex fraccional, dates
 packages/design-system   Plou vendoritzat + els components de Fem-ho
-tools/checks     les disset comprovacions
+tools/checks     les divuit comprovacions
 tools/gen        generació de tokens a Compose i a recursos
 tools/i18n       generació dels strings.xml
 docs/            quinze documents normatius + ESTAT.md

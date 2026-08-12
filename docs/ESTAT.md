@@ -15,7 +15,7 @@ npm run typecheck        # 0 errors
 npm run lint             # 0 errors
 npm test                 # unitàries, SQLite
 npm run test:postgres    # unitàries, Postgres (cal FEMHO_TEST_POSTGRES_URL)
-npm run check            # les 17 comprovacions permanents
+npm run check            # les 18 comprovacions permanents
 npm run e2e              # navegador, contra un servidor real
 npm run test:android     # Kotlin pur, sense emulador
 npm run android:build    # APK de depuració
@@ -93,7 +93,7 @@ que no tenir-ne cap.
 
 Complet respecte de `docs/05` §4: **106 rutes**. Autenticació amb refresc rotatiu,
 capa de política única, `activity_log` dins de la mateixa transacció que el canvi,
-sincronització amb cursor, CalDAV en port propi, MCP amb 17 tools, compartits,
+sincronització amb cursor, CalDAV en port propi, MCP amb 18 tools, compartits,
 notificacions i administració.
 
 Els dos motors es proven: la suite `dual-engine` recorre els camins d'escriptura a
@@ -361,8 +361,20 @@ resposta la baixa i `complete_task` la tanca — i l'historial ho llegeix tot ba
 «IA · Hermes» i la persona a la mateixa columna. El que segueix sent cert és la frase de
 sobre: **el model és sempre de fora**; Fem-ho posa la porta, no la intel·ligència.
 
-El que encara no hi ha: el contenidor que ho automatitzi tot sol, i la pestanya IA a
-Android.
+**I el que passa quan les dues bandes es toquen alhora.** La reserva, que existia per
+repartir feina, ara també és un pany: mentre l'agent hi treballi la persona no pot moure ni
+reclamar la tasca, i preguntar el deixa anar perquè qui espera no treballa. Reclamar-la
+(«Ho agafo jo») la porta al tauler humà **amb tota la conversa i l'historial**, i l'agent ho
+sap per tres camins: la seva següent escriptura falla amb el motiu escrit, `get_briefing`
+porta `taken_over`, i l'historial ho diu.
+
+La targeta del kanban d'IA diu **quan va passar l'última cosa** —«fa 5 min» dins del dia, la
+data passat el dia— i la fitxa **quan la va llegir l'agent**, que és la pregunta que
+l'historial no responia. I un àmbit sense agent es diu dues vegades: quan hi deixes la tasca
+i mentre duri.
+
+El que encara no hi ha: el contenidor que ho automatitzi tot sol, i el pany i el botó de
+reclamar a Android.
 
 ---
 
@@ -448,7 +460,7 @@ que el producte no és teu.
 Els llegeixen agents d'MCP, DAVx⁵, Thunderbird i qui programi contra l'API — cap d'ells té
 catàleg ni idioma:
 
-- Les 17 tools d'MCP: títols, descripcions i tots els `.describe()`. Traduir-les per
+- Les 18 tools d'MCP: títols, descripcions i tots els `.describe()`. Traduir-les per
   idioma d'usuari no tindria on mirar-se —un token no és una persona— i faria que el
   mateix servidor descrivís les seves eines diferent segons qui preguntés.
 - Els ~20 missatges `text/plain` del camí DAV.
