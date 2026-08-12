@@ -10,6 +10,7 @@
 
 import { sql } from 'kysely';
 import type { AuditContext } from '../audit/audited-transaction.js';
+import { dbBool } from '../db/bool.js';
 import type { MigrationDb } from '../db/migration-db.js';
 import { PolicyError } from '../policy/errors.js';
 import type { Principal } from '../policy/principal.js';
@@ -134,6 +135,13 @@ export async function nextTask(
       AND t.status <> 'done'
       AND t.deleted_at IS NULL
       AND l.task_id IS NULL
+      /*
+        **El que espera resposta no es torna a repartir.** Sense això, l'agent que pregunta
+        i allibera es torna a servir la mateixa tasca a la crida següent i entra en bucle
+        preguntant el mateix: la reserva ja no la protegeix, perquè justament l'ha deixada
+        anar per poder-te deixar respondre.
+      */
+      AND t.needs_attention = ${dbBool(false)}
       AND ${scopeFilter}
       ${scopeId === undefined ? sql`` : sql`AND t.scope_id = ${scopeId}`}
     ORDER BY t.position
@@ -186,6 +194,32 @@ export async function release(
     verb: 'released',
     changes: { reason: { from: null, to: reason } },
   });
+}
+
+/**
+ * Deixa anar la reserva **si n'hi ha**, sense queixar-se si no.
+ *
+ * `release` exigeix motiu i es queixa si no hi ha res a alliberar, que és el correcte quan
+ * ho demana un agent. Aquí serveix per als casos on desbloquejar és **una conseqüència** i
+ * no una petició: l'agent que pregunta i es queda esperant, o la persona que reclama la
+ * tasca. Que no hi hagi reserva no és cap error en cap dels dos casos.
+ */
+export async function releaseIfHeld(
+  ctx: AuditContext,
+  taskId: string,
+  reason: string,
+): Promise<boolean> {
+  const result = await sql`DELETE FROM task_leases WHERE task_id = ${taskId}`.execute(ctx.tx);
+  if (Number(result.numAffectedRows ?? 0n) === 0) return false;
+
+  ctx.record({
+    entityType: 'task',
+    entityId: taskId,
+    scopeId: null,
+    verb: 'released',
+    changes: { reason: { from: null, to: reason } },
+  });
+  return true;
 }
 
 /** La reserva viva d'una tasca, si en té. */

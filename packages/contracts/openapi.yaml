@@ -5078,6 +5078,19 @@ components:
                 Quants blocs desplegables té la targeta: un per les subtasques, si en té,
                 i un per cada llista. És el número del commutador "Llistes (2)", que
                 compta blocs i no ítems.
+        locked_until:
+          type: [string, 'null']
+          format: date-time
+          description: |
+            Fins quan la té reservada un agent, o `null` si està lliure. **No és una
+            columna de `tasks`**: és la reserva viva (`task_leases`), que existia per evitar
+            que dos agents fessin la mateixa feina i que ara també fa de pany.
+
+            Mentre hi sigui, una persona no la pot moure ni reclamar: l'agent hi és a dins.
+            Caduca sola als 30 minuts.
+        locked_by_agent_id:
+          type: [string, 'null']
+          description: Quin agent la té. `null` amb `locked_until` ple vol dir una persona.
         needs_attention:
           type: boolean
           description: |

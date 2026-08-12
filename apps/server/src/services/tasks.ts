@@ -27,7 +27,9 @@ import { clampInt } from '../util/clamp.js';
 import { localDayBounds } from '../time/local-day.js';
 import { listInboxEvents, type InboxEvent } from './events.js';
 import { listInboxMail, type InboxMail } from './mail.js';
+import { refusalError, refuseTaskWrite, type WriteIntent } from '../policy/ai-writes.js';
 import { clearAttention } from './attention.js';
+import { leaseOf } from './leases.js';
 import { assertScopeAccess, listScopes } from './scopes.js';
 
 export interface TaskRow {
@@ -88,6 +90,17 @@ export interface Task extends TaskRow {
    * files per pintar unes quantes pastilles.
    */
   progress: { done: number; total: number; lists: number };
+  /**
+   * Fins quan està bloquejada, o `null` si no ho està.
+   *
+   * **No és una columna de `tasks`**: és la reserva viva (`task_leases`), que ja existia per
+   * evitar que dos agents fessin la mateixa feina. El que hi ha de nou és que es vegi: una
+   * targeta que no diu que hi ha un agent a dins convida a endur-se-la, i llavors l'agent
+   * segueix treballant contra una cosa que ja no és allà.
+   */
+  locked_until: string | null;
+  /** Quin agent la té. `null` amb `locked_until` ple vol dir que la té una persona. */
+  locked_by_agent_id: string | null;
 }
 
 const TASK_COLUMNS = sql`
@@ -167,6 +180,20 @@ async function withAssignees(db: MigrationDb, rows: TaskRow[]): Promise<Task[]> 
     labelsByTask.set(link.task_id, list);
   }
 
+  /**
+   * **El pany.** Una consulta per a tot el tauler, com la resta: preguntar-ho targeta per
+   * targeta serien tres-centes consultes per pintar uns quants cadenats.
+   *
+   * `new Date()` i no un instant que vingui de fora perquè això és un camí de lectura i no
+   * en té cap: una reserva viva ho és **ara**, en el moment de mirar-la.
+   */
+  const ara = new Date().toISOString();
+  const leases = await sql<{ task_id: string; agent_id: string | null; expires_at: string }>`
+    SELECT task_id, agent_id, expires_at FROM task_leases
+    WHERE task_id IN (${sql.join(ids)}) AND expires_at > ${ara}
+  `.execute(db);
+  const leaseByTask = new Map(leases.rows.map((row) => [row.task_id, row]));
+
   const listCounts = new Map(blocks.rows.map((row) => [row.task_id, Number(row.lists)]));
   const counts = new Map(
     progress.rows.map((row) => [row.task_id, { done: Number(row.done), total: Number(row.total) }]),
@@ -178,6 +205,8 @@ async function withAssignees(db: MigrationDb, rows: TaskRow[]): Promise<Task[]> 
     needs_attention: isTrue(row.needs_attention),
     assignee_ids: (byTask.get(row.id) ?? []).sort(),
     label_ids: (labelsByTask.get(row.id) ?? []).sort(),
+    locked_until: leaseByTask.get(row.id)?.expires_at ?? null,
+    locked_by_agent_id: leaseByTask.get(row.id)?.agent_id ?? null,
     progress: {
       ...(counts.get(row.id) ?? { done: 0, total: 0 }),
       lists: listCounts.get(row.id) ?? 0,
@@ -564,6 +593,45 @@ export interface MoveTaskInput {
  * perquè el servidor la calculi, per a clients simples. Les dues coses acaben al mateix
  * lloc, i el càlcul és exactament el mateix codi de `packages/contracts`.
  */
+/**
+ * El pany, aplicat.
+ *
+ * Una sola porta per als tres camins d'escriptura, perquè la regla no es pugui complir a
+ * dos llocs i oblidar-se al tercer. La decisió és pura (`policy/ai-writes.ts`); això és el
+ * que hi porta la reserva viva i el nom de l'agent, que és el que fa que el missatge sigui
+ * llegible per a qui el rep.
+ */
+async function assertWritable(
+  ctx: AuditContext,
+  principal: Principal,
+  task: { id: string; ai_mode: TaskRow['ai_mode'] },
+  intent: WriteIntent,
+): Promise<void> {
+  const lease = await leaseOf(ctx.tx, task.id, ctx.now);
+  const refusal = refuseTaskWrite(
+    { kind: principal.kind, agentId: principal.agentId },
+    {
+      aiMode: task.ai_mode,
+      lease:
+        lease === undefined
+          ? null
+          : { agentId: lease.agentId, userId: lease.userId, expiresAt: lease.expiresAt },
+    },
+    intent,
+  );
+  if (refusal === null) return;
+
+  // El nom, no l'identificador: qui llegeix això és una persona mirant una targeta.
+  let agentName: string | undefined;
+  if (lease?.agentId != null) {
+    const found = await sql<{ name: string }>`
+      SELECT name FROM ai_agents WHERE id = ${lease.agentId}
+    `.execute(ctx.tx);
+    agentName = found.rows[0]?.name;
+  }
+  throw refusalError(refusal, { agentName, now: ctx.now });
+}
+
 export async function moveTask(
   ctx: AuditContext,
   principal: Principal,
@@ -578,6 +646,7 @@ export async function moveTask(
   const current = found.rows[0];
   if (current === undefined) throw notFound('task', id);
   await assertScopeAccess(ctx.tx, principal, current.scope_id, { type: 'La tasca', id });
+  await assertWritable(ctx, principal, current, 'move');
 
   const status = input.status ?? current.status;
 
@@ -694,6 +763,7 @@ export async function completeTask(
   const current = found.rows[0];
   if (current === undefined) throw notFound('task', id);
   await assertScopeAccess(ctx.tx, principal, current.scope_id, { type: 'La tasca', id });
+  await assertWritable(ctx, principal, current, 'move');
 
   await sql`
     UPDATE tasks
@@ -964,6 +1034,7 @@ export async function updateTask(
   if (before === undefined) throw notFound('task', id);
 
   await assertScopeAccess(ctx.tx, principal, before.scope_id);
+  await assertWritable(ctx, principal, before, 'edit');
 
   const fields: Record<string, unknown> = {};
   if (input.title !== undefined) {

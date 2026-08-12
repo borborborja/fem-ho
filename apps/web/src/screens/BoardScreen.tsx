@@ -14,7 +14,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { generatePosition, t, type QuickAddContext, type TaskStatus } from '@fem-ho/contracts';
 import { v7 as uuidv7 } from 'uuid';
-import { api } from '../app/api.js';
+import { api, failureText } from '../app/api.js';
 import { Chips } from '../app/Chips.js';
 import { useSessionData, useSession } from '../app/session.js';
 import { useApi } from '../app/useApi.js';
@@ -85,6 +85,7 @@ function toBoardTask(
     time: task.due_time ?? undefined,
     aiMode: task.ai_mode,
     needsAttention: task.needs_attention,
+    lockedUntil: task.locked_until,
     progress: task.progress,
   };
 }
@@ -282,6 +283,14 @@ export function BoardScreen({
     inbox.reload();
   }, [board.reload, inbox.reload]);
   const [optimistic, setOptimistic] = useState<Record<string, TaskStatus>>({});
+  /**
+   * El que s'ha de dir després d'un gest, i que no és un error de càrrega.
+   *
+   * Dues menes i el mateix lloc: **vermell** quan el servidor ha frenat el gest —el pany—
+   * i **avís** quan el gest s'ha fet però hi ha una cosa que has de saber, com que l'àmbit
+   * on acabes de deixar la tasca no té cap agent que la pugui fer.
+   */
+  const [notice, setNotice] = useState<{ tone: 'error' | 'warning'; text: string } | null>(null);
 
   // Quan arriben dades noves, les suposicions optimistes ja no calen: la resposta del
   // servidor mana i mantenir-les taparia un rebuig.
@@ -487,7 +496,7 @@ export function BoardScreen({
         position: generatePosition(lastPosition, null),
       });
       refresh();
-    } catch {
+    } catch (cause: unknown) {
       // Reversió: la targeta torna al seu lloc i l'usuari veu que no s'ha mogut.
       setOptimistic((current) => {
         const next = { ...current };
@@ -495,6 +504,13 @@ export function BoardScreen({
         else next[taskId] = before;
         return next;
       });
+      /**
+       * **I es diu per què.** Fins ara la targeta tornava sola al seu lloc sense cap
+       * paraula, que amb el pany és el pitjor moment possible per callar: el gest no ha
+       * fallat per atzar, l'ha frenat un agent que hi està treballant i el missatge diu
+       * quanta estona queda.
+       */
+      setNotice({ tone: 'error', text: failureText(cause) });
     }
   };
 
@@ -554,6 +570,8 @@ export function BoardScreen({
       {board.error !== undefined || inbox.error !== undefined ? (
         <ErrorBanner onRetry={refresh} />
       ) : null}
+
+      {notice === null ? null : <BoardNotice notice={notice} onDismiss={() => setNotice(null)} />}
 
       <KanbanBoard
         aiBoard={aiBoard}
@@ -719,6 +737,61 @@ export function BoardScreen({
           />
         }
       />
+    </div>
+  );
+}
+
+/**
+ * El que ha passat amb l'últim gest, dit a sobre del tauler.
+ *
+ * No és `ErrorBanner`: aquell diu «no he pogut carregar» i ofereix reintentar, i això diu
+ * «el gest no s'ha fet, i per això», que es tanca llegint-ho. Dues coses diferents al mateix
+ * lloc serien un botó de reintentar que no reintenta res.
+ */
+function BoardNotice({
+  notice,
+  onDismiss,
+}: {
+  notice: { tone: 'error' | 'warning'; text: string };
+  onDismiss: () => void;
+}) {
+  const error = notice.tone === 'error';
+  return (
+    <div
+      role="alert"
+      data-testid="board-notice"
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 12,
+        padding: '10px 14px',
+        borderRadius: 12,
+        background: error ? 'var(--danger-bg)' : 'var(--gradient-wash-warm)',
+        color: error ? 'var(--danger-text)' : 'var(--ink)',
+        fontSize: 12.5,
+      }}
+    >
+      <span>
+        {/* Icona i text, mai el color sol (docs/04 §8). */}
+        <span aria-hidden="true">{error ? '🔒 ' : '⚠ '}</span>
+        {notice.text}
+      </span>
+      <button
+        type="button"
+        data-testid="board-notice-dismiss"
+        onClick={onDismiss}
+        style={{
+          border: 'none',
+          background: 'transparent',
+          color: 'inherit',
+          font: 'inherit',
+          fontWeight: 700,
+          cursor: 'pointer',
+        }}
+      >
+        {t('nav.close')}
+      </button>
     </div>
   );
 }

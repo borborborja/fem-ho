@@ -36,6 +36,8 @@ export interface BoardTask {
   hasUnseenAiChange?: boolean | undefined;
   /** Un agent espera resposta teva. La targeta va destacada i ho diu. */
   needsAttention?: boolean | undefined;
+  /** Fins quan la té reservada un agent. Mentre hi sigui, la targeta va amb cadenat. */
+  lockedUntil?: string | null | undefined;
   /** Subtasques i ítems de llista, comptats junts. Ve de `/board` com a agregat. */
   progress?: { done: number; total: number; lists: number } | undefined;
   /**

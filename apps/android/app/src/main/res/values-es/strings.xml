@@ -30,6 +30,7 @@
     <string name="ai_attention_card">Espera respuesta</string>
     <string name="ai_attention_pending">{count} tareas esperan tu respuesta</string>
     <string name="ai_attention_waiting">El agente espera una respuesta tuya para poder seguir. Se va cuando respondas.</string>
+    <string name="ai_lock_card">El agente trabaja en ella</string>
     <string name="ai_mode_assisted">Con ayuda</string>
     <string name="ai_mode_cycle">Cambia el modo de IA</string>
     <string name="ai_mode_delegated">IA</string>
@@ -122,11 +123,13 @@
     <string name="error_cannot_delete_self">No puedes borrar tu propia cuenta desde Admin. Pídeselo a otro administrador.</string>
     <string name="error_capabilities_exceeded">Ninguna de las capacidades pedidas es tuya: un token no puede hacer más que quien lo crea.</string>
     <string name="error_capabilities_required">Un token sin ninguna capacidad no puede hacer nada: elige al menos una.</string>
+    <string name="error_claimed_by_other">Otro agente la tiene reservada durante {minutes} min más.</string>
     <string name="error_confirmation_mismatch">Para vaciar la instancia, escribe su nombre exacto: «{name}».</string>
     <string name="error_email_taken">Ya hay una cuenta con {email}.</string>
     <string name="error_endpoint_required">Hay que decir qué endpoint se da de baja.</string>
     <string name="error_event_incomplete">Un evento necesita calendario, título e instante de inicio.</string>
     <string name="error_generic">Algo ha fallado.</string>
+    <string name="error_human_took_over">Esta tarea la ha asumido una persona: ya no es de la IA.</string>
     <string name="error_invalid_ai_mode">El modo tiene que ser individual, con ayuda o delegado.</string>
     <string name="error_invalid_credentials">Correo o contraseña incorrectos.</string>
     <string name="error_invalid_email">Esto no parece un correo.</string>
@@ -143,6 +146,7 @@
     <string name="error_name_required">Un token sin nombre no se distingue de los otros, y entonces no se puede revocar ninguno con confianza.</string>
     <string name="error_no_lease">Esta tarea no está reservada.</string>
     <string name="error_not_a_member">{person} no es miembro de {scope}: no podría abrir la tarea.</string>
+    <string name="error_not_claimed">Esta tarea no la tienes reservada.</string>
     <string name="error_not_creatable">Esto no se puede crear desde un lote.</string>
     <string name="error_not_found">Esto ya no está.</string>
     <string name="error_not_owner">El ámbito {name} solo lo puede borrar quien lo creó.</string>
@@ -161,6 +165,7 @@
     <string name="error_share_revoked">Este enlace está revocado: no se puede volver a abrir. Crea uno nuevo.</string>
     <string name="error_source_url_required">La fuente necesita una dirección.</string>
     <string name="error_target_required">Un enlace es para una tarea o para una lista, no para las dos ni para ninguna.</string>
+    <string name="error_task_locked">El agente «{agent}» está trabajando en ella ahora mismo. Se desbloqueará sola dentro de {minutes} min.</string>
     <string name="error_text_required">Esto no puede quedar vacío.</string>
     <string name="error_title_required">El título no puede quedar vacío.</string>
     <string name="error_too_many_attempts">Demasiados intentos. Vuelve a probar dentro de {seconds} segundos.</string>

@@ -142,6 +142,11 @@ export function TaskCard({
    * mai és l'únic senyal (docs/04 §8), i «destacada» sense saber per què no és cap avís.
    */
   attentionLabel,
+  /**
+   * «Un agent hi està treballant». Amb text, la targeta porta el cadenat **i el diu**: qui
+   * la miri ha de saber per què no la pot moure abans de provar-ho, no després.
+   */
+  lockLabel,
   dragging = false,
   onOpen,
   onToggleDone,
@@ -361,6 +366,35 @@ export function TaskCard({
 
               {/* `manual` NO pinta res: és el cas normal i no ha d'ocupar espai
                   (docs/09 §3). El color no és mai l'únic senyal, per això hi ha text. */}
+              {lockLabel ? (
+                <span
+                  data-testid="task-locked"
+                  title={lockLabel}
+                  style={{
+                    fontSize: 10.5,
+                    fontWeight: 600,
+                    padding: '3px 9px',
+                    borderRadius: 100,
+                    background: 'var(--tag-bg)',
+                    color: 'var(--ink-soft)',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 4,
+                  }}
+                >
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path
+                      d="M7 10V7a5 5 0 0 1 10 0v3M5.5 10h13a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-13a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1Z"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                  {lockLabel}
+                </span>
+              ) : null}
+
               {attentionLabel ? (
                 <span
                   data-testid="task-attention"

@@ -30,6 +30,7 @@
     <string name="ai_attention_card">Espera resposta</string>
     <string name="ai_attention_pending">{count} tasques esperen resposta teva</string>
     <string name="ai_attention_waiting">L\'agent espera una resposta teva per poder seguir. Marxa quan responguis.</string>
+    <string name="ai_lock_card">L\'agent hi treballa</string>
     <string name="ai_mode_assisted">Amb ajuda</string>
     <string name="ai_mode_cycle">Canvia el mode d\'IA</string>
     <string name="ai_mode_delegated">IA</string>
@@ -122,11 +123,13 @@
     <string name="error_cannot_delete_self">No et pots esborrar el teu compte des d\'Admin. Demana-ho a un altre administrador.</string>
     <string name="error_capabilities_exceeded">Cap de les capacitats demanades és teva: un token no pot fer més que qui el crea.</string>
     <string name="error_capabilities_required">Un token sense cap capacitat no pot fer res: tria\'n almenys una.</string>
+    <string name="error_claimed_by_other">Un altre agent la té reservada durant {minutes} min més.</string>
     <string name="error_confirmation_mismatch">Per netejar la instància, escriu-ne el nom exacte: «{name}».</string>
     <string name="error_email_taken">Ja hi ha un compte amb {email}.</string>
     <string name="error_endpoint_required">Cal dir quin endpoint es dona de baixa.</string>
     <string name="error_event_incomplete">Un esdeveniment necessita calendari, títol i instant d\'inici.</string>
     <string name="error_generic">Alguna cosa ha fallat.</string>
+    <string name="error_human_took_over">Aquesta tasca l\'ha assumida una persona: ja no és de la IA.</string>
     <string name="error_invalid_ai_mode">El mode ha de ser individual, amb ajuda o delegat.</string>
     <string name="error_invalid_credentials">Correu o contrasenya incorrectes.</string>
     <string name="error_invalid_email">Això no sembla un correu.</string>
@@ -143,6 +146,7 @@
     <string name="error_name_required">Un token sense nom no es distingeix dels altres, i llavors no se\'n pot revocar cap amb confiança.</string>
     <string name="error_no_lease">Aquesta tasca no està reservada.</string>
     <string name="error_not_a_member">{person} no és membre de {scope}: no podria obrir la tasca.</string>
+    <string name="error_not_claimed">Aquesta tasca no la tens reservada.</string>
     <string name="error_not_creatable">Això no es pot crear des d\'un lot.</string>
     <string name="error_not_found">Això ja no hi és.</string>
     <string name="error_not_owner">L\'àmbit {name} només el pot esborrar qui el va crear.</string>
@@ -161,6 +165,7 @@
     <string name="error_share_revoked">Aquest enllaç està revocat: no es pot tornar a obrir. Crea\'n un de nou.</string>
     <string name="error_source_url_required">La font necessita una adreça.</string>
     <string name="error_target_required">Un enllaç és per a una tasca o per a una llista, no per a totes dues ni per a cap.</string>
+    <string name="error_task_locked">L\'agent «{agent}» hi està treballant ara mateix. Es desbloquejarà sola d\'aquí a {minutes} min.</string>
     <string name="error_text_required">Això no pot quedar buit.</string>
     <string name="error_title_required">El títol no pot quedar buit.</string>
     <string name="error_too_many_attempts">Massa intents. Torna-ho a provar d\'aquí a {seconds} segons.</string>

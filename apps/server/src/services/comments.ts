@@ -15,6 +15,7 @@ import type { MigrationDb } from '../db/migration-db.js';
 import { PolicyError, missingCapability, notFound } from '../policy/errors.js';
 import { hasCapability, type Principal } from '../policy/principal.js';
 import { clearAttention, raiseAttention } from './attention.js';
+import { releaseIfHeld } from './leases.js';
 import { assertScopeAccess } from './scopes.js';
 
 export interface Comment {
@@ -164,6 +165,14 @@ export async function askUser(
   `.execute(ctx.tx);
 
   await raiseAttention(ctx, taskId);
+
+  /**
+   * **Preguntar desbloqueja.** Un agent que espera no està treballant, i mentre la reserva
+   * visqui ningú pot respondre-li ni endur-se la tasca: el pany voldria dir «hi ha algú a
+   * dins» quan el que hi ha és algú esperant a fora.
+   */
+  await releaseIfHeld(ctx, taskId, 'Espera resposta de la persona.');
+
   ctx.record({
     entityType: 'task',
     entityId: taskId,

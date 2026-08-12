@@ -30,6 +30,7 @@
     <string name="ai_attention_card">Waiting on you</string>
     <string name="ai_attention_pending">{count} tasks are waiting for your reply</string>
     <string name="ai_attention_waiting">The agent needs a reply from you to carry on. It goes away when you answer.</string>
+    <string name="ai_lock_card">The agent is on it</string>
     <string name="ai_mode_assisted">Assisted</string>
     <string name="ai_mode_cycle">Change the AI mode</string>
     <string name="ai_mode_delegated">AI</string>
@@ -122,11 +123,13 @@
     <string name="error_cannot_delete_self">You cannot delete your own account from Admin. Ask another administrator.</string>
     <string name="error_capabilities_exceeded">None of the requested capabilities are yours: a token cannot do more than whoever creates it.</string>
     <string name="error_capabilities_required">A token with no capabilities cannot do anything: pick at least one.</string>
+    <string name="error_claimed_by_other">Another agent has it claimed for {minutes} more min.</string>
     <string name="error_confirmation_mismatch">To wipe the instance, type its exact name: “{name}”.</string>
     <string name="error_email_taken">There is already an account with {email}.</string>
     <string name="error_endpoint_required">The endpoint being unsubscribed has to be given.</string>
     <string name="error_event_incomplete">An event needs a calendar, a title and a start instant.</string>
     <string name="error_generic">Something went wrong.</string>
+    <string name="error_human_took_over">A person has taken this task over: it is no longer the AI\'s.</string>
     <string name="error_invalid_ai_mode">The mode has to be manual, assisted or delegated.</string>
     <string name="error_invalid_credentials">Wrong email or password.</string>
     <string name="error_invalid_email">That does not look like an email address.</string>
@@ -143,6 +146,7 @@
     <string name="error_name_required">A token with no name cannot be told apart from the others, and then none can be revoked with confidence.</string>
     <string name="error_no_lease">This task is not claimed.</string>
     <string name="error_not_a_member">{person} is not a member of {scope}: they could not open the task.</string>
+    <string name="error_not_claimed">You have not claimed this task.</string>
     <string name="error_not_creatable">This cannot be created from a batch.</string>
     <string name="error_not_found">This is no longer here.</string>
     <string name="error_not_owner">The {name} scope can only be deleted by whoever created it.</string>
@@ -161,6 +165,7 @@
     <string name="error_share_revoked">This link is revoked: it cannot be reopened. Create a new one.</string>
     <string name="error_source_url_required">The source needs an address.</string>
     <string name="error_target_required">A link is for a task or for a checklist, not for both and not for neither.</string>
+    <string name="error_task_locked">The agent “{agent}” is working on it right now. It unlocks on its own in {minutes} min.</string>
     <string name="error_text_required">This cannot be left empty.</string>
     <string name="error_title_required">The title cannot be left empty.</string>
     <string name="error_too_many_attempts">Too many attempts. Try again in {seconds} seconds.</string>

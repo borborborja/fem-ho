@@ -3466,6 +3466,18 @@ export interface components {
                 lists: number;
             };
             /**
+             * Format: date-time
+             * @description Fins quan la té reservada un agent, o `null` si està lliure. **No és una
+             *     columna de `tasks`**: és la reserva viva (`task_leases`), que existia per evitar
+             *     que dos agents fessin la mateixa feina i que ara també fa de pany.
+             *
+             *     Mentre hi sigui, una persona no la pot moure ni reclamar: l'agent hi és a dins.
+             *     Caduca sola als 30 minuts.
+             */
+            locked_until?: string | null;
+            /** @description Quin agent la té. `null` amb `locked_until` ple vol dir una persona. */
+            locked_by_agent_id?: string | null;
+            /**
              * @description Si un agent espera resposta teva **ara**. Viu a la tasca i no al comentari que
              *     la pregunta: «quines esperen resposta» és el que ha de poder respondre el
              *     tauler sense llegir els comentaris de tres-centes targetes.

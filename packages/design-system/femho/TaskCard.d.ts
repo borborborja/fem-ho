@@ -52,6 +52,11 @@ export interface TaskCardProps extends React.HTMLAttributes<HTMLDivElement> {
    * text no hi ha res a destacar, perquè un color sol no és cap avís (docs/04 §8).
    */
   attentionLabel?: string | undefined;
+  /**
+   * «Un agent hi està treballant», traduït. Amb text, la targeta porta el cadenat i el diu:
+   * saber per què no es pot moure abans de provar-ho és mitja explicació.
+   */
+  lockLabel?: string | undefined;
   /** Només a les targetes de l'Inbox (docs/02 §4). */
   /**
    * La fletxa de la barra dreta: mou la targeta una columna endavant.
