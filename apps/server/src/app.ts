@@ -29,6 +29,7 @@ import { registerSetupRoutes } from './http/setup.js';
 import { registerShareRoutes } from './http/shares.js';
 import { registerAiStatusRoutes } from './http/ai-status.js';
 import { registerMailRoutes } from './http/mail.js';
+import { registerSessionRoutes } from './http/sessions.js';
 import { registerTokenRoutes } from './http/tokens.js';
 import { registerChecklistRoutes, registerEventRoutes, registerTaskRoutes } from './http/tasks.js';
 
@@ -108,6 +109,7 @@ export function buildApp(config: Config, options: BuildOptions = {}): FastifyIns
   registerChecklistRoutes(app);
   registerSyncRoutes(app);
   registerMcpRoutes(app);
+  registerSessionRoutes(app);
   registerTokenRoutes(app);
   registerMailRoutes(app, instanceSecret);
   registerAiStatusRoutes(app);

@@ -30,7 +30,7 @@ import {
   updateScope,
   type MemberRow,
 } from '../services/scopes.js';
-import { settingsOf, updateScopeSettings } from '../services/scope-settings.js';
+import { settingsOf, settingsOfMany, updateScopeSettings } from '../services/scope-settings.js';
 import { backfillSessions } from '../services/sessions.js';
 import { body, handle, nullable, query, str } from './handle.js';
 
@@ -92,6 +92,30 @@ export function registerScopeRoutes(app: FastifyInstance, instanceSecret: () => 
           kind: input.kind === 'individual' || input.kind === 'collective' ? input.kind : undefined,
         }),
       );
+    }),
+  );
+
+  /**
+   * **La configuració de tots els àmbits alhora.**
+   *
+   * Va abans de `/scopes/:id/settings` perquè `settings` no s'ha de confondre amb un
+   * identificador —Fastify prefereix el tros literal, i així queda escrit—, i existeix
+   * perquè l'app necessita saber d'entrada **quins àmbits anoten la dedicació**: sense
+   * això, el menú hauria de preguntar-ho àmbit per àmbit per decidir si ensenya el Registre.
+   */
+  app.get('/api/v1/scopes/settings', async (request, reply) =>
+    handle(app, request, reply, async (principal) => {
+      const scopes = await listScopes(db().db, principal);
+      const per = await settingsOfMany(
+        db().db,
+        scopes.map((scope) => scope.id),
+      );
+      return {
+        data: scopes.map((scope) => ({
+          scope_id: scope.id,
+          ...(per.get(scope.id) ?? {}),
+        })),
+      };
     }),
   );
 

@@ -883,6 +883,115 @@ export interface paths {
         patch: operations["updateScope"];
         trace?: never;
     };
+    "/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * El Registre — què s'ha fet, quan i quanta estona
+         * @description Els blocs de dedicació que es poden veure, amb el nom de la tasca, el projecte, la
+         *     tipologia i la persona ja resolts, **i els totals que pinta la capçalera**: per
+         *     persona, per projecte i per dia. Van junts perquè són els mateixos blocs sumats:
+         *     demanar-los a part seria fer dues vegades la mateixa consulta amb el risc que un dia
+         *     no diguin el mateix.
+         *
+         *     **Un bloc és del dia que comença.** El que va de 23:30 a 00:30 surt al dia d'ahir,
+         *     sencer; les hores extres sí que es reparteixen entre els dos dies, perquè es
+         *     calculen del bloc.
+         *
+         *     **Qui veu què**: cadascú els seus; qui mana a l'àmbit, els de tothom. El filtre és a
+         *     la consulta i no a la pantalla.
+         */
+        get: operations["listSessions"];
+        put?: never;
+        /**
+         * Apuntar un bloc a mà
+         * @description L'entrada manual i el bloc que es dibuixa al cronograma. Els instants s'ajusten a 5
+         *     minuts, com les vores que s'arrosseguen.
+         *
+         *     **Els solapaments no es prohibeixen**: dues persones poden treballar alhora a la
+         *     mateixa tasca, i el cronograma els ensenya trepitjats en comptes d'impedir-los.
+         */
+        post: operations["createSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sessions/export.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * El Registre en CSV
+         * @description Les mateixes columnes de sempre —`Data,Hora,Projecte,Tasca,Tipologia,Persona,Minuts`—
+         *     amb salts CRLF, escapat RFC 4180 i **BOM d'UTF-8**: sense els tres bytes del principi
+         *     l'Excel obre el fitxer en la codificació del sistema i els accents es trenquen.
+         *
+         *     Exporta exactament el que hi ha filtrat: els mateixos paràmetres que `GET /sessions`.
+         */
+        get: operations["exportSessions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sessions/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Esborrar un bloc
+         * @description Esborrat suau, com tota la resta: la tombstone ha de poder viatjar.
+         */
+        delete: operations["deleteSession"];
+        options?: never;
+        head?: never;
+        /**
+         * Moure, allargar o reassignar un bloc
+         * @description El que fa el cronograma en arrossegar. `task_id` hi entra perquè canviar de fila vol
+         *     dir canviar de projecte, i un bloc no té projecte: el té la tasca.
+         */
+        patch: operations["updateSession"];
+        trace?: never;
+    };
+    "/scopes/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * La configuració de tots els àmbits visibles
+         * @description L'app necessita saber d'entrada **quins àmbits anoten la dedicació**: sense això, el
+         *     menú hauria de preguntar-ho àmbit per àmbit per decidir si ensenya el Registre.
+         */
+        get: operations["listScopeSettings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/scopes/{id}/settings": {
         parameters: {
             query?: never;
@@ -3666,6 +3775,73 @@ export interface components {
             updated_at: string;
             version: number;
         };
+        Session: {
+            id: string;
+            task_id: string;
+            scope_id: string;
+            /** @description De qui és el temps: qui va moure la targeta. */
+            user_id: string;
+            /** Format: date-time */
+            started_at: string;
+            /**
+             * Format: date-time
+             * @description `null` vol dir que la tasca s'està fent ara mateix.
+             */
+            ended_at?: string | null;
+            /**
+             * @description D'on surt el bloc: del tauler (una targeta que ha passat per Fent), escrit a mà,
+             *     o reconstruït de l'historial en encendre el registre.
+             * @enum {string}
+             */
+            source: "board" | "manual" | "backfill";
+            note?: string | null;
+        };
+        SessionEntry: {
+            id: string;
+            task_id: string;
+            task_title: string;
+            scope_id: string;
+            project_id?: string | null;
+            project_name?: string | null;
+            task_type_id?: string | null;
+            task_type_name?: string | null;
+            task_type_color?: string | null;
+            user_id: string;
+            user_name?: string | null;
+            /** Format: date-time */
+            started_at: string;
+            /** Format: date-time */
+            ended_at?: string | null;
+            /** @description En un bloc obert, els que porta fins ara. */
+            minutes: number;
+            /** @description Dels minuts, quants cauen fora de l'horari o en dia no laborable. */
+            overtime_minutes: number;
+            /**
+             * @description Passa del llindar de l'àmbit. **No s'ha retallat**: una targeta oblidada a Fent
+             *     hi ha estat, i escurçar-la diria una cosa que no va passar.
+             */
+            needs_review: boolean;
+            open: boolean;
+            source: string;
+        };
+        SessionBucket: {
+            key: string;
+            label: string;
+            minutes: number;
+            overtime_minutes: number;
+        };
+        SessionReport: {
+            data: components["schemas"]["SessionEntry"][];
+            totals: {
+                minutes: number;
+                overtime_minutes: number;
+                /** @description Tasques diferents, no blocs. */
+                tasks: number;
+                by_user: components["schemas"]["SessionBucket"][];
+                by_project: components["schemas"]["SessionBucket"][];
+                by_day: components["schemas"]["SessionBucket"][];
+            };
+        };
         ScopeSettings: {
             /**
              * @description Si aquest àmbit anota la dedicació i té Registre i Estadístiques. **Apagat per
@@ -5669,6 +5845,191 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    listSessions: {
+        parameters: {
+            query?: {
+                from?: string;
+                to?: string;
+                scope_ids?: string;
+                project_id?: string;
+                user_id?: string;
+                task_type_id?: string;
+                search?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Els blocs i els totals. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionReport"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    createSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    task_id: string;
+                    /** Format: date-time */
+                    started_at: string;
+                    /** Format: date-time */
+                    ended_at: string;
+                    note?: string;
+                    /** @description De qui és el temps. Per defecte, de qui l'escriu. */
+                    user_id?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description El bloc. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Session"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            /** @description El bloc acaba abans de començar, o l'instant no és vàlid. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    exportSessions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description El fitxer. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": string;
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    deleteSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Esborrat. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: date-time */
+                    started_at?: string;
+                    /** Format: date-time */
+                    ended_at?: string;
+                    task_id?: string;
+                    note?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description El bloc, com ha quedat. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Session"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            /** @description El bloc acabaria abans de començar. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listScopeSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Una fila per àmbit. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: ({
+                            scope_id: string;
+                        } & components["schemas"]["ScopeSettings"])[];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
         };
     };
     getScopeSettings: {

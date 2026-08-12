@@ -1621,6 +1621,159 @@ paths:
           content:
             { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
 
+  /sessions:
+    get:
+      tags: [tasks]
+      operationId: listSessions
+      summary: El Registre — què s'ha fet, quan i quanta estona
+      description: |
+        Els blocs de dedicació que es poden veure, amb el nom de la tasca, el projecte, la
+        tipologia i la persona ja resolts, **i els totals que pinta la capçalera**: per
+        persona, per projecte i per dia. Van junts perquè són els mateixos blocs sumats:
+        demanar-los a part seria fer dues vegades la mateixa consulta amb el risc que un dia
+        no diguin el mateix.
+
+        **Un bloc és del dia que comença.** El que va de 23:30 a 00:30 surt al dia d'ahir,
+        sencer; les hores extres sí que es reparteixen entre els dos dies, perquè es
+        calculen del bloc.
+
+        **Qui veu què**: cadascú els seus; qui mana a l'àmbit, els de tothom. El filtre és a
+        la consulta i no a la pantalla.
+      parameters:
+        - { name: from, in: query, schema: { type: string } }
+        - { name: to, in: query, schema: { type: string } }
+        - { name: scope_ids, in: query, schema: { type: string } }
+        - { name: project_id, in: query, schema: { type: string } }
+        - { name: user_id, in: query, schema: { type: string } }
+        - { name: task_type_id, in: query, schema: { type: string } }
+        - { name: search, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: Els blocs i els totals.
+          content: { application/json: { schema: { $ref: '#/components/schemas/SessionReport' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+    post:
+      tags: [tasks]
+      operationId: createSession
+      summary: Apuntar un bloc a mà
+      description: |
+        L'entrada manual i el bloc que es dibuixa al cronograma. Els instants s'ajusten a 5
+        minuts, com les vores que s'arrosseguen.
+
+        **Els solapaments no es prohibeixen**: dues persones poden treballar alhora a la
+        mateixa tasca, i el cronograma els ensenya trepitjats en comptes d'impedir-los.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [task_id, started_at, ended_at]
+              properties:
+                task_id: { type: string }
+                started_at: { type: string, format: date-time }
+                ended_at: { type: string, format: date-time }
+                note: { type: string }
+                user_id:
+                  type: string
+                  description: De qui és el temps. Per defecte, de qui l'escriu.
+      responses:
+        '201':
+          description: El bloc.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Session' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422':
+          description: El bloc acaba abans de començar, o l'instant no és vàlid.
+          content:
+            { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+
+  /sessions/export.csv:
+    get:
+      tags: [tasks]
+      operationId: exportSessions
+      summary: El Registre en CSV
+      description: |
+        Les mateixes columnes de sempre —`Data,Hora,Projecte,Tasca,Tipologia,Persona,Minuts`—
+        amb salts CRLF, escapat RFC 4180 i **BOM d'UTF-8**: sense els tres bytes del principi
+        l'Excel obre el fitxer en la codificació del sistema i els accents es trenquen.
+
+        Exporta exactament el que hi ha filtrat: els mateixos paràmetres que `GET /sessions`.
+      responses:
+        '200':
+          description: El fitxer.
+          content: { text/csv: { schema: { type: string } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+
+  /sessions/{id}:
+    patch:
+      tags: [tasks]
+      operationId: updateSession
+      summary: Moure, allargar o reassignar un bloc
+      description: |
+        El que fa el cronograma en arrossegar. `task_id` hi entra perquè canviar de fila vol
+        dir canviar de projecte, i un bloc no té projecte: el té la tasca.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                started_at: { type: string, format: date-time }
+                ended_at: { type: string, format: date-time }
+                task_id: { type: string }
+                note: { type: [string, 'null'] }
+      responses:
+        '200':
+          description: El bloc, com ha quedat.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Session' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422':
+          description: El bloc acabaria abans de començar.
+          content:
+            { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+    delete:
+      tags: [tasks]
+      operationId: deleteSession
+      summary: Esborrar un bloc
+      description: 'Esborrat suau, com tota la resta: la tombstone ha de poder viatjar.'
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '204': { description: Esborrat. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /scopes/settings:
+    get:
+      tags: [scopes]
+      operationId: listScopeSettings
+      summary: La configuració de tots els àmbits visibles
+      description: |
+        L'app necessita saber d'entrada **quins àmbits anoten la dedicació**: sense això, el
+        menú hauria de preguntar-ho àmbit per àmbit per decidir si ensenya el Registre.
+      responses:
+        '200':
+          description: Una fila per àmbit.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      allOf:
+                        - type: object
+                          required: [scope_id]
+                          properties:
+                            scope_id: { type: string }
+                        - $ref: '#/components/schemas/ScopeSettings'
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+
   /scopes/{id}/settings:
     get:
       tags: [scopes]
@@ -5336,6 +5489,104 @@ components:
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
         version: { type: integer }
+
+    Session:
+      type: object
+      additionalProperties: false
+      required: [id, task_id, scope_id, user_id, started_at, source]
+      properties:
+        id: { type: string }
+        task_id: { type: string }
+        scope_id: { type: string }
+        user_id:
+          type: string
+          description: 'De qui és el temps: qui va moure la targeta.'
+        started_at: { type: string, format: date-time }
+        ended_at:
+          type: [string, 'null']
+          format: date-time
+          description: "`null` vol dir que la tasca s'està fent ara mateix."
+        source:
+          type: string
+          enum: [board, manual, backfill]
+          description: |
+            D'on surt el bloc: del tauler (una targeta que ha passat per Fent), escrit a mà,
+            o reconstruït de l'historial en encendre el registre.
+        note: { type: [string, 'null'] }
+
+    SessionEntry:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          id,
+          task_id,
+          task_title,
+          scope_id,
+          user_id,
+          started_at,
+          minutes,
+          overtime_minutes,
+          needs_review,
+          open,
+          source,
+        ]
+      properties:
+        id: { type: string }
+        task_id: { type: string }
+        task_title: { type: string }
+        scope_id: { type: string }
+        project_id: { type: [string, 'null'] }
+        project_name: { type: [string, 'null'] }
+        task_type_id: { type: [string, 'null'] }
+        task_type_name: { type: [string, 'null'] }
+        task_type_color: { type: [string, 'null'] }
+        user_id: { type: string }
+        user_name: { type: [string, 'null'] }
+        started_at: { type: string, format: date-time }
+        ended_at: { type: [string, 'null'], format: date-time }
+        minutes:
+          type: integer
+          description: En un bloc obert, els que porta fins ara.
+        overtime_minutes:
+          type: integer
+          description: Dels minuts, quants cauen fora de l'horari o en dia no laborable.
+        needs_review:
+          type: boolean
+          description: |
+            Passa del llindar de l'àmbit. **No s'ha retallat**: una targeta oblidada a Fent
+            hi ha estat, i escurçar-la diria una cosa que no va passar.
+        open: { type: boolean }
+        source: { type: string }
+
+    SessionBucket:
+      type: object
+      additionalProperties: false
+      required: [key, label, minutes, overtime_minutes]
+      properties:
+        key: { type: string }
+        label: { type: string }
+        minutes: { type: integer }
+        overtime_minutes: { type: integer }
+
+    SessionReport:
+      type: object
+      additionalProperties: false
+      required: [data, totals]
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/SessionEntry' } }
+        totals:
+          type: object
+          required: [minutes, overtime_minutes, tasks, by_user, by_project, by_day]
+          properties:
+            minutes: { type: integer }
+            overtime_minutes: { type: integer }
+            tasks:
+              type: integer
+              description: Tasques diferents, no blocs.
+            by_user: { type: array, items: { $ref: '#/components/schemas/SessionBucket' } }
+            by_project: { type: array, items: { $ref: '#/components/schemas/SessionBucket' } }
+            by_day: { type: array, items: { $ref: '#/components/schemas/SessionBucket' } }
 
     ScopeSettings:
       type: object

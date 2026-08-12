@@ -29,6 +29,14 @@ export type ScopeAction =
   | 'read'
   /** Crear, editar i completar tasques, esdeveniments, llistes i comentaris. */
   | 'content'
+  /**
+   * Veure el Registre i les Estadístiques **de tot l'àmbit**, i no només els blocs propis.
+   *
+   * És una acció a part i no un tros de `read` perquè el que es mira és **la dedicació de la
+   * gent**: qui col·labora en un àmbit hi veu les tasques, i que això inclogui quantes hores
+   * hi ha dedicat cadascú és una altra decisió, que la pren qui mana a l'àmbit.
+   */
+  | 'reports'
   /** Convidar, expulsar i canviar rols. */
   | 'membership'
   /** Nom, color, icona, `kind`, i què es comparteix. */
@@ -39,7 +47,7 @@ export type ScopeAction =
   | 'leave';
 
 const MATRIX: Record<ScopeRole, ReadonlySet<ScopeAction>> = {
-  owner: new Set<ScopeAction>(['read', 'content', 'membership', 'settings', 'delete']),
+  owner: new Set<ScopeAction>(['read', 'content', 'reports', 'membership', 'settings', 'delete']),
   collaborator: new Set<ScopeAction>(['read', 'content', 'leave']),
   viewer: new Set<ScopeAction>(['read', 'leave']),
 };

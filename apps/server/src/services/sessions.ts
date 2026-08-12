@@ -17,8 +17,11 @@ import { sql } from 'kysely';
 import { v7 as uuidv7 } from 'uuid';
 import type { AuditContext } from '../audit/audited-transaction.js';
 import type { MigrationDb } from '../db/migration-db.js';
+import { missingCapability, notFound, PolicyError } from '../policy/errors.js';
+import { hasCapability, type Principal } from '../policy/principal.js';
 import { rebuildSessions, type StatusChange } from '../policy/session-rebuild.js';
 import { settingsOf } from './scope-settings.js';
+import { assertScopeAccess } from './scopes.js';
 
 export interface SessionRow {
   id: string;
@@ -196,4 +199,210 @@ export async function sessionsOfTask(db: MigrationDb, taskId: string): Promise<S
     ORDER BY started_at
   `.execute(db);
   return found.rows;
+}
+
+/**
+ * L'ajust del cronograma: **cinc minuts**.
+ *
+ * Arrossegar una vora amb el ratolí no té precisió de segons, i sense ajust els blocs
+ * quedarien a les 9:03:47. És el mateix criteri de l'eina que això substitueix, i el que fa
+ * que dos blocs seguits encaixin sense un forat d'un minut.
+ */
+export const SNAP_MINUTS = 5;
+
+function snap(instant: string): string {
+  const ms = Date.parse(instant);
+  if (!Number.isFinite(ms)) throw invalidInstant(instant);
+  const pas = SNAP_MINUTS * 60_000;
+  return new Date(Math.round(ms / pas) * pas).toISOString();
+}
+
+function invalidInstant(value: string): PolicyError {
+  return new PolicyError(
+    'invalid-instant',
+    'Invalid instant',
+    422,
+    `"${value}" is not an ISO instant.`,
+    { value },
+  );
+}
+
+/** Comprova que el bloc tingui sentit i que qui el toca hi tingui accés. */
+async function assertBlockWritable(
+  ctx: AuditContext,
+  principal: Principal,
+  scopeId: string,
+  started: string,
+  ended: string,
+): Promise<void> {
+  await assertScopeAccess(ctx.tx, principal, scopeId);
+
+  if (Date.parse(ended) <= Date.parse(started)) {
+    throw new PolicyError(
+      'empty-session',
+      'Empty session',
+      422,
+      'A block has to end after it starts.',
+    );
+  }
+}
+
+export interface ManualSessionInput {
+  task_id: string;
+  started_at: string;
+  ended_at: string;
+  note?: string | undefined;
+  /** De qui és el temps. Per defecte, de qui l'escriu. */
+  user_id?: string | undefined;
+}
+
+/**
+ * Un bloc escrit a mà: l'entrada manual i el que es dibuixa al cronograma.
+ *
+ * **Els solapaments no es prohibeixen.** Dues persones poden treballar alhora a la mateixa
+ * tasca, i una persona pot tenir raons per apuntar dues coses a la mateixa hora. El que sí
+ * que es fa és ensenyar-ho: al cronograma els blocs que es trepitgen es veuen trepitjats.
+ */
+export async function createSession(
+  ctx: AuditContext,
+  principal: Principal,
+  input: ManualSessionInput,
+): Promise<SessionRow> {
+  if (!hasCapability(principal, 'tasks:write')) throw missingCapability('tasks:write');
+
+  const task = await sql<{ scope_id: string }>`
+    SELECT scope_id FROM tasks WHERE id = ${input.task_id} AND deleted_at IS NULL
+  `.execute(ctx.tx);
+  const scopeId = task.rows[0]?.scope_id;
+  if (scopeId === undefined) throw notFound('task', input.task_id);
+
+  const started = snap(input.started_at);
+  const ended = snap(input.ended_at);
+  await assertBlockWritable(ctx, principal, scopeId, started, ended);
+
+  const id = uuidv7();
+  await sql`
+    INSERT INTO task_sessions
+      (id, task_id, scope_id, user_id, started_at, ended_at, source, note,
+       created_at, updated_at, version)
+    VALUES (${id}, ${input.task_id}, ${scopeId}, ${input.user_id ?? principal.userId},
+            ${started}, ${ended}, 'manual', ${input.note ?? null}, ${ctx.now}, ${ctx.now}, 1)
+  `.execute(ctx.tx);
+
+  ctx.record({
+    entityType: 'task',
+    entityId: input.task_id,
+    scopeId,
+    verb: 'logged',
+    changes: { session: { from: null, to: `${started}/${ended}` } },
+  });
+
+  return {
+    id,
+    task_id: input.task_id,
+    scope_id: scopeId,
+    user_id: input.user_id ?? principal.userId,
+    started_at: started,
+    ended_at: ended,
+    source: 'manual',
+    note: input.note ?? null,
+  };
+}
+
+/**
+ * Moure, allargar o reassignar un bloc.
+ *
+ * `task_id` hi entra perquè al cronograma es canvia de projecte **arrossegant el bloc a una
+ * altra fila**, i un bloc no té projecte: el té la tasca. Moure'l de fila vol dir, doncs,
+ * portar-lo a una altra tasca, i és el que la pantalla demana quan ho fa.
+ */
+export async function updateSession(
+  ctx: AuditContext,
+  principal: Principal,
+  id: string,
+  input: { started_at?: string; ended_at?: string; note?: string | null; task_id?: string },
+): Promise<SessionRow> {
+  if (!hasCapability(principal, 'tasks:write')) throw missingCapability('tasks:write');
+
+  const found = await sql<SessionRow>`
+    SELECT ${SESSION_COLUMNS} FROM task_sessions WHERE id = ${id} AND deleted_at IS NULL
+  `.execute(ctx.tx);
+  const abans = found.rows[0];
+  if (abans === undefined) throw notFound('session', id);
+
+  let taskId = abans.task_id;
+  let scopeId = abans.scope_id;
+  if (input.task_id !== undefined && input.task_id !== abans.task_id) {
+    const task = await sql<{ scope_id: string }>`
+      SELECT scope_id FROM tasks WHERE id = ${input.task_id} AND deleted_at IS NULL
+    `.execute(ctx.tx);
+    const nou = task.rows[0]?.scope_id;
+    if (nou === undefined) throw notFound('task', input.task_id);
+    taskId = input.task_id;
+    scopeId = nou;
+  }
+
+  const started = input.started_at === undefined ? abans.started_at : snap(input.started_at);
+  const ended = input.ended_at === undefined ? (abans.ended_at ?? ctx.now) : snap(input.ended_at);
+
+  await assertBlockWritable(ctx, principal, abans.scope_id, started, ended);
+  if (scopeId !== abans.scope_id) await assertScopeAccess(ctx.tx, principal, scopeId);
+
+  await sql`
+    UPDATE task_sessions
+    SET task_id = ${taskId}, scope_id = ${scopeId}, started_at = ${started}, ended_at = ${ended},
+        note = ${input.note === undefined ? abans.note : input.note},
+        updated_at = ${ctx.now}, version = version + 1
+    WHERE id = ${id}
+  `.execute(ctx.tx);
+
+  ctx.record({
+    entityType: 'task',
+    entityId: taskId,
+    scopeId,
+    verb: 'logged',
+    changes: {
+      session: {
+        from: `${abans.started_at}/${abans.ended_at ?? ''}`,
+        to: `${started}/${ended}`,
+      },
+    },
+  });
+
+  return { ...abans, task_id: taskId, scope_id: scopeId, started_at: started, ended_at: ended };
+}
+
+/**
+ * Esborra un bloc.
+ *
+ * **Suau**, com tota la resta: la tombstone ha de poder viatjar als altres dispositius, i un
+ * bloc esborrat de debò tornaria a aparèixer al primer `backfill` que passés per allà.
+ */
+export async function deleteSession(
+  ctx: AuditContext,
+  principal: Principal,
+  id: string,
+): Promise<void> {
+  if (!hasCapability(principal, 'tasks:write')) throw missingCapability('tasks:write');
+
+  const found = await sql<SessionRow>`
+    SELECT ${SESSION_COLUMNS} FROM task_sessions WHERE id = ${id} AND deleted_at IS NULL
+  `.execute(ctx.tx);
+  const bloc = found.rows[0];
+  if (bloc === undefined) throw notFound('session', id);
+  await assertScopeAccess(ctx.tx, principal, bloc.scope_id);
+
+  await sql`
+    UPDATE task_sessions SET deleted_at = ${ctx.now}, updated_at = ${ctx.now},
+                             version = version + 1
+    WHERE id = ${id}
+  `.execute(ctx.tx);
+
+  ctx.record({
+    entityType: 'task',
+    entityId: bloc.task_id,
+    scopeId: bloc.scope_id,
+    verb: 'logged',
+    changes: { session: { from: `${bloc.started_at}/${bloc.ended_at ?? ''}`, to: null } },
+  });
 }

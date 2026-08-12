@@ -44,6 +44,9 @@ export type AuditVerb =
   // L'agent ha sabut per un altre canal el que li faltava, ho ha deixat escrit aquí i
   // segueix. Sense el verb, l'historial diria que la marca va marxar sola.
   | 'resumed'
+  // Un bloc de dedicació escrit, mogut o esborrat a mà. Va contra la tasca, com el
+  // comentari: qui llegeixi l'historial vol veure que algú va tocar les hores d'allò.
+  | 'logged'
   // Un refresc d'un origen extern. Es distingeix d'una edició perquè no l'ha fet ningú
   // d'aquí: ve d'un calendari de fora, i a l'historial s'ha de poder llegir així.
   | 'refreshed'

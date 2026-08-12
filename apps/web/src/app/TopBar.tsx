@@ -108,6 +108,8 @@ export interface TopBarProps {
    * IA, i un avís que no és al botó que hi porta fa fer un pas de més per res.
    */
   attentionCount?: number;
+  /** Si hi ha cap àmbit amb registre de dedicació: decideix si el menú en porta les entrades. */
+  timeTracking?: boolean;
   onToggleAiBoard?: () => void;
 }
 
@@ -124,6 +126,7 @@ export function TopBar({
   aiEnabled = false,
   aiBoardActive = false,
   attentionCount = 0,
+  timeTracking = false,
   onToggleAiBoard,
 }: TopBarProps) {
   const { profile, scopes, projects, settings, instance } = useSessionData();
@@ -832,6 +835,15 @@ export function TopBar({
                   <div style={{ fontWeight: 700, color: 'var(--ink)' }}>{profile.name}</div>
                   {profile.email ?? ''}
                 </div>
+                {/*
+                  **El Registre i les Estadístiques surten només si algun àmbit els té.**
+                  Són una funció de nínxol —qui factura hores—: ensenyar-les a qui no les ha
+                  demanades seria dues entrades de menú que no porten enlloc.
+                */}
+                {timeTracking ? menuItem(t('nav.registre'), () => navigate('/registre')) : null}
+                {timeTracking
+                  ? menuItem(t('nav.estadistiques'), () => navigate('/estadistiques'))
+                  : null}
                 {menuItem(t('nav.settings'), () => navigate('/settings'))}
                 {menuItem(t('nav.logout'), () => void logout(), true)}
               </>,
