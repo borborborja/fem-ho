@@ -15,6 +15,7 @@ export function Chips<T extends string>({
   onChange,
   testId,
   groupLabel,
+  disabled,
 }: {
   value: T;
   options: {
@@ -29,6 +30,13 @@ export function Chips<T extends string>({
   testId: string;
   /** Què tria aquesta fila. Sense això, tres adjectius solts no diuen de què parlen. */
   groupLabel?: string;
+  /**
+   * La tria està decidida per algú altre.
+   *
+   * **Es desactiva i no s'amaga.** Un ajust que desapareix fa pensar que l'app l'ha perdut;
+   * un de desactivat amb el motiu al costat diu qui l'ha decidit i que no és cosa teva.
+   */
+  disabled?: boolean;
 }) {
   return (
     <div
@@ -43,12 +51,14 @@ export function Chips<T extends string>({
           type="button"
           data-testid={`${testId}-${option.key}`}
           aria-pressed={value === option.key}
+          disabled={disabled === true}
           {...(option.hint === undefined ? {} : { title: option.hint, 'aria-label': option.hint })}
           onClick={() => onChange(option.key)}
           style={{
             padding: '7px 14px',
             borderRadius: 100,
-            cursor: 'pointer',
+            cursor: disabled === true ? 'default' : 'pointer',
+            opacity: disabled === true ? 0.55 : 1,
             font: 'inherit',
             fontSize: 12,
             fontWeight: value === option.key ? 700 : 500,

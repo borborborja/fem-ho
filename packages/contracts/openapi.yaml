@@ -5068,6 +5068,14 @@ components:
             si l'operador ja ho ha decidit, preguntar-ho igualment seria teatre. Acotar no
             esborra la preferència de ningú —deixa d'aplicar-se mentre duri l'acotació—,
             i per això treure-la torna a deixar cadascú com estava.
+        logo_url:
+          type: [string, 'null']
+          description: |
+            El logo de la instància, o `null` si no n'hi ha. Surt de `FEMHO_LOGO_URL` si
+            hi és, i si no del que hagi pujat l'administrador (`/brand/logo`).
+
+            És **públic** perquè surt a la pantalla de login i a la d'un enllaç compartit,
+            que són les dues on encara no hi ha sessió.
         setup_required:
           type: boolean
           description: |

@@ -43,7 +43,7 @@ import type { FastifyInstance } from 'fastify';
  * provava una disposició que a producció no existeix. Aquesta llista, en canvi, és el que
  * corre a la imatge.
  */
-const API_PREFIXES = ['/api/', '/mcp', '/dav/', '/healthz', '/readyz', '/info'];
+const API_PREFIXES = ['/api/', '/mcp', '/dav/', '/healthz', '/readyz', '/info', '/brand/'];
 
 /**
  * On és la construcció de la web.

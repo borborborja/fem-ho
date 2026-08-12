@@ -17,6 +17,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { t } from '@fem-ho/contracts';
 import { ScopeChip, useIsMobile } from '@fem-ho/design-system/femho';
 import { resolveScopeMode } from './scope-mode.js';
+import { Brand } from './Brand.js';
 import { Avatar } from './Avatar.js';
 import { useRouter } from './router.js';
 import { useSession, useSessionData } from './session.js';
@@ -456,16 +457,12 @@ export function TopBar({
               background: 'transparent',
               padding: 0,
               cursor: 'pointer',
-              fontSize: 24,
-              fontWeight: 900,
-              fontFamily: 'var(--font-sans)',
-              backgroundImage: 'var(--gradient-brand-text)',
-              WebkitBackgroundClip: 'text',
-              backgroundClip: 'text',
-              color: 'transparent',
+              display: 'flex',
+              alignItems: 'center',
             }}
           >
-            Fem-ho
+            {/* El nom de la instància, o el seu logo. Deia «Fem-ho» escrit a mà. */}
+            <Brand />
           </button>
 
           {mobile ? <div style={{ flex: 1 }} /> : null}

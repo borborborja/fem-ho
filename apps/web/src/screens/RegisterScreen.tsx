@@ -13,6 +13,8 @@
 
 import { useState, type FormEvent } from 'react';
 import { t } from '@fem-ho/contracts';
+import { BrandMark } from '../app/Brand.js';
+import { usePublicInfo } from '../app/usePublicInfo.js';
 import { useSession } from '../app/session.js';
 import { useMutation } from '../app/useApi.js';
 
@@ -32,6 +34,7 @@ const LABEL = { fontSize: 11.5, fontWeight: 600, color: 'var(--ink-soft)' } as c
 
 export function RegisterScreen() {
   const { register } = useSession();
+  const info = usePublicInfo();
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
@@ -53,18 +56,9 @@ export function RegisterScreen() {
       }}
     >
       <form onSubmit={onSubmit} data-testid="register" style={CARD}>
-        <h1
-          style={{
-            margin: 0,
-            fontSize: 30,
-            fontWeight: 900,
-            backgroundImage: 'var(--gradient-brand-text)',
-            WebkitBackgroundClip: 'text',
-            backgroundClip: 'text',
-            color: 'transparent',
-          }}
-        >
-          Fem-ho
+        {/* El nom de la instància, o el seu logo. Deia «Fem-ho» escrit a mà. */}
+        <h1 style={{ margin: 0 }}>
+          <BrandMark name={info?.name ?? 'Fem-ho'} logoUrl={info?.logo_url ?? null} size={30} />
         </h1>
         <p style={{ margin: 0, fontSize: 13.5, color: 'var(--ink-soft)' }}>
           {t('register.subtitle')}

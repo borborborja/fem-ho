@@ -22,9 +22,11 @@ import {
 } from '@fem-ho/contracts';
 import { v7 as uuidv7 } from 'uuid';
 import { EmptyState, useIsMobile } from '@fem-ho/design-system/femho';
-import { api, ApiError } from '../app/api.js';
+import { api, ApiError, failureText } from '../app/api.js';
 import { Avatar } from '../app/Avatar.js';
+import { canChooseScopeMode, resolveScopeMode } from '../app/scope-mode.js';
 import { Chips } from '../app/Chips.js';
+import { Brand } from '../app/Brand.js';
 import { useRouter } from '../app/router.js';
 import { useSession, useSessionData } from '../app/session.js';
 import { useApi, useMutation } from '../app/useApi.js';
@@ -117,18 +119,7 @@ export function SettingsScreen() {
             gap: 22,
           }}
         >
-          <span
-            style={{
-              fontSize: 24,
-              fontWeight: 900,
-              backgroundImage: 'var(--gradient-brand-text)',
-              WebkitBackgroundClip: 'text',
-              backgroundClip: 'text',
-              color: 'transparent',
-            }}
-          >
-            Fem-ho
-          </span>
+          <Brand />
           <button
             type="button"
             data-testid="settings-back"
@@ -316,7 +307,7 @@ function UpdateNotice() {
 }
 
 function GeneralTab() {
-  const { profile, settings } = useSessionData();
+  const { profile, settings, instance } = useSessionData();
   const weekStart = resolveWeekStart(settings.week_start, getLocale());
   // `/info` és públic i sense autenticar: el dret al codi el té qualsevol que hi arribi.
   const info = useApi<Info>('/info').data ?? { version: '', license: '', source_url: '' };
@@ -358,6 +349,45 @@ function GeneralTab() {
         treballa el cap de setmana el vol d'una manera i qui no, d'una altra, i tots dos
         poden tenir la mateixa llengua.
       */}
+      {/*
+        **Multiàmbit o monoàmbit.**
+
+        Va aquí i a dalt de tot de les preferències de disposició perquè és la que canvia
+        més coses de cop: què hi ha a la barra, i si el camp d'afegida demana `#Àmbit`.
+
+        Quan la instància ho ha decidit per tothom, surt **desactivat amb el motiu** i no
+        amagat: un ajust que desapareix fa pensar que l'app l'ha perdut, i qui l'ha buscat
+        a la documentació el ve a trobar aquí.
+      */}
+      <Group title={t('settings.scopeMode')}>
+        <Chips
+          testId="scope-mode"
+          groupLabel={t('settings.scopeMode')}
+          value={resolveScopeMode(instance, settings)}
+          disabled={!canChooseScopeMode(instance)}
+          options={[
+            {
+              key: 'multi' as const,
+              label: t('settings.scopeMode.multi'),
+              hint: t('settings.scopeMode.multi.hint'),
+            },
+            {
+              key: 'single' as const,
+              label: t('settings.scopeMode.single'),
+              hint: t('settings.scopeMode.single.hint'),
+            },
+          ]}
+          onChange={(value) => void updateSettings({ scope_mode: value })}
+        />
+        <p style={{ margin: 0, fontSize: 12, color: 'var(--ink-soft)', lineHeight: 1.5 }}>
+          {canChooseScopeMode(instance)
+            ? t('settings.scopeMode.help')
+            : t('settings.scopeMode.fixed', {
+                mode: t(`settings.scopeMode.${instance.scope_mode ?? 'both'}`),
+              })}
+        </p>
+      </Group>
+
       <Group title={t('settings.weekStart')}>
         <Chips
           testId="week-start"
@@ -1765,6 +1795,11 @@ function ProfileTab() {
 }
 
 function AdminTab() {
+  const { instance } = useSessionData();
+  const [brandError, setBrandError] = useState<string | null>(null);
+  /** Amb el logo posat al `.env`, la pujada no serveix de res i es diu en comptes d'oferir-la. */
+  const fixatPelEntorn =
+    instance.logo_url !== null && !String(instance.logo_url ?? '').startsWith('/brand/');
   const users = useApi<AdminUser[]>('/api/v1/admin/users');
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
@@ -1858,6 +1893,74 @@ function AdminTab() {
         >
           {t('settings.invite')}
         </button>
+      </Group>
+
+      {/*
+        **La marca de la instància.**
+
+        Una eina autoallotjada que es desplega dins d'una empresa s'hi ha de poder
+        presentar. El nom ja el porta `FEMHO_INSTANCE_NAME`; això és el logo, que és el que
+        de debò la fa semblar seva.
+
+        Amb `FEMHO_LOGO_URL` posat, aquí es diu i no es deixa tocar: qui desplega amb un
+        `compose.yaml` immutable no vol que ningú l'hi canviï des de la pantalla.
+      */}
+      <Group title={t('settings.branding')}>
+        {instance.logo_url === null || instance.logo_url === undefined ? (
+          <EmptyState>{t('settings.branding.none')}</EmptyState>
+        ) : (
+          <img
+            src={instance.logo_url}
+            alt={instance.name}
+            data-testid="branding-preview"
+            style={{ height: 28, width: 'auto', maxWidth: 220 }}
+          />
+        )}
+
+        {fixatPelEntorn ? (
+          <p style={{ margin: 0, fontSize: 12, color: 'var(--ink-soft)' }}>
+            {t('settings.branding.fixed')}
+          </p>
+        ) : (
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <input
+              type="file"
+              data-testid="branding-file"
+              accept="image/svg+xml,image/png,image/webp"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file === undefined) return;
+                void api
+                  .upload('/api/v1/admin/branding/logo', file, { asImage: true })
+                  .then(() => window.location.reload())
+                  .catch((cause: unknown) => setBrandError(failureText(cause)));
+              }}
+              style={{ fontSize: 12 }}
+            />
+            {instance.logo_url === null || instance.logo_url === undefined ? null : (
+              <button
+                type="button"
+                className="plou-btn plou-btn-ghost"
+                data-testid="branding-remove"
+                onClick={() => {
+                  void api
+                    .delete('/api/v1/admin/branding/logo')
+                    .then(() => window.location.reload());
+                }}
+                style={{ fontSize: 12 }}
+              >
+                {t('settings.branding.remove')}
+              </button>
+            )}
+          </div>
+        )}
+        {brandError === null ? (
+          <p style={{ margin: 0, fontSize: 12, color: 'var(--ink-soft)' }}>
+            {t('settings.branding.help')}
+          </p>
+        ) : (
+          <p style={{ margin: 0, fontSize: 12, color: 'var(--danger-text)' }}>{brandError}</p>
+        )}
       </Group>
 
       <Group title={t('settings.wipe')}>

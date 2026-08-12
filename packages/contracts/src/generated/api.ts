@@ -3455,6 +3455,14 @@ export interface components {
              */
             scope_mode: "both" | "single" | "multi";
             /**
+             * @description El logo de la instància, o `null` si no n'hi ha. Surt de `FEMHO_LOGO_URL` si
+             *     hi és, i si no del que hagi pujat l'administrador (`/brand/logo`).
+             *
+             *     És **públic** perquè surt a la pantalla de login i a la d'un enllaç compartit,
+             *     que són les dues on encara no hi ha sessió.
+             */
+            logo_url?: string | null;
+            /**
              * @description Cert mentre no hi hagi cap administrador. Mentre ho sigui, /setup és
              *     accessible; un cop creat el primer administrador, es tanca per sempre.
              */

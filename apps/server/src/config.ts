@@ -188,6 +188,14 @@ export interface Config {
    */
   scopeMode: InstanceScopeMode;
   /**
+   * El logo de la instància, si el posa qui l'allotja.
+   *
+   * Amb això posat **mana** i Ajustos no deixa pujar-ne cap: qui desplega amb un
+   * `compose.yaml` immutable no vol que ningú l'hi canviï des de la pantalla. Buit, s'hi
+   * puja des d'Ajustos ▸ Admin.
+   */
+  logoUrl: string | undefined;
+  /**
    * Deixar que els avatars surtin de Gravatar.
    *
    * **Apagat per defecte, i no per prudència genèrica.** Fem-ho és autoallotjat: encendre
@@ -269,6 +277,7 @@ export function loadConfig(version: string): Config {
     databaseUrl: env('DATABASE_URL') ?? 'sqlite:///data/femho.db',
     registration: envRegistration(),
     scopeMode: envScopeMode(),
+    logoUrl: env('LOGO_URL'),
     gravatar: envBool('GRAVATAR') ?? false,
     mailAllowHosts: (env('MAIL_ALLOW_HOSTS') ?? '')
       .split(',')

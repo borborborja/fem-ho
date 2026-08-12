@@ -23,6 +23,7 @@ import { registerMeRoutes } from './http/me.js';
 import { registerAttachmentRoutes } from './http/attachments.js';
 import { registerScopeRoutes } from './http/scopes.js';
 import { registerFederationRoutes } from './http/federation.js';
+import { registerBrandingRoutes } from './http/branding.js';
 import { registerSpaRoutes } from './http/spa.js';
 import { registerSetupRoutes } from './http/setup.js';
 import { registerShareRoutes } from './http/shares.js';
@@ -121,6 +122,7 @@ export function buildApp(config: Config, options: BuildOptions = {}): FastifyIns
    * Registra un gestor de "no trobat" que porta a `index.html`, i si anés abans es
    * menjaria les rutes de l'API que encara no s'han declarat.
    */
+  registerBrandingRoutes(app);
   registerSpaRoutes(app);
 
   return app;

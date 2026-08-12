@@ -9,8 +9,10 @@
  * incorrectes": distingir-los convertiria el formulari en un comprovador de comptes.
  */
 
-import { useEffect, useState, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { t } from '@fem-ho/contracts';
+import { BrandMark } from '../app/Brand.js';
+import { usePublicInfo } from '../app/usePublicInfo.js';
 import { useSession } from '../app/session.js';
 import { useMutation } from '../app/useApi.js';
 
@@ -26,21 +28,9 @@ export function LoginScreen() {
    * Ho diu `/info`, que és públic i no demana sessió. Ensenyar-lo sempre portaria a un
    * formulari que respon 403, i una porta pintada que no obre és pitjor que cap porta.
    */
-  const [open, setOpen] = useState(false);
-  useEffect(() => {
-    let alive = true;
-    fetch('/info')
-      .then(async (res) => (res.ok ? ((await res.json()) as { registration?: string }) : null))
-      .then((info) => {
-        if (alive) setOpen(info?.registration === 'open');
-      })
-      .catch(() => {
-        // Sense `/info` no se sap: es deixa amagat, que és el que no promet res.
-      });
-    return () => {
-      alive = false;
-    };
-  }, []);
+  // Sense `/info` no se sap: es deixa amagat, que és el que no promet res.
+  const info = usePublicInfo();
+  const open = info?.registration === 'open';
 
   const onSubmit = (event: FormEvent): void => {
     event.preventDefault();
@@ -72,18 +62,9 @@ export function LoginScreen() {
           gap: 14,
         }}
       >
-        <h1
-          style={{
-            margin: 0,
-            fontSize: 30,
-            fontWeight: 900,
-            backgroundImage: 'var(--gradient-brand-text)',
-            WebkitBackgroundClip: 'text',
-            backgroundClip: 'text',
-            color: 'transparent',
-          }}
-        >
-          Fem-ho
+        {/* El nom de la instància, o el seu logo. Deia «Fem-ho» escrit a mà. */}
+        <h1 style={{ margin: 0 }}>
+          <BrandMark name={info?.name ?? 'Fem-ho'} logoUrl={info?.logo_url ?? null} size={30} />
         </h1>
         <p style={{ margin: 0, fontSize: 13.5, color: 'var(--ink-soft)' }}>{t('login.subtitle')}</p>
 

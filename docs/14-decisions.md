@@ -836,6 +836,42 @@ la d'aquesta persona. Ara cau a General, com qualsevol pestanya que no existeix.
 
 ---
 
+### P24 · El monoàmbit és una lent, no un model de dades diferent
+
+**La resolució: el mode canvia què posa la barra al davant, i res més.**
+
+Els àmbits són el primer dels tres trets que `instruccions.md` diu que no són opcionals, i
+per a molta gent són exactament el que vol. Per a qui fa servir l'eina per a **una sola
+cosa** són una barra amb un sol xip que no fa res, i això li tanca l'eina sense cap motiu
+tècnic.
+
+La temptació és fer-ne dos productes. El que ho fa barat i segur és no fer-ho: **tota tasca
+segueix vivint dins d'un àmbit** —la regla 1 es queda intacta—, els àmbits col·lectius, el
+CalDAV per àmbit i els tokens d'abast segueixen igual, i el que canvia és la barra. Per això
+la feina és un fitxer de política, una columna de preferència i un tros de `TopBar`, i no una
+migració de dades.
+
+**Dos qui decideixen, amb un ordre.** La persona tria com vol treballar; qui allotja la
+instància pot acotar-ho amb `FEMHO_SCOPE_MODE`. Un de sol no serviria: només la persona i una
+empresa no pot dir «aquí es treballa així»; només la instància i una casa on cadascú té el
+seu cap no pot deixar que cadascú ho vegi a la seva manera.
+
+**Acotar no esborra res.** La preferència de cada persona es conserva i deixa d'aplicar-se
+mentre duri l'acotació, o sigui que treure-la torna a deixar cadascú com estava. Fusionar
+àmbits «per simplificar» seria irreversible: tenen membres i CalDAV publicats.
+
+Tres coses que se'n deriven:
+
+- **`NULL` no vol dir `multi`.** Vol dir «no ho ha dit mai», i és el que fa sortir el wizard
+  a qui toca sense una segona columna. La columna no porta `DEFAULT` per això.
+- **El defecte és `multi`.** A qui ja fa servir l'app no se li canvia la barra un matí; el
+  que sí que passa és que **veurà la pregunta una vegada**, que és com s'assabenta que la
+  tria existeix.
+- **`#Àmbit` deixa de demanar-se sol.** No hi ha cap regla nova: l'afegida ràpida ja tria el
+  marcador segons quants àmbits hi ha actius. És el senyal que la lent és la mateixa app.
+
+---
+
 ## Part 3 — Fets sospitosos de `research/`
 
 El crític va marcar 7 afirmacions com a probablement inventades, obsoletes o internament incoherents. **Cap `docs/` en depèn.**

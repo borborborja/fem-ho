@@ -12,7 +12,7 @@ import { t } from '@fem-ho/contracts';
 import { SyncPill } from '@fem-ho/design-system/femho';
 import { match, useRouter } from './router.js';
 import { useSession, useSessionData } from './session.js';
-import { resolveScopeMode } from './scope-mode.js';
+import { needsScopeModeWizard, resolveScopeMode } from './scope-mode.js';
 import { installShortcuts } from './shortcuts.js';
 import { TopBar } from './TopBar.js';
 import type { Agent, Checklist } from './types.js';
@@ -30,6 +30,7 @@ import { PublicShareScreen } from '../screens/PublicShareScreen.js';
 import { CommandPalette } from '../screens/CommandPalette.js';
 import { SearchScreen } from '../screens/SearchScreen.js';
 import { SettingsScreen } from '../screens/SettingsScreen.js';
+import { WelcomeScreen } from '../screens/WelcomeScreen.js';
 import { TaskModal } from '../screens/TaskModal.js';
 import { ShareTaskDialog } from '../screens/ShareTaskDialog.js';
 import { ProofRoute } from '../proof/ProofRoute.js';
@@ -247,6 +248,15 @@ function AppShell() {
       },
     });
   }, [navigate, scopes, activeScopeIds, setQuery]);
+
+  /**
+   * **La primera pregunta va abans que res, i abans que Ajustos.**
+   *
+   * Es pinta sencera i sense barra: la barra és justament el que s'està triant, i
+   * ensenyar-ne una de provisional al darrere faria que la tria semblés un filtre més.
+   * Surt només a qui no ho ha dit mai i quan hi ha res a triar (`app/scope-mode.ts`).
+   */
+  if (needsScopeModeWizard(instance, settings)) return <WelcomeScreen />;
 
   // Ajustos no porta ni switch de vista ni chips d'àmbit (docs/02 §9), i per tant no
   // porta `TopBar`: es pinta sencera.

@@ -51,6 +51,7 @@ fitxer, que és el que permet fer servir secrets de Docker.
 | `FEMHO_ALLOW_REGISTRATION` | `false` | Qualsevol es pot fer un compte. **El primer serà administrador** |
 | `FEMHO_REGISTRATION` | `disabled` | La forma llarga: `disabled`, `invite` o `open` |
 | `FEMHO_SCOPE_MODE` | `both` | Si aquí es treballa per àmbits, per projectes, o ho tria cadascú: `both`, `multi` o `single`. Veure l'avís de sota |
+| `FEMHO_LOGO_URL` | — | El logo de la instància. Amb això posat, **mana** i no es pot pujar-ne cap des d'Ajustos |
 | `FEMHO_GRAVATAR` | `false` | Les fotos de perfil surten de Gravatar. Veure l'avís de sota |
 | `FEMHO_UPDATE_CHECK` | `true` | Preguntar a GitHub si hi ha una versió més nova. Veure l'avís de sota |
 | `FEMHO_MAX_UPLOAD_MB` | `25` | Mida màxima d'un adjunt |
@@ -69,6 +70,20 @@ fitxer, que és el que permet fer servir secrets de Docker.
 **Aquesta taula és la llista sencera.** No hi ha cap altra variable: la comprovació
 permanent `env-documented` compara el que llegeix el codi amb el que diu aquest fitxer i
 falla en les dues direccions. Si en veus una en un tutorial i no és aquí, no existeix.
+
+### Posar-hi la teva marca
+
+`FEMHO_INSTANCE_NAME` és el nom que es veu a la barra, al login i a la pàgina d'un enllaç
+compartit. El logo té **dues portes**:
+
+- **`FEMHO_LOGO_URL`**, i llavors mana: Ajustos ho diu i no deixa pujar-ne cap. És el que
+  vol qui desplega amb un `compose.yaml` immutable.
+- **Ajustos ▸ Admin**, si aquella variable és buida. Es desa a `<FEMHO_DATA_DIR>/brand/`,
+  o sigui que va amb la còpia de seguretat com la resta de dades.
+
+SVG, PNG o WebP, i com a molt 512 KB. **Un SVG és XML i pot portar scripts**: se serveix amb
+`Content-Security-Policy: sandbox` i amb el tipus que decideix el servidor, mai el que digui
+qui el puja.
 
 ### Multiàmbit, monoàmbit, o que cadascú triï
 
