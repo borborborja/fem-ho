@@ -16,6 +16,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { t } from '@fem-ho/contracts';
 import { ScopeChip, useIsMobile } from '@fem-ho/design-system/femho';
+import { resolveScopeMode } from './scope-mode.js';
 import { Avatar } from './Avatar.js';
 import { useRouter } from './router.js';
 import { useSession, useSessionData } from './session.js';
@@ -116,7 +117,8 @@ export function TopBar({
   aiBoardActive = false,
   onToggleAiBoard,
 }: TopBarProps) {
-  const { profile, scopes, projects } = useSessionData();
+  const { profile, scopes, projects, settings, instance } = useSessionData();
+  const mode = resolveScopeMode(instance, settings);
   const { logout } = useSession();
   const { navigate } = useRouter();
   const [menu, setMenu] = useState<Menu>(null);
@@ -479,6 +481,39 @@ export function TopBar({
             flex: 1,
           }}
         >
+          {/*
+            **El selector d'àmbit, i només quan serveix per a alguna cosa.**
+
+            En monoàmbit s'està en un àmbit i prou. Si només n'hi ha un, un desplegable amb
+            una sola opció és un control que no fa res: ocupa lloc, convida a obrir-lo i no
+            hi ha res a triar. Amb dos o més, és l'única manera d'anar de l'un a l'altre —i
+            per això va **abans** del commutador de vista: primer on ets, després què hi
+            mires.
+          */}
+          {mode === 'single' && scopes.length > 1 ? (
+            <select
+              className="plou-input"
+              data-testid="scope-picker"
+              aria-label={t('nav.scopePicker')}
+              value={activeScopeIds[0] ?? ''}
+              onChange={(event) => onActiveScopesChange([event.target.value])}
+              style={{
+                fontSize: 12.5,
+                fontWeight: 700,
+                padding: '7px 10px',
+                minHeight: mobile ? 44 : undefined,
+                width: 'auto',
+                maxWidth: 180,
+              }}
+            >
+              {scopes.map((scope) => (
+                <option key={scope.id} value={scope.id}>
+                  {scope.name}
+                </option>
+              ))}
+            </select>
+          ) : null}
+
           <div
             role="tablist"
             /*
@@ -534,29 +569,54 @@ export function TopBar({
             ))}
           </div>
 
-          <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }} data-testid="scope-chips">
-            {scopes.map((scope) => (
-              <span key={scope.id} style={{ position: 'relative', display: 'flex' }}>
+          {/*
+            **En monoàmbit, aquí hi ha els projectes.**
+
+            És el mateix lloc i el mateix component: qui treballa en una sola cosa no vol
+            triar entre àmbits —en té un— sinó entre les parts d'aquella cosa. L'àmbit es
+            tria al selector de l'esquerra, quan n'hi ha més d'un.
+          */}
+          {mode === 'single' ? (
+            <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }} data-testid="project-chips">
+              {projectsOf(activeScopeIds[0] ?? '').map((project) => (
                 <ScopeChip
-                  data-testid={`scope-${scope.id}`}
-                  label={scope.name}
-                  // El camp de l'API és el NOM del token (`--plou-blue`), no un valor CSS:
-                  // passar-lo tal qual dona una declaració invàlida i el navegador cau al
-                  // gris per defecte, amb el text blanc a sobre i il·legible.
-                  color={`var(${scope.color})`}
-                  active={activeScopeIds.includes(scope.id)}
-                  aria-label={t('nav.scopeToggle', { name: scope.name })}
-                  onClick={() => toggleScope(scope.id)}
-                  style={
-                    canFilter(scope.id)
-                      ? { borderTopRightRadius: 0, borderBottomRightRadius: 0, paddingRight: 10 }
-                      : undefined
-                  }
+                  key={project.id}
+                  data-testid={`project-chip-${project.id}`}
+                  label={project.name}
+                  // Els projectes no tenen color propi: agafen el del seu àmbit, que és
+                  // el que diu de qui són sense inventar-ne cap paleta nova.
+                  color={`var(${scopes.find((s) => s.id === project.scope_id)?.color ?? '--plou-blue'})`}
+                  active={projectIds.includes(project.id)}
+                  aria-label={t('nav.projectToggle', { name: project.name })}
+                  onClick={() => toggleProject(project.id)}
                 />
-                {canFilter(scope.id) ? projectButton(scope) : null}
-              </span>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }} data-testid="scope-chips">
+              {scopes.map((scope) => (
+                <span key={scope.id} style={{ position: 'relative', display: 'flex' }}>
+                  <ScopeChip
+                    data-testid={`scope-${scope.id}`}
+                    label={scope.name}
+                    // El camp de l'API és el NOM del token (`--plou-blue`), no un valor CSS:
+                    // passar-lo tal qual dona una declaració invàlida i el navegador cau al
+                    // gris per defecte, amb el text blanc a sobre i il·legible.
+                    color={`var(${scope.color})`}
+                    active={activeScopeIds.includes(scope.id)}
+                    aria-label={t('nav.scopeToggle', { name: scope.name })}
+                    onClick={() => toggleScope(scope.id)}
+                    style={
+                      canFilter(scope.id)
+                        ? { borderTopRightRadius: 0, borderBottomRightRadius: 0, paddingRight: 10 }
+                        : undefined
+                    }
+                  />
+                  {canFilter(scope.id) ? projectButton(scope) : null}
+                </span>
+              ))}
+            </div>
+          )}
 
           <div style={{ position: 'relative' }}>
             {round(t('nav.add'), 'add', '+')}

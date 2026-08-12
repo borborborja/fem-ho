@@ -231,9 +231,11 @@
     <string name="nav_pinned">Llistes pinejades</string>
     <string name="nav_pinnedprogress">{done} de {total} fets</string>
     <string name="nav_profile">El teu compte</string>
+    <string name="nav_projecttoggle">Mostra o amaga el projecte {name}</string>
     <string name="nav_rename">Reanomena</string>
     <string name="nav_retry">Reintentar</string>
     <string name="nav_save">Desa</string>
+    <string name="nav_scopepicker">En quin àmbit estàs</string>
     <string name="nav_scopeprojects">Projectes de l\'àmbit {name}</string>
     <string name="nav_scopetoggle">Mostra o amaga l\'àmbit {name}</string>
     <string name="nav_search">Cercar</string>

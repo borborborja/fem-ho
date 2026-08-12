@@ -12,6 +12,7 @@ import { t } from '@fem-ho/contracts';
 import { SyncPill } from '@fem-ho/design-system/femho';
 import { match, useRouter } from './router.js';
 import { useSession, useSessionData } from './session.js';
+import { resolveScopeMode } from './scope-mode.js';
 import { installShortcuts } from './shortcuts.js';
 import { TopBar } from './TopBar.js';
 import type { Agent, Checklist } from './types.js';
@@ -96,7 +97,8 @@ export function App() {
 
 function AppShell() {
   const { route, navigate } = useRouter();
-  const { scopes } = useSessionData();
+  const { scopes, settings, instance } = useSessionData();
+  const mode = resolveScopeMode(instance, settings);
 
   /**
    * Els àmbits actius viuen a la URL i no a l'estat.
@@ -105,10 +107,27 @@ function AppShell() {
    * és el que la gent espera d'una web. Sense `scopes` a la query, s'agafen tots.
    */
   const fromQuery = route.query.get('scopes');
-  const activeScopeIds =
+  const demanats =
     fromQuery === null || fromQuery === ''
-      ? scopes.map((scope) => scope.id)
+      ? []
       : fromQuery.split(',').filter((id) => scopes.some((scope) => scope.id === id));
+
+  /**
+   * **En monoàmbit sempre n'hi ha exactament un.**
+   *
+   * Sense res a l'adreça, el primer; amb una llista, el primer que hi sigui de debò. Que
+   * n'hi hagi sempre un i només un és el que fa que la resta de l'app hi caigui sola: el
+   * calendari, la bústia i el cercador ja filtren per `activeScopeIds`, i l'afegida ràpida
+   * deixa de demanar `#Àmbit` perquè ja en sap el destí.
+   *
+   * En multiàmbit, res canvia: buit vol dir tots, com sempre.
+   */
+  const activeScopeIds =
+    mode === 'single'
+      ? [demanats[0] ?? scopes[0]?.id].filter((id): id is string => id !== undefined)
+      : demanats.length === 0
+        ? scopes.map((scope) => scope.id)
+        : demanats;
 
   /**
    * Els projectes que es veuen, **buit vol dir tots**.

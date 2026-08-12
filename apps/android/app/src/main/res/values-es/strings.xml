@@ -231,9 +231,11 @@
     <string name="nav_pinned">Listas fijadas</string>
     <string name="nav_pinnedprogress">{done} de {total} hechos</string>
     <string name="nav_profile">Tu cuenta</string>
+    <string name="nav_projecttoggle">Muestra u oculta el proyecto {name}</string>
     <string name="nav_rename">Renombrar</string>
     <string name="nav_retry">Reintentar</string>
     <string name="nav_save">Guardar</string>
+    <string name="nav_scopepicker">En qué ámbito estás</string>
     <string name="nav_scopeprojects">Proyectos del ámbito {name}</string>
     <string name="nav_scopetoggle">Muestra u oculta el ámbito {name}</string>
     <string name="nav_search">Buscar</string>

@@ -231,9 +231,11 @@
     <string name="nav_pinned">Pinned lists</string>
     <string name="nav_pinnedprogress">{done} of {total} done</string>
     <string name="nav_profile">Your account</string>
+    <string name="nav_projecttoggle">Show or hide the project {name}</string>
     <string name="nav_rename">Rename</string>
     <string name="nav_retry">Try again</string>
     <string name="nav_save">Save</string>
+    <string name="nav_scopepicker">Which scope you are in</string>
     <string name="nav_scopeprojects">Projects in the {name} scope</string>
     <string name="nav_scopetoggle">Show or hide the {name} scope</string>
     <string name="nav_search">Search</string>
