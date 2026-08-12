@@ -87,8 +87,9 @@
     <string name="card_lists_expanded">▾ Llistes ({count})</string>
     <string name="checklist_additem">+ Afegir ítem…</string>
     <string name="checklist_completed">Completats</string>
-    <string name="checklist_completedinline">En línia</string>
-    <string name="checklist_completedsection">En una secció</string>
+    <string name="checklist_completedinline">Fets en línia</string>
+    <string name="checklist_completedsection">Fets en una secció</string>
+    <string name="checklist_completedwhere">On van els ítems fets</string>
     <string name="checklist_count">{done}/{total}</string>
     <string name="checklist_done">Llista completada. Vols despinejar-la?</string>
     <string name="checklist_empty">Aquesta llista encara no té cap ítem.</string>

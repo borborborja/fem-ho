@@ -21,7 +21,7 @@ import {
   weekdayNames,
 } from '@fem-ho/contracts';
 import { v7 as uuidv7 } from 'uuid';
-import { EmptyState } from '@fem-ho/design-system/femho';
+import { EmptyState, useIsMobile } from '@fem-ho/design-system/femho';
 import { api, ApiError } from '../app/api.js';
 import { Avatar } from '../app/Avatar.js';
 import { Chips } from '../app/Chips.js';
@@ -68,6 +68,7 @@ type Tab = (typeof TABS)[number];
 export function SettingsScreen() {
   const { profile } = useSessionData();
   const { navigate, route } = useRouter();
+  const mobile = useIsMobile();
 
   /**
    * La pestanya pot venir de la URL.
@@ -138,19 +139,44 @@ export function SettingsScreen() {
         </div>
       </header>
 
+      {/*
+        **Al mòbil, el menú va a dalt i no al costat.**
+
+        Amb `220px 1fr` fixos, a una pantalla de 390 el contingut es quedava amb **cent
+        deu píxels**: el text queia a una paraula per línia, el selector de seguretat
+        ensenyava «TLS · p» i el botó «Afegeix el compte» era un cercle amb tres línies a
+        dins. No era una pantalla incòmoda, era una pantalla que no es pot fer servir —i
+        Ajustos al mòbil és justament on es configura el correu i els calendaris.
+
+        A dalt i en fila, amb desplaçament horitzontal **dins de la barra** i no de la
+        pàgina: el que no pot passar és que la pàgina sencera es mogui de costat.
+      */}
       <div
         data-testid="settings-screen"
         style={{
           maxWidth: 1100,
           margin: '0 auto',
-          padding: '24px 28px',
+          padding: mobile ? '16px 14px' : '24px 28px',
           display: 'grid',
-          gridTemplateColumns: '220px 1fr',
-          gap: 28,
+          gridTemplateColumns: mobile ? '1fr' : '220px 1fr',
+          gap: mobile ? 14 : 28,
           alignItems: 'start',
         }}
       >
-        <nav style={{ display: 'grid', gap: 2 }}>
+        <nav
+          style={
+            mobile
+              ? {
+                  display: 'flex',
+                  gap: 6,
+                  overflowX: 'auto',
+                  paddingBottom: 4,
+                  // Sense això, els xips s'encongeixen fins a partir el nom.
+                  scrollbarWidth: 'none',
+                }
+              : { display: 'grid', gap: 2 }
+          }
+        >
           {tabs.map((key) => (
             <button
               key={key}
@@ -161,7 +187,7 @@ export function SettingsScreen() {
               style={{
                 textAlign: 'left',
                 padding: '9px 12px',
-                borderRadius: 10,
+                borderRadius: mobile ? 100 : 10,
                 border: 'none',
                 cursor: 'pointer',
                 font: 'inherit',
@@ -169,6 +195,7 @@ export function SettingsScreen() {
                 fontWeight: tab === key ? 700 : 500,
                 background: tab === key ? 'var(--ghost-bg)' : 'transparent',
                 color: 'var(--ink)',
+                ...(mobile ? { flexShrink: 0, whiteSpace: 'nowrap' as const } : {}),
               }}
             >
               {t(`settings.tab.${key}`)}

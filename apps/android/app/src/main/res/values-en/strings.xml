@@ -87,8 +87,9 @@
     <string name="card_lists_expanded">▾ Lists ({count})</string>
     <string name="checklist_additem">+ Add item…</string>
     <string name="checklist_completed">Completed</string>
-    <string name="checklist_completedinline">In place</string>
-    <string name="checklist_completedsection">In a section</string>
+    <string name="checklist_completedinline">Done items inline</string>
+    <string name="checklist_completedsection">Done items in a section</string>
+    <string name="checklist_completedwhere">Where done items go</string>
     <string name="checklist_count">{done}/{total}</string>
     <string name="checklist_done">List completed. Unpin it?</string>
     <string name="checklist_empty">This list has no items yet.</string>

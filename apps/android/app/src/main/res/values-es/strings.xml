@@ -87,8 +87,9 @@
     <string name="card_lists_expanded">▾ Listas ({count})</string>
     <string name="checklist_additem">+ Añadir elemento…</string>
     <string name="checklist_completed">Completados</string>
-    <string name="checklist_completedinline">En línea</string>
-    <string name="checklist_completedsection">En una sección</string>
+    <string name="checklist_completedinline">Hechos en línea</string>
+    <string name="checklist_completedsection">Hechos en una sección</string>
+    <string name="checklist_completedwhere">Dónde van los ítems hechos</string>
     <string name="checklist_count">{done}/{total}</string>
     <string name="checklist_done">Lista completada. ¿La quitas de las fijadas?</string>
     <string name="checklist_empty">Esta lista todavía no tiene ningún elemento.</string>

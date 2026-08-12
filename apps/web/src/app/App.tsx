@@ -300,6 +300,22 @@ function AppShell() {
         ref={boardRef}
         style={{
           maxWidth: 'var(--content-max, 1360px)',
+          /**
+           * **`width: 100%` amb `margin: 0 auto`, i no només el marge.**
+           *
+           * `margin-inline: auto` dins d'un contenidor de flex en columna deixa l'element
+           * dimensionat **pel contingut** i no per la finestra: `fit-content` agafa el
+           * màxim entre l'espai disponible i la mida mínima del contingut, i amb el tauler
+           * a dins aquesta mínima són les quatre columnes juntes. A 390px de pantalla el
+           * `main` en feia 575 i **la pàgina sencera es desplaçava de costat**, amb la
+           * barra de dalt marxant de la vista en passar de columna.
+           *
+           * El `minWidth: 0` de sota no ho tapa: aquell treu el mínim automàtic d'un ítem
+           * de flex, no la manera com `fit-content` es resol. El que ho fixa és dir
+           * l'amplada.
+           */
+          width: '100%',
+          boxSizing: 'border-box',
           margin: '0 auto',
           padding: '20px 28px calc(28px + env(safe-area-inset-bottom, 0px))',
           /**

@@ -718,6 +718,34 @@ tries què puja a la llista. Són dues preguntes i P4 les manté amb un sol comp
 
 ---
 
+### P19 · Al telèfon la pàgina es movia de costat, i Ajustos no s’hi podia fer servir
+
+**La resolució: `width: 100%` al `main`, i a Ajustos el menú va a dalt.**
+
+Dues coses diferents, totes dues invisibles a una captura i totes dues evidents amb un
+número: `document.scrollWidth` contra `window.innerWidth`.
+
+**El tauler.** Les columnes es desplacen per dins —això és el disseny—, però el que es
+desplaçava era **el document sencer**: a 390px en feia 677, i la barra de dalt marxava de
+la vista en passar de columna. La causa és fina: `main` porta `margin: 0 auto`, i dins d'un
+contenidor de flex en columna el marge automàtic el dimensiona **per `fit-content`**, que
+agafa el màxim entre l'espai disponible i la **mida mínima del contingut** —amb el tauler a
+dins, les quatre columnes juntes—. El `minWidth: 0` que ja hi havia no ho tapa: aquell treu
+el mínim automàtic d'un ítem de flex, no la manera com `fit-content` es resol. Dir
+l'amplada sí.
+
+**Ajustos.** `220px 1fr` fixos: a 390 el contingut es quedava amb **cent deu píxels**. El
+text queia a una paraula per línia, el selector de seguretat ensenyava «TLS · p» i el botó
+«Afegeix el compte» era un cercle amb tres línies a dins. No és una pantalla incòmoda: és
+una pantalla que no es pot fer servir —i Ajustos al telèfon és justament on es configura el
+correu i els calendaris. Ara el menú va a dalt, en fila de xips, amb el desplaçament
+horitzontal **dins de la barra** i no de la pàgina.
+
+La prova mesura els dos números a les quatre pantalles. Cap captura ho hauria dit: una
+pàgina que es mou de costat es veu igual que una que no.
+
+---
+
 ## Part 3 — Fets sospitosos de `research/`
 
 El crític va marcar 7 afirmacions com a probablement inventades, obsoletes o internament incoherents. **Cap `docs/` en depèn.**
