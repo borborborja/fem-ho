@@ -29,6 +29,7 @@ const CHECKS = [
   { name: 'audit-coverage', script: 'audit-coverage.mjs' },
   { name: 'parser-parity', script: 'parser-parity.mjs' },
   { name: 'tokens-parity', script: 'tokens-parity.mjs' },
+  { name: 'agent-skill', script: 'agent-skill.mjs' },
   { name: 'css-classes', script: 'css-classes.mjs', selfTest: true },
   { name: 'mail-invariants', script: 'mail-invariants.mjs', selfTest: true },
 ];

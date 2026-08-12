@@ -33,6 +33,20 @@ export type AuditVerb =
   // Un comentari. És la via principal perquè un agent reporti (docs/09 §6), i per tant
   // ha de sortir a l'historial de la tasca com qualsevol altre gest.
   | 'commented'
+  // Un agent que no pot seguir sense tu, i la resposta que el desencalla. Són dos verbs i
+  // no un de sol amb un valor: a l'historial el que es llegeix és «t'ha preguntat» i «li
+  // has respost», que és exactament el que ha passat.
+  | 'asked'
+  | 'answered'
+  // Una persona s'ha endut una tasca que era de la IA. És el que llegeix l'agent per saber
+  // per què la seva següent escriptura ha fallat.
+  | 'taken_over'
+  // L'agent ha sabut per un altre canal el que li faltava, ho ha deixat escrit aquí i
+  // segueix. Sense el verb, l'historial diria que la marca va marxar sola.
+  | 'resumed'
+  // Un bloc de dedicació escrit, mogut o esborrat a mà. Va contra la tasca, com el
+  // comentari: qui llegeixi l'historial vol veure que algú va tocar les hores d'allò.
+  | 'logged'
   // Un refresc d'un origen extern. Es distingeix d'una edició perquè no l'ha fet ningú
   // d'aquí: ve d'un calendari de fora, i a l'historial s'ha de poder llegir així.
   | 'refreshed'
@@ -210,6 +224,20 @@ async function writeEntry(
        ${principal.label ?? null}, ${principal.source}, ${entry.verb},
        ${entry.changes === undefined ? null : JSON.stringify(entry.changes)}, ${now})
   `.execute(tx);
+
+  /**
+   * **L'última cosa que li ha passat a la tasca**, aquí i no a cada servei.
+   *
+   * `updated_at` és l'última escriptura **a la fila** i per tant no veu el que passa al
+   * voltant: un comentari, una reserva, una pregunta. La targeta del kanban d'IA ha de
+   * poder dir «fa 5 min» o «fa tres dies», que és la diferència entre un agent que hi
+   * treballa i un que no hi és. Es manté al mateix lloc que registra el rastre, o sigui
+   * que un verb nou hi entra sol; i no toca `version`, perquè no és un canvi de la tasca
+   * que ningú hagi de sincronitzar.
+   */
+  if (entry.entityType === 'task') {
+    await sql`UPDATE tasks SET last_activity_at = ${now} WHERE id = ${entry.entityId}`.execute(tx);
+  }
 }
 
 /**

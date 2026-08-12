@@ -33,6 +33,11 @@ import * as taskProvenance from './migrations/012-task-provenance.js';
 import * as mailSources from './migrations/013-mail-sources.js';
 import * as mailVisibility from './migrations/014-mail-visibility.js';
 import * as scopeMode from './migrations/015-scope-mode.js';
+import * as agentScopes from './migrations/016-agent-scopes.js';
+import * as attention from './migrations/017-attention.js';
+import * as activityTrace from './migrations/018-activity-trace.js';
+import * as timeTracking from './migrations/019-time-tracking.js';
+import * as scopeAdmin from './migrations/020-scope-admin.js';
 
 export interface Migration {
   name: string;
@@ -97,6 +102,19 @@ export const MIGRATIONS: Migration[] = [
   },
   // Una columna a `user_settings`, com la 007: cap taula refeta, cap clau forana pel mig.
   { name: '015-scope-mode', up: scopeMode.up, down: scopeMode.down },
+  // Taula nova i una columna: cap refet, cap clau forana que hi apunti des de fora.
+  { name: '016-agent-scopes', up: agentScopes.up, down: agentScopes.down },
+  { name: '017-attention', up: attention.up, down: attention.down },
+  { name: '018-activity-trace', up: activityTrace.up, down: activityTrace.down },
+  // Taules noves i una columna: cap refet, i per tant cap `needsForeignKeysOff`.
+  { name: '019-time-tracking', up: timeTracking.up, down: timeTracking.down },
+  // Refà `scope_members` per ampliar-ne el `CHECK`: cal apagar les claus foranes.
+  {
+    name: '020-scope-admin',
+    up: scopeAdmin.up,
+    down: scopeAdmin.down,
+    needsForeignKeysOff: true,
+  },
 ];
 
 const MIGRATIONS_TABLE = 'schema_migrations';

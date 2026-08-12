@@ -237,6 +237,28 @@ GET /tasks?limit=50&cursor=<opac>
 
 Els de `/ai/*` són a [`09-mode-ia.md`](09-mode-ia.md).
 
+### Registre i dedicació
+
+| Mètode | Ruta | Notes |
+| --- | --- | --- |
+| `GET` | `/sessions` | Els blocs i **els totals que pinta la capçalera**: per persona, per projecte i per dia |
+| `GET` | `/sessions/stats` | Les Estadístiques, pels mateixos filtres |
+| `GET` | `/sessions/export.csv` | El que hi ha filtrat, amb BOM d'UTF-8 |
+| `POST` | `/sessions` | Un bloc a mà. S'ajusta a 5 minuts |
+| `PATCH` `DELETE` | `/sessions/{id}` | Moure, allargar o esborrar |
+| `GET` `PATCH` | `/scopes/{id}/settings` | Com es comporta l'àmbit |
+| `GET` | `/scopes/settings` | La de tots, per saber quins àmbits anoten la dedicació |
+| `GET` `POST` | `/task-types` | Les tipologies |
+| `PATCH` `DELETE` | `/task-types/{id}` | |
+
+Els totals van **amb** els blocs a la mateixa resposta perquè són els mateixos minuts sumats:
+demanar-los a part seria fer dues vegades la mateixa consulta amb el risc que un dia no
+diguin el mateix. I les Estadístiques passen per la mateixa funció, per la mateixa raó.
+
+**Qui veu què** es decideix a la consulta i no a la pantalla: cadascú els seus blocs, i qui
+té l'acció `reports` a l'àmbit —el propietari i l'administrador— els de tothom. Un filtre de
+pantalla és un filtre que algú es deixa.
+
 ### Sincronització i temps real
 
 | Mètode | Ruta | Notes |

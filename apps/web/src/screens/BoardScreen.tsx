@@ -14,8 +14,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { generatePosition, t, type QuickAddContext, type TaskStatus } from '@fem-ho/contracts';
 import { v7 as uuidv7 } from 'uuid';
-import { api } from '../app/api.js';
+import { api, failureText } from '../app/api.js';
 import { Chips } from '../app/Chips.js';
+import { useRouter } from '../app/router.js';
 import { useSessionData, useSession } from '../app/session.js';
 import { useApi } from '../app/useApi.js';
 import type { Board, Inbox, Task } from '../app/types.js';
@@ -63,6 +64,14 @@ function toBoardTask(
   initials: string | undefined,
   assignedToOther: boolean,
   collective: boolean,
+  /**
+   * Si s'hi ha de veure quan va passar l'última cosa.
+   *
+   * **Només al tauler d'IA.** Allà el silenci és informació —«fa tres dies» vol dir que
+   * l'agent no hi ha tornat—; al tauler humà seria una data més a cada targeta sense res a
+   * dir, perquè de les teves ja saps quan les vas tocar.
+   */
+  showActivity: boolean,
 ): BoardTask {
   return {
     id: task.id,
@@ -84,6 +93,9 @@ function toBoardTask(
     assignedToOther,
     time: task.due_time ?? undefined,
     aiMode: task.ai_mode,
+    needsAttention: task.needs_attention,
+    lockedUntil: task.locked_until,
+    lastActivityAt: showActivity ? task.last_activity_at : null,
     progress: task.progress,
   };
 }
@@ -179,6 +191,7 @@ export function BoardScreen({
   flip,
 }: BoardScreenProps) {
   const { scopes, projects, people, settings, profile } = useSessionData();
+  const { navigate } = useRouter();
   const { updateSettings } = useSession();
 
   const path = useMemo(() => {
@@ -281,6 +294,63 @@ export function BoardScreen({
     inbox.reload();
   }, [board.reload, inbox.reload]);
   const [optimistic, setOptimistic] = useState<Record<string, TaskStatus>>({});
+  /**
+   * El que s'ha de dir després d'un gest, i que no és un error de càrrega.
+   *
+   * Dues menes i el mateix lloc: **vermell** quan el servidor ha frenat el gest —el pany—
+   * i **avís** quan el gest s'ha fet però hi ha una cosa que has de saber, com que l'àmbit
+   * on acabes de deixar la tasca no té cap agent que la pugui fer.
+   */
+  const [notice, setNotice] = useState<{ tone: 'error' | 'warning'; text: string } | null>(null);
+
+  /**
+   * Quins àmbits tenen agent.
+   *
+   * Es demana **sempre i no només al tauler d'IA**: el gest que delega una tasca surt
+   * d'allà, però la banda que diu «aquests àmbits no tenen ningú» s'ha de poder pintar tan
+   * aviat com s'hi entra, sense un salt de contingut.
+   */
+  /**
+   * Les tipologies dels àmbits actius, per al sigil `$`.
+   *
+   * Van al context del parser i no a una crida de l'afegida ràpida: el parser és pur i
+   * compartit amb Android, i el que ha de rebre són els noms que pot reconèixer.
+   */
+  const taskTypes = useApi<{ data: { id: string; name: string; scope_id: string }[] }>(
+    '/api/v1/task-types',
+  );
+
+  const coverage = useApi<{
+    data: { scope_id: string; agent: { id: string; name: string; enabled: boolean } | null }[];
+  }>('/api/v1/ai/coverage');
+
+  /** Els àmbits actius que ara mateix no tenen qui els faci, amb el perquè. */
+  const orfes = (coverage.data?.data ?? [])
+    .filter((row) => activeScopeIds.includes(row.scope_id))
+    .filter((row) => row.agent === null || !row.agent.enabled)
+    .map((row) => ({
+      name: scopes.find((scope) => scope.id === row.scope_id)?.name ?? '',
+      agent: row.agent,
+    }));
+
+  /**
+   * **L'avís va al moment de delegar-la, no al de mirar-la.**
+   *
+   * Qui acaba de deixar una targeta al tauler de la IA és qui espera que passi una cosa; si
+   * no ha de passar, aquest és el moment de dir-ho i el lloc on hi ha el remei a un clic.
+   */
+  const avisaSiNoTeAgent = (scopeId: string): void => {
+    const row = (coverage.data?.data ?? []).find((entry) => entry.scope_id === scopeId);
+    const name = scopes.find((scope) => scope.id === scopeId)?.name ?? '';
+    if (row === undefined || (row.agent !== null && row.agent.enabled)) return;
+    setNotice({
+      tone: 'warning',
+      text:
+        row.agent === null
+          ? t('ai.coverage.none', { scope: name })
+          : t('ai.coverage.disabled', { scope: name, agent: row.agent.name }),
+    });
+  };
 
   // Quan arriben dades noves, les suposicions optimistes ja no calen: la resposta del
   // servidor mana i mantenir-les taparia un rebuig.
@@ -358,6 +428,7 @@ export function BoardScreen({
             initialsOf(assignees),
             assignees.length > 0 && !assignees.includes(profile.id),
             scopes.find((scope) => scope.id === task.scope_id)?.kind === 'collective',
+            aiBoard,
           );
           const moved = optimistic[task.id];
           return moved === undefined ? card : { ...card, status: moved };
@@ -418,6 +489,7 @@ export function BoardScreen({
             initialsOf(assignees),
             assignees.length > 0 && !assignees.includes(profile.id),
             scopes.find((scope) => scope.id === task.scope_id)?.kind === 'collective',
+            aiBoard,
           );
           const moved = optimistic[task.id];
           return moved === undefined ? card : { ...card, status: moved };
@@ -439,8 +511,11 @@ export function BoardScreen({
       })),
       people,
       activeScopeIds,
+      taskTypes: (taskTypes.data?.data ?? [])
+        .filter((type) => activeScopeIds.includes(type.scope_id))
+        .map((type) => ({ id: type.id, name: type.name, scopeId: type.scope_id })),
     }),
-    [activeScopes, projects, people, activeScopeIds],
+    [activeScopes, projects, people, activeScopeIds, taskTypes.data],
   );
 
   const move = async (taskId: string, status: TaskStatus): Promise<void> => {
@@ -462,7 +537,17 @@ export function BoardScreen({
           .find((task) => task.id === taskId);
 
         if (status !== 'inbox' && current?.ai_mode === 'manual') {
-          await api.post(`/api/v1/tasks/${taskId}/ai-mode`, { ai_mode: 'assisted' });
+          /**
+           * **`delegated` i no `assisted`.**
+           *
+           * Posava «amb ajuda», i `next_task` només reparteix «delegada»: el que
+           * arrossegaves al tauler de la IA **no l'agafava cap agent, mai**, i res ho
+           * deia. Deixar-hi una targeta vol dir «que ho faci l'agent»; el mode «amb
+           * ajuda» segueix existint per a qui el demani amb `!ia:ajuda`, que és on ja
+           * vivia.
+           */
+          await api.post(`/api/v1/tasks/${taskId}/ai-mode`, { ai_mode: 'delegated' });
+          avisaSiNoTeAgent(current.scope_id);
         } else if (status === 'inbox' && current !== undefined && current.ai_mode !== 'manual') {
           await api.post(`/api/v1/tasks/${taskId}/ai-mode`, { ai_mode: 'manual' });
         }
@@ -486,7 +571,7 @@ export function BoardScreen({
         position: generatePosition(lastPosition, null),
       });
       refresh();
-    } catch {
+    } catch (cause: unknown) {
       // Reversió: la targeta torna al seu lloc i l'usuari veu que no s'ha mogut.
       setOptimistic((current) => {
         const next = { ...current };
@@ -494,6 +579,13 @@ export function BoardScreen({
         else next[taskId] = before;
         return next;
       });
+      /**
+       * **I es diu per què.** Fins ara la targeta tornava sola al seu lloc sense cap
+       * paraula, que amb el pany és el pitjor moment possible per callar: el gest no ha
+       * fallat per atzar, l'ha frenat un agent que hi està treballant i el missatge diu
+       * quanta estona queda.
+       */
+      setNotice({ tone: 'error', text: failureText(cause) });
     }
   };
 
@@ -504,6 +596,7 @@ export function BoardScreen({
       projectId: string | null;
       assigneeIds: string[];
       aiMode: 'manual' | 'assisted' | 'delegated';
+      taskTypeId: string | null;
     },
     status: TaskStatus = 'inbox',
   ): Promise<void> => {
@@ -516,6 +609,7 @@ export function BoardScreen({
       title: input.title,
       status,
       assignee_ids: input.assigneeIds.length > 0 ? input.assigneeIds : undefined,
+      task_type_id: input.taskTypeId ?? undefined,
     });
     refresh();
   };
@@ -552,6 +646,54 @@ export function BoardScreen({
     >
       {board.error !== undefined || inbox.error !== undefined ? (
         <ErrorBanner onRetry={refresh} />
+      ) : null}
+
+      {notice === null ? null : <BoardNotice notice={notice} onDismiss={() => setNotice(null)} />}
+
+      {/*
+        **L'avís passa; el problema es queda.** Un àmbit sense agent no és l'incident d'un
+        gest: és un estat, i mentre duri, tot el que hi deixis es quedarà quiet. Per això la
+        banda viu al tauler d'IA i no depèn d'haver-hi arrossegat res.
+      */}
+      {aiBoard && orfes.length > 0 ? (
+        <div
+          role="status"
+          data-testid="ai-coverage-warning"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+            padding: '10px 14px',
+            borderRadius: 12,
+            background: 'var(--gradient-wash-warm)',
+            color: 'var(--ink)',
+            fontSize: 12.5,
+          }}
+        >
+          <span>
+            <span aria-hidden="true">⚠ </span>
+            {orfes[0]?.agent == null
+              ? t('ai.coverage.none', { scope: orfes.map((row) => row.name).join(', ') })
+              : t('ai.coverage.disabled', { scope: orfes[0].name, agent: orfes[0].agent.name })}
+          </span>
+          <button
+            type="button"
+            data-testid="ai-coverage-fix"
+            onClick={() => navigate('/settings?tab=ai')}
+            style={{
+              border: 'none',
+              background: 'transparent',
+              color: 'var(--kicker)',
+              font: 'inherit',
+              fontWeight: 700,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {t('ai.coverage.fix')}
+          </button>
+        </div>
       ) : null}
 
       <KanbanBoard
@@ -718,6 +860,61 @@ export function BoardScreen({
           />
         }
       />
+    </div>
+  );
+}
+
+/**
+ * El que ha passat amb l'últim gest, dit a sobre del tauler.
+ *
+ * No és `ErrorBanner`: aquell diu «no he pogut carregar» i ofereix reintentar, i això diu
+ * «el gest no s'ha fet, i per això», que es tanca llegint-ho. Dues coses diferents al mateix
+ * lloc serien un botó de reintentar que no reintenta res.
+ */
+function BoardNotice({
+  notice,
+  onDismiss,
+}: {
+  notice: { tone: 'error' | 'warning'; text: string };
+  onDismiss: () => void;
+}) {
+  const error = notice.tone === 'error';
+  return (
+    <div
+      role="alert"
+      data-testid="board-notice"
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 12,
+        padding: '10px 14px',
+        borderRadius: 12,
+        background: error ? 'var(--danger-bg)' : 'var(--gradient-wash-warm)',
+        color: error ? 'var(--danger-text)' : 'var(--ink)',
+        fontSize: 12.5,
+      }}
+    >
+      <span>
+        {/* Icona i text, mai el color sol (docs/04 §8). */}
+        <span aria-hidden="true">{error ? '🔒 ' : '⚠ '}</span>
+        {notice.text}
+      </span>
+      <button
+        type="button"
+        data-testid="board-notice-dismiss"
+        onClick={onDismiss}
+        style={{
+          border: 'none',
+          background: 'transparent',
+          color: 'inherit',
+          font: 'inherit',
+          fontWeight: 700,
+          cursor: 'pointer',
+        }}
+      >
+        {t('nav.close')}
+      </button>
     </div>
   );
 }

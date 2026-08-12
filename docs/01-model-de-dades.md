@@ -728,6 +728,54 @@ El mini-calendari de la capçalera consulta qualsevol dia passat amb el mateix �
 
 ---
 
+### `task_sessions` — el temps treballat
+
+```sql
+CREATE TABLE task_sessions (
+  id         TEXT PRIMARY KEY,
+  task_id    TEXT NOT NULL REFERENCES tasks(id),
+  scope_id   TEXT NOT NULL REFERENCES scopes(id),   -- desnormalitzat: tot el filtratge hi passa
+  user_id    TEXT NOT NULL REFERENCES users(id),    -- qui va moure la targeta
+  started_at INSTANT NOT NULL,
+  ended_at   INSTANT,                               -- NULL = s'està fent ara
+  source     TEXT NOT NULL CHECK (source IN ('board','manual','backfill')),
+  note       TEXT,
+  created_at, updated_at, deleted_at, version
+);
+```
+
+**Un bloc per estada a «Fent», i cap acumulat** (P27). Els obre i els tanca `moveTask`, que
+és l'únic camí pel qual una tasca canvia de columna: no hi ha cronòmetre, perquè el gest que
+ja fas per dir «hi estic» és el que compta les hores.
+
+**Aquí no hi ha cap `minutes`**: la suma es calcula sempre dels blocs. Guardar el total i els
+trams és guardar el mateix número dues vegades, i el dia que discrepin ningú sabrà quin mana.
+
+Per sota d'un minut no es desa: passar per Fent en un clic no és temps treballat.
+
+### `scope_settings` — com es comporta un àmbit
+
+Una fila per àmbit, **i la fila absent és el cas normal**: `time_tracking`, `work_start`,
+`work_end`, `work_days` (set caràcters començant en dilluns), `overtime_visible`,
+`long_session_hours`, `project_noun` (`project` | `client`), `task_types_enabled` i
+`task_type_required`.
+
+`scopes` guarda **qui és** l'àmbit; això, **com es comporta**. Van separats perquè són coses
+de vides diferents: la identitat la mira tothom qui pinta un xip, i el comportament només qui
+obre el Registre. I sense fila, tot pren el valor de `policy/scope-settings.ts`, que és el
+que fa que la migració no encengui res a ningú.
+
+### `task_types` — en què es va anar el temps
+
+`(id, scope_id, name, color, position)` amb `UNIQUE (scope_id, name)`, i `tasks.task_type_id`
+amb `ON DELETE SET NULL`: esborrada la tipologia, la feina feta segueix comptant sota «Sense
+tipologia».
+
+**No són etiquetes** (P27): n'hi ha **una** per tasca, la manté qui mana a l'àmbit, i pot ser
+obligatòria. El sigil de l'afegida ràpida és `$`, perquè `#` ja és l'àmbit i el projecte.
+
+---
+
 ## 9 · Recurrència
 
 `rrule` guarda una **RRULE d'RFC 5545**, no un nombre de segons. Vikunja fa servir segons i és la seva limitació més citada: no pot expressar "el primer dimarts de cada mes", que és exactament el tipus de norma domèstica que Fem-ho necessita.

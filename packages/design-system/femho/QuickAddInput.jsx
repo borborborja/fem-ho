@@ -79,7 +79,9 @@ export function QuickAddInput({
                   cursor: 'pointer',
                   fontFamily: 'var(--font-sans)',
                   background:
-                    token.kind === 'aiMode' ? 'var(--gradient-wash-tag)' : 'var(--tag-bg)',
+                    token.kind === 'aiMode' || token.kind === 'taskType'
+                      ? 'var(--gradient-wash-tag)'
+                      : 'var(--tag-bg)',
                   color: 'var(--tag-text)',
                 }}
               >

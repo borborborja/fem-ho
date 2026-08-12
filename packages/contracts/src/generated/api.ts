@@ -883,6 +883,225 @@ export interface paths {
         patch: operations["updateScope"];
         trace?: never;
     };
+    "/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * El Registre — què s'ha fet, quan i quanta estona
+         * @description Els blocs de dedicació que es poden veure, amb el nom de la tasca, el projecte, la
+         *     tipologia i la persona ja resolts, **i els totals que pinta la capçalera**: per
+         *     persona, per projecte i per dia. Van junts perquè són els mateixos blocs sumats:
+         *     demanar-los a part seria fer dues vegades la mateixa consulta amb el risc que un dia
+         *     no diguin el mateix.
+         *
+         *     **Un bloc és del dia que comença.** El que va de 23:30 a 00:30 surt al dia d'ahir,
+         *     sencer; les hores extres sí que es reparteixen entre els dos dies, perquè es
+         *     calculen del bloc.
+         *
+         *     **Qui veu què**: cadascú els seus; qui mana a l'àmbit, els de tothom. El filtre és a
+         *     la consulta i no a la pantalla.
+         */
+        get: operations["listSessions"];
+        put?: never;
+        /**
+         * Apuntar un bloc a mà
+         * @description L'entrada manual i el bloc que es dibuixa al cronograma. Els instants s'ajusten a 5
+         *     minuts, com les vores que s'arrosseguen.
+         *
+         *     **Els solapaments no es prohibeixen**: dues persones poden treballar alhora a la
+         *     mateixa tasca, i el cronograma els ensenya trepitjats en comptes d'impedir-los.
+         */
+        post: operations["createSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sessions/export.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * El Registre en CSV
+         * @description Les mateixes columnes de sempre —`Data,Hora,Projecte,Tasca,Tipologia,Persona,Minuts`—
+         *     amb salts CRLF, escapat RFC 4180 i **BOM d'UTF-8**: sense els tres bytes del principi
+         *     l'Excel obre el fitxer en la codificació del sistema i els accents es trenquen.
+         *
+         *     Exporta exactament el que hi ha filtrat: els mateixos paràmetres que `GET /sessions`.
+         */
+        get: operations["exportSessions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sessions/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Les Estadístiques — els mateixos blocs, mirats de lluny
+         * @description Passa pels **mateixos filtres i la mateixa visibilitat** que `GET /sessions`, perquè
+         *     el dia que un número no quadri amb el Registre la culpa sigui d'una sola consulta i
+         *     no de dues que s'assemblen.
+         *
+         *     L'evolució porta **els dies buits inclosos** —un gràfic que només porta els dies amb
+         *     feina insinua una continuïtat que no hi va ser— i s'agrupa **per setmanes passats els
+         *     70 dies**, perquè un any de punts diaris és una tanca i no una tendència.
+         */
+        get: operations["sessionStats"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sessions/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Esborrar un bloc
+         * @description Esborrat suau, com tota la resta: la tombstone ha de poder viatjar.
+         */
+        delete: operations["deleteSession"];
+        options?: never;
+        head?: never;
+        /**
+         * Moure, allargar o reassignar un bloc
+         * @description El que fa el cronograma en arrossegar. `task_id` hi entra perquè canviar de fila vol
+         *     dir canviar de projecte, i un bloc no té projecte: el té la tasca.
+         */
+        patch: operations["updateSession"];
+        trace?: never;
+    };
+    "/task-types": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Les tipologies de tasca
+         * @description **En què** es va anar el temps: «Contingut», «Reunió», «Gravació». Són d'àmbit i
+         *     **tancades** —les manté qui mana a l'àmbit—, que és el que les distingeix d'una
+         *     etiqueta i el que fa que les Estadístiques per tipologia vulguin dir alguna cosa.
+         */
+        get: operations["listTaskTypes"];
+        put?: never;
+        /**
+         * Crear-ne una
+         * @description Només qui pot els ajustos de l'àmbit. **Idempotent pel nom**: crear dues vegades
+         *     «Contingut» a la mateixa pantalla és un doble clic, no una intenció.
+         */
+        post: operations["createTaskType"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/task-types/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Esborrar-la
+         * @description **La feina feta no es toca**: les tasques que la portaven es queden sense tipologia i
+         *     el que ja hi ha registrat segueix comptant sota «Sense tipologia». Esborrar una
+         *     manera de classificar no ha de fer desaparèixer les hores classificades.
+         */
+        delete: operations["deleteTaskType"];
+        options?: never;
+        head?: never;
+        /** Reanomenar-la o canviar-ne el color */
+        patch: operations["updateTaskType"];
+        trace?: never;
+    };
+    "/scopes/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * La configuració de tots els àmbits visibles
+         * @description L'app necessita saber d'entrada **quins àmbits anoten la dedicació**: sense això, el
+         *     menú hauria de preguntar-ho àmbit per àmbit per decidir si ensenya el Registre.
+         */
+        get: operations["listScopeSettings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/scopes/{id}/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Com es comporta aquest àmbit
+         * @description El registre de dedicació, l'horari laboral, les tipologies i com se'n diu d'un
+         *     projecte en aquesta casa.
+         *
+         *     **Separat de l'àmbit** perquè són coses de vides diferents: el nom i el color els
+         *     mira tothom qui pinta un xip, i això només qui obre el Registre. La fila pot no
+         *     existir: llavors torna els valors per defecte, que és el que fa que la funció neixi
+         *     apagada a tothom.
+         */
+        get: operations["getScopeSettings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Canviar com es comporta l'àmbit
+         * @description Només qui pot els ajustos de l'àmbit. El que no s'entengui **es deixa com estava**:
+         *     desar-hi un valor inventat seria pitjor que ignorar-lo.
+         *
+         *     En encendre `time_tracking` es reconstrueix la dedicació del passat des de
+         *     l'historial i es diu quants blocs s'han recuperat (`backfilled`). És idempotent.
+         */
+        patch: operations["updateScopeSettings"];
+        trace?: never;
+    };
     "/scopes/{id}/members": {
         parameters: {
             query?: never;
@@ -1461,6 +1680,81 @@ export interface paths {
         patch: operations["updateAgent"];
         trace?: never;
     };
+    "/ai/agents/{id}/scopes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Els àmbits d'on aquest agent agafa feina
+         * @description **Un àmbit, un agent.** Es desa el conjunt sencer i no diferències: la pantalla
+         *     envia les caselles tal com han quedat, i calcular què s'ha afegit i què s'ha tret des
+         *     de fora és com dues pestanyes obertes deixen un àmbit sense agent.
+         *
+         *     Va a part del `PATCH` de l'agent perquè és una decisió d'una altra mena: canviar el
+         *     nom no pot fallar per culpa d'un altre agent, i això sí.
+         */
+        put: operations["setAgentScopes"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ai/agents/{id}/credentials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Les credencials d'aquest agent */
+        get: operations["listAgentCredentials"];
+        put?: never;
+        /**
+         * Una credencial per a aquest agent
+         * @description Qui la faci servir **actua com aquest agent**: els seus àmbits, i la
+         *     responsabilitat de la persona en nom de qui actua (D5).
+         *
+         *     Va sota l'agent i no a `/tokens` perquè aquí ja se sap de qui és. Les capacitats
+         *     són les que un agent necessita i cap més —llegir i escriure tasques, llegir el
+         *     calendari—: ni usuaris, ni tokens, ni instància.
+         *
+         *     **El testimoni sencer surt una sola vegada**, com als tokens d'API: del hash no se'n
+         *     pot treure.
+         */
+        post: operations["createAgentCredential"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ai/agents/{id}/scope-availability": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Quins àmbits pot marcar aquest agent
+         * @description Per desactivar la casella **dient de qui és** en comptes de deixar-la marcar i
+         *     respondre amb un error després.
+         */
+        get: operations["agentScopeAvailability"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/ai/next-task": {
         parameters: {
             query?: never;
@@ -1515,6 +1809,165 @@ export interface paths {
          *     l'historial amb un forat que ningú sabrà interpretar (docs/09 §5).
          */
         post: operations["releaseTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tasks/{id}/take-over": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ho agafo jo
+         * @description Treu una tasca de la IA i la porta al tauler humà: `ai_mode` passa a `manual` i la
+         *     tasca va **a la columna que es demani**. Es demana i no s'endevina: una tasca que
+         *     l'agent tenia a «Fent» pot ser que la vulguis continuar tu, o pot ser que la
+         *     vulguis tornar a la cua.
+         *
+         *     **No esborra res.** Comentaris, adjunts i historial es queden: són de la tasca i no
+         *     del mode, i són justament el que fa que valgui la pena reclamar-la.
+         *
+         *     Un `409` vol dir que l'agent hi està treballant ara mateix. La reserva caduca sola
+         *     als 30 minuts; forçar-la seria trencar-li la feina a mig fer.
+         */
+        post: operations["takeOverTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ai/skill": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * El full d'instruccions de l'agent
+         * @description El text que se li dona a l'agent perquè sàpiga com comportar-se: quin bucle segueix,
+         *     què vol dir el pany, i quan preguntar en comptes d'endevinar. En l'idioma de qui el
+         *     demana, o el que digui `lang`.
+         *
+         *     **No porta cap credencial.** La que en porta és la configuració d'MCP —el
+         *     `.mcp.json`—, i la pantalla ho diu al costat: són dos fitxers i no un justament
+         *     perquè «quin dels dos és el secret» tingui resposta.
+         */
+        get: operations["getAgentSkill"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ai/coverage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Quins àmbits tenen agent
+         * @description Per a cada àmbit visible, quin agent el porta i si està engegat. `null` vol dir que
+         *     no el porta ningú: **una tasca delegada a un àmbit orfe no la farà mai ningú**, i
+         *     això és el que permet dir-ho en el moment de deixar-la-hi en comptes de deixar-la
+         *     esperant per sempre.
+         */
+        get: operations["listAgentCoverage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ai/attention": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Quantes tasques esperen resposta
+         * @description El que necessita el punt del commutador d'IA: un recompte i els identificadors.
+         *     La barra no s'ha de baixar les tasques senceres per pintar un punt.
+         *
+         *     Només compta les columnes obertes: una tasca feta ja no espera res.
+         */
+        get: operations["listAttention"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ai/tasks/{id}/ask-user": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preguntar i quedar-se esperant
+         * @description És un comentari **amb conseqüència**: la pregunta surt a la conversa i a
+         *     l'historial com tota la resta, i la tasca passa a demanar atenció —punt al
+         *     commutador d'IA i targeta destacada al kanban.
+         *
+         *     **Només un agent.** La marca vol dir «un agent espera una resposta teva»; si la
+         *     pogués aixecar qualsevol, deixaria de voler dir això.
+         *
+         *     La baixa **respondre-hi**, i completar la tasca. No hi ha cap «vist»: el que
+         *     desencalla l'agent és la resposta, i marcar-ho com a vist deixaria la pantalla
+         *     neta amb l'agent esperant per sempre.
+         */
+        post: operations["askUser"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ai/tasks/{id}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Seguir després de saber-ho per un altre canal
+         * @description L'agent viu fora de Fem-ho i la persona també: la resposta que desencalla una
+         *     tasca pot arribar per un xat, per veu o en un document. El que no pot passar és
+         *     que la tasca segueixi el seu curs i **aquí no en quedi res**.
+         *
+         *     Per això `learned` és obligatori i s'escriu com a comentari **abans** de baixar la
+         *     marca d'atenció: primer es documenta, després es desbloqueja. Una crida que només
+         *     baixés la marca seria el botó de «vist» que `ask_user` evita, amb l'agent fent-se'l
+         *     a ell mateix.
+         *
+         *     Torna a reservar la tasca: si segueix, hi torna a ser a dins i el pany ho ha de dir.
+         */
+        post: operations["resumeTask"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2420,6 +2873,12 @@ export interface components {
             task_id: string;
             author_id?: string | null;
             author_name?: string | null;
+            /**
+             * @description Quin agent ho ha dit, si ho ha dit un agent. Un agent actua **en nom d'una
+             *     persona** (D5) i per tant `author_id` és la persona: sense això, saber qui
+             *     parla voldria dir mirar si l'etiqueta comença per «IA · ».
+             */
+            agent_id?: string | null;
             /** @description Present quan el comentari ve d'un enllaç compartit. */
             guest_name?: string | null;
             body: string;
@@ -2766,6 +3225,23 @@ export interface components {
             actor_user_id: string;
             can_create_tasks: boolean;
             enabled: boolean;
+            /**
+             * @description Els àmbits d'on aquest agent agafa feina. **Un àmbit té un sol agent**: si
+             *     «Feina» és d'en Hermes, cap altre agent no hi entra.
+             *
+             *     Va buida quan `all_scopes` és cert: llavors mana l'indicador.
+             */
+            scope_ids: string[];
+            /**
+             * @description Aquest agent porta **tots** els àmbits de la persona en nom de qui actua,
+             *     inclosos els que es creïn més endavant.
+             *
+             *     És un indicador i no una còpia del conjunt d'avui: amb una còpia, l'àmbit que es
+             *     creï demà no seria de ningú i la feina que hi caigués no la faria mai cap agent,
+             *     sense que res ho digués.
+             * @default false
+             */
+            all_scopes: boolean;
             /** Format: date-time */
             created_at: string;
             version: number;
@@ -2849,6 +3325,19 @@ export interface components {
             /** @description Els primers caràcters, per poder-lo reconèixer a la llista. */
             token_prefix: string;
             capabilities: string[];
+            /**
+             * @description De quin agent és aquesta credencial, o `null` si és teva.
+             *
+             *     La pantalla d'MCP i API les ensenya **en només lectura i amb un botó que hi
+             *     porta**: sense això hi hauria credencials que existeixen i no surten enlloc
+             *     d'on la gent les busca, i qui en volgués revocar una no sabria on anar.
+             */
+            ai_agent_id: string | null;
+            /**
+             * @description Va **buida a les credencials d'agent**: els àmbits els hereten de l'agent, i
+             *     copiar-los aquí voldria dir que el dia que se li canviïn a l'agent la
+             *     credencial es quedaria apuntant als d'abans.
+             */
             scope_ids: string[];
             /** Format: date-time */
             created_at: string;
@@ -3302,6 +3791,57 @@ export interface components {
                  */
                 lists: number;
             };
+            /**
+             * Format: date-time
+             * @description L'última cosa que li ha passat a la tasca, sigui qui sigui qui la va fer.
+             *
+             *     **No és `updated_at`**: aquell és l'última escriptura a la fila i no veu el que
+             *     passa al voltant —un comentari, una reserva, una pregunta—. És el que fa que la
+             *     targeta del kanban d'IA pugui dir «fa 5 min» o «fa tres dies», que és la
+             *     diferència entre un agent que hi treballa i un que no hi és.
+             */
+            last_activity_at?: string | null;
+            /**
+             * Format: date-time
+             * @description Quan un agent la va llegir per última vegada. Respon «t'ha llegit la resposta?»
+             *     sense haver-li de preguntar.
+             *
+             *     **Les lectures no van a l'historial**: un agent que consulta cada minut hi
+             *     deixaria mil files al dia i taparia el que sí que va fer.
+             */
+            ai_last_read_at?: string | null;
+            /** @description Quin agent la va llegir. */
+            ai_last_read_by?: string | null;
+            /**
+             * Format: date-time
+             * @description Fins quan la té reservada un agent, o `null` si està lliure. **No és una
+             *     columna de `tasks`**: és la reserva viva (`task_leases`), que existia per evitar
+             *     que dos agents fessin la mateixa feina i que ara també fa de pany.
+             *
+             *     Mentre hi sigui, una persona no la pot moure ni reclamar: l'agent hi és a dins.
+             *     Caduca sola als 30 minuts.
+             */
+            locked_until?: string | null;
+            /** @description Quin agent la té. `null` amb `locked_until` ple vol dir una persona. */
+            locked_by_agent_id?: string | null;
+            /**
+             * @description En què es va anar el temps. **No és una etiqueta**: n'hi ha una i prou, la manté
+             *     qui mana a l'àmbit, i pot ser obligatòria.
+             */
+            task_type_id?: string | null;
+            /**
+             * @description Si un agent espera resposta teva **ara**. Viu a la tasca i no al comentari que
+             *     la pregunta: «quines esperen resposta» és el que ha de poder respondre el
+             *     tauler sense llegir els comentaris de tres-centes targetes.
+             */
+            needs_attention: boolean;
+            /**
+             * Format: date-time
+             * @description Des de quan. Una pregunta de fa deu minuts i una de fa tres dies no volen dir
+             *     el mateix, i **no s'esborra en respondre**: quan va preguntar segueix sent
+             *     cert després.
+             */
+            attention_asked_at?: string | null;
             /** @description Persones. El brief demana "persona o persones". */
             assignee_ids?: string[];
             /**
@@ -3315,6 +3855,145 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
             version: number;
+        };
+        Session: {
+            id: string;
+            task_id: string;
+            scope_id: string;
+            /** @description De qui és el temps: qui va moure la targeta. */
+            user_id: string;
+            /** Format: date-time */
+            started_at: string;
+            /**
+             * Format: date-time
+             * @description `null` vol dir que la tasca s'està fent ara mateix.
+             */
+            ended_at?: string | null;
+            /**
+             * @description D'on surt el bloc: del tauler (una targeta que ha passat per Fent), escrit a mà,
+             *     o reconstruït de l'historial en encendre el registre.
+             * @enum {string}
+             */
+            source: "board" | "manual" | "backfill";
+            note?: string | null;
+        };
+        SessionEntry: {
+            id: string;
+            task_id: string;
+            task_title: string;
+            scope_id: string;
+            project_id?: string | null;
+            project_name?: string | null;
+            task_type_id?: string | null;
+            task_type_name?: string | null;
+            task_type_color?: string | null;
+            user_id: string;
+            user_name?: string | null;
+            /** Format: date-time */
+            started_at: string;
+            /** Format: date-time */
+            ended_at?: string | null;
+            /** @description En un bloc obert, els que porta fins ara. */
+            minutes: number;
+            /** @description Dels minuts, quants cauen fora de l'horari o en dia no laborable. */
+            overtime_minutes: number;
+            /**
+             * @description Passa del llindar de l'àmbit. **No s'ha retallat**: una targeta oblidada a Fent
+             *     hi ha estat, i escurçar-la diria una cosa que no va passar.
+             */
+            needs_review: boolean;
+            open: boolean;
+            source: string;
+        };
+        SessionBucket: {
+            key: string;
+            label: string;
+            minutes: number;
+            overtime_minutes: number;
+        };
+        SessionReport: {
+            data: components["schemas"]["SessionEntry"][];
+            totals: {
+                minutes: number;
+                overtime_minutes: number;
+                /** @description Tasques diferents, no blocs. */
+                tasks: number;
+                by_user: components["schemas"]["SessionBucket"][];
+                by_project: components["schemas"]["SessionBucket"][];
+                by_day: components["schemas"]["SessionBucket"][];
+            };
+        };
+        SessionStats: {
+            tasks: number;
+            minutes: number;
+            overtime_minutes: number;
+            projects: number;
+            /** @description Minuts per **tasca**, no per bloc ni per dia. */
+            average_minutes: number;
+            evolution: {
+                key: string;
+                minutes: number;
+            }[];
+            /** @description Cert si l'evolució està agrupada per setmanes. */
+            weekly: boolean;
+            by_type: components["schemas"]["SessionBucket"][];
+            by_project: components["schemas"]["SessionBucket"][];
+            by_user: components["schemas"]["SessionBucket"][];
+            /** @description Les hores extres per projecte: per saber per a qui s'han fet. */
+            overtime_by_project: components["schemas"]["SessionBucket"][];
+        };
+        TaskType: {
+            id: string;
+            scope_id: string;
+            name: string;
+            color: string;
+            position: string;
+        };
+        ScopeSettings: {
+            /**
+             * @description Si aquest àmbit anota la dedicació i té Registre i Estadístiques. **Apagat per
+             *     defecte**: és una funció de nínxol i encendre-la a tothom ompliria de columnes
+             *     una app que per a la majoria és una llista de coses a fer.
+             */
+            time_tracking: boolean;
+            /** @description Hora de paret local, `HH:MM`. */
+            work_start: string;
+            work_end: string;
+            /**
+             * @description Set caràcters començant en dilluns: `1111100` és de dilluns a divendres. Es
+             *     llegeix d'un cop d'ull en un bolcat de la base, cosa que una màscara de bits no fa.
+             */
+            work_days: string;
+            /** @description Ensenyar el que cau fora de l'horari com a hores extres. */
+            overtime_visible: boolean;
+            /**
+             * @description A partir d'aquí, un bloc surt marcat per revisar. No es retalla ni s'esborra: una
+             *     targeta oblidada a Fent **hi ha estat**, i escurçar-la diria una cosa que no va
+             *     passar sense dir quina part.
+             */
+            long_session_hours: number;
+            /**
+             * @description Com se'n diu, d'un projecte, en aquest àmbit. **És només la paraula de la
+             *     interfície**: el camp segueix sent `project_id` a la base, a l'API i a les tools
+             *     (regla 3).
+             * @enum {string}
+             */
+            project_noun: "project" | "client";
+            task_types_enabled: boolean;
+            /** @description I no s'hi pot crear cap tasca sense dir-ne la tipologia. */
+            task_type_required: boolean;
+        };
+        ScopeSettingsInput: {
+            time_tracking?: boolean;
+            work_start?: string;
+            work_end?: string;
+            work_days?: string;
+            overtime_visible?: boolean;
+            long_session_hours?: number;
+            /** @enum {string} */
+            project_noun?: "project" | "client";
+            task_types_enabled?: boolean;
+            task_type_required?: boolean;
         };
         TaskInput: {
             id?: string;
@@ -3332,6 +4011,7 @@ export interface components {
             due_date?: string;
             due_time?: string;
             assignee_ids?: string[];
+            task_type_id?: string;
             /**
              * @description De quin esdeveniment surt aquesta tasca.
              *
@@ -5275,6 +5955,403 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
+    listSessions: {
+        parameters: {
+            query?: {
+                from?: string;
+                to?: string;
+                scope_ids?: string;
+                project_id?: string;
+                user_id?: string;
+                task_type_id?: string;
+                search?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Els blocs i els totals. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionReport"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    createSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    task_id: string;
+                    /** Format: date-time */
+                    started_at: string;
+                    /** Format: date-time */
+                    ended_at: string;
+                    note?: string;
+                    /** @description De qui és el temps. Per defecte, de qui l'escriu. */
+                    user_id?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description El bloc. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Session"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            /** @description El bloc acaba abans de començar, o l'instant no és vàlid. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    exportSessions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description El fitxer. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": string;
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    sessionStats: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Les mètriques i els desglossaments. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionStats"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    deleteSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Esborrat. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: date-time */
+                    started_at?: string;
+                    /** Format: date-time */
+                    ended_at?: string;
+                    task_id?: string;
+                    note?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description El bloc, com ha quedat. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Session"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            /** @description El bloc acabaria abans de començar. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listTaskTypes: {
+        parameters: {
+            query?: {
+                scope_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Les tipologies visibles. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["TaskType"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    createTaskType: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    scope_id: string;
+                    name: string;
+                    color?: string;
+                    position?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description La tipologia. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskType"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            /** @description Qui ho demana no mana en aquest àmbit. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Falta l'àmbit o el nom. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    deleteTaskType: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Esborrada. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateTaskType: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    name?: string;
+                    color?: string;
+                    position?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description La tipologia. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskType"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listScopeSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Una fila per àmbit. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: ({
+                            scope_id: string;
+                        } & components["schemas"]["ScopeSettings"])[];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    getScopeSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description La configuració viva. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScopeSettings"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateScopeSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScopeSettingsInput"];
+            };
+        };
+        responses: {
+            /** @description La configuració desada. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScopeSettings"] & {
+                        /** @description Blocs de dedicació recuperats de l'historial. */
+                        backfilled?: number;
+                    };
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            /** @description Qui ho demana no mana en aquest àmbit. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
     listMembers: {
         parameters: {
             query?: never;
@@ -6557,6 +7634,144 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
+    setAgentScopes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    scope_ids?: string[];
+                    /** @default false */
+                    all_scopes?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Assignat. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Agent"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            /**
+             * @description L'àmbit ja el porta un altre agent. El problema porta `params.agent_id` i
+             *     `params.agent_name` perquè el missatge sigui el següent pas —un botó que hi
+             *     porti— i no una porta tancada.
+             */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listAgentCredentials: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Les credencials, sense el testimoni. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ApiTokenSummary"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    createAgentCredential: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    name?: string;
+                    /** Format: date-time */
+                    expires_at?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Creada. El testimoni sencer va aquí i enlloc més. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        token: string;
+                        summary: components["schemas"]["ApiTokenSummary"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    agentScopeAvailability: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Els àmbits visibles, amb qui els té. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            scope_id: string;
+                            taken_by: {
+                                id?: string;
+                                name?: string;
+                            } | null;
+                        }[];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+        };
+    };
     nextTask: {
         parameters: {
             query?: {
@@ -6640,6 +7855,219 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             /** @description Falta el motiu. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    takeOverTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    status: "todo" | "doing";
+                };
+            };
+        };
+        responses: {
+            /** @description La tasca, ja teva. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Task"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            /** @description L'agent hi està treballant. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Falta la columna, o no és `todo` ni `doing`. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getAgentSkill: {
+        parameters: {
+            query?: {
+                lang?: "ca" | "en" | "es";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description El full, en Markdown. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/markdown": string;
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    listAgentCoverage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description La cobertura, en l'ordre dels àmbits a la barra. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            scope_id: string;
+                            agent: {
+                                id: string;
+                                name: string;
+                                enabled: boolean;
+                            } | null;
+                        }[];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    listAttention: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description El recompte i els identificadors. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        count: number;
+                        task_ids: string[];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    askUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    question: string;
+                };
+            };
+        };
+        responses: {
+            /** @description La pregunta, com a comentari. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Comment"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            /** @description Qui ho demana no és un agent. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    resumeTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    learned: string;
+                };
+            };
+        };
+        responses: {
+            /** @description El que ha après, com a comentari. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Comment"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            /** @description Qui ho demana no és un agent, o la tasca ja és d'una persona. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            /** @description No ha dit què ha après. */
             422: {
                 headers: {
                     [name: string]: unknown;

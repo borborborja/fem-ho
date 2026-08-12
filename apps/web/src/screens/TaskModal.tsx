@@ -12,14 +12,29 @@
  */
 
 import { useEffect, useState } from 'react';
-import { dateTime, getLocale, t, type TaskStatus } from '@fem-ho/contracts';
+import {
+  dateTime,
+  getLocale,
+  relativeTime,
+  shortTime,
+  t,
+  type TaskStatus,
+} from '@fem-ho/contracts';
 import { v7 as uuidv7 } from 'uuid';
 import { ActivityTimeline, ChecklistRow, EmptyState } from '@fem-ho/design-system/femho';
-import { api } from '../app/api.js';
+import { api, failureText } from '../app/api.js';
 import { Attachments } from '../app/Attachments.js';
 import { useSessionData } from '../app/session.js';
 import { useApi, useMutation } from '../app/useApi.js';
-import type { ActivityEntry, Checklist, Comment, Label, Subtask, Task } from '../app/types.js';
+import type {
+  ActivityEntry,
+  Checklist,
+  Comment,
+  Label,
+  Subtask,
+  Task,
+  TaskType,
+} from '../app/types.js';
 
 /**
  * Els verbs que l'historial sap traduir.
@@ -36,6 +51,9 @@ const VERBS = [
   'reopened',
   'cascade_complete',
   'commented',
+  // La pregunta d'un agent i la resposta que el desencalla.
+  'asked',
+  'answered',
   'refreshed',
   'deleted',
   'claimed',
@@ -142,8 +160,12 @@ export function TaskModal({
   });
   const [newSubtask, setNewSubtask] = useState('');
   const [newComment, setNewComment] = useState('');
+  /** Reclamar-la va en dos temps: el botó, i llavors a quina columna la vols. */
+  const [takingOver, setTakingOver] = useState(false);
+  const [takeOverError, setTakeOverError] = useState<string | null>(null);
   const [activityFilter, setActivityFilter] = useState<'all' | 'ai' | 'human'>('all');
   const labels = useApi<Label[]>('/api/v1/labels');
+  const taskTypes = useApi<{ data: TaskType[] }>('/api/v1/task-types');
   /** El nom que s'està escrivint per a una etiqueta nova; `null` si no n'hi ha cap. */
   const [newLabel, setNewLabel] = useState<string | null>(null);
 
@@ -242,6 +264,23 @@ export function TaskModal({
   const data = task.data;
   const scope = scopes.find((candidate) => candidate.id === data?.scope_id);
   const scopeLabels = (labels.data ?? []).filter((entry) => entry.scope_id === data?.scope_id);
+  const scopeTypes = (taskTypes.data?.data ?? []).filter(
+    (type) => type.scope_id === data?.scope_id,
+  );
+
+  /**
+   * Quan s'ensenya la conversa amb la IA.
+   *
+   * **També després de reclamar-la.** Si només depengués del mode, agafar una tasca a mig
+   * fer li esborraria de la vista tot el que l'agent hi va deixar dit —que és justament el
+   * que la fa valdre la pena reclamar—: la conversa és de la tasca, no del mode.
+   */
+  const ia =
+    (data !== undefined && data.ai_mode !== 'manual') ||
+    (comments.data ?? []).some((comment) => comment.agent_id !== null);
+
+  /** Qui la té ara mateix, si algun agent hi està treballant. */
+  const bloquejada = data?.locked_until != null;
 
   const label = (text: string) => (
     <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--ink-soft)' }}>{text}</span>
@@ -614,6 +653,40 @@ export function TaskModal({
                  desapareixia sense que ningú ho hagués demanat. Ara la decisió la pren
                  l'estat que ja se sap, i un error és un error.
             */}
+            {/*
+              **La tipologia: una i tancada.** Surt només si l'àmbit en fa servir, i és un
+              desplegable i no uns xips com les etiquetes justament perquè es vegi que se
+              n'hi posa **una**: uns xips convidarien a marcar-ne dues i llavors la
+              pregunta «quantes n'hi pot haver» tornaria a estar oberta.
+            */}
+            {scopeTypes.length === 0 ? null : (
+              <section style={{ display: 'grid', gap: 6 }} data-testid="task-type">
+                {label(t('task.taskType'))}
+                <select
+                  className="plou-input"
+                  data-testid="task-type-select"
+                  value={data?.task_type_id ?? ''}
+                  onChange={(event) => {
+                    void api
+                      .patch(`/api/v1/tasks/${taskId ?? ''}`, {
+                        task_type_id: event.target.value === '' ? null : event.target.value,
+                      })
+                      .then(() => {
+                        task.reload();
+                        onChanged();
+                      });
+                  }}
+                >
+                  <option value="">{t('stats.noType')}</option>
+                  {scopeTypes.map((type) => (
+                    <option key={type.id} value={type.id}>
+                      {type.name}
+                    </option>
+                  ))}
+                </select>
+              </section>
+            )}
+
             <section style={{ display: 'grid', gap: 6 }}>
               {label(t('task.labels'))}
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -858,13 +931,146 @@ export function TaskModal({
               <Attachments parent="tasks" parentId={taskId} label={label} />
             )}
 
-            <section style={{ display: 'grid', gap: 6 }}>
-              {label(t('task.comments'))}
+            {/*
+              **La conversa amb l'agent és la mateixa que la de comentaris, no una de nova.**
+
+              Amb una pestanya IA a part hi hauria dos llocs on mirar què s'ha dit d'aquesta
+              tasca, i el dia que algú respongués al lloc equivocat l'agent es quedaria
+              esperant. El que canvia quan la tasca no és `manual` és **el que s'hi veu**:
+              qui parla, quina pregunta espera resposta, i que el que adjuntis aquí sota li
+              arriba amb el traspàs.
+            */}
+            <section
+              data-testid={ia ? 'task-ai-conversation' : 'task-comments'}
+              style={{ display: 'grid', gap: 6 }}
+            >
+              {label(ia ? t('task.aiConversation') : t('task.comments'))}
+
+              {/*
+                **El pany i el camí de tornada, junts.** Van al mateix lloc perquè són la
+                mateixa pregunta —«qui la té?»— i la resposta canvia el que pots fer: amb
+                l'agent a dins no es toca, i quan surt te la pots endur amb tot el que hi ha
+                escrit.
+              */}
+              {ia && !creating && data !== undefined ? (
+                bloquejada ? (
+                  <p
+                    data-testid="task-locked-notice"
+                    style={{
+                      margin: 0,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      padding: '7px 11px',
+                      borderRadius: 12,
+                      background: 'var(--ghost-bg)',
+                      fontSize: 12,
+                      color: 'var(--ink-soft)',
+                    }}
+                  >
+                    <span aria-hidden="true">🔒</span>
+                    {t('ai.lock.working', {
+                      time: shortTime(getLocale(), new Date(data.locked_until ?? '')),
+                    })}
+                  </p>
+                ) : data.ai_mode !== 'manual' ? (
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                    {takingOver ? (
+                      <>
+                        {/* A quina columna. Endevinar-ho seria decidir-ho per tu. */}
+                        <span style={{ fontSize: 12, color: 'var(--ink-soft)' }}>
+                          {t('ai.takeOver.where')}
+                        </span>
+                        {(['todo', 'doing'] as const).map((status) => (
+                          <button
+                            key={status}
+                            type="button"
+                            className="plou-btn plou-btn-ghost"
+                            data-testid={`task-take-over-${status}`}
+                            style={{ fontSize: 12 }}
+                            onClick={() => {
+                              void api
+                                .post(`/api/v1/tasks/${taskId ?? ''}/take-over`, { status })
+                                .then(() => {
+                                  setTakingOver(false);
+                                  task.reload();
+                                  activity.reload();
+                                  onChanged();
+                                })
+                                .catch((cause: unknown) => setTakeOverError(failureText(cause)));
+                            }}
+                          >
+                            {t(`board.column.${status}`)}
+                          </button>
+                        ))}
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        className="plou-btn plou-btn-ghost"
+                        data-testid="task-take-over"
+                        style={{ fontSize: 12 }}
+                        onClick={() => setTakingOver(true)}
+                      >
+                        {t('ai.takeOver.action')}
+                      </button>
+                    )}
+                    {takeOverError === null ? null : (
+                      <span style={{ fontSize: 12, color: 'var(--danger-text)' }}>
+                        {takeOverError}
+                      </span>
+                    )}
+                  </div>
+                ) : null
+              ) : null}
+
+              {/*
+                L'avís, amb icona i text i no només color (docs/04 §8). Marxa quan respons:
+                no hi ha cap botó de «vist», perquè el que desencalla l'agent és la
+                resposta.
+              */}
+              {data?.needs_attention === true ? (
+                <p
+                  data-testid="task-attention-notice"
+                  style={{
+                    margin: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '7px 11px',
+                    borderRadius: 12,
+                    background: 'var(--gradient-wash-warm)',
+                    border: '1px solid var(--plou-orange)',
+                    fontSize: 12,
+                    color: 'var(--ink)',
+                  }}
+                >
+                  <span aria-hidden="true">⚠</span>
+                  {t('ai.attention.waiting')}
+                </p>
+              ) : null}
+
               {(comments.data ?? []).length === 0 ? (
-                <EmptyState>{t('task.empty.comments')}</EmptyState>
+                <EmptyState>
+                  {t(ia ? 'task.empty.aiConversation' : 'task.empty.comments')}
+                </EmptyState>
               ) : (
                 (comments.data ?? []).map((comment) => (
-                  <div key={comment.id} style={{ fontSize: 12.5, color: 'var(--ink)' }}>
+                  <div
+                    key={comment.id}
+                    data-testid={comment.agent_id === null ? undefined : 'task-ai-message'}
+                    style={{
+                      fontSize: 12.5,
+                      color: 'var(--ink)',
+                      ...(comment.agent_id === null
+                        ? {}
+                        : {
+                            padding: '7px 11px',
+                            borderRadius: 12,
+                            background: 'var(--gradient-wash-cool)',
+                          }),
+                    }}
+                  >
                     <strong style={{ fontWeight: 700 }}>
                       {comment.guest_name ??
                         people.find((person) => person.id === comment.author_id)?.name ??
@@ -879,7 +1085,7 @@ export function TaskModal({
                   className="plou-input"
                   data-testid="task-new-comment"
                   value={newComment}
-                  placeholder={t('task.newComment')}
+                  placeholder={t(ia ? 'task.aiReply' : 'task.newComment')}
                   onChange={(event) => setNewComment(event.target.value)}
                 />
                 <button
@@ -893,16 +1099,59 @@ export function TaskModal({
                         setNewComment('');
                         comments.reload();
                         activity.reload();
+                        /**
+                         * **I la tasca**, perquè respondre li baixa la marca d'atenció i
+                         * l'avís es llegeix de la tasca. Sense això l'avís es quedava a la
+                         * pantalla amb la marca ja baixada: qui respon veuria que segueix
+                         * esperant-lo i tornaria a respondre.
+                         */
+                        task.reload();
+                        /**
+                         * I si el que s'acaba de respondre era una pregunta d'un agent,
+                         * **també ho ha de saber la barra**: el punt del commutador d'IA i
+                         * la targeta destacada són fora d'aquest modal, i deixar-los amb el
+                         * comptador vell diria que encara t'esperen quan ja no.
+                         */
+                        if (data?.needs_attention === true) onChanged();
                       });
                   }}
                 >
                   {t('task.send')}
                 </button>
               </div>
+              {/*
+                **El que adjuntis li arriba.** L'adjunt ja hi era just a sobre i el traspàs
+                el porta com a enllaç a recurs (docs/09 §4); el que faltava era dir-ho, que
+                és el que fa que algú l'hi enviï en comptes d'enganxar-hi una URL.
+              */}
+              {ia ? (
+                <p style={{ margin: 0, fontSize: 11.5, color: 'var(--ink-faint)' }}>
+                  {t('ai.attention.attachHint')}
+                </p>
+              ) : null}
             </section>
 
             <section style={{ display: 'grid', gap: 6 }}>
               {label(t('task.activity'))}
+
+              {/*
+                **Quan la va llegir l'agent**, que és la pregunta que l'historial no responia:
+                els verbs diuen què ha fet, i el silenci no distingeix «encara no ha tornat»
+                de «ho ha llegit i no hi ha res a fer». Les lectures no hi entren com a files
+                —un agent que consulta cada minut n'hi deixaria mil al dia— i per això va
+                aquí a sobre, com un fet de la tasca i no com un esdeveniment.
+              */}
+              {data?.ai_last_read_at == null ? null : (
+                <p
+                  data-testid="task-ai-read-at"
+                  title={dateTime(getLocale(), new Date(data.ai_last_read_at))}
+                  style={{ margin: 0, fontSize: 11.5, color: 'var(--ink-faint)' }}
+                >
+                  {t('ai.readAt', {
+                    when: relativeTime(getLocale(), new Date(data.ai_last_read_at), new Date()),
+                  })}
+                </p>
+              )}
               {(activity.data?.data ?? []).length === 0 ? (
                 <EmptyState>{t('task.empty.activity')}</EmptyState>
               ) : (

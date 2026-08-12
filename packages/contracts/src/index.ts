@@ -40,6 +40,7 @@ export {
   dateTime,
   longDay,
   monthName,
+  relativeTime,
   resolveWeekStart,
   shortTime,
   startOfWeek,

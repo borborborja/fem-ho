@@ -101,6 +101,17 @@ export interface TopBarProps {
    */
   aiEnabled?: boolean;
   aiBoardActive?: boolean;
+  /**
+   * Quantes tasques esperen resposta teva.
+   *
+   * Va al commutador d'IA i no a una safata a part: el lloc on s'hi va és el kanban de la
+   * IA, i un avís que no és al botó que hi porta fa fer un pas de més per res.
+   */
+  attentionCount?: number;
+  /** Si hi ha cap àmbit amb registre de dedicació: decideix si el menú en porta les entrades. */
+  timeTracking?: boolean;
+  /** Com se'n diu, d'un projecte, als àmbits actius. Només canvia la paraula. */
+  projectNoun?: 'project' | 'client';
   onToggleAiBoard?: () => void;
 }
 
@@ -116,6 +127,9 @@ export function TopBar({
   onScopeWarning,
   aiEnabled = false,
   aiBoardActive = false,
+  attentionCount = 0,
+  timeTracking = false,
+  projectNoun = 'project',
   onToggleAiBoard,
 }: TopBarProps) {
   const { profile, scopes, projects, settings, instance } = useSessionData();
@@ -620,7 +634,10 @@ export function TopBar({
             {menu === 'add'
               ? menuBox(
                   <>
-                    {menuItem(t('nav.newProject'), onNewProject)}
+                    {menuItem(
+                      t(projectNoun === 'client' ? 'nav.newProject.client' : 'nav.newProject'),
+                      onNewProject,
+                    )}
                     {menuItem(t('nav.newChecklistFull'), onNewChecklist)}
                   </>,
                 )
@@ -649,11 +666,41 @@ export function TopBar({
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
+                position: 'relative',
                 background: aiBoardActive ? 'var(--gradient-brand-2stop)' : 'var(--tag-bg)',
                 color: aiBoardActive ? 'var(--on-brand)' : 'var(--ink-soft)',
               }}
             >
               <RobotIcon />
+              {/*
+                **El punt d'atenció, amb el recompte.** És el germà del punt de canvi
+                autònom no vist, amb una diferència que és tota la gràcia: aquell marxa
+                mirant-lo i aquest **no marxa fins que respons**.
+              */}
+              {attentionCount > 0 ? (
+                <span
+                  data-testid="ai-attention-count"
+                  aria-label={t('ai.attention.pending', { count: attentionCount })}
+                  title={t('ai.attention.pending', { count: attentionCount })}
+                  style={{
+                    position: 'absolute',
+                    top: -3,
+                    right: -3,
+                    minWidth: 16,
+                    height: 16,
+                    padding: '0 4px',
+                    borderRadius: 100,
+                    background: 'var(--plou-orange)',
+                    color: 'var(--on-brand)',
+                    fontSize: 10,
+                    fontWeight: 800,
+                    display: 'grid',
+                    placeItems: 'center',
+                  }}
+                >
+                  {attentionCount}
+                </span>
+              ) : null}
             </button>
           ) : null}
 
@@ -794,6 +841,15 @@ export function TopBar({
                   <div style={{ fontWeight: 700, color: 'var(--ink)' }}>{profile.name}</div>
                   {profile.email ?? ''}
                 </div>
+                {/*
+                  **El Registre i les Estadístiques surten només si algun àmbit els té.**
+                  Són una funció de nínxol —qui factura hores—: ensenyar-les a qui no les ha
+                  demanades seria dues entrades de menú que no porten enlloc.
+                */}
+                {timeTracking ? menuItem(t('nav.registre'), () => navigate('/registre')) : null}
+                {timeTracking
+                  ? menuItem(t('nav.estadistiques'), () => navigate('/estadistiques'))
+                  : null}
                 {menuItem(t('nav.settings'), () => navigate('/settings'))}
                 {menuItem(t('nav.logout'), () => void logout(), true)}
               </>,

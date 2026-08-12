@@ -19,5 +19,5 @@ amb els casos reals que les van ensenyar:
   comprovar.
 - **Els fitxers amb la capçalera `GENERAT` no s'editen.** Es regenera la font i es
   compromet el resultat.
-- **Si arregles un defecte que cap de les disset comprovacions permanents hauria vist,
-  afegeix-ne una.** És el criteri que les ha fet créixer de vuit a disset.
+- **Si arregles un defecte que cap de les divuit comprovacions permanents hauria vist,
+  afegeix-ne una.** És el criteri que les ha fet créixer de vuit a divuit.

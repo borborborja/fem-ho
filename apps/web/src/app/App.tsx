@@ -28,6 +28,9 @@ import { LoginScreen } from '../screens/LoginScreen.js';
 import { RegisterScreen } from '../screens/RegisterScreen.js';
 import { PublicShareScreen } from '../screens/PublicShareScreen.js';
 import { CommandPalette } from '../screens/CommandPalette.js';
+import { projectNoun } from './project-noun.js';
+import { EstadistiquesScreen } from '../screens/EstadistiquesScreen.js';
+import { RegistreScreen } from '../screens/RegistreScreen.js';
 import { SearchScreen } from '../screens/SearchScreen.js';
 import { SettingsScreen } from '../screens/SettingsScreen.js';
 import { WelcomeScreen } from '../screens/WelcomeScreen.js';
@@ -169,6 +172,30 @@ function AppShell() {
   const aiEnabled = (agents.data ?? []).some((agent) => agent.enabled);
 
   /**
+   * Quantes tasques esperen resposta.
+   *
+   * Es torna a demanar amb `reloadKey`, que és el que puja quan una fitxa canvia: respondre
+   * a la pestanya IA baixa la marca, i el punt ha de marxar sense recarregar la pàgina.
+   */
+  const attention = useApi<{ count: number }>('/api/v1/ai/attention', [reloadKey]);
+
+  /**
+   * Quins àmbits anoten la dedicació.
+   *
+   * Ho decideix el menú —el Registre i les Estadístiques només surten si n'hi ha algun— i
+   * ho decideix la pantalla, que sense cap àmbit amb registre no té res a ensenyar.
+   */
+  const timeTracking = useApi<{ data: { scope_id: string; time_tracking: boolean }[] }>(
+    '/api/v1/scopes/settings',
+  );
+  const ambRegistre = (timeTracking.data?.data ?? [])
+    .filter((row) => row.time_tracking)
+    .map((row) => row.scope_id);
+
+  /** «Projecte» o «client», segons ho hagin dit els àmbits actius. */
+  const noun = projectNoun(timeTracking.data?.data ?? [], activeScopeIds);
+
+  /**
    * El gir del tauler.
    *
    * Mig gir cap a fora, es canvia el contingut amagat de perfil, i mig gir cap a dins.
@@ -285,6 +312,8 @@ function AppShell() {
     view === 'tasks' &&
     route.path !== '/search' &&
     route.path !== '/dashboard' &&
+    route.path !== '/registre' &&
+    route.path !== '/estadistiques' &&
     route.path !== '/settings';
   const fullHeight = showsBoard;
 
@@ -322,6 +351,9 @@ function AppShell() {
         onScopeWarning={setWarning}
         aiEnabled={aiEnabled}
         aiBoardActive={aiBoard}
+        attentionCount={attention.data?.count ?? 0}
+        timeTracking={ambRegistre.length > 0}
+        projectNoun={noun}
         onToggleAiBoard={toggleAiBoard}
       />
 
@@ -402,6 +434,14 @@ function AppShell() {
           />
         ) : route.path === '/search' ? (
           <SearchScreen onOpenTask={setOpenTask} />
+        ) : route.path === '/registre' ? (
+          <RegistreScreen
+            activeScopeIds={activeScopeIds}
+            onOpenTask={setOpenTask}
+            projectNoun={noun}
+          />
+        ) : route.path === '/estadistiques' ? (
+          <EstadistiquesScreen activeScopeIds={activeScopeIds} />
         ) : route.path === '/dashboard' ? (
           <DashboardScreen
             onOpenTask={setOpenTask}

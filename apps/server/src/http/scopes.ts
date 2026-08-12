@@ -30,6 +30,14 @@ import {
   updateScope,
   type MemberRow,
 } from '../services/scopes.js';
+import { settingsOf, settingsOfMany, updateScopeSettings } from '../services/scope-settings.js';
+import {
+  createTaskType,
+  deleteTaskType,
+  listTaskTypes,
+  updateTaskType,
+} from '../services/task-types.js';
+import { backfillSessions } from '../services/sessions.js';
 import { body, handle, nullable, query, str } from './handle.js';
 
 const ROLES: MemberRow['role'][] = [...SCOPE_ROLES];
@@ -91,6 +99,110 @@ export function registerScopeRoutes(app: FastifyInstance, instanceSecret: () => 
         }),
       );
     }),
+  );
+
+  // ------------------------------------------------------- tipologies de tasca
+
+  app.get('/api/v1/task-types', async (request, reply) =>
+    handle(app, request, reply, async (principal) => ({
+      data: await listTaskTypes(db().db, principal, str(query(request).scope_id)),
+    })),
+  );
+
+  app.post('/api/v1/task-types', async (request, reply) =>
+    handle(app, request, reply, async (principal) => {
+      const input = body(request);
+      const created = await auditedTransaction(db().db, principal, (ctx) =>
+        createTaskType(ctx, principal, {
+          scope_id: str(input.scope_id),
+          name: str(input.name),
+          color: str(input.color),
+          position: str(input.position),
+        }),
+      );
+      void reply.code(201);
+      return created;
+    }),
+  );
+
+  app.patch<{ Params: { id: string } }>('/api/v1/task-types/:id', async (request, reply) =>
+    handle(app, request, reply, async (principal) => {
+      const input = body(request);
+      return auditedTransaction(db().db, principal, (ctx) =>
+        updateTaskType(ctx, principal, request.params.id, {
+          name: str(input.name),
+          color: str(input.color),
+          position: str(input.position),
+        }),
+      );
+    }),
+  );
+
+  app.delete<{ Params: { id: string } }>('/api/v1/task-types/:id', async (request, reply) =>
+    handle(app, request, reply, async (principal) => {
+      await auditedTransaction(db().db, principal, (ctx) =>
+        deleteTaskType(ctx, principal, request.params.id),
+      );
+      void reply.code(204).send();
+      return undefined;
+    }),
+  );
+
+  /**
+   * **La configuració de tots els àmbits alhora.**
+   *
+   * Va abans de `/scopes/:id/settings` perquè `settings` no s'ha de confondre amb un
+   * identificador —Fastify prefereix el tros literal, i així queda escrit—, i existeix
+   * perquè l'app necessita saber d'entrada **quins àmbits anoten la dedicació**: sense
+   * això, el menú hauria de preguntar-ho àmbit per àmbit per decidir si ensenya el Registre.
+   */
+  app.get('/api/v1/scopes/settings', async (request, reply) =>
+    handle(app, request, reply, async (principal) => {
+      const scopes = await listScopes(db().db, principal);
+      const per = await settingsOfMany(
+        db().db,
+        scopes.map((scope) => scope.id),
+      );
+      return {
+        data: scopes.map((scope) => ({
+          scope_id: scope.id,
+          ...(per.get(scope.id) ?? {}),
+        })),
+      };
+    }),
+  );
+
+  /**
+   * **Com es comporta l'àmbit**: el registre de dedicació, l'horari laboral, les tipologies i
+   * com se'n diu, d'un projecte, en aquesta casa.
+   *
+   * Separat de `PATCH /scopes/:id` perquè són coses de vides diferents: el nom i el color els
+   * mira tothom qui pinta un xip, i això només qui obre el Registre. Junts, la pantalla
+   * d'edició d'un àmbit hauria d'enviar deu camps per canviar-ne el color.
+   */
+  app.get<{ Params: { id: string } }>('/api/v1/scopes/:id/settings', async (request, reply) =>
+    handle(app, request, reply, async (principal) => {
+      await getScope(db().db, principal, request.params.id);
+      return settingsOf(db().db, request.params.id);
+    }),
+  );
+
+  app.patch<{ Params: { id: string } }>('/api/v1/scopes/:id/settings', async (request, reply) =>
+    handle(app, request, reply, async (principal) =>
+      auditedTransaction(db().db, principal, async (ctx) => {
+        const desat = await updateScopeSettings(ctx, principal, request.params.id, body(request));
+
+        /**
+         * **Encendre el registre recupera el passat.** Les dades ja hi eren —l'historial
+         * guarda cada entrada i sortida de Fent des del primer dia—, o sigui que estrenar-lo
+         * amb les taules buides seria amagar una cosa que tenim. És idempotent: tornar-ho a
+         * encendre no duplica res.
+         */
+        const recuperats = desat.time_tracking ? await backfillSessions(ctx, request.params.id) : 0;
+
+        return { ...desat, backfilled: recuperats };
+      }),
+    ),
   );
 
   app.delete<{ Params: { id: string } }>('/api/v1/scopes/:id', async (request, reply) =>

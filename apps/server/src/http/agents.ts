@@ -7,8 +7,22 @@
 
 import type { FastifyInstance } from 'fastify';
 import { auditedTransaction } from '../audit/audited-transaction.js';
-import { createAgent, deleteAgent, getAgent, listAgents, updateAgent } from '../services/agents.js';
+import { createToken, listTokens } from '../services/tokens.js';
+import {
+  agentCoverage,
+  agentScopeAvailability,
+  createAgent,
+  deleteAgent,
+  getAgent,
+  listAgents,
+  setAgentScopes,
+  updateAgent,
+} from '../services/agents.js';
+import { askUser, resumeTask } from '../services/comments.js';
+import { listTasks } from '../services/tasks.js';
 import { claim, leaseOf, nextTask, release } from '../services/leases.js';
+import { getProfile } from '../services/users.js';
+import { AGENT_SKILL } from '../ai/skill.generated.js';
 import { body, handle, query, str } from './handle.js';
 
 export function registerAgentRoutes(app: FastifyInstance): void {
@@ -54,6 +68,98 @@ export function registerAgentRoutes(app: FastifyInstance): void {
     }),
   );
 
+  /**
+   * Els àmbits d'un agent.
+   *
+   * Va a part del `PATCH` de l'agent perquè és **una decisió d'una altra mena**: canviar el
+   * nom no pot fallar per culpa d'un altre agent, i això sí. Barrejats, desar el nom
+   * tornaria un 422 que parla d'àmbits.
+   */
+  app.put<{ Params: { id: string } }>('/api/v1/ai/agents/:id/scopes', async (request, reply) =>
+    handle(app, request, reply, async (principal) => {
+      const input = body(request);
+      return auditedTransaction(db().db, principal, (ctx) =>
+        setAgentScopes(ctx, principal, request.params.id, {
+          scope_ids: Array.isArray(input.scope_ids)
+            ? input.scope_ids.filter((id): id is string => typeof id === 'string')
+            : [],
+          all_scopes: input.all_scopes === true,
+        }),
+      );
+    }),
+  );
+
+  /**
+   * Les credencials d'un agent.
+   *
+   * **Va sota l'agent i no a `/tokens`** perquè aquí ja se sap de qui és: la ruta comprova
+   * que l'agent sigui d'aquesta persona, i el servei de tokens rep l'identificador ja
+   * validat. Per la porta general caldria acceptar-hi un agent qualsevol i tornar-lo a
+   * comprovar allà, que és la mena de comprovació que un dia falta.
+   *
+   * Les capacitats són **les que un agent necessita i cap més**, i cadascuna té la seva
+   * feina: les tasques i les llistes perquè pugui treballar, els àmbits i els projectes en
+   * lectura perquè **les seves instruccions manen sobre el criteri de l'agent** i sense
+   * poder-los llegir `get_briefing` responia «no tens la capacitat», els comentaris perquè
+   * són la via principal per reportar i per preguntar (docs/09 §6), els adjunts en lectura
+   * perquè el traspàs els porta com a enllaç, i el calendari en lectura perquè hi ha feina
+   * que depèn del dia. Res de gestionar usuaris, ni tokens, ni la instància, ni el correu.
+   *
+   * **Els noms surten de `CAPABILITIES`.** Aquí hi havia un `calendar:read` que no existeix
+   * enlloc: no donava cap error i el que feia era no donar cap permís de calendari.
+   */
+  app.post<{ Params: { id: string } }>(
+    '/api/v1/ai/agents/:id/credentials',
+    async (request, reply) =>
+      handle(app, request, reply, async (principal) => {
+        const agent = await getAgent(db().db, principal, request.params.id);
+        const input = body(request);
+
+        const result = await auditedTransaction(db().db, principal, (ctx) =>
+          createToken(ctx, principal, {
+            name: str(input.name) ?? `${agent.name}`,
+            capabilities: [
+              'tasks:read',
+              'tasks:write',
+              // Les instruccions de l'àmbit i del projecte manen sobre el seu criteri, i
+              // per llegir-les cal poder llegir els àmbits: sense això `get_briefing` —la
+              // segona crida que fa un agent— responia «no tens la capacitat».
+              'scopes:read',
+              'projects:read',
+              'checklists:read',
+              'checklists:write',
+              'comments:read',
+              'comments:write',
+              'attachments:read',
+              'events:read',
+            ],
+            ai_agent_id: agent.id,
+            expires_at: typeof input.expires_at === 'string' ? input.expires_at : null,
+          }),
+        );
+
+        void reply.code(201);
+        return result;
+      }),
+  );
+
+  app.get<{ Params: { id: string } }>('/api/v1/ai/agents/:id/credentials', async (request, reply) =>
+    handle(app, request, reply, async (principal) => {
+      const agent = await getAgent(db().db, principal, request.params.id);
+      const totes = await listTokens(db().db, principal);
+      return { data: totes.filter((token) => token.ai_agent_id === agent.id) };
+    }),
+  );
+
+  /** Quins àmbits pot marcar, i quins ja té un altre agent. Per a la pantalla. */
+  app.get<{ Params: { id: string } }>(
+    '/api/v1/ai/agents/:id/scope-availability',
+    async (request, reply) =>
+      handle(app, request, reply, async (principal) => ({
+        data: await agentScopeAvailability(db().db, principal, request.params.id),
+      })),
+  );
+
   app.delete<{ Params: { id: string } }>('/api/v1/ai/agents/:id', async (request, reply) =>
     handle(app, request, reply, async (principal) =>
       auditedTransaction(db().db, principal, (ctx) =>
@@ -81,6 +187,53 @@ export function registerAgentRoutes(app: FastifyInstance): void {
     }),
   );
 
+  /**
+   * **El full d'instruccions de l'agent, en el teu idioma.**
+   *
+   * `text/markdown` i no JSON: es copia i es baixa tal com és, i el que se n'ha de fer és
+   * enganxar-lo a l'agent. **No porta cap credencial** —això és el `.mcp.json`, que sí que
+   * en porta i ho diu en vermell—, i per això aquesta ruta no revela res que no sigui el
+   * mateix text per a tothom.
+   */
+  app.get('/api/v1/ai/skill', async (request, reply) =>
+    handle(app, request, reply, async (principal) => {
+      const demanat = str(query(request).lang);
+      const profile = await getProfile(db().db, principal.userId);
+      const lang = demanat ?? profile.locale ?? 'ca';
+      const text = AGENT_SKILL[lang === 'en' || lang === 'es' ? lang : 'ca'];
+      void reply.type('text/markdown; charset=utf-8').send(text);
+      return undefined;
+    }),
+  );
+
+  /**
+   * **Quins àmbits tenen agent.** Ho fa servir el tauler d'IA per dir, en el moment de
+   * deixar-hi una tasca, que allà no la farà ningú.
+   */
+  app.get('/api/v1/ai/coverage', async (request, reply) =>
+    handle(app, request, reply, async (principal) => ({
+      data: await agentCoverage(db().db, principal),
+    })),
+  );
+
+  /**
+   * **Quantes tasques esperen resposta**, per al punt del commutador d'IA.
+   *
+   * Un recompte i els identificadors, i prou: la barra no ha de baixar-se les tasques
+   * senceres per pintar un punt, i els identificadors hi són perquè qui vulgui saltar-hi
+   * no hagi de buscar-les una per una.
+   */
+  app.get('/api/v1/ai/attention', async (request, reply) =>
+    handle(app, request, reply, async (principal) => {
+      const found = await listTasks(db().db, principal, {
+        needsAttention: true,
+        statuses: ['inbox', 'todo', 'doing'],
+        limit: 200,
+      });
+      return { count: found.data.length, task_ids: found.data.map((task) => task.id) };
+    }),
+  );
+
   app.post<{ Params: { id: string } }>('/api/v1/ai/tasks/:id/claim', async (request, reply) =>
     handle(app, request, reply, async (principal) =>
       auditedTransaction(db().db, principal, (ctx) => claim(ctx, principal, request.params.id)),
@@ -96,6 +249,35 @@ export function registerAgentRoutes(app: FastifyInstance): void {
       );
       void reply.code(204).send();
       return undefined;
+    }),
+  );
+
+  /**
+   * **La pregunta que atura l'agent.** Un comentari amb conseqüència: surt a la conversa i
+   * a l'historial com tota la resta, i la tasca passa a demanar atenció. La tool `ask_user`
+   * d'MCP és el mateix camí; això és perquè un agent que no parla MCP també hi arribi.
+   */
+  app.post<{ Params: { id: string } }>('/api/v1/ai/tasks/:id/ask-user', async (request, reply) =>
+    handle(app, request, reply, async (principal) => {
+      const created = await auditedTransaction(db().db, principal, (ctx) =>
+        askUser(ctx, principal, request.params.id, String(body(request).question ?? '')),
+      );
+      void reply.code(201);
+      return created;
+    }),
+  );
+
+  /**
+   * **L'agent torna.** El que ha sabut per un altre canal es deixa escrit aquí, i llavors
+   * la marca d'atenció cau: primer es documenta, després es desbloqueja.
+   */
+  app.post<{ Params: { id: string } }>('/api/v1/ai/tasks/:id/resume', async (request, reply) =>
+    handle(app, request, reply, async (principal) => {
+      const created = await auditedTransaction(db().db, principal, (ctx) =>
+        resumeTask(ctx, principal, request.params.id, String(body(request).learned ?? '')),
+      );
+      void reply.code(201);
+      return created;
     }),
   );
 

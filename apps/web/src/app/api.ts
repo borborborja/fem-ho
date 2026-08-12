@@ -168,7 +168,7 @@ async function refresh(): Promise<boolean> {
 }
 
 export interface RequestOptions {
-  method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   body?: unknown;
   /** Capçaleres extra. `Authorization` i `content-type` les posa el client. */
   headers?: Record<string, string>;
@@ -224,6 +224,26 @@ export const api = {
     request<T>(path, { method: 'POST', ...(body === undefined ? {} : { body }) }),
   patch: <T>(path: string, body: unknown): Promise<T> =>
     request<T>(path, { method: 'PATCH', body }),
+  // `PUT` i no `PATCH` per als àmbits d'un agent: es desa **el conjunt sencer**, perquè
+  // treure'n un és tan normal com afegir-n'hi un i amb un pedaç no se sabria dir.
+  put: <T>(path: string, body: unknown): Promise<T> => request<T>(path, { method: 'PUT', body }),
+  /**
+   * Una resposta que **no és JSON**: el full d'instruccions de l'agent ve en Markdown i es
+   * copia i es baixa tal com és. `request` intenta interpretar-ho i tornaria un objecte a
+   * mig fer o petaria; això el demana com el que és.
+   */
+  text: async (path: string): Promise<string> => {
+    const send = async (): Promise<Response> => {
+      const headers: Record<string, string> = {};
+      if (tokens !== null) headers.authorization = `Bearer ${tokens.access_token}`;
+      return fetch(path.startsWith('/') ? path : `/api/v1/${path}`, { headers });
+    };
+
+    let res = await send();
+    if (res.status === 401 && tokens !== null && (await refresh())) res = await send();
+    if (!res.ok) throw new ApiError(res.status, undefined, `HTTP ${String(res.status)}`);
+    return res.text();
+  },
   delete: <T>(path: string): Promise<T> => request<T>(path, { method: 'DELETE' }),
 
   /**

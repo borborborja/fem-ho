@@ -106,3 +106,33 @@ export function shortTime(locale: Locale, date: Date): string {
 export function dateTime(locale: Locale, date: Date): string {
   return new Intl.DateTimeFormat(locale, { dateStyle: 'short', timeStyle: 'short' }).format(date);
 }
+
+/**
+ * «fa 5 min», «fa 3 h», i a partir d'un dia, la data i l'hora.
+ *
+ * **El llindar és un dia, i no és una preferència estètica.** Dins del dia el que es vol
+ * saber és *quanta estona fa* —si l'agent hi era fa cinc minuts o fa vuit hores canvia què
+ * en penses—; passat el dia, això deixa de dir res i el que informa és **quan**: «fa 37 h»
+ * obliga a fer un càlcul que «10/08 18:20» ja porta fet.
+ *
+ * `Intl.RelativeTimeFormat` i no una taula de sufixos: els tres idiomes de la casa —i el
+ * quart que vingui— surten de CLDR, com els noms dels mesos, i el plural el fa ell.
+ *
+ * `now` s'injecta perquè això es pugui provar sense fer dependre el resultat del rellotge
+ * de qui corre les proves, que és el que fa que aquesta mena de funció es trenqui en silenci
+ * un dimarts.
+ */
+export function relativeTime(locale: Locale, date: Date, now: Date): string {
+  const segons = Math.round((date.getTime() - now.getTime()) / 1000);
+  const passats = Math.abs(segons);
+
+  if (passats >= 24 * 3600) return dateTime(locale, date);
+
+  const relatiu = new Intl.RelativeTimeFormat(locale, { numeric: 'auto', style: 'short' });
+  // Menys d'un minut és «ara»: dir «fa 12 segons» d'una tasca és una precisió que no ajuda.
+  // En segons i no en minuts perquè `0 minute` en català es diu «aquest minut», que no és
+  // el que ningú diria mirant una targeta.
+  if (passats < 60) return relatiu.format(0, 'second');
+  if (passats < 3600) return relatiu.format(Math.round(segons / 60), 'minute');
+  return relatiu.format(Math.round(segons / 3600), 'hour');
+}

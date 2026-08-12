@@ -27,6 +27,9 @@ data class QuickAddScope(
 
 data class QuickAddPerson(val id: String, val name: String)
 
+/** Una tipologia triable amb `$`: en què es va anar el temps. */
+data class QuickAddTaskType(val id: String, val name: String, val scopeId: String)
+
 data class QuickAddContext(
     val scopes: List<QuickAddScope>,
     val people: List<QuickAddPerson>,
@@ -35,9 +38,16 @@ data class QuickAddContext(
      * es demana l'àmbit; amb un de sol, s'agafa aquell (docs/02 §4).
      */
     val activeScopeIds: List<String> = emptyList(),
+    /**
+     * Les tipologies triables amb `$`, dels àmbits actius.
+     *
+     * Buida vol dir que cap àmbit actiu en fa servir, i llavors `$` no és cap sigil: és un
+     * dòlar dins d'un títol, que és el que ha de continuar sent per a qui no les té.
+     */
+    val taskTypes: List<QuickAddTaskType> = emptyList(),
 )
 
-enum class TokenKind { SCOPE, PROJECT, PERSON, AI_MODE }
+enum class TokenKind { SCOPE, PROJECT, PERSON, AI_MODE, TASK_TYPE }
 
 /** Un tros reconegut del text, que la interfície pinta com a xip reversible. */
 data class QuickAddToken(
@@ -73,6 +83,8 @@ data class QuickAddResult(
     val projectId: String?,
     val assigneeIds: List<String>,
     val aiMode: AiMode,
+    /** La tipologia, si s'ha escrit amb `$`. */
+    val taskTypeId: String? = null,
     val tokens: List<QuickAddToken>,
     val error: QuickAddError?,
 )
@@ -149,6 +161,7 @@ fun parseQuickAdd(text: String, context: QuickAddContext): QuickAddResult {
     var projectId: String? = null
     val assigneeIds = mutableListOf<String>()
     var aiMode = AiMode.MANUAL
+    var taskTypeId: String? = null
 
     var i = 0
     var plainFrom = 0
@@ -160,11 +173,49 @@ fun parseQuickAdd(text: String, context: QuickAddContext): QuickAddResult {
 
     val scopePairs = context.scopes.map { it.id to it.name }
     val peoplePairs = context.people.map { it.id to it.name }
+    val typePairs = context.taskTypes.map { it.id to it.name }
 
     while (i < text.length) {
         val char = text[i]
 
         if (char == '#') {
+            /**
+             * **Amb un sol àmbit actiu, `#X` mira primer els projectes d'aquell àmbit.**
+             *
+             * Abans `#` era sempre l'àmbit, i un projecte només s'escrivia
+             * `#Àmbit/Projecte` —també quan l'àmbit era únic, que és absurd: en monoàmbit
+             * la barra ja no ensenya cap xip d'àmbit. Amb diversos actius no canvia res.
+             */
+            val unic =
+                if (context.activeScopeIds.size == 1) {
+                    context.scopes.firstOrNull { it.id == context.activeScopeIds.first() }
+                } else {
+                    null
+                }
+
+            if (unic != null) {
+                val project = matchLongest(text, i + 1, unic.projects.map { it.id to it.name })
+                if (project != null) {
+                    flushPlain(i)
+                    val end = i + 1 + project.length
+                    tokens.add(
+                        QuickAddToken(
+                            kind = TokenKind.PROJECT,
+                            raw = text.substring(i, end),
+                            start = i,
+                            end = end,
+                            id = project.id,
+                            label = project.name,
+                        ),
+                    )
+                    projectId = project.id
+                    scopeId = unic.id
+                    i = end
+                    plainFrom = i
+                    continue
+                }
+            }
+
             val scope = matchLongest(text, i + 1, scopePairs)
             if (scope != null) {
                 flushPlain(i)
@@ -232,6 +283,33 @@ fun parseQuickAdd(text: String, context: QuickAddContext): QuickAddResult {
             }
         }
 
+        /**
+         * `$Tipologia` — en què es va anar el temps.
+         *
+         * **`$` i no `#`** perquè `#` ja és l'àmbit i el projecte.
+         */
+        if (char == '$') {
+            val type = matchLongest(text, i + 1, typePairs)
+            if (type != null) {
+                flushPlain(i)
+                val end = i + 1 + type.length
+                tokens.add(
+                    QuickAddToken(
+                        kind = TokenKind.TASK_TYPE,
+                        raw = text.substring(i, end),
+                        start = i,
+                        end = end,
+                        id = type.id,
+                        label = type.name,
+                    ),
+                )
+                taskTypeId = type.id
+                i = end
+                plainFrom = i
+                continue
+            }
+        }
+
         if (char == '!') {
             // `!ia` i `!ia:delegada` (docs/09 §2). Sense el sigil, tota tasca neix manual.
             val match = AI_SIGIL.find(text.substring(i))
@@ -277,7 +355,16 @@ fun parseQuickAdd(text: String, context: QuickAddContext): QuickAddResult {
             else -> null
         }
 
-    return QuickAddResult(title, scopeId, projectId, assigneeIds.toList(), aiMode, tokens.toList(), error)
+    return QuickAddResult(
+        title,
+        scopeId,
+        projectId,
+        assigneeIds.toList(),
+        aiMode,
+        taskTypeId,
+        tokens.toList(),
+        error,
+    )
 }
 
 /**
@@ -292,6 +379,7 @@ fun revertToken(text: String, token: QuickAddToken): String {
         when (token.kind) {
             TokenKind.SCOPE, TokenKind.PERSON -> token.raw.removePrefix("#").removePrefix("@")
             TokenKind.PROJECT -> token.raw.removePrefix("/")
+            TokenKind.TASK_TYPE -> token.raw.removePrefix("$")
             TokenKind.AI_MODE -> ""
         }
     return (text.substring(0, token.start) + plain + text.substring(token.end))

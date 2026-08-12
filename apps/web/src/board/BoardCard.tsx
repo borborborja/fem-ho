@@ -11,7 +11,7 @@
  */
 
 import { useState } from 'react';
-import { t } from '@fem-ho/contracts';
+import { dateTime, getLocale, relativeTime, t } from '@fem-ho/contracts';
 import { v7 as uuidv7 } from 'uuid';
 import { TaskCard, type CardList } from '@fem-ho/design-system/femho';
 import { SourceIcon } from './SourceIcon.js';
@@ -172,6 +172,18 @@ export function BoardCard({
             : undefined
       }
       hasUnseenAiChange={task.hasUnseenAiChange ?? false}
+      attentionLabel={task.needsAttention === true ? t('ai.attention.card') : undefined}
+      lockLabel={task.lockedUntil == null ? undefined : t('ai.lock.card')}
+      activityLabel={
+        task.lastActivityAt == null
+          ? undefined
+          : relativeTime(getLocale(), new Date(task.lastActivityAt), new Date())
+      }
+      activityTitle={
+        task.lastActivityAt == null
+          ? undefined
+          : dateTime(getLocale(), new Date(task.lastActivityAt))
+      }
       checklistProgress={
         progress.total > 0
           ? t('checklist.count', { done: progress.done, total: progress.total })

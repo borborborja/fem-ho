@@ -14,7 +14,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { sql } from 'kysely';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { dbBool } from './bool.js';
+import { dbBool, isTrue } from './bool.js';
 import { connect, type Connection } from './connection.js';
 import { connectTestSchema, type TestSchema } from './test-postgres.js';
 import type { Engine } from './dialect.js';
@@ -289,6 +289,68 @@ describe('migrar una base que ja té dades', () => {
     expect(fila.rows[0]?.scope_mode).toBeNull();
     // I la resta de preferències segueixen intactes: la migració només hi afegeix.
     expect(fila.rows[0]?.inbox_position).toBe('left');
+  });
+
+  it('la 017 no fa que cap tasca que ja hi era demani atenció', async () => {
+    /**
+     * **El defecte importa perquè el senyal serveixi de res.** Si les tasques d'abans
+     * naixessin marcades, el primer que veuria qui actualitza és un punt d'atenció amb
+     * tres-centes tasques a sota, i el senyal quedaria cremat el mateix dia que arriba.
+     */
+    const ara = '2026-08-12T09:30:00.000Z';
+    await sql`
+      INSERT INTO tasks (id, scope_id, title, status, position, view_mode, ai_mode,
+                         created_by, created_at, updated_at, version)
+      VALUES ('t1', 's1', 'Una de sempre', 'todo', 'a1', 'card', 'manual', 'u1',
+              ${ara}, ${ara}, 1)
+    `.execute(conn.db);
+
+    const fila = await sql<{ needs_attention: number; attention_asked_at: string | null }>`
+      SELECT needs_attention, attention_asked_at FROM tasks WHERE id = 't1'
+    `.execute(conn.db);
+
+    expect(isTrue(fila.rows[0]?.needs_attention)).toBe(false);
+    // I «des de quan» és nul mentre no hi hagi cap pregunta: no és una data d'estrena.
+    expect(fila.rows[0]?.attention_asked_at).toBeNull();
+  });
+
+  it('la 018 no inventa activitat ni lectures a les tasques que ja hi eren', async () => {
+    /**
+     * **Una data falsa és pitjor que un buit.** Si `last_activity_at` naixés amb la data de
+     * la migració, totes les tasques d'una casa dirien «fa 5 min» el dia que s'actualitza,
+     * i la marca —que existeix per distingir el que es mou del que porta dies quiet—
+     * naixeria mentint. La interfície ja sap què fer amb un nul; amb una data inventada no.
+     */
+    const fila = await sql<{
+      last_activity_at: string | null;
+      ai_last_read_at: string | null;
+      ai_last_read_by: string | null;
+    }>`
+      SELECT last_activity_at, ai_last_read_at, ai_last_read_by FROM tasks WHERE id = 't1'
+    `.execute(conn.db);
+
+    expect(fila.rows[0]?.last_activity_at).toBeNull();
+    expect(fila.rows[0]?.ai_last_read_at).toBeNull();
+    expect(fila.rows[0]?.ai_last_read_by).toBeNull();
+  });
+
+  it('la 019 no encén el registre a cap àmbit que ja hi era', async () => {
+    /**
+     * **La fila absent és el cas normal, i és el que fa que això sigui segur.** Si crear la
+     * taula hagués sembrat una fila per àmbit —o pitjor, amb `time_tracking` a cert—, qui
+     * actualitzi es trobaria l'endemà una funció nova encesa a tot arreu i el tauler ple de
+     * columnes que no ha demanat.
+     */
+    const files = await sql<{ n: number }>`SELECT COUNT(*) AS n FROM scope_settings`.execute(
+      conn.db,
+    );
+    expect(Number(files.rows[0]?.n)).toBe(0);
+
+    // I cap tasca no neix amb tipologia: la columna hi és i és nul·la.
+    const tasca = await sql<{ task_type_id: string | null }>`
+      SELECT task_type_id FROM tasks WHERE id = 't1'
+    `.execute(conn.db);
+    expect(tasca.rows[0]?.task_type_id).toBeNull();
   });
 });
 

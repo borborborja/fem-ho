@@ -14,6 +14,7 @@
 import { sql } from 'kysely';
 import type { Source } from '@fem-ho/contracts';
 import type { MigrationDb } from '../db/migration-db.js';
+import { isTrue } from '../db/bool.js';
 import { visibleScopeIds } from './scope-visibility.js';
 import { hashToken, isApiToken } from '../auth/tokens.js';
 import { capabilitiesForRole, isCapability, type Capability } from './capabilities.js';
@@ -97,11 +98,39 @@ export async function resolveApiToken(
   await sql`UPDATE api_tokens SET last_used_at = ${now} WHERE id = ${row.id}`.execute(tx);
 
   if (row.ai_agent_id !== null) {
-    const agent = await sql<{ on_behalf_of_user_id: string; name: string; enabled: number }>`
-      SELECT on_behalf_of_user_id, name, enabled FROM ai_agents WHERE id = ${row.ai_agent_id}
+    const agent = await sql<{
+      on_behalf_of_user_id: string;
+      name: string;
+      enabled: number;
+      all_scopes: unknown;
+    }>`
+      SELECT on_behalf_of_user_id, name, enabled, all_scopes
+      FROM ai_agents WHERE id = ${row.ai_agent_id}
     `.execute(tx);
     const a = agent.rows[0];
     if (a === undefined || a.enabled === 0) throw unauthenticated("L'agent no està actiu.");
+
+    /**
+     * **L'agent no arriba més enllà dels seus àmbits, i es decideix aquí.**
+     *
+     * Un àmbit té un sol agent (migració 016), i la manera de fer-ho valer a tot arreu
+     * alhora és acotar-li el principal: `next_task`, `list_tasks`, `get_task` i la resta
+     * ja respecten `scopeIds`, o sigui que no cal tocar-ne cap ni hi ha una segona còpia
+     * de la regla que un dia divergeixi.
+     *
+     * Amb `all_scopes` no s'acota res més: es queda amb el que ja tenia el token, que és
+     * la intersecció amb el que veu la persona en nom de qui actua. Sense àmbits
+     * assignats, el conjunt queda **buit** i l'agent no veu res —que és el correcte: un
+     * agent acabat de crear encara no és de ningú.
+     */
+    let abast = scopeIds;
+    if (!isTrue(a.all_scopes)) {
+      const assignats = await sql<{ scope_id: string }>`
+        SELECT scope_id FROM agent_scopes WHERE agent_id = ${row.ai_agent_id}
+      `.execute(tx);
+      const seus = new Set(assignats.rows.map((r) => r.scope_id));
+      abast = scopeIds === null ? seus : new Set([...scopeIds].filter((id) => seus.has(id)));
+    }
 
     return {
       kind: 'agent',
@@ -110,7 +139,7 @@ export async function resolveApiToken(
       userId: a.on_behalf_of_user_id,
       agentId: row.ai_agent_id,
       capabilities,
-      scopeIds,
+      scopeIds: abast,
       source,
       label: `IA · ${a.name}`,
     };

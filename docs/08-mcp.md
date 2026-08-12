@@ -47,7 +47,7 @@ El token que arriba a Fem-ho és **per a Fem-ho**. S'ha de validar que ho sigui,
 
 S'ordenen **alfabèticament** a la llista: els clients cacheguen, i un ordre estable millora els encerts de la memòria cau de prompts.
 
-Són **16**. La disciplina de nombre importa: una definició de tool ocupa entre 100 i 500 tokens, i amb catàlegs de 40 tools una part gran de la finestra de context se'n va en metadades abans de començar. Hi ha servidors MCP de Vikunja que n'exposen més de 30, i és un error que no s'ha de copiar.
+Són **18**. La disciplina de nombre importa: una definició de tool ocupa entre 100 i 500 tokens, i amb catàlegs de 40 tools una part gran de la finestra de context se'n va en metadades abans de començar. Hi ha servidors MCP de Vikunja que n'exposen més de 30, i és un error que no s'ha de copiar.
 
 ### Lectura
 
@@ -71,6 +71,8 @@ Són **16**. La disciplina de nombre importa: una definició de tool ocupa entre
 | `move_task` | Canvia `status` i `position`. |
 | `complete_task` | Completa, amb cascada i recurrència. |
 | `add_comment` | Comenta. **És la via principal perquè un agent reporti.** |
+| `ask_user` | Pregunta **i s'atura**: el comentari surt igual, la tasca passa a demanar atenció i **la reserva es deixa anar** —qui espera no treballa—. La marca la baixa una resposta d'una persona, o completar la tasca. Mai un «vist». |
+| `resume_task` | L'agent ha sabut per un altre canal el que li faltava: ho deixa escrit, la marca cau i **torna a reservar** la tasca. El text és obligatori: primer es documenta, després es desbloqueja. |
 | `update_checklist_item` | Marca un ítem. |
 
 ### Flux de treball d'agent
@@ -89,7 +91,7 @@ Cada tool declara les seves pistes de comportament, i cal encertar-les perquè s
 | Tool | Només lectura | Destructiva | Idempotent |
 | --- | --- | --- | --- |
 | `whoami`, `get_*`, `list_*`, `search_*` | sí | no | sí |
-| `create_task`, `add_comment` | no | no | no |
+| `create_task`, `add_comment`, `ask_user`, `resume_task` | no | no | no |
 | `update_*`, `move_task`, `complete_task` | no | no | sí |
 | `release_task` | no | no | sí |
 | `next_task` | no | no | **no** |
@@ -105,6 +107,30 @@ Tres nivells, i confondre'ls fa que els agents entrin en bucle:
 - **Autenticació o permisos** → **`401` o `403` d'HTTP**, mai cap dels dos anteriors.
 
 Els missatges han de ser accionables: *"Aquest token només té accés a l'àmbit Feina. La tasca 0192f3a1 és a Personal."* Un 403 mut fa que l'agent reintenti fins a esgotar el límit de ritme.
+
+### El pany
+
+La reserva de `next_task` (30 minuts) **no és només per repartir**: mentre l'agent la tingui,
+la persona no pot moure ni reclamar la tasca —rep un `409` que diu qui la té i quants minuts
+queden—, i l'agent només pot moure i completar el que té reservat. Comentar sempre es pot, per
+les dues bandes: un agent que no pot reportar s'atura en silenci.
+
+Preguntar (`ask_user`) **deixa anar la reserva**, perquè qui espera no treballa i mentre
+espera la persona ha de poder respondre o endur-se la tasca. `next_task` tampoc torna mai una
+tasca que espera resposta: si ho fes, l'agent es reparteix la tasca per la qual t'espera i
+pregunta el mateix en bucle.
+
+Si una persona reclama la tasca (`POST /tasks/{id}/take-over`), la següent escriptura de
+l'agent falla amb el motiu escrit, i `get_briefing` porta `taken_over` amb el que li han
+tret el darrer dia. És el timbre que un protocol de consulta pot tenir.
+
+### Engegar-lo, de debò
+
+La credencial d'un agent es crea a **Ajustos ▸ Usuari IA**, dins de l'agent, i **no** a MCP i API: allà hi surt en només lectura, marcada com d'IA i amb un botó que hi porta. Els àmbits no es trien al token —els hereta de l'agent—, que és el que evita l'estat impossible d'un token per a un àmbit que l'agent no porta.
+
+Els exemples de `.mcp.json` per a Claude Code, Codex i Hermes/openclaw són a [`agent/connectar.md`](agent/connectar.md), i el full de comportament —quin bucle segueix, quan preguntar en comptes d'endevinar— a [`agent/skill/ca.md`](agent/skill/ca.md), amb [`es`](agent/skill/es.md) i [`en`](agent/skill/en.md).
+
+Des de l'app, «Com s'hi connecta» (Ajustos ▸ Usuari IA) dona l'URL, el `.mcp.json` fet i el full en l'idioma de l'app, per copiar i per baixar (`GET /api/v1/ai/skill`). **El `.mcp.json` porta la credencial i ho diu; el full no en porta cap.** Són dos fitxers justament perquè «quin dels dos és el secret» tingui resposta.
 
 ---
 

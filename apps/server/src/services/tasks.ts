@@ -15,7 +15,7 @@ import {
   type SourceKind,
   type TaskStatus,
 } from '@fem-ho/contracts';
-import { dbBool } from '../db/bool.js';
+import { dbBool, isTrue } from '../db/bool.js';
 import type { AuditContext } from '../audit/audited-transaction.js';
 import type { MigrationDb } from '../db/migration-db.js';
 import { PolicyError, missingCapability, notFound } from '../policy/errors.js';
@@ -27,6 +27,12 @@ import { clampInt } from '../util/clamp.js';
 import { localDayBounds } from '../time/local-day.js';
 import { listInboxEvents, type InboxEvent } from './events.js';
 import { listInboxMail, type InboxMail } from './mail.js';
+import { refusalError, refuseTaskWrite, type WriteIntent } from '../policy/ai-writes.js';
+import { clearAttention } from './attention.js';
+import { settingsOf } from './scope-settings.js';
+import { assertTypeInScope } from './task-types.js';
+import { closeSession, openSession } from './sessions.js';
+import { leaseOf, releaseIfHeld } from './leases.js';
 import { assertScopeAccess, listScopes } from './scopes.js';
 
 export interface TaskRow {
@@ -58,6 +64,29 @@ export interface TaskRow {
    * mirar una columna més.
    */
   source_kind: SourceKind | null;
+  /**
+   * Si un agent espera resposta teva **ara**.
+   *
+   * Viu a la tasca i no al comentari que la pregunta: «quines esperen resposta» és el que
+   * ha de poder respondre el tauler sense llegir els comentaris de tres-centes targetes.
+   */
+  needs_attention: boolean;
+  /** En què es va anar el temps: la tipologia, si l'àmbit en fa servir. */
+  task_type_id: string | null;
+  /** Des de quan. Una pregunta de fa deu minuts i una de fa tres dies no diuen el mateix. */
+  attention_asked_at: string | null;
+  /**
+   * L'última cosa que li ha passat, sigui qui sigui qui la va fer.
+   *
+   * **No és `updated_at`**: aquell és l'última escriptura a la fila i no veu el que passa
+   * al voltant —un comentari, una reserva, una pregunta—. Això és el que fa que la targeta
+   * pugui dir «fa 5 min» o «fa tres dies», que és la diferència entre un agent que hi
+   * treballa i un que no hi és.
+   */
+  last_activity_at: string | null;
+  /** Quan un agent la va llegir per última vegada, i quin. `null` si cap. */
+  ai_last_read_at: string | null;
+  ai_last_read_by: string | null;
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -78,12 +107,25 @@ export interface Task extends TaskRow {
    * files per pintar unes quantes pastilles.
    */
   progress: { done: number; total: number; lists: number };
+  /**
+   * Fins quan està bloquejada, o `null` si no ho està.
+   *
+   * **No és una columna de `tasks`**: és la reserva viva (`task_leases`), que ja existia per
+   * evitar que dos agents fessin la mateixa feina. El que hi ha de nou és que es vegi: una
+   * targeta que no diu que hi ha un agent a dins convida a endur-se-la, i llavors l'agent
+   * segueix treballant contra una cosa que ja no és allà.
+   */
+  locked_until: string | null;
+  /** Quin agent la té. `null` amb `locked_until` ple vol dir que la té una persona. */
+  locked_by_agent_id: string | null;
 }
 
 const TASK_COLUMNS = sql`
   id, scope_id, project_id, title, description, status, position, due_date, due_time,
   deadline, completed_at, view_mode, ai_mode, delegate_agent_id,
-  rrule, recurrence_mode, recurrence_parent_id, source_kind, created_by,
+  rrule, recurrence_mode, recurrence_parent_id, source_kind,
+  needs_attention, attention_asked_at, last_activity_at, ai_last_read_at, ai_last_read_by,
+  task_type_id, created_by,
   created_at, updated_at, version
 `;
 
@@ -156,6 +198,20 @@ async function withAssignees(db: MigrationDb, rows: TaskRow[]): Promise<Task[]> 
     labelsByTask.set(link.task_id, list);
   }
 
+  /**
+   * **El pany.** Una consulta per a tot el tauler, com la resta: preguntar-ho targeta per
+   * targeta serien tres-centes consultes per pintar uns quants cadenats.
+   *
+   * `new Date()` i no un instant que vingui de fora perquè això és un camí de lectura i no
+   * en té cap: una reserva viva ho és **ara**, en el moment de mirar-la.
+   */
+  const ara = new Date().toISOString();
+  const leases = await sql<{ task_id: string; agent_id: string | null; expires_at: string }>`
+    SELECT task_id, agent_id, expires_at FROM task_leases
+    WHERE task_id IN (${sql.join(ids)}) AND expires_at > ${ara}
+  `.execute(db);
+  const leaseByTask = new Map(leases.rows.map((row) => [row.task_id, row]));
+
   const listCounts = new Map(blocks.rows.map((row) => [row.task_id, Number(row.lists)]));
   const counts = new Map(
     progress.rows.map((row) => [row.task_id, { done: Number(row.done), total: Number(row.total) }]),
@@ -163,8 +219,12 @@ async function withAssignees(db: MigrationDb, rows: TaskRow[]): Promise<Task[]> 
 
   return rows.map((row) => ({
     ...row,
+    // SQLite dona 0/1 i Postgres un booleà: qui ho llegeix ha de rebre sempre un booleà.
+    needs_attention: isTrue(row.needs_attention),
     assignee_ids: (byTask.get(row.id) ?? []).sort(),
     label_ids: (labelsByTask.get(row.id) ?? []).sort(),
+    locked_until: leaseByTask.get(row.id)?.expires_at ?? null,
+    locked_by_agent_id: leaseByTask.get(row.id)?.agent_id ?? null,
     progress: {
       ...(counts.get(row.id) ?? { done: 0, total: 0 }),
       lists: listCounts.get(row.id) ?? 0,
@@ -184,6 +244,26 @@ export async function getTask(db: MigrationDb, principal: Principal, id: string)
   // L'abast es comprova SEMPRE, i l'error diu on és la tasca perquè qui el rebi pugui
   // corregir en comptes de reintentar (docs/05 §2).
   await assertScopeAccess(db, principal, row.scope_id, { type: 'La tasca', id });
+
+  /**
+   * **Que un agent l'ha llegida es guarda.** És el que respon «t'ha llegit la resposta?»
+   * sense haver-li de preguntar, i és mitja explicació quan una tasca porta dies quieta.
+   *
+   * Va aquí, en un camí de lectura, i no és cap incoherència: `resolve.ts` ja fa el mateix
+   * amb `api_tokens.last_used_at`. **No toca `updated_at` ni `version`**: llegir no és un
+   * canvi de la tasca i no ha de viatjar pel sync ni marcar-la com a modificada. I no va a
+   * l'historial perquè un agent que consulta cada minut hi deixaria mil files al dia i
+   * taparia el que sí que va fer.
+   */
+  if (principal.kind === 'agent' && principal.agentId !== undefined) {
+    const ara = new Date().toISOString();
+    await sql`
+      UPDATE tasks SET ai_last_read_at = ${ara}, ai_last_read_by = ${principal.agentId}
+      WHERE id = ${id}
+    `.execute(db);
+    row.ai_last_read_at = ara;
+    row.ai_last_read_by = principal.agentId;
+  }
 
   const [task] = await withAssignees(db, [row]);
   if (task === undefined) throw notFound('task', id);
@@ -212,6 +292,8 @@ export interface ListTasksFilters {
    */
   dueFrom?: string | undefined;
   dueTo?: string | undefined;
+  /** Només les que esperen resposta. És el que compta el punt del commutador d'IA. */
+  needsAttention?: boolean | undefined;
 }
 
 export interface TaskPage {
@@ -247,6 +329,7 @@ export async function listTasks(
       ${filters.projectId === undefined ? sql`` : sql`AND project_id = ${filters.projectId}`}
       ${filters.dueFrom === undefined ? sql`` : sql`AND due_date >= ${filters.dueFrom}`}
       ${filters.dueTo === undefined ? sql`` : sql`AND due_date <= ${filters.dueTo}`}
+      ${filters.needsAttention === true ? sql`AND needs_attention = ${dbBool(true)}` : sql``}
       ${
         cursor === null
           ? sql``
@@ -327,6 +410,8 @@ export interface CreateTaskInput {
   due_date?: string | undefined;
   due_time?: string | undefined;
   assignee_ids?: string[] | undefined;
+  /** En què es va anar el temps. Obligatòria als àmbits que ho demanin. */
+  task_type_id?: string | undefined;
   /**
    * De quin esdeveniment ve, si ve d'algun.
    *
@@ -371,6 +456,30 @@ export async function createTask(
   }
 
   const scope = await assertScopeAccess(ctx.tx, principal, input.scope_id);
+
+  /**
+   * **La tipologia, quan l'àmbit l'exigeix.**
+   *
+   * Es comprova en **crear**, que és el que va demanar qui ho farà servir: si es demanés en
+   * completar, hi hauria tasques a mig fer que un dia no es podrien acabar sense una
+   * decisió que ja no recorda ningú. L'error diu que en falta una, i la pantalla ofereix
+   * les que hi ha —rebutjar sense oferir seria una porta tancada.
+   */
+  const config = await settingsOf(ctx.tx, input.scope_id);
+  // `!= null` i no `!== undefined`: pel camí del sync arriba la fila sencera de l'altra
+  // banda, amb `task_type_id: null`, i «no en té» no és «en té una que es diu null».
+  if (input.task_type_id != null && input.task_type_id !== '') {
+    await assertTypeInScope(ctx.tx, input.scope_id, input.task_type_id);
+  } else if (config.task_types_enabled && config.task_type_required) {
+    throw new PolicyError(
+      'task-type-required',
+      'Task type required',
+      422,
+      `Tasks in ${scope.name} need a task type.`,
+      { name: scope.name, scope_id: input.scope_id },
+    );
+  }
+
   const id = input.id ?? uuidv7();
 
   const existing = await sql<TaskRow>`
@@ -466,14 +575,14 @@ export async function createTask(
     INSERT INTO tasks (id, scope_id, project_id, title, description, status, position,
                        due_date, due_time, view_mode, ai_mode, origin, search_text,
                        event_calendar_id, event_uid, event_recurrence_id, source_kind,
-                       created_by, created_at, updated_at, version)
+                       task_type_id, created_by, created_at, updated_at, version)
     VALUES (${id}, ${input.scope_id}, ${input.project_id ?? null}, ${input.title.trim()},
             ${input.description ?? null}, ${status}, ${position}, ${input.due_date ?? null},
             ${input.due_time ?? null}, 'card', 'manual', 'native',
             ${normalizeForSearch(input.title, input.description)},
             ${input.source_event?.calendar_id ?? null}, ${input.source_event?.uid ?? null},
             ${input.source_event?.recurrence_id ?? null}, ${sourceKind},
-            ${principal.userId}, ${ctx.now}, ${ctx.now}, 1)
+            ${input.task_type_id ?? null}, ${principal.userId}, ${ctx.now}, ${ctx.now}, 1)
     ON CONFLICT (id) DO NOTHING
   `.execute(ctx.tx);
 
@@ -548,6 +657,45 @@ export interface MoveTaskInput {
  * perquè el servidor la calculi, per a clients simples. Les dues coses acaben al mateix
  * lloc, i el càlcul és exactament el mateix codi de `packages/contracts`.
  */
+/**
+ * El pany, aplicat.
+ *
+ * Una sola porta per als tres camins d'escriptura, perquè la regla no es pugui complir a
+ * dos llocs i oblidar-se al tercer. La decisió és pura (`policy/ai-writes.ts`); això és el
+ * que hi porta la reserva viva i el nom de l'agent, que és el que fa que el missatge sigui
+ * llegible per a qui el rep.
+ */
+async function assertWritable(
+  ctx: AuditContext,
+  principal: Principal,
+  task: { id: string; ai_mode: TaskRow['ai_mode'] },
+  intent: WriteIntent,
+): Promise<void> {
+  const lease = await leaseOf(ctx.tx, task.id, ctx.now);
+  const refusal = refuseTaskWrite(
+    { kind: principal.kind, agentId: principal.agentId },
+    {
+      aiMode: task.ai_mode,
+      lease:
+        lease === undefined
+          ? null
+          : { agentId: lease.agentId, userId: lease.userId, expiresAt: lease.expiresAt },
+    },
+    intent,
+  );
+  if (refusal === null) return;
+
+  // El nom, no l'identificador: qui llegeix això és una persona mirant una targeta.
+  let agentName: string | undefined;
+  if (lease?.agentId != null) {
+    const found = await sql<{ name: string }>`
+      SELECT name FROM ai_agents WHERE id = ${lease.agentId}
+    `.execute(ctx.tx);
+    agentName = found.rows[0]?.name;
+  }
+  throw refusalError(refusal, { agentName, now: ctx.now });
+}
+
 export async function moveTask(
   ctx: AuditContext,
   principal: Principal,
@@ -562,6 +710,7 @@ export async function moveTask(
   const current = found.rows[0];
   if (current === undefined) throw notFound('task', id);
   await assertScopeAccess(ctx.tx, principal, current.scope_id, { type: 'La tasca', id });
+  await assertWritable(ctx, principal, current, 'move');
 
   const status = input.status ?? current.status;
 
@@ -639,6 +788,20 @@ export async function moveTask(
     },
   });
 
+  /**
+   * **La dedicació s'anota aquí i enlloc més.**
+   *
+   * Entrar a Fent obre un bloc i sortir-ne el tanca. Va a `moveTask` perquè és l'únic camí
+   * pel qual una tasca canvia de columna —el tauler, la fletxa de la targeta, el commutador
+   * i l'MCP hi passen tots—, i posar-ho a cada cridador seria posar-ho a quatre llocs perquè
+   * un dia en falti un.
+   */
+  if (status === 'doing' && current.status !== 'doing') {
+    await openSession(ctx, principal.userId, current);
+  } else if (status !== 'doing' && current.status === 'doing') {
+    await closeSession(ctx, id);
+  }
+
   if (entraAFet) {
     // La resta del que vol dir «feta», i el mateix ordre que a `completeTask`: les
     // subtasques cauen amb ella i, si es repeteix, neix la següent. Una tasca que es
@@ -650,6 +813,75 @@ export async function moveTask(
     `.execute(ctx.tx);
     await createNextOccurrence(ctx, principal, id, current);
   }
+
+  const updated = await sql<TaskRow>`
+    SELECT ${TASK_COLUMNS} FROM tasks WHERE id = ${id}
+  `.execute(ctx.tx);
+  const [task] = await withAssignees(ctx.tx, updated.rows);
+  if (task === undefined) throw notFound('task', id);
+  return task;
+}
+
+/**
+ * Reclamar una tasca que estava a mans de la IA.
+ *
+ * **El camí de tornada que no existia.** Fins avui una tasca delegada només sortia del
+ * kanban d'IA arrossegant-la a la bústia, que la deixa a `manual` però també la treu de la
+ * columna on era: la manera d'agafar una cosa a mig fer era desfer-li el lloc.
+ *
+ * Tres coses hi passen, i cap n'esborra res:
+ *
+ *   - Passa a `manual` i **a la columna que triïs**. Per això el paràmetre existeix: una
+ *     tasca que l'agent tenia a «Fent» pot ser que la vulguis continuar tu, o pot ser que
+ *     la vulguis tornar a la cua. Endevinar-ho seria decidir-ho per tu.
+ *   - **Baixa la marca d'atenció**, si esperava resposta: ja no espera ningú.
+ *   - **Deixa anar la reserva.** Només arriba aquí si no estava bloquejada —`assertWritable`
+ *     ho ha comprovat—, però una reserva caducada que quedés a la taula faria que el pany
+ *     tornés a sortir sol quan l'agent la renovés.
+ *
+ * Els comentaris, els adjunts i l'historial es queden: són de la tasca, no del mode. És
+ * literalment el que la fa útil de reclamar —el que l'agent ja hi ha deixat escrit.
+ */
+export async function takeOverTask(
+  ctx: AuditContext,
+  principal: Principal,
+  id: string,
+  status: 'todo' | 'doing',
+): Promise<Task> {
+  if (!hasCapability(principal, 'tasks:write')) throw missingCapability('tasks:write');
+
+  const found = await sql<TaskRow>`
+    SELECT ${TASK_COLUMNS} FROM tasks WHERE id = ${id} AND deleted_at IS NULL
+  `.execute(ctx.tx);
+  const current = found.rows[0];
+  if (current === undefined) throw notFound('task', id);
+  await assertScopeAccess(ctx.tx, principal, current.scope_id, { type: 'La tasca', id });
+  await assertWritable(ctx, principal, current, 'take-over');
+
+  await sql`
+    UPDATE tasks
+    SET ai_mode = 'manual', status = ${status}, updated_at = ${ctx.now}, version = version + 1
+    WHERE id = ${id}
+  `.execute(ctx.tx);
+
+  await clearAttention(ctx, id);
+  await releaseIfHeld(ctx, id, 'Una persona ha assumit la tasca.');
+
+  /**
+   * **`taken_over` i no `updated`.** L'historial és el que llegeix l'agent per saber què
+   * ha passat, i «ha canviat `ai_mode` de delegated a manual» no diu qui se l'ha enduta
+   * ni per què la seva següent crida falla.
+   */
+  ctx.record({
+    entityType: 'task',
+    entityId: id,
+    scopeId: current.scope_id,
+    verb: 'taken_over',
+    changes: {
+      ai_mode: { from: current.ai_mode, to: 'manual' },
+      status: { from: current.status, to: status },
+    },
+  });
 
   const updated = await sql<TaskRow>`
     SELECT ${TASK_COLUMNS} FROM tasks WHERE id = ${id}
@@ -678,6 +910,7 @@ export async function completeTask(
   const current = found.rows[0];
   if (current === undefined) throw notFound('task', id);
   await assertScopeAccess(ctx.tx, principal, current.scope_id, { type: 'La tasca', id });
+  await assertWritable(ctx, principal, current, 'move');
 
   await sql`
     UPDATE tasks
@@ -685,6 +918,17 @@ export async function completeTask(
         version = version + 1
     WHERE id = ${id}
   `.execute(ctx.tx);
+
+  /**
+   * **Una tasca feta ja no espera resposta.** Si la marca hi quedés, el punt del
+   * commutador comptaria una pregunta d'una tasca que ja no és a cap columna oberta, i
+   * l'única manera de treure'l seria respondre-hi una cosa que ja no cal.
+   */
+  await clearAttention(ctx, id);
+
+  // I si venia de Fent, el bloc de dedicació es tanca: acabar-la per aquí o arrossegant-la
+  // ha de deixar el mateix rastre.
+  if (current.status === 'doing') await closeSession(ctx, id);
 
   // Les subtasques cauen amb la tasca. La cascada AMUNT —marcar l'últim ítem d'una
   // llista marca la subtasca i la tasca— arriba a M8, que és quan hi ha llistes.
@@ -911,6 +1155,8 @@ export interface UpdateTaskInput {
   deadline?: string | null | undefined;
   /** `null` la treu del projecte i la torna a l'espai general de l'àmbit. */
   project_id?: string | null | undefined;
+  /** `null` o buit la deixen sense tipologia. */
+  task_type_id?: string | null | undefined;
   /** RFC 5545. `null` deixa de repetir-se. */
   rrule?: string | null | undefined;
   /** `schedule` compta des del venciment; `completion`, des que es fa (docs/01 §4). */
@@ -941,6 +1187,7 @@ export async function updateTask(
   if (before === undefined) throw notFound('task', id);
 
   await assertScopeAccess(ctx.tx, principal, before.scope_id);
+  await assertWritable(ctx, principal, before, 'edit');
 
   const fields: Record<string, unknown> = {};
   if (input.title !== undefined) {
@@ -954,6 +1201,13 @@ export async function updateTask(
     }
     fields.title = input.title.trim();
   }
+  if (input.task_type_id !== undefined) {
+    if (input.task_type_id !== null && input.task_type_id !== '') {
+      await assertTypeInScope(ctx.tx, before.scope_id, input.task_type_id);
+    }
+    fields.task_type_id = input.task_type_id === '' ? null : input.task_type_id;
+  }
+
   for (const key of [
     'description',
     'due_date',

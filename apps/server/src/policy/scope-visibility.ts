@@ -19,6 +19,7 @@
 
 import { sql, type RawBuilder } from 'kysely';
 import type { MigrationDb } from '../db/migration-db.js';
+import type { ScopeRole } from './scope-roles.js';
 
 /**
  * El fragment de SQL, per incrustar en un `WHERE`.
@@ -46,7 +47,12 @@ export async function visibleScopeIds(db: MigrationDb, userId: string): Promise<
   return new Set(rows.rows.map((r) => r.id));
 }
 
-export type ScopeRole = 'owner' | 'collaborator' | 'viewer';
+/**
+ * Es reexporta de `scope-roles.ts` i no es torna a escriure: **la llista de rols viu en un
+ * sol lloc**, que és el que evita que un rol nou existeixi a la matriu de permisos i no
+ * aquí, i que qui el tingui es quedi sense res.
+ */
+export type { ScopeRole } from './scope-roles.js';
 
 /**
  * El rol d'aquest usuari en aquest àmbit, o `null` si no hi és.
@@ -75,5 +81,13 @@ export async function roleOf(
 
   const role = member.rows[0]?.role;
   if (role === undefined) return null;
-  return role === 'owner' ? 'owner' : role === 'viewer' ? 'viewer' : 'collaborator';
+
+  /**
+   * Un valor que no coneixem cau a `collaborator`, que és el rol que **no mana**.
+   *
+   * És la direcció segura: una base amb un rol vell o inventat no ha de donar permisos que
+   * ningú ha concedit. Els quatre que sí que coneixem es diuen aquí i enlloc més.
+   */
+  if (role === 'owner' || role === 'admin' || role === 'viewer') return role;
+  return 'collaborator';
 }

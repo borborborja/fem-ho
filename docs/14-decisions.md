@@ -872,6 +872,158 @@ Tres coses que se'n deriven:
 
 ---
 
+### P25 · Un àmbit té un agent, i el que atura un agent és una pregunta
+
+**La resolució: la feina d'un agent es reparteix per àmbit, i «no puc seguir» és un estat de
+la tasca.**
+
+El terreny de la delegació hi era sencer des de M11 —els agents, els tres modes, el kanban de
+la IA, les reserves, disset tools d'MCP— i **no s'hi podia arribar**: `createToken` no
+escrivia mai `ai_agent_id`, o sigui que cap token es resolia com a agent i `next_task` era
+inabastable. Un terreny que sembla una funció és pitjor que no tenir-lo.
+
+**Per àmbit i no per tasca.** L'alternativa —un `delegate_agent_id` a cada tasca, a més de
+l'àmbit— dona dos eixos que poden dir coses diferents: una tasca de l'àmbit d'en Hermes
+delegada a un altre agent no vol dir res i algú ho ha de resoldre cada vegada. Amb un àmbit
+per agent, «de qui és això» té sempre una resposta i només una, i delegar una tasca no
+obliga a triar ningú.
+
+L'exclusivitat viu **a la base** (`UNIQUE (scope_id)`) perquè una regla que només és al codi
+la trenca el primer que escrigui pel segon camí: una importació, una restauració. El servei
+la torna a comprovar per una altra raó: per poder dir **de qui és l'àmbit**. Un «no es pot»
+és una porta tancada; un «el té en Hermes» és el pas següent.
+
+**`all_scopes` és un indicador i no una llista.** Si en desar-ho es copiessin els àmbits
+d'avui, l'àmbit que es creï la setmana que ve no seria de ningú i la feina que hi caigués no
+la faria mai cap agent, sense que res ho digués.
+
+**I la marca d'atenció, que és el que fa que això es pugui deixar córrer sol.** Un agent que
+no pot decidir una cosa ho podia dir en un comentari, i allà es quedava. `ask_user` és el
+mateix comentari amb conseqüència: la tasca passa a demanar atenció, i es veu al commutador
+d'IA i a la targeta sense obrir res.
+
+- **La baixa respondre**, i completar la tasca. **No hi ha cap «vist»**: el que desencalla
+  l'agent és la resposta, i un botó de vist deixaria la pantalla neta amb l'agent esperant
+  per sempre —la pitjor de les dues mentides possibles.
+- **La conversa és la de comentaris, no una pestanya nova.** Amb dos llocs on mirar què s'ha
+  dit d'una tasca, algú respondria al que no toca i l'agent seguiria aturat.
+- **La pregunta és de l'agent i prou.** Que la pogués aixecar una persona la convertiria en
+  un recordatori, i llavors el punt del commutador ja no voldria dir «algú t'espera».
+
+**El transport és MCP i el comportament és un skill.** La pregunta de partida era «un skill o
+un MCP?» i té resposta perquè són coses diferents: l'MCP és per on parla —i ja hi era—, i el
+skill és el full que li diu quin bucle segueix i quan preguntar en comptes d'endevinar. És
+`docs/agent/skill/` —en català, castellà i anglès—, i l'app el reparteix en l'idioma de qui
+el demana.
+
+---
+
+### P26 · El kanban d'IA vol dir «fes-ho», i la reserva és el pany
+
+**La resolució: deixar una targeta al tauler de la IA la delega, i mentre l'agent hi
+treballi ningú l'hi treu.**
+
+Provant P25 va sortir el forat que ho invalidava tot: arrossegar al tauler de la IA posava
+`assisted`, i `next_task` només reparteix `delegated`. **El que hi deixaves no l'agafava cap
+agent, mai**, i res ho deia. El gest promet una cosa i el servidor en feia una altra, que és
+la mateixa família de defecte que la columna Fet buida (P14) i les etiquetes que no es podien
+treure (P15): peces senceres i ben provades cosides al no-res.
+
+Els tres modes es queden —el brief els demana i el sigil `!ia:ajuda` en fabrica—, però **la
+interfície només produeix `manual` i `delegated`**. «Amb ajuda» no és el que passa quan
+arrossegues una tasca al tauler de la IA: el que passa és que vols que ho faci.
+
+**La reserva era mig concepte.** Existia per evitar que dos agents fessin la mateixa feina i
+**cap escriptura la mirava**: una persona podia endur-se una tasca mentre l'agent hi
+treballava, i un agent podia seguir movent una que ja no era seva. Ara mana, i mana als dos
+sentits:
+
+- **Una persona no mou ni reclama una tasca bloquejada.** El `409` diu qui la té i quants
+  minuts queden: un «no» amb final és una espera, un «no» sol és una porta.
+- **Un agent només mou i completa el que té reservat**, i mai una tasca `manual`. Això últim
+  **és** l'avís de la reclamació: un protocol de consulta no té timbre, i el que en fa és que
+  la següent cosa que provi digui exactament què ha passat.
+- **Comentar no es bloqueja mai.** Un agent que no pot dir què li passa s'atura en silenci, i
+  una persona que no pot respondre deixa l'agent esperant per sempre.
+- **Preguntar deixa anar el pany.** Qui espera no treballa. Si `ask_user` no desbloquegés, la
+  pregunta et deixaria la tasca tancada precisament quan et toca a tu.
+
+**Reclamar-la no esborra res.** Comentaris, adjunts i historial són de la tasca i no del mode,
+i són justament el que fa que valgui la pena reclamar-la: el que l'agent ja hi ha esbrinat. La
+conversa amb la IA es queda a la fitxa encara que la tasca passi a `manual`.
+
+**Sense forçat.** El pany caduca sol als 30 minuts. Un botó de «desbloqueja-la igualment»
+seria exactament la manera de trencar-li la feina a mig fer a l'agent, que és el que això
+evita.
+
+**Que se sàpiga què ha fet i quan.** `last_activity_at` la manté la capa d'auditoria —un sol
+lloc, per on passa tota escriptura— i **no és `updated_at`**, que no veu els comentaris ni les
+reserves. Les lectures d'un agent es guarden en una columna i **no a l'historial**: un agent
+que consulta cada minut hi deixaria mil files al dia i taparia el que sí que va fer.
+
+**I que l'agent pugui tornar.** La resposta pot arribar-li per un xat o en un document: passa
+i no és cap trampa. `resume_task` exigeix escriure què ha après **abans** de baixar la marca,
+perquè una crida que només la baixés seria el botó de «vist» que `ask_user` evita, amb l'agent
+fent-se'l a ell mateix.
+
+---
+
+### P27 · La dedicació s'anota sola, el projecte és l'eix, i una tipologia no és una etiqueta
+
+**La resolució: Fem-ho guarda temps treballat, i el guarda com a blocs que obre i tanca el
+tauler.**
+
+Ve de substituir una eina que algú fa servir cada dia i que té dues pantalles que Fem-ho no
+tenia: un **Registre** i unes **Estadístiques**. Allà el temps viu dins de cada tasca
+(`minutes` més una llista de sessions, mantingudes redundants pel navegador) i tot el càlcul
+es fa al client amb la taula sencera baixada.
+
+**Un bloc per estada, i cap acumulat.** Podria ser una columna `minutes` a `tasks` i seria
+més barat de sumar; llavors una tasca que torna de Fet a Fent hauria de fondre's amb el que
+ja hi havia i **el cronograma no existiria**: per pintar un dia en blocs cal saber quan va
+començar i quan va acabar cada estada, no quant sumen totes. Per això la suma es calcula
+sempre dels blocs: guardar el total i els trams és guardar el mateix número dues vegades.
+
+**No hi ha cronòmetre.** El gest que ja fas per dir «hi estic» —moure la targeta a Fent— és
+el que compta les hores. Un botó de començar i aturar és una cosa més per recordar-se, i el
+que passa amb les coses que s'han de recordar és que un dia no te'n recordes i el número
+queda fals sense que res ho digui.
+
+**El passat es reconstrueix, i amb una frontera estricta.** `activity_log` guarda cada
+entrada i sortida de Fent des del primer dia, o sigui que encendre el Registre a un àmbit
+que fa mesos que funciona no comença de zero. Però **sense sortida no hi ha bloc**: tancar-lo
+amb el següent rastre que hi hagi donaria una suposició amb pinta de mesura. L'excepció és la
+tasca que s'està fent ara, que no és cap forat.
+
+**Els oblits no es retallen.** Una targeta que es queda a Fent tota la nit **hi ha estat**;
+el bloc es marca per revisar i s'ajusta arrossegant-lo. Escurçar-lo automàticament diria una
+cosa que no va passar sense dir quina part.
+
+**El projecte és l'eix, i pot dir-se «client».** L'eina d'origen ho organitza tot per
+client, que és un `string` copiat a cada tasca. Aquí això ja existeix i es diu projecte: les
+tasques sense projecte —l'espai general de l'àmbit— són l'«Intern» de sempre. El que
+s'afegeix és **la paraula**, per àmbit, i només la paraula: el camp segueix sent `project_id`
+a la base, a l'API i a les tools (regla 3).
+
+**Una tipologia no és una etiqueta**, encara que s'hi assembli molt. D'una tipologia n'hi ha
+**una** per tasca, la manté **qui mana a l'àmbit** i pot ser **obligatòria**; una etiqueta és
+lliure, en pots posar les que vulguis i qualsevol en crea des de la fitxa. Amb una sola
+taula, «quantes n'hi pot haver» dependria d'un indicador i cada lloc que les toca hauria de
+preguntar-s'ho; i l'historial no en guardaria quina hi havia abans, perquè `setTaskLabel`
+registra dos booleans i no diu **quina** etiqueta. El sigil és `$` perquè `#` ja és l'àmbit i
+el projecte.
+
+**Les hores extres no es desen.** Són una lectura del bloc contra l'horari d'aquell moment;
+desar-les voldria dir que canviar l'horari deixés el passat dient una cosa que ja no és
+certa. I es diuen **per projecte**, perquè «he fet quaranta hores extres» no fa canviar res i
+«les he fetes totes per a un client» sí.
+
+**I la configuració va per àmbit, amb la fila absent com a cas normal.** Qui fa servir Fem-ho
+per a casa no ha de veure mai res d'això: la migració que crea la taula no encén res a ningú,
+i els valors vius són els de `policy/scope-settings.ts`.
+
+---
+
 ## Part 3 — Fets sospitosos de `research/`
 
 El crític va marcar 7 afirmacions com a probablement inventades, obsoletes o internament incoherents. **Cap `docs/` en depèn.**

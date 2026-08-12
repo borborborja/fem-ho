@@ -283,6 +283,32 @@ De dalt a baix:
 
 ---
 
+## 8b · Registre i Estadístiques
+
+Dues pantalles pròpies (`/registre`, `/estadistiques`) que **surten al menú només si algun
+àmbit anota la dedicació**. Són de nínxol —qui factura hores— i ensenyar-les a qui no les ha
+demanades serien dues entrades que no porten enlloc.
+
+**Registre ▸ Taula.** Files agrupades per dia amb el total del dia, i a dalt les pastilles de
+totals: primer per persona, després per projecte. Filtres de període —avui, aquesta setmana,
+aquest mes, 30, 90, tot—, projecte, persona i cerca. El botó d'exportar dona el CSV del que
+hi ha filtrat.
+
+**Registre ▸ Cronograma.** Un sol dia, una fila per projecte i els blocs a l'hora que van
+passar. **Existeix per veure els forats**: la taula diu quantes hores hi ha, això diu on són
+i on no n'hi ha. S'edita arrossegant —moure el bloc el canvia d'hora, les vores l'allarguen—
+amb ajust a cinc minuts, i el desat és una sola petició en deixar anar. Els blocs fora
+d'horari van destacats.
+
+**Estadístiques.** Quatre targetes, l'evolució —amb els dies buits inclosos, i per setmanes
+quan el rang passa dels 70 dies— i els desglossaments per tipologia, per projecte i per
+persona, més les hores extres per projecte quan n'hi ha.
+
+Els números els fa el servidor i arriben fets. Els gràfics són SVG amb els tokens del design
+system: cap llibreria de charting per dibuixar una línia i unes barres.
+
+---
+
 ## 9 · Ajustos
 
 Graella de 220px + contingut, màxim 1100px.

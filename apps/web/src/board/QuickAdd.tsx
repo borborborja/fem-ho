@@ -32,6 +32,8 @@ export interface QuickAddProps {
     projectId: string | null;
     assigneeIds: string[];
     aiMode: 'manual' | 'assisted' | 'delegated';
+    /** La tipologia escrita amb `$`, si l'àmbit en fa servir. */
+    taskTypeId: string | null;
   }) => void | Promise<void>;
 }
 
@@ -175,6 +177,7 @@ export function QuickAdd({ context, columnLabel, scopeColors = {}, onCreate }: Q
       projectId: parsed.projectId,
       assigneeIds: parsed.assigneeIds,
       aiMode: parsed.aiMode,
+      taskTypeId: parsed.taskTypeId,
     });
 
     // El camp es buida i MANTÉ EL FOCUS, per poder-ne encadenar (docs/02 §4).

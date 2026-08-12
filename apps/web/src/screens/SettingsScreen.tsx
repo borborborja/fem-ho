@@ -34,6 +34,8 @@ import type {
   AdminUser,
   Agent,
   ApiTokenSummary,
+  ScopeSettings,
+  TaskType,
   Calendar,
   Info,
   MailAccount,
@@ -207,7 +209,7 @@ export function SettingsScreen() {
           {tab === 'scopes' ? <ScopesTab /> : null}
           {tab === 'calendars' ? <CalendarsTab /> : null}
           {tab === 'mail' ? <MailTab /> : null}
-          {tab === 'mcp' ? <McpTab /> : null}
+          {tab === 'mcp' ? <McpTab onGoToAgent={() => setTab('ai')} /> : null}
           {tab === 'ai' ? <AiTab /> : null}
           {tab === 'shares' ? <SharesTab /> : null}
           {tab === 'profile' ? <ProfileTab /> : null}
@@ -690,6 +692,7 @@ function ScopeRow({ scope, onDone }: { scope: Scope; onDone: () => Promise<void>
   const [color, setColor] = useState(scope.color);
   const [kind, setKind] = useState<'individual' | 'collective'>(scope.kind);
   const [openMembers, setOpenMembers] = useState(false);
+  const [openTracking, setOpenTracking] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const save = useMutation(async () => {
@@ -743,6 +746,16 @@ function ScopeRow({ scope, onDone }: { scope: Scope; onDone: () => Promise<void>
             style={LINK_BUTTON}
           >
             {t('settings.members')}
+          </button>
+        ) : null}
+        {isOwner ? (
+          <button
+            type="button"
+            data-testid={`scope-tracking-${scope.id}`}
+            onClick={() => setOpenTracking(!openTracking)}
+            style={LINK_BUTTON}
+          >
+            {t('settings.tracking')}
           </button>
         ) : null}
       </div>
@@ -801,6 +814,205 @@ function ScopeRow({ scope, onDone }: { scope: Scope; onDone: () => Promise<void>
       ) : null}
 
       {openMembers ? <MembersList scopeId={scope.id} canManage={isOwner} /> : null}
+      {openTracking ? <TrackingSettings scopeId={scope.id} /> : null}
+    </div>
+  );
+}
+
+/**
+ * Com es comporta un àmbit: el registre de dedicació, l'horari i les tipologies.
+ *
+ * Va aquí i no a una pestanya pròpia perquè és **d'aquest àmbit**: qui fa servir Fem-ho per
+ * a casa no ho ha de veure mai, i qui factura hores ho troba on ja és per canviar el nom i
+ * el color.
+ */
+function TrackingSettings({ scopeId }: { scopeId: string }) {
+  const settings = useApi<ScopeSettings>(`/api/v1/scopes/${scopeId}/settings`);
+  const types = useApi<{ data: TaskType[] }>(`/api/v1/task-types?scope_id=${scopeId}`);
+  const [nou, setNou] = useState('');
+  const [recuperats, setRecuperats] = useState<number | null>(null);
+
+  const config = settings.data;
+
+  const desa = (canvis: Record<string, unknown>): void => {
+    void api
+      .patch<{ backfilled: number }>(`/api/v1/scopes/${scopeId}/settings`, canvis)
+      .then((resposta) => {
+        // **Es diu quants blocs s'han recuperat.** Encendre-ho i trobar-se el Registre ple
+        // sense explicació faria pensar que l'app s'ho ha inventat; el que ha passat és que
+        // ja ho sabíem de l'historial.
+        if (resposta.backfilled > 0) setRecuperats(resposta.backfilled);
+        settings.reload();
+      });
+  };
+
+  if (config === undefined) return null;
+
+  return (
+    <div style={{ paddingLeft: 18, display: 'grid', gap: 10 }}>
+      <Toggle
+        testId={`tracking-on-${scopeId}`}
+        label={t('settings.trackingOn')}
+        checked={config.time_tracking}
+        onChange={(value) => desa({ time_tracking: value })}
+      />
+      <p style={HINT}>{t('settings.trackingHelp')}</p>
+      {recuperats === null ? null : (
+        <p
+          data-testid={`tracking-backfilled-${scopeId}`}
+          style={{ ...HINT, color: 'var(--kicker)' }}
+        >
+          {t('settings.trackingBackfilled', { count: recuperats })}
+        </p>
+      )}
+
+      {config.time_tracking ? (
+        <>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 12, color: 'var(--ink-soft)' }}>
+              {t('settings.workHours')}
+            </span>
+            <input
+              type="time"
+              className="plou-input"
+              data-testid={`work-start-${scopeId}`}
+              value={config.work_start}
+              onChange={(event) => desa({ work_start: event.target.value })}
+              style={{ width: 'auto' }}
+            />
+            <input
+              type="time"
+              className="plou-input"
+              data-testid={`work-end-${scopeId}`}
+              value={config.work_end}
+              onChange={(event) => desa({ work_end: event.target.value })}
+              style={{ width: 'auto' }}
+            />
+          </div>
+
+          {/* Els dies laborables, en l'ordre en què es diuen: de dilluns a diumenge. */}
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].map((dia, index) => (
+              <label
+                key={dia}
+                style={{ display: 'flex', gap: 4, alignItems: 'center', fontSize: 12 }}
+              >
+                <input
+                  type="checkbox"
+                  data-testid={`work-day-${scopeId}-${dia}`}
+                  checked={config.work_days[index] === '1'}
+                  onChange={(event) => {
+                    const dies = config.work_days.split('');
+                    dies[index] = event.target.checked ? '1' : '0';
+                    desa({ work_days: dies.join('') });
+                  }}
+                />
+                {t(`settings.day.${dia}`)}
+              </label>
+            ))}
+          </div>
+
+          <Toggle
+            testId={`overtime-${scopeId}`}
+            label={t('settings.overtimeVisible')}
+            checked={config.overtime_visible}
+            onChange={(value) => desa({ overtime_visible: value })}
+          />
+
+          <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12 }}>
+            {t('settings.longSession')}
+            <input
+              type="number"
+              className="plou-input"
+              data-testid={`long-session-${scopeId}`}
+              value={config.long_session_hours}
+              min={1}
+              max={168}
+              onChange={(event) => desa({ long_session_hours: Number(event.target.value) })}
+              style={{ width: 80 }}
+            />
+          </label>
+        </>
+      ) : null}
+
+      {/*
+        **La nomenclatura.** Només canvia la paraula de la interfície: el camp segueix sent
+        `project_id` a la base, a l'API i a les tools (regla 3).
+      */}
+      <Chips
+        testId={`project-noun-${scopeId}`}
+        value={config.project_noun}
+        options={[
+          { key: 'project' as const, label: t('settings.noun.project') },
+          { key: 'client' as const, label: t('settings.noun.client') },
+        ]}
+        onChange={(value) => desa({ project_noun: value })}
+      />
+
+      <Toggle
+        testId={`types-on-${scopeId}`}
+        label={t('settings.typesOn')}
+        checked={config.task_types_enabled}
+        onChange={(value) => desa({ task_types_enabled: value })}
+      />
+
+      {config.task_types_enabled ? (
+        <>
+          <Toggle
+            testId={`types-required-${scopeId}`}
+            label={t('settings.typesRequired')}
+            checked={config.task_type_required}
+            onChange={(value) => desa({ task_type_required: value })}
+          />
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {(types.data?.data ?? []).map((type) => (
+              <span
+                key={type.id}
+                data-testid={`task-type-${type.id}`}
+                className="plou-tag"
+                style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}
+              >
+                {type.name}
+                <button
+                  type="button"
+                  data-testid={`task-type-delete-${type.id}`}
+                  onClick={() => {
+                    void api.delete(`/api/v1/task-types/${type.id}`).then(() => types.reload());
+                  }}
+                  style={{ ...LINK_BUTTON, color: 'var(--danger-text)' }}
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input
+              className="plou-input"
+              data-testid={`task-type-name-${scopeId}`}
+              value={nou}
+              placeholder={t('settings.typeNew')}
+              onChange={(event) => setNou(event.target.value)}
+            />
+            <button
+              type="button"
+              className="plou-btn plou-btn-ghost"
+              data-testid={`task-type-add-${scopeId}`}
+              disabled={nou.trim() === ''}
+              onClick={() => {
+                void api
+                  .post('/api/v1/task-types', { scope_id: scopeId, name: nou.trim() })
+                  .then(() => {
+                    setNou('');
+                    types.reload();
+                  });
+              }}
+            >
+              {t('nav.create')}
+            </button>
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }
@@ -1002,9 +1214,40 @@ function MembersList({ scopeId, canManage }: { scopeId: string; canManage: boole
             data-testid={`member-${member.id}`}
             style={{ fontSize: 12.5, color: 'var(--ink-soft)', display: 'flex', gap: 8 }}
           >
-            <span>
-              {member.name ?? member.user_id ?? ''} · {t(`settings.role.${member.role}`)}
-            </span>
+            <span>{member.name ?? member.user_id ?? ''}</span>
+
+            {/*
+              **El rol es canvia aquí**, i fins avui no es podia: el `PATCH` existia des del
+              primer dia i no el cridava ningú, o sigui que l'única manera d'elevar algú era
+              fer-lo propietari —i llavors també podia esborrar l'àmbit sencer.
+
+              El propietari no es toca des d'aquí: treure-se'l a un mateix per descuit deixa
+              l'àmbit sense qui el governi, i el servidor ja ho impedeix quan és l'últim.
+            */}
+            {canManage && member.role !== 'owner' ? (
+              <select
+                className="plou-input"
+                data-testid={`member-role-${member.id}`}
+                value={member.role}
+                onChange={(event) => {
+                  void api
+                    .patch(`/api/v1/scopes/${scopeId}/members/${member.id}`, {
+                      role: event.target.value,
+                    })
+                    .then(() => members.reload());
+                }}
+                style={{ width: 'auto', fontSize: 12, padding: '2px 8px' }}
+              >
+                {(['admin', 'collaborator', 'viewer'] as const).map((role) => (
+                  <option key={role} value={role}>
+                    {t(`settings.role.${role}`)}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <span style={{ color: 'var(--ink-faint)' }}>{t(`settings.role.${member.role}`)}</span>
+            )}
+
             {canManage && member.role !== 'owner' ? (
               <button
                 type="button"
@@ -1404,8 +1647,14 @@ function SourcesForScope({
   );
 }
 
-function McpTab() {
+function McpTab({ onGoToAgent }: { onGoToAgent: () => void }) {
   const tokens = useApi<{ data: ApiTokenSummary[] }>('/api/v1/tokens');
+  /**
+   * **Els agents, per poder dir de qui és cada credencial d'IA.** Una credencial que surt
+   * a la llista sense dir a què pertany i que no es deixa revocar aquí seria un misteri;
+   * amb el nom de l'agent i un botó, és un camí.
+   */
+  const agents = useApi<Agent[]>('/api/v1/ai/agents');
   const [name, setName] = useState('');
   const [created, setCreated] = useState<string | null>(null);
 
@@ -1466,41 +1715,84 @@ function McpTab() {
           </div>
         ) : null}
 
-        {(tokens.data?.data ?? []).map((token) => (
-          <div
-            key={token.id}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-              fontSize: 12.5,
-              color: 'var(--ink-soft)',
-            }}
-          >
-            <span style={{ fontWeight: 600, color: 'var(--ink)' }}>{token.name}</span>
-            <span style={{ fontFamily: 'monospace' }}>{token.token_prefix}</span>
-            <span>{token.last_used_at ?? t('tokens.never')}</span>
-            <button
-              type="button"
-              data-testid={`token-revoke-${token.id}`}
-              onClick={() => {
-                void api.delete(`/api/v1/tokens/${token.id}`).then(() => {
-                  tokens.reload();
-                });
-              }}
+        {(tokens.data?.data ?? []).map((token) => {
+          /**
+           * Una credencial d'IA es veu aquí —és on la gent busca els tokens— però **no es
+           * toca aquí**: els seus àmbits els hereta de l'agent, i revocar-la sense veure de
+           * qui era deixaria un agent aturat sense saber per què.
+           */
+          const agent =
+            token.ai_agent_id === null
+              ? undefined
+              : (agents.data ?? []).find((row) => row.id === token.ai_agent_id);
+
+          return (
+            <div
+              key={token.id}
               style={{
-                border: 'none',
-                background: 'transparent',
-                font: 'inherit',
-                fontSize: 12,
-                cursor: 'pointer',
-                color: 'var(--danger-text)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                fontSize: 12.5,
+                color: 'var(--ink-soft)',
               }}
             >
-              {t('tokens.revoke')}
-            </button>
-          </div>
-        ))}
+              <span style={{ fontWeight: 600, color: 'var(--ink)' }}>{token.name}</span>
+              <span style={{ fontFamily: 'monospace' }}>{token.token_prefix}</span>
+              <span>{token.last_used_at ?? t('tokens.never')}</span>
+              {token.ai_agent_id === null ? (
+                <button
+                  type="button"
+                  data-testid={`token-revoke-${token.id}`}
+                  onClick={() => {
+                    void api.delete(`/api/v1/tokens/${token.id}`).then(() => {
+                      tokens.reload();
+                    });
+                  }}
+                  style={{
+                    border: 'none',
+                    background: 'transparent',
+                    font: 'inherit',
+                    fontSize: 12,
+                    cursor: 'pointer',
+                    color: 'var(--danger-text)',
+                  }}
+                >
+                  {t('tokens.revoke')}
+                </button>
+              ) : (
+                <>
+                  {/* Icona i text, mai el color sol (docs/04 §8). */}
+                  <span className="plou-tag plou-tag-accent" data-testid={`token-ai-${token.id}`}>
+                    🤖 {t('tokens.aiOwned', { name: agent?.name ?? '…' })}
+                  </span>
+                  <button
+                    type="button"
+                    data-testid={`token-ai-go-${token.id}`}
+                    onClick={onGoToAgent}
+                    style={{
+                      border: 'none',
+                      background: 'transparent',
+                      font: 'inherit',
+                      fontSize: 12,
+                      cursor: 'pointer',
+                      color: 'var(--kicker)',
+                      fontWeight: 600,
+                    }}
+                  >
+                    {t('tokens.aiOwnedGo')}
+                  </button>
+                </>
+              )}
+            </div>
+          );
+        })}
+
+        {(tokens.data?.data ?? []).some((token) => token.ai_agent_id !== null) ? (
+          <p style={{ margin: 0, fontSize: 11.5, color: 'var(--ink-faint)', lineHeight: 1.45 }}>
+            {t('tokens.aiOwnedHelp')}
+          </p>
+        ) : null}
 
         <div style={{ display: 'flex', gap: 8 }}>
           <input
@@ -1528,6 +1820,13 @@ function McpTab() {
 function AiTab() {
   const agents = useApi<Agent[]>('/api/v1/ai/agents');
   const [name, setName] = useState('');
+  /**
+   * **Un canvi en un agent en canvia un altre.** Assignar «Feina» a l'Hermes fa que la
+   * casella del Codex hagi de sortir desactivada, i la disponibilitat la sap el servidor:
+   * aquest comptador la fa tornar a demanar a **totes** les files, no només a la que s'ha
+   * tocat. Sense això, la casella presa es podria marcar fins que algú recarregués.
+   */
+  const [versio, setVersio] = useState(0);
 
   return (
     <Group title={t('settings.agents')}>
@@ -1535,34 +1834,15 @@ function AiTab() {
         <EmptyState>{t('settings.empty.agents')}</EmptyState>
       ) : (
         (agents.data ?? []).map((agent) => (
-          <div
+          <AgentRow
             key={agent.id}
-            style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 12.5 }}
-          >
-            <span style={{ fontWeight: 600 }}>{agent.name}</span>
-            <Toggle
-              testId={`agent-enabled-${agent.id}`}
-              label={t('settings.agentEnabled')}
-              checked={agent.enabled}
-              onChange={(value) => {
-                void api.patch(`/api/v1/ai/agents/${agent.id}`, { enabled: value }).then(() => {
-                  agents.reload();
-                });
-              }}
-            />
-            <Toggle
-              testId={`agent-create-${agent.id}`}
-              label={t('settings.agentCanCreate')}
-              checked={agent.can_create_tasks}
-              onChange={(value) => {
-                void api
-                  .patch(`/api/v1/ai/agents/${agent.id}`, { can_create_tasks: value })
-                  .then(() => {
-                    agents.reload();
-                  });
-              }}
-            />
-          </div>
+            agent={agent}
+            versio={versio}
+            onChanged={() => {
+              agents.reload();
+              setVersio((value) => value + 1);
+            }}
+          />
         ))
       )}
 
@@ -1578,8 +1858,8 @@ function AiTab() {
           type="button"
           className="plou-btn plou-btn-primary"
           data-testid="agent-create"
+          disabled={name.trim() === ''}
           onClick={() => {
-            if (name.trim() === '') return;
             void api.post('/api/v1/ai/agents', { id: uuidv7(), name: name.trim() }).then(() => {
               setName('');
               agents.reload();
@@ -1590,6 +1870,302 @@ function AiTab() {
         </button>
       </div>
     </Group>
+  );
+}
+
+/**
+ * La configuració d'MCP, feta.
+ *
+ * Amb el testimoni sencer si s'acaba de crear, i amb un forat si no: **del hash no se'n pot
+ * treure**, i un fitxer que sembla complet i porta una credencial inventada faria perdre
+ * mitja tarda a qui l'enganxi.
+ */
+function mcpJson(token: string | null): string {
+  return `${JSON.stringify(
+    {
+      mcpServers: {
+        'fem-ho': {
+          type: 'http',
+          url: `${window.location.origin}/mcp`,
+          headers: { Authorization: `Bearer ${token ?? 'ENGANXA-HI-LA-CREDENCIAL'}` },
+        },
+      },
+    },
+    null,
+    2,
+  )}\n`;
+}
+
+/** Baixar un text com a fitxer, sense passar pel servidor: ja el tenim aquí. */
+function baixa(name: string, text: string, type: string): void {
+  const url = URL.createObjectURL(new Blob([text], { type }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = name;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+/**
+ * Un agent: què pot fer, **d'on agafa feina**, i amb què s'hi connecta.
+ *
+ * Els tres blocs són el que cal per posar-lo a treballar, i van junts perquè és una sola
+ * decisió: qui és, què porta i com hi entra. Repartits per pantalles, configurar un agent
+ * seria anar i tornar tres vegades.
+ */
+function AgentRow({
+  agent,
+  versio,
+  onChanged,
+}: {
+  agent: Agent;
+  versio: number;
+  onChanged: () => void;
+}) {
+  const { scopes } = useSessionData();
+  const disponibilitat = useApi<{
+    data: { scope_id: string; taken_by: { name: string } | null }[];
+  }>(`/api/v1/ai/agents/${agent.id}/scope-availability`, [versio]);
+  const credencials = useApi<{ data: ApiTokenSummary[] }>(
+    `/api/v1/ai/agents/${agent.id}/credentials`,
+  );
+  const [nova, setNova] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const presa = (scopeId: string): string | null =>
+    disponibilitat.data?.data.find((row) => row.scope_id === scopeId)?.taken_by?.name ?? null;
+
+  /** Desa el conjunt sencer: la pantalla envia les caselles tal com han quedat. */
+  const desa = (next: { scope_ids: string[]; all_scopes: boolean }): void => {
+    setError(null);
+    void api
+      .put(`/api/v1/ai/agents/${agent.id}/scopes`, next)
+      .then(onChanged)
+      .catch((cause: unknown) => setError(failureText(cause)));
+  };
+
+  return (
+    <div
+      data-testid={`agent-${agent.id}`}
+      style={{
+        display: 'grid',
+        gap: 10,
+        padding: 12,
+        border: '1px solid var(--card-border)',
+        borderRadius: 'var(--radius-card)',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 12.5 }}>
+        <span style={{ fontWeight: 600 }}>{agent.name}</span>
+        <Toggle
+          testId={`agent-enabled-${agent.id}`}
+          label={t('settings.agentEnabled')}
+          checked={agent.enabled}
+          onChange={(value) => {
+            void api.patch(`/api/v1/ai/agents/${agent.id}`, { enabled: value }).then(onChanged);
+          }}
+        />
+        <Toggle
+          testId={`agent-create-${agent.id}`}
+          label={t('settings.agentCanCreate')}
+          checked={agent.can_create_tasks}
+          onChange={(value) => {
+            void api
+              .patch(`/api/v1/ai/agents/${agent.id}`, { can_create_tasks: value })
+              .then(onChanged);
+          }}
+        />
+      </div>
+
+      {/*
+        **D'on agafa feina.** Un àmbit té un sol agent: els que ja té un altre surten
+        desactivats **amb el seu nom**, perquè saber a qui anar és el següent pas i deixar
+        marcar per respondre amb un error després no ho és.
+      */}
+      <div style={{ display: 'grid', gap: 6 }}>
+        <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--ink-soft)' }}>
+          {t('settings.agentScopes')}
+        </span>
+        <Toggle
+          testId={`agent-all-scopes-${agent.id}`}
+          label={t('settings.agentAllScopes')}
+          checked={agent.all_scopes}
+          onChange={(value) => desa({ scope_ids: value ? [] : agent.scope_ids, all_scopes: value })}
+        />
+        {agent.all_scopes ? null : (
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            {scopes.map((scope) => {
+              const altre = presa(scope.id);
+              return (
+                <label
+                  key={scope.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 5,
+                    fontSize: 12,
+                    color: altre === null ? 'var(--ink)' : 'var(--ink-faint)',
+                  }}
+                  title={
+                    altre === null ? undefined : t('settings.agentScopeTaken', { name: altre })
+                  }
+                >
+                  <input
+                    type="checkbox"
+                    data-testid={`agent-scope-${agent.id}-${scope.id}`}
+                    checked={agent.scope_ids.includes(scope.id)}
+                    disabled={altre !== null}
+                    onChange={(event) =>
+                      desa({
+                        all_scopes: false,
+                        scope_ids: event.target.checked
+                          ? [...agent.scope_ids, scope.id]
+                          : agent.scope_ids.filter((id) => id !== scope.id),
+                      })
+                    }
+                  />
+                  {scope.name}
+                  {altre === null ? null : ` · ${altre}`}
+                </label>
+              );
+            })}
+          </div>
+        )}
+        {error === null ? null : (
+          <p style={{ margin: 0, fontSize: 12, color: 'var(--danger-text)' }}>{error}</p>
+        )}
+      </div>
+
+      {/*
+        **Amb què s'hi connecta.** El testimoni surt una sola vegada —del hash no se'n pot
+        treure— i per això va amb el botó de copiar (P17) i amb l'avís al costat.
+      */}
+      <div style={{ display: 'grid', gap: 6 }}>
+        <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--ink-soft)' }}>
+          {t('settings.agentCredentials')}
+        </span>
+        {(credencials.data?.data ?? []).map((cred) => (
+          <div
+            key={cred.id}
+            style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12 }}
+          >
+            <span style={{ fontFamily: 'monospace' }}>{cred.token_prefix}…</span>
+            <span style={{ color: 'var(--ink-faint)' }}>{cred.name}</span>
+            <button
+              type="button"
+              className="plou-btn plou-btn-ghost"
+              data-testid={`agent-credential-revoke-${cred.id}`}
+              onClick={() => {
+                void api.delete(`/api/v1/tokens/${cred.id}`).then(() => credencials.reload());
+              }}
+              style={{ fontSize: 11.5, color: 'var(--danger-text)' }}
+            >
+              {t('tokens.revoke')}
+            </button>
+          </div>
+        ))}
+
+        {nova === null ? null : (
+          <div style={{ display: 'grid', gap: 5 }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input
+                readOnly
+                className="plou-input"
+                data-testid={`agent-credential-value-${agent.id}`}
+                value={nova}
+                onFocus={(event) => event.currentTarget.select()}
+                style={{ fontSize: 12, flex: 1 }}
+              />
+              <CopyButton value={nova} />
+            </div>
+            <p style={{ margin: 0, fontSize: 11.5, color: 'var(--danger-text)' }}>
+              {t('tokens.onceWarning')}
+            </p>
+          </div>
+        )}
+
+        {/*
+          **Com s'hi connecta**, i quin dels dos fitxers és el secret.
+
+          Són dos a posta: la configuració d'MCP **porta la credencial** —qui la tingui pot
+          llegir i escriure les teves tasques— i el full d'instruccions no en porta cap. Amb
+          un sol fitxer, «això es pot passar per un xat?» no tindria resposta.
+        */}
+        <div style={{ display: 'grid', gap: 6, marginTop: 4 }}>
+          <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--ink-soft)' }}>
+            {t('settings.agentConnect')}
+          </span>
+
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <input
+              readOnly
+              className="plou-input"
+              data-testid={`agent-mcp-url-${agent.id}`}
+              value={`${window.location.origin}/mcp`}
+              onFocus={(event) => event.currentTarget.select()}
+              style={{ fontSize: 12 }}
+            />
+            <CopyButton value={`${window.location.origin}/mcp`} />
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <CopyButton value={mcpJson(nova)} />
+            <button
+              type="button"
+              className="plou-btn plou-btn-ghost"
+              data-testid={`agent-mcp-download-${agent.id}`}
+              onClick={() => baixa('mcp.json', mcpJson(nova), 'application/json')}
+              style={{ fontSize: 11.5 }}
+            >
+              {t('settings.agentDownloadMcp')}
+            </button>
+            <span style={{ fontSize: 11.5, color: 'var(--danger-text)', fontWeight: 600 }}>
+              <span aria-hidden="true">⚠ </span>
+              {nova === null ? t('settings.agentMcpNoToken') : t('settings.agentMcpHasToken')}
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              className="plou-btn plou-btn-ghost"
+              data-testid={`agent-skill-download-${agent.id}`}
+              onClick={() => {
+                void api
+                  .text('/api/v1/ai/skill')
+                  .then((text) => baixa('fem-ho.skill.md', text, 'text/markdown'));
+              }}
+              style={{ fontSize: 11.5 }}
+            >
+              {t('settings.agentDownloadSkill')}
+            </button>
+            <span style={{ fontSize: 11.5, color: 'var(--ink-faint)' }}>
+              {t('settings.agentSkillNoToken')}
+            </span>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          className="plou-btn plou-btn-ghost"
+          data-testid={`agent-credential-new-${agent.id}`}
+          onClick={() => {
+            void api
+              .post<{ token: string }>(`/api/v1/ai/agents/${agent.id}/credentials`, {
+                name: agent.name,
+              })
+              .then((result) => {
+                setNova(result.token);
+                credencials.reload();
+              })
+              .catch((cause: unknown) => setError(failureText(cause)));
+          }}
+          style={{ fontSize: 12, width: 'fit-content' }}
+        >
+          {t('settings.agentNewCredential')}
+        </button>
+      </div>
+    </div>
   );
 }
 

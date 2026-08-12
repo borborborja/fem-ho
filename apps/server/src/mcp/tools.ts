@@ -1,12 +1,14 @@
 /**
- * Les **16 tools** d'MCP (docs/08 §3).
+ * Les **18 tools** d'MCP (docs/08 §3).
  *
  * **Sense prefix, verb primer** (D6): els clients ja fan namespace pel seu compte —a
  * Claude una tool acaba sent `mcp__femho__list_tasks`— i posar-hi un `femho_` a sobre
  * malgasta tokens a cada nom, a cada crida i a cada finestra de context.
  *
- * **Setze i no més.** Una definició de tool ocupa entre 100 i 500 tokens; amb catàlegs
- * de 40, una part gran de la finestra de context se'n va en metadades abans de començar.
+ * **Divuit i les justes.** Una definició de tool ocupa entre 100 i 500 tokens; amb catàlegs
+ * de 40, una part gran de la finestra de context se'n va en metadades abans de començar. La
+ * darrera que hi ha entrat, `ask_user`, és la que evita el pitjor error d'un agent que
+ * treballa sol: endevinar en comptes de preguntar.
  *
  * **Cap tool d'esborrar.** Un agent no esborra res: com a molt marca i comenta.
  *
@@ -66,6 +68,17 @@ export const TOOLS: ToolSpec[] = [
     annotations: CREATE,
   },
   {
+    name: 'ask_user',
+    title: 'Ask the person and wait',
+    description:
+      "Asks a question and **stops on this task until someone answers**. Use it instead of guessing: the question shows up in the task and the person sees a mark without having to open it. The mark goes away when a person replies — there is no 'seen' button.",
+    inputSchema: {
+      task_id: taskId,
+      question: z.string().describe('What you need in order to carry on. One concrete question.'),
+    },
+    annotations: CREATE,
+  },
+  {
     name: 'complete_task',
     title: 'Complete a task',
     description:
@@ -91,7 +104,7 @@ export const TOOLS: ToolSpec[] = [
     name: 'get_briefing',
     title: 'Briefing for agents',
     description:
-      'Scopes with their instructions, projects, what is pending and what is delegated. **Saves six calls**: it is the second one an agent should call, after `whoami`.',
+      'Scopes with their instructions, projects, what is pending and what is delegated, plus `taken_over`: the tasks a person has taken off you in the last day. **Saves six calls**: it is the second one an agent should call, after `whoami`.',
     inputSchema: { scope_id: z.string().optional() },
     annotations: READ,
   },
@@ -172,6 +185,19 @@ export const TOOLS: ToolSpec[] = [
     annotations: MODIFY,
   },
   {
+    name: 'resume_task',
+    title: 'Carry on after learning something elsewhere',
+    description:
+      'Records what you learned outside Fem-ho —a chat, a call, a file you were given— and **clears the waiting mark**, then claims the task again. Say what you learned: the record is what clears the mark, not wanting it gone. Use it when the answer to your `ask_user` reached you by another channel.',
+    inputSchema: {
+      task_id: taskId,
+      learned: z
+        .string()
+        .describe('What you now know that you did not know when you asked. In one paragraph.'),
+    },
+    annotations: CREATE,
+  },
+  {
     name: 'search_tasks',
     title: 'Search tasks',
     description: 'Text search over titles and descriptions.',
@@ -210,9 +236,9 @@ export const TOOLS: ToolSpec[] = [
 
 /** Comprovació d'invariants del catàleg. Es crida en construir el servidor. */
 export function assertCatalogue(tools: ToolSpec[] = TOOLS): void {
-  if (tools.length !== 16) {
+  if (tools.length !== 18) {
     throw new Error(
-      `El catàleg ha de tenir 16 tools i en té ${String(tools.length)} (docs/08 §3).`,
+      `El catàleg ha de tenir 18 tools i en té ${String(tools.length)} (docs/08 §3).`,
     );
   }
 

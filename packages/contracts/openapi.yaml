@@ -1621,6 +1621,324 @@ paths:
           content:
             { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
 
+  /sessions:
+    get:
+      tags: [tasks]
+      operationId: listSessions
+      summary: El Registre — què s'ha fet, quan i quanta estona
+      description: |
+        Els blocs de dedicació que es poden veure, amb el nom de la tasca, el projecte, la
+        tipologia i la persona ja resolts, **i els totals que pinta la capçalera**: per
+        persona, per projecte i per dia. Van junts perquè són els mateixos blocs sumats:
+        demanar-los a part seria fer dues vegades la mateixa consulta amb el risc que un dia
+        no diguin el mateix.
+
+        **Un bloc és del dia que comença.** El que va de 23:30 a 00:30 surt al dia d'ahir,
+        sencer; les hores extres sí que es reparteixen entre els dos dies, perquè es
+        calculen del bloc.
+
+        **Qui veu què**: cadascú els seus; qui mana a l'àmbit, els de tothom. El filtre és a
+        la consulta i no a la pantalla.
+      parameters:
+        - { name: from, in: query, schema: { type: string } }
+        - { name: to, in: query, schema: { type: string } }
+        - { name: scope_ids, in: query, schema: { type: string } }
+        - { name: project_id, in: query, schema: { type: string } }
+        - { name: user_id, in: query, schema: { type: string } }
+        - { name: task_type_id, in: query, schema: { type: string } }
+        - { name: search, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: Els blocs i els totals.
+          content: { application/json: { schema: { $ref: '#/components/schemas/SessionReport' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+    post:
+      tags: [tasks]
+      operationId: createSession
+      summary: Apuntar un bloc a mà
+      description: |
+        L'entrada manual i el bloc que es dibuixa al cronograma. Els instants s'ajusten a 5
+        minuts, com les vores que s'arrosseguen.
+
+        **Els solapaments no es prohibeixen**: dues persones poden treballar alhora a la
+        mateixa tasca, i el cronograma els ensenya trepitjats en comptes d'impedir-los.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [task_id, started_at, ended_at]
+              properties:
+                task_id: { type: string }
+                started_at: { type: string, format: date-time }
+                ended_at: { type: string, format: date-time }
+                note: { type: string }
+                user_id:
+                  type: string
+                  description: De qui és el temps. Per defecte, de qui l'escriu.
+      responses:
+        '201':
+          description: El bloc.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Session' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422':
+          description: El bloc acaba abans de començar, o l'instant no és vàlid.
+          content:
+            { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+
+  /sessions/export.csv:
+    get:
+      tags: [tasks]
+      operationId: exportSessions
+      summary: El Registre en CSV
+      description: |
+        Les mateixes columnes de sempre —`Data,Hora,Projecte,Tasca,Tipologia,Persona,Minuts`—
+        amb salts CRLF, escapat RFC 4180 i **BOM d'UTF-8**: sense els tres bytes del principi
+        l'Excel obre el fitxer en la codificació del sistema i els accents es trenquen.
+
+        Exporta exactament el que hi ha filtrat: els mateixos paràmetres que `GET /sessions`.
+      responses:
+        '200':
+          description: El fitxer.
+          content: { text/csv: { schema: { type: string } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+
+  /sessions/stats:
+    get:
+      tags: [tasks]
+      operationId: sessionStats
+      summary: Les Estadístiques — els mateixos blocs, mirats de lluny
+      description: |
+        Passa pels **mateixos filtres i la mateixa visibilitat** que `GET /sessions`, perquè
+        el dia que un número no quadri amb el Registre la culpa sigui d'una sola consulta i
+        no de dues que s'assemblen.
+
+        L'evolució porta **els dies buits inclosos** —un gràfic que només porta els dies amb
+        feina insinua una continuïtat que no hi va ser— i s'agrupa **per setmanes passats els
+        70 dies**, perquè un any de punts diaris és una tanca i no una tendència.
+      responses:
+        '200':
+          description: Les mètriques i els desglossaments.
+          content: { application/json: { schema: { $ref: '#/components/schemas/SessionStats' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+
+  /sessions/{id}:
+    patch:
+      tags: [tasks]
+      operationId: updateSession
+      summary: Moure, allargar o reassignar un bloc
+      description: |
+        El que fa el cronograma en arrossegar. `task_id` hi entra perquè canviar de fila vol
+        dir canviar de projecte, i un bloc no té projecte: el té la tasca.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                started_at: { type: string, format: date-time }
+                ended_at: { type: string, format: date-time }
+                task_id: { type: string }
+                note: { type: [string, 'null'] }
+      responses:
+        '200':
+          description: El bloc, com ha quedat.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Session' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422':
+          description: El bloc acabaria abans de començar.
+          content:
+            { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+    delete:
+      tags: [tasks]
+      operationId: deleteSession
+      summary: Esborrar un bloc
+      description: 'Esborrat suau, com tota la resta: la tombstone ha de poder viatjar.'
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '204': { description: Esborrat. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /task-types:
+    get:
+      tags: [scopes]
+      operationId: listTaskTypes
+      summary: Les tipologies de tasca
+      description: |
+        **En què** es va anar el temps: «Contingut», «Reunió», «Gravació». Són d'àmbit i
+        **tancades** —les manté qui mana a l'àmbit—, que és el que les distingeix d'una
+        etiqueta i el que fa que les Estadístiques per tipologia vulguin dir alguna cosa.
+      parameters: [{ name: scope_id, in: query, schema: { type: string } }]
+      responses:
+        '200':
+          description: Les tipologies visibles.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/TaskType' } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+    post:
+      tags: [scopes]
+      operationId: createTaskType
+      summary: Crear-ne una
+      description: |
+        Només qui pot els ajustos de l'àmbit. **Idempotent pel nom**: crear dues vegades
+        «Contingut» a la mateixa pantalla és un doble clic, no una intenció.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [scope_id, name]
+              properties:
+                scope_id: { type: string }
+                name: { type: string, minLength: 1 }
+                color: { type: string }
+                position: { type: string }
+      responses:
+        '201':
+          description: La tipologia.
+          content: { application/json: { schema: { $ref: '#/components/schemas/TaskType' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403':
+          description: Qui ho demana no mana en aquest àmbit.
+          content:
+            { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+        '422':
+          description: Falta l'àmbit o el nom.
+          content:
+            { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+
+  /task-types/{id}:
+    patch:
+      tags: [scopes]
+      operationId: updateTaskType
+      summary: Reanomenar-la o canviar-ne el color
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                color: { type: string }
+                position: { type: string }
+      responses:
+        '200':
+          description: La tipologia.
+          content: { application/json: { schema: { $ref: '#/components/schemas/TaskType' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [scopes]
+      operationId: deleteTaskType
+      summary: Esborrar-la
+      description: |
+        **La feina feta no es toca**: les tasques que la portaven es queden sense tipologia i
+        el que ja hi ha registrat segueix comptant sota «Sense tipologia». Esborrar una
+        manera de classificar no ha de fer desaparèixer les hores classificades.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '204': { description: Esborrada. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /scopes/settings:
+    get:
+      tags: [scopes]
+      operationId: listScopeSettings
+      summary: La configuració de tots els àmbits visibles
+      description: |
+        L'app necessita saber d'entrada **quins àmbits anoten la dedicació**: sense això, el
+        menú hauria de preguntar-ho àmbit per àmbit per decidir si ensenya el Registre.
+      responses:
+        '200':
+          description: Una fila per àmbit.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      allOf:
+                        - type: object
+                          required: [scope_id]
+                          properties:
+                            scope_id: { type: string }
+                        - $ref: '#/components/schemas/ScopeSettings'
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+
+  /scopes/{id}/settings:
+    get:
+      tags: [scopes]
+      operationId: getScopeSettings
+      summary: Com es comporta aquest àmbit
+      description: |
+        El registre de dedicació, l'horari laboral, les tipologies i com se'n diu d'un
+        projecte en aquesta casa.
+
+        **Separat de l'àmbit** perquè són coses de vides diferents: el nom i el color els
+        mira tothom qui pinta un xip, i això només qui obre el Registre. La fila pot no
+        existir: llavors torna els valors per defecte, que és el que fa que la funció neixi
+        apagada a tothom.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '200':
+          description: La configuració viva.
+          content: { application/json: { schema: { $ref: '#/components/schemas/ScopeSettings' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [scopes]
+      operationId: updateScopeSettings
+      summary: Canviar com es comporta l'àmbit
+      description: |
+        Només qui pot els ajustos de l'àmbit. El que no s'entengui **es deixa com estava**:
+        desar-hi un valor inventat seria pitjor que ignorar-lo.
+
+        En encendre `time_tracking` es reconstrueix la dedicació del passat des de
+        l'historial i es diu quants blocs s'han recuperat (`backfilled`). És idempotent.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ScopeSettingsInput' }
+      responses:
+        '200':
+          description: La configuració desada.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ScopeSettings'
+                  - type: object
+                    properties:
+                      backfilled:
+                        type: integer
+                        description: Blocs de dedicació recuperats de l'historial.
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403':
+          description: Qui ho demana no mana en aquest àmbit.
+          content:
+            { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   /scopes/{id}/members:
     get:
       tags: [scopes]
@@ -2476,6 +2794,135 @@ paths:
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
 
+  /ai/agents/{id}/scopes:
+    put:
+      tags: [ai]
+      operationId: setAgentScopes
+      summary: Els àmbits d'on aquest agent agafa feina
+      description: |
+        **Un àmbit, un agent.** Es desa el conjunt sencer i no diferències: la pantalla
+        envia les caselles tal com han quedat, i calcular què s'ha afegit i què s'ha tret des
+        de fora és com dues pestanyes obertes deixen un àmbit sense agent.
+
+        Va a part del `PATCH` de l'agent perquè és una decisió d'una altra mena: canviar el
+        nom no pot fallar per culpa d'un altre agent, i això sí.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                scope_ids: { type: array, items: { type: string } }
+                all_scopes: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Assignat.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Agent' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422':
+          description: |
+            L'àmbit ja el porta un altre agent. El problema porta `params.agent_id` i
+            `params.agent_name` perquè el missatge sigui el següent pas —un botó que hi
+            porti— i no una porta tancada.
+          content:
+            { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+
+  /ai/agents/{id}/credentials:
+    post:
+      tags: [ai]
+      operationId: createAgentCredential
+      summary: Una credencial per a aquest agent
+      description: |
+        Qui la faci servir **actua com aquest agent**: els seus àmbits, i la
+        responsabilitat de la persona en nom de qui actua (D5).
+
+        Va sota l'agent i no a `/tokens` perquè aquí ja se sap de qui és. Les capacitats
+        són les que un agent necessita i cap més —llegir i escriure tasques, llegir el
+        calendari—: ni usuaris, ni tokens, ni instància.
+
+        **El testimoni sencer surt una sola vegada**, com als tokens d'API: del hash no se'n
+        pot treure.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                name: { type: string }
+                expires_at: { type: [string, 'null'], format: date-time }
+      responses:
+        '201':
+          description: Creada. El testimoni sencer va aquí i enlloc més.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [token, summary]
+                properties:
+                  token: { type: string }
+                  summary: { $ref: '#/components/schemas/ApiTokenSummary' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    get:
+      tags: [ai]
+      operationId: listAgentCredentials
+      summary: Les credencials d'aquest agent
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '200':
+          description: Les credencials, sense el testimoni.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/ApiTokenSummary' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /ai/agents/{id}/scope-availability:
+    get:
+      tags: [ai]
+      operationId: agentScopeAvailability
+      summary: Quins àmbits pot marcar aquest agent
+      description: |
+        Per desactivar la casella **dient de qui és** en comptes de deixar-la marcar i
+        respondre amb un error després.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '200':
+          description: Els àmbits visibles, amb qui els té.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      required: [scope_id, taken_by]
+                      properties:
+                        scope_id: { type: string }
+                        taken_by:
+                          type: [object, 'null']
+                          properties:
+                            id: { type: string }
+                            name: { type: string }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   /ai/next-task:
     get:
       tags: [tasks]
@@ -2541,6 +2988,206 @@ paths:
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '422':
           description: Falta el motiu.
+          content:
+            { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+
+  /tasks/{id}/take-over:
+    post:
+      tags: [tasks]
+      operationId: takeOverTask
+      summary: Ho agafo jo
+      description: |
+        Treu una tasca de la IA i la porta al tauler humà: `ai_mode` passa a `manual` i la
+        tasca va **a la columna que es demani**. Es demana i no s'endevina: una tasca que
+        l'agent tenia a «Fent» pot ser que la vulguis continuar tu, o pot ser que la
+        vulguis tornar a la cua.
+
+        **No esborra res.** Comentaris, adjunts i historial es queden: són de la tasca i no
+        del mode, i són justament el que fa que valgui la pena reclamar-la.
+
+        Un `409` vol dir que l'agent hi està treballant ara mateix. La reserva caduca sola
+        als 30 minuts; forçar-la seria trencar-li la feina a mig fer.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [todo, doing] }
+      responses:
+        '200':
+          description: La tasca, ja teva.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Task' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: L'agent hi està treballant.
+          content:
+            { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+        '422':
+          description: Falta la columna, o no és `todo` ni `doing`.
+          content:
+            { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+
+  /ai/skill:
+    get:
+      tags: [tasks]
+      operationId: getAgentSkill
+      summary: El full d'instruccions de l'agent
+      description: |
+        El text que se li dona a l'agent perquè sàpiga com comportar-se: quin bucle segueix,
+        què vol dir el pany, i quan preguntar en comptes d'endevinar. En l'idioma de qui el
+        demana, o el que digui `lang`.
+
+        **No porta cap credencial.** La que en porta és la configuració d'MCP —el
+        `.mcp.json`—, i la pantalla ho diu al costat: són dos fitxers i no un justament
+        perquè «quin dels dos és el secret» tingui resposta.
+      parameters:
+        - { name: lang, in: query, required: false, schema: { type: string, enum: [ca, en, es] } }
+      responses:
+        '200':
+          description: El full, en Markdown.
+          content: { text/markdown: { schema: { type: string } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+
+  /ai/coverage:
+    get:
+      tags: [tasks]
+      operationId: listAgentCoverage
+      summary: Quins àmbits tenen agent
+      description: |
+        Per a cada àmbit visible, quin agent el porta i si està engegat. `null` vol dir que
+        no el porta ningú: **una tasca delegada a un àmbit orfe no la farà mai ningú**, i
+        això és el que permet dir-ho en el moment de deixar-la-hi en comptes de deixar-la
+        esperant per sempre.
+      responses:
+        '200':
+          description: La cobertura, en l'ordre dels àmbits a la barra.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      required: [scope_id, agent]
+                      properties:
+                        scope_id: { type: string }
+                        agent:
+                          oneOf:
+                            - type: object
+                              required: [id, name, enabled]
+                              properties:
+                                id: { type: string }
+                                name: { type: string }
+                                enabled: { type: boolean }
+                            - type: 'null'
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+
+  /ai/attention:
+    get:
+      tags: [tasks]
+      operationId: listAttention
+      summary: Quantes tasques esperen resposta
+      description: |
+        El que necessita el punt del commutador d'IA: un recompte i els identificadors.
+        La barra no s'ha de baixar les tasques senceres per pintar un punt.
+
+        Només compta les columnes obertes: una tasca feta ja no espera res.
+      responses:
+        '200':
+          description: El recompte i els identificadors.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [count, task_ids]
+                properties:
+                  count: { type: integer }
+                  task_ids: { type: array, items: { type: string } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+
+  /ai/tasks/{id}/ask-user:
+    post:
+      tags: [tasks]
+      operationId: askUser
+      summary: Preguntar i quedar-se esperant
+      description: |
+        És un comentari **amb conseqüència**: la pregunta surt a la conversa i a
+        l'historial com tota la resta, i la tasca passa a demanar atenció —punt al
+        commutador d'IA i targeta destacada al kanban.
+
+        **Només un agent.** La marca vol dir «un agent espera una resposta teva»; si la
+        pogués aixecar qualsevol, deixaria de voler dir això.
+
+        La baixa **respondre-hi**, i completar la tasca. No hi ha cap «vist»: el que
+        desencalla l'agent és la resposta, i marcar-ho com a vist deixaria la pantalla
+        neta amb l'agent esperant per sempre.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [question]
+              properties:
+                question: { type: string, minLength: 1 }
+      responses:
+        '201':
+          description: La pregunta, com a comentari.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Comment' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403':
+          description: Qui ho demana no és un agent.
+          content:
+            { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /ai/tasks/{id}/resume:
+    post:
+      tags: [tasks]
+      operationId: resumeTask
+      summary: Seguir després de saber-ho per un altre canal
+      description: |
+        L'agent viu fora de Fem-ho i la persona també: la resposta que desencalla una
+        tasca pot arribar per un xat, per veu o en un document. El que no pot passar és
+        que la tasca segueixi el seu curs i **aquí no en quedi res**.
+
+        Per això `learned` és obligatori i s'escriu com a comentari **abans** de baixar la
+        marca d'atenció: primer es documenta, després es desbloqueja. Una crida que només
+        baixés la marca seria el botó de «vist» que `ask_user` evita, amb l'agent fent-se'l
+        a ell mateix.
+
+        Torna a reservar la tasca: si segueix, hi torna a ser a dins i el pany ho ha de dir.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [learned]
+              properties:
+                learned: { type: string, minLength: 1 }
+      responses:
+        '201':
+          description: El que ha après, com a comentari.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Comment' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403':
+          description: Qui ho demana no és un agent, o la tasca ja és d'una persona.
+          content:
+            { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422':
+          description: No ha dit què ha après.
           content:
             { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
 
@@ -3737,6 +4384,12 @@ components:
         task_id: { type: string }
         author_id: { type: [string, 'null'] }
         author_name: { type: [string, 'null'] }
+        agent_id:
+          type: [string, 'null']
+          description: |
+            Quin agent ho ha dit, si ho ha dit un agent. Un agent actua **en nom d'una
+            persona** (D5) i per tant `author_id` és la persona: sense això, saber qui
+            parla voldria dir mirar si l'etiqueta comença per «IA · ».
         guest_name:
           type: [string, 'null']
           description: Present quan el comentari ve d'un enllaç compartit.
@@ -4169,6 +4822,8 @@ components:
           actor_user_id,
           can_create_tasks,
           enabled,
+          scope_ids,
+          all_scopes,
           created_at,
           version,
         ]
@@ -4183,6 +4838,24 @@ components:
           description: La fila d'usuari `kind='ai'`, que és qui signa l'historial i els comentaris.
         can_create_tasks: { type: boolean }
         enabled: { type: boolean }
+        scope_ids:
+          type: array
+          items: { type: string }
+          description: |
+            Els àmbits d'on aquest agent agafa feina. **Un àmbit té un sol agent**: si
+            «Feina» és d'en Hermes, cap altre agent no hi entra.
+
+            Va buida quan `all_scopes` és cert: llavors mana l'indicador.
+        all_scopes:
+          type: boolean
+          default: false
+          description: |
+            Aquest agent porta **tots** els àmbits de la persona en nom de qui actua,
+            inclosos els que es creïn més endavant.
+
+            És un indicador i no una còpia del conjunt d'avui: amb una còpia, l'àmbit que es
+            creï demà no seria de ningú i la feina que hi caigués no la faria mai cap agent,
+            sense que res ho digués.
         created_at: { type: string, format: date-time }
         version: { type: integer }
 
@@ -4277,7 +4950,7 @@ components:
 
     ApiTokenSummary:
       type: object
-      required: [id, name, token_prefix, capabilities, scope_ids, created_at]
+      required: [id, name, token_prefix, capabilities, ai_agent_id, scope_ids, created_at]
       properties:
         id: { type: string }
         name: { type: string }
@@ -4287,9 +4960,21 @@ components:
         capabilities:
           type: array
           items: { type: string }
+        ai_agent_id:
+          type: [string, 'null']
+          description: |
+            De quin agent és aquesta credencial, o `null` si és teva.
+
+            La pantalla d'MCP i API les ensenya **en només lectura i amb un botó que hi
+            porta**: sense això hi hauria credencials que existeixen i no surten enlloc
+            d'on la gent les busca, i qui en volgués revocar una no sabria on anar.
         scope_ids:
           type: array
           items: { type: string }
+          description: |
+            Va **buida a les credencials d'agent**: els àmbits els hereten de l'agent, i
+            copiar-los aquí voldria dir que el dia que se li canviïn a l'agent la
+            credencial es quedaria apuntant als d'abans.
         created_at: { type: string, format: date-time }
         expires_at: { type: [string, 'null'], format: date-time }
         last_used_at: { type: [string, 'null'], format: date-time }
@@ -4766,7 +5451,19 @@ components:
       type: object
       additionalProperties: false
       required:
-        [id, scope_id, title, status, position, ai_mode, view_mode, created_at, updated_at, version]
+        [
+          id,
+          scope_id,
+          title,
+          status,
+          position,
+          ai_mode,
+          view_mode,
+          needs_attention,
+          created_at,
+          updated_at,
+          version,
+        ]
       properties:
         id: { type: string }
         scope_id: { type: string }
@@ -4839,6 +5536,59 @@ components:
                 Quants blocs desplegables té la targeta: un per les subtasques, si en té,
                 i un per cada llista. És el número del commutador "Llistes (2)", que
                 compta blocs i no ítems.
+        last_activity_at:
+          type: [string, 'null']
+          format: date-time
+          description: |
+            L'última cosa que li ha passat a la tasca, sigui qui sigui qui la va fer.
+
+            **No és `updated_at`**: aquell és l'última escriptura a la fila i no veu el que
+            passa al voltant —un comentari, una reserva, una pregunta—. És el que fa que la
+            targeta del kanban d'IA pugui dir «fa 5 min» o «fa tres dies», que és la
+            diferència entre un agent que hi treballa i un que no hi és.
+        ai_last_read_at:
+          type: [string, 'null']
+          format: date-time
+          description: |
+            Quan un agent la va llegir per última vegada. Respon «t'ha llegit la resposta?»
+            sense haver-li de preguntar.
+
+            **Les lectures no van a l'historial**: un agent que consulta cada minut hi
+            deixaria mil files al dia i taparia el que sí que va fer.
+        ai_last_read_by:
+          type: [string, 'null']
+          description: Quin agent la va llegir.
+        locked_until:
+          type: [string, 'null']
+          format: date-time
+          description: |
+            Fins quan la té reservada un agent, o `null` si està lliure. **No és una
+            columna de `tasks`**: és la reserva viva (`task_leases`), que existia per evitar
+            que dos agents fessin la mateixa feina i que ara també fa de pany.
+
+            Mentre hi sigui, una persona no la pot moure ni reclamar: l'agent hi és a dins.
+            Caduca sola als 30 minuts.
+        locked_by_agent_id:
+          type: [string, 'null']
+          description: Quin agent la té. `null` amb `locked_until` ple vol dir una persona.
+        task_type_id:
+          type: [string, 'null']
+          description: |
+            En què es va anar el temps. **No és una etiqueta**: n'hi ha una i prou, la manté
+            qui mana a l'àmbit, i pot ser obligatòria.
+        needs_attention:
+          type: boolean
+          description: |
+            Si un agent espera resposta teva **ara**. Viu a la tasca i no al comentari que
+            la pregunta: «quines esperen resposta» és el que ha de poder respondre el
+            tauler sense llegir els comentaris de tres-centes targetes.
+        attention_asked_at:
+          type: [string, 'null']
+          format: date-time
+          description: |
+            Des de quan. Una pregunta de fa deu minuts i una de fa tres dies no volen dir
+            el mateix, i **no s'esborra en respondre**: quan va preguntar segueix sent
+            cert després.
         assignee_ids:
           type: array
           items: { type: string }
@@ -4853,6 +5603,223 @@ components:
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
         version: { type: integer }
+
+    Session:
+      type: object
+      additionalProperties: false
+      required: [id, task_id, scope_id, user_id, started_at, source]
+      properties:
+        id: { type: string }
+        task_id: { type: string }
+        scope_id: { type: string }
+        user_id:
+          type: string
+          description: 'De qui és el temps: qui va moure la targeta.'
+        started_at: { type: string, format: date-time }
+        ended_at:
+          type: [string, 'null']
+          format: date-time
+          description: "`null` vol dir que la tasca s'està fent ara mateix."
+        source:
+          type: string
+          enum: [board, manual, backfill]
+          description: |
+            D'on surt el bloc: del tauler (una targeta que ha passat per Fent), escrit a mà,
+            o reconstruït de l'historial en encendre el registre.
+        note: { type: [string, 'null'] }
+
+    SessionEntry:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          id,
+          task_id,
+          task_title,
+          scope_id,
+          user_id,
+          started_at,
+          minutes,
+          overtime_minutes,
+          needs_review,
+          open,
+          source,
+        ]
+      properties:
+        id: { type: string }
+        task_id: { type: string }
+        task_title: { type: string }
+        scope_id: { type: string }
+        project_id: { type: [string, 'null'] }
+        project_name: { type: [string, 'null'] }
+        task_type_id: { type: [string, 'null'] }
+        task_type_name: { type: [string, 'null'] }
+        task_type_color: { type: [string, 'null'] }
+        user_id: { type: string }
+        user_name: { type: [string, 'null'] }
+        started_at: { type: string, format: date-time }
+        ended_at: { type: [string, 'null'], format: date-time }
+        minutes:
+          type: integer
+          description: En un bloc obert, els que porta fins ara.
+        overtime_minutes:
+          type: integer
+          description: Dels minuts, quants cauen fora de l'horari o en dia no laborable.
+        needs_review:
+          type: boolean
+          description: |
+            Passa del llindar de l'àmbit. **No s'ha retallat**: una targeta oblidada a Fent
+            hi ha estat, i escurçar-la diria una cosa que no va passar.
+        open: { type: boolean }
+        source: { type: string }
+
+    SessionBucket:
+      type: object
+      additionalProperties: false
+      required: [key, label, minutes, overtime_minutes]
+      properties:
+        key: { type: string }
+        label: { type: string }
+        minutes: { type: integer }
+        overtime_minutes: { type: integer }
+
+    SessionReport:
+      type: object
+      additionalProperties: false
+      required: [data, totals]
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/SessionEntry' } }
+        totals:
+          type: object
+          required: [minutes, overtime_minutes, tasks, by_user, by_project, by_day]
+          properties:
+            minutes: { type: integer }
+            overtime_minutes: { type: integer }
+            tasks:
+              type: integer
+              description: Tasques diferents, no blocs.
+            by_user: { type: array, items: { $ref: '#/components/schemas/SessionBucket' } }
+            by_project: { type: array, items: { $ref: '#/components/schemas/SessionBucket' } }
+            by_day: { type: array, items: { $ref: '#/components/schemas/SessionBucket' } }
+
+    SessionStats:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          tasks,
+          minutes,
+          overtime_minutes,
+          projects,
+          average_minutes,
+          evolution,
+          weekly,
+          by_type,
+          by_project,
+          by_user,
+          overtime_by_project,
+        ]
+      properties:
+        tasks: { type: integer }
+        minutes: { type: integer }
+        overtime_minutes: { type: integer }
+        projects: { type: integer }
+        average_minutes:
+          type: integer
+          description: Minuts per **tasca**, no per bloc ni per dia.
+        evolution:
+          type: array
+          items:
+            type: object
+            required: [key, minutes]
+            properties:
+              key: { type: string }
+              minutes: { type: integer }
+        weekly:
+          type: boolean
+          description: Cert si l'evolució està agrupada per setmanes.
+        by_type: { type: array, items: { $ref: '#/components/schemas/SessionBucket' } }
+        by_project: { type: array, items: { $ref: '#/components/schemas/SessionBucket' } }
+        by_user: { type: array, items: { $ref: '#/components/schemas/SessionBucket' } }
+        overtime_by_project:
+          type: array
+          items: { $ref: '#/components/schemas/SessionBucket' }
+          description: "Les hores extres per projecte: per saber per a qui s'han fet."
+
+    TaskType:
+      type: object
+      additionalProperties: false
+      required: [id, scope_id, name, color, position]
+      properties:
+        id: { type: string }
+        scope_id: { type: string }
+        name: { type: string }
+        color: { type: string }
+        position: { type: string }
+
+    ScopeSettings:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          time_tracking,
+          work_start,
+          work_end,
+          work_days,
+          overtime_visible,
+          long_session_hours,
+          project_noun,
+          task_types_enabled,
+          task_type_required,
+        ]
+      properties:
+        time_tracking:
+          type: boolean
+          description: |
+            Si aquest àmbit anota la dedicació i té Registre i Estadístiques. **Apagat per
+            defecte**: és una funció de nínxol i encendre-la a tothom ompliria de columnes
+            una app que per a la majoria és una llista de coses a fer.
+        work_start: { type: string, description: 'Hora de paret local, `HH:MM`.' }
+        work_end: { type: string }
+        work_days:
+          type: string
+          description: |
+            Set caràcters començant en dilluns: `1111100` és de dilluns a divendres. Es
+            llegeix d'un cop d'ull en un bolcat de la base, cosa que una màscara de bits no fa.
+        overtime_visible:
+          type: boolean
+          description: Ensenyar el que cau fora de l'horari com a hores extres.
+        long_session_hours:
+          type: integer
+          description: |
+            A partir d'aquí, un bloc surt marcat per revisar. No es retalla ni s'esborra: una
+            targeta oblidada a Fent **hi ha estat**, i escurçar-la diria una cosa que no va
+            passar sense dir quina part.
+        project_noun:
+          type: string
+          enum: [project, client]
+          description: |
+            Com se'n diu, d'un projecte, en aquest àmbit. **És només la paraula de la
+            interfície**: el camp segueix sent `project_id` a la base, a l'API i a les tools
+            (regla 3).
+        task_types_enabled: { type: boolean }
+        task_type_required:
+          type: boolean
+          description: I no s'hi pot crear cap tasca sense dir-ne la tipologia.
+
+    ScopeSettingsInput:
+      type: object
+      additionalProperties: false
+      properties:
+        time_tracking: { type: boolean }
+        work_start: { type: string }
+        work_end: { type: string }
+        work_days: { type: string }
+        overtime_visible: { type: boolean }
+        long_session_hours: { type: integer }
+        project_noun: { type: string, enum: [project, client] }
+        task_types_enabled: { type: boolean }
+        task_type_required: { type: boolean }
 
     TaskInput:
       type: object
@@ -4876,6 +5843,7 @@ components:
         assignee_ids:
           type: array
           items: { type: string }
+        task_type_id: { type: string }
         source_event:
           type: object
           additionalProperties: false

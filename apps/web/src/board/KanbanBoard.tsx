@@ -34,6 +34,16 @@ export interface BoardTask {
   time?: string | undefined;
   aiMode?: 'manual' | 'assisted' | 'delegated' | undefined;
   hasUnseenAiChange?: boolean | undefined;
+  /** Un agent espera resposta teva. La targeta va destacada i ho diu. */
+  needsAttention?: boolean | undefined;
+  /** Fins quan la té reservada un agent. Mentre hi sigui, la targeta va amb cadenat. */
+  lockedUntil?: string | null | undefined;
+  /**
+   * Quan va passar l'última cosa. Només es pinta al tauler d'IA: allà el silenci és
+   * informació —«fa tres dies» vol dir que l'agent no hi ha tornat—, i al tauler humà
+   * seria una data més a cada targeta sense res a dir.
+   */
+  lastActivityAt?: string | null | undefined;
   /** Subtasques i ítems de llista, comptats junts. Ve de `/board` com a agregat. */
   progress?: { done: number; total: number; lists: number } | undefined;
   /**
