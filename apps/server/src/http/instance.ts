@@ -42,6 +42,12 @@ export function registerInstanceRoutes(app: FastifyInstance): void {
       name: app.config.instanceName,
       version: app.config.version,
       registration: app.config.registration,
+      /**
+       * **Públic a posta.** El wizard i Ajustos l'han de saber abans de preguntar res: si
+       * l'operador ja ha decidit com es treballa aquí, preguntar-ho igualment seria
+       * teatre. No diu res de ningú —és una propietat de la instància, com el nom.
+       */
+      scope_mode: app.config.scopeMode,
       setup_required: setupRequired,
       /**
        * D'on surt el codi d'aquesta instància.

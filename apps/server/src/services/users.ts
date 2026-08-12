@@ -7,6 +7,7 @@
  */
 
 import { sql } from 'kysely';
+import type { UserScopeMode } from '../policy/scope-mode.js';
 import type { Mailbox } from '../policy/mailbox.js';
 import type { AuditContext } from '../audit/audited-transaction.js';
 import { hashPassword, verifyPassword } from '../auth/password.js';
@@ -38,6 +39,9 @@ export interface UserProfile {
 }
 
 /** Els dos comportaments possibles en esborrar una tasca feta des d'una cita. */
+/** Els dos modes que pot triar una persona. La instància pot acotar-ho (`policy/scope-mode.ts`). */
+export const USER_SCOPE_MODES = ['single', 'multi'] as const;
+
 export const EVENT_TASK_DELETED = ['return_to_inbox', 'hide_from_inbox'] as const;
 export type EventTaskDeleted = (typeof EVENT_TASK_DELETED)[number];
 
@@ -56,6 +60,15 @@ export interface UserSettings {
   hidden_calendar_ids: string[];
   /** `auto` segueix l'idioma; `monday` i `sunday` manen per damunt. Veure migració 007. */
   week_start: WeekStartChoice;
+  /**
+   * Amb quina lent es veu l'app: àmbits a la barra, o projectes de l'àmbit on ets.
+   *
+   * **`null` vol dir que no ho ha dit mai** —el wizard no li ha sortit— i no «vol multi».
+   * La distinció és el que fa que el wizard sàpiga a qui ha de sortir sense una segona
+   * columna. Qui decideix de debò és `policy/scope-mode.ts`, amb el que digui la
+   * instància. Veure migració 015.
+   */
+  scope_mode: UserScopeMode | null;
   show_calendar_widget: boolean;
   show_overdue_section: boolean;
   quiet_hours_start: string | null;
@@ -269,6 +282,7 @@ const DEFAULT_SETTINGS: UserSettings = {
   collapsed_groups: [],
   hidden_calendar_ids: [],
   week_start: 'auto',
+  scope_mode: null,
   show_calendar_widget: true,
   show_overdue_section: true,
   quiet_hours_start: null,
@@ -293,6 +307,7 @@ export async function getSettings(db: MigrationDb, userId: string): Promise<User
     collapsed_groups: string | null;
     hidden_calendar_ids: string | null;
     week_start: WeekStartChoice;
+    scope_mode: UserScopeMode | null;
     show_calendar_widget: unknown;
     show_overdue_section: unknown;
     quiet_hours_start: string | null;
@@ -301,7 +316,7 @@ export async function getSettings(db: MigrationDb, userId: string): Promise<User
     gravatar: unknown;
     event_task_deleted: EventTaskDeleted;
   }>`SELECT done_cleared_at, inbox_position, inbox_show_overdue, inbox_origin, collapsed_groups,
-            hidden_calendar_ids, week_start,
+            hidden_calendar_ids, week_start, scope_mode,
             show_calendar_widget, show_overdue_section, quiet_hours_start, quiet_hours_end,
             daily_digest_at, gravatar, event_task_deleted
      FROM user_settings WHERE user_id = ${userId}`.execute(db);
@@ -317,6 +332,7 @@ export async function getSettings(db: MigrationDb, userId: string): Promise<User
     collapsed_groups: parseGroups(row.collapsed_groups),
     hidden_calendar_ids: parseGroups(row.hidden_calendar_ids),
     week_start: row.week_start ?? 'auto',
+    scope_mode: row.scope_mode ?? null,
     show_calendar_widget: isTrue(row.show_calendar_widget),
     show_overdue_section: isTrue(row.show_overdue_section),
     quiet_hours_start: row.quiet_hours_start,
@@ -346,6 +362,8 @@ export interface UpdateSettingsInput {
   collapsed_groups?: string[] | undefined;
   hidden_calendar_ids?: string[] | undefined;
   week_start?: string | undefined;
+  /** `null` explícit torna a «no ho ha dit»; absent no toca res. */
+  scope_mode?: string | null | undefined;
   show_calendar_widget?: boolean | undefined;
   show_overdue_section?: boolean | undefined;
   quiet_hours_start?: string | null | undefined;
@@ -376,6 +394,22 @@ export async function updateSettings(
     collapsed_groups: input.collapsed_groups ?? before.collapsed_groups,
     hidden_calendar_ids: input.hidden_calendar_ids ?? before.hidden_calendar_ids,
     week_start: pickEnum('week_start', input.week_start, WEEK_START_CHOICES, before.week_start),
+    /**
+     * **`null` és un valor i no «no el toquis».** Absent deixa el que hi havia; `null`
+     * explícit torna a «no ho ha dit», que és el que fa tornar a sortir el wizard —i és
+     * l'única manera de provar-lo dues vegades sense esborrar l'usuari.
+     */
+    scope_mode:
+      input.scope_mode === undefined
+        ? before.scope_mode
+        : input.scope_mode === null
+          ? null
+          : pickEnum(
+              'scope_mode',
+              input.scope_mode,
+              USER_SCOPE_MODES,
+              before.scope_mode ?? 'multi',
+            ),
     show_calendar_widget: input.show_calendar_widget ?? before.show_calendar_widget,
     show_overdue_section: input.show_overdue_section ?? before.show_overdue_section,
     quiet_hours_start:
@@ -398,13 +432,14 @@ export async function updateSettings(
   await sql`
     INSERT INTO user_settings (user_id, done_cleared_at, inbox_position, inbox_show_overdue,
                                inbox_origin, collapsed_groups, hidden_calendar_ids, week_start,
+                               scope_mode,
                                show_calendar_widget, show_overdue_section,
                                quiet_hours_start, quiet_hours_end, daily_digest_at,
                                gravatar, event_task_deleted, notify_prefs, updated_at)
     VALUES (${principal.userId}, ${next.done_cleared_at}, ${next.inbox_position},
             ${dbBool(next.inbox_show_overdue)}, ${next.inbox_origin},
             ${JSON.stringify(next.collapsed_groups)},
-            ${JSON.stringify(next.hidden_calendar_ids)}, ${next.week_start},
+            ${JSON.stringify(next.hidden_calendar_ids)}, ${next.week_start}, ${next.scope_mode},
             ${dbBool(next.show_calendar_widget)}, ${dbBool(next.show_overdue_section)},
             ${next.quiet_hours_start}, ${next.quiet_hours_end}, ${next.daily_digest_at},
             ${dbBool(next.gravatar)}, ${next.event_task_deleted}, '{}', ${ctx.now})
@@ -417,6 +452,7 @@ export async function updateSettings(
       collapsed_groups = excluded.collapsed_groups,
       hidden_calendar_ids = excluded.hidden_calendar_ids,
       week_start = excluded.week_start,
+      scope_mode = excluded.scope_mode,
       show_calendar_widget = excluded.show_calendar_widget,
       show_overdue_section = excluded.show_overdue_section,
       quiet_hours_start = excluded.quiet_hours_start,

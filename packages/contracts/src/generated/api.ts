@@ -2696,6 +2696,20 @@ export interface components {
              * @enum {string}
              */
             week_start: "auto" | "monday" | "sunday";
+            /**
+             * @description Amb quina lent es veu l'app: `multi` posa els àmbits a la barra —el primer eix
+             *     de navegació de Fem-ho— i `single` hi posa els projectes de l'àmbit on ets.
+             *
+             *     **No canvia res del model**: tota tasca segueix vivint dins d'un àmbit. És una
+             *     preferència de presentació, com el tema.
+             *
+             *     `null` vol dir **que aquesta persona no ho ha dit mai** i és el que fa sortir
+             *     el wizard la primera vegada. Mentre val `null` s'aplica `multi`, que és com
+             *     funciona l'app avui: a qui ja la fa servir no se li canvia la barra sense
+             *     demanar-ho. Qui mana per damunt de tot és `Info.scope_mode` de la instància.
+             * @enum {string|null}
+             */
+            scope_mode?: "single" | "multi" | null;
             show_calendar_widget?: boolean;
             show_overdue_section?: boolean;
             quiet_hours_start?: string | null;
@@ -3428,6 +3442,18 @@ export interface components {
              * @enum {string}
              */
             registration: "disabled" | "invite" | "open";
+            /**
+             * @description Si la instància deixa triar entre multiàmbit i monoàmbit (`both`, per defecte)
+             *     o n'imposa un. Surt de `FEMHO_SCOPE_MODE`.
+             *
+             *     És **públic** perquè el wizard i Ajustos l'han de saber abans de preguntar res:
+             *     si l'operador ja ho ha decidit, preguntar-ho igualment seria teatre. Acotar no
+             *     esborra la preferència de ningú —deixa d'aplicar-se mentre duri l'acotació—,
+             *     i per això treure-la torna a deixar cadascú com estava.
+             * @default both
+             * @enum {string}
+             */
+            scope_mode: "both" | "single" | "multi";
             /**
              * @description Cert mentre no hi hagi cap administrador. Mentre ho sigui, /setup és
              *     accessible; un cop creat el primer administrador, es tanca per sempre.

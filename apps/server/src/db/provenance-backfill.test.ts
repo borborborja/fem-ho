@@ -48,14 +48,26 @@ async function llavor(sourceKind: string | null, origin: string): Promise<string
 /**
  * Desfà fins a treure la 012, inclosa.
  *
- * La 013 i la 014 hi són pel mig i **també es desfan sobre aquestes dades**, que de propina
- * fa que aquest fitxer exerciti els dos refets —el d'`attachments` i el de `mail_rules`— en
- * tots dos sentits i amb files a taula.
+ * Les que hi ha pel mig **també es desfan sobre aquestes dades**, que de propina fa que
+ * aquest fitxer exerciti els dos refets —el d'`attachments` i el de `mail_rules`— en tots
+ * dos sentits i amb files a taula.
+ *
+ * **Es baixa fins a trobar la 012 i no un nombre fix de passos**: la llista escrita a mà
+ * volia dir que afegir una migració nova feia fallar aquesta prova, que no en sap res.
+ * El que aquí importa és que **totes** les que hi ha pel mig es desfan amb dades a taula,
+ * i això es comprova igual sense saber-ne els noms.
  */
 async function desfesLa012(): Promise<void> {
-  expect(await migrateDown(conn.db, 'sqlite')).toBe('014-mail-visibility');
-  expect(await migrateDown(conn.db, 'sqlite')).toBe('013-mail-sources');
-  expect(await migrateDown(conn.db, 'sqlite')).toBe('012-task-provenance');
+  const desfetes: string[] = [];
+  for (;;) {
+    const nom = await migrateDown(conn.db, 'sqlite');
+    expect(nom, "la 012 no s'ha trobat baixant").not.toBeNull();
+    desfetes.push(nom!);
+    if (nom === '012-task-provenance') break;
+  }
+  // Hi ha passat per sobre: la 013 i la 014 refan taules, i s'han de desfer amb files.
+  expect(desfetes).toContain('013-mail-sources');
+  expect(desfetes).toContain('014-mail-visibility');
 }
 
 const kindOf = async (taskId: string): Promise<string | null> => {

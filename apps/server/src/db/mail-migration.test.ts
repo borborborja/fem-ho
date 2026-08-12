@@ -90,6 +90,23 @@ describe.each(motors)('la 013 · $engine', (motor) => {
     if (tmp !== null) rmSync(tmp, { recursive: true, force: true });
   });
 
+  /**
+   * Baixa fins a **treure** la migració que es diu, i torna les que ha desfet pel camí.
+   *
+   * Escrit així i no amb un nombre fix de passos: aquest fitxer prova el refet de dues
+   * taules, no quantes migracions hi ha al repositori, i amb els noms comptats a mà afegir-ne
+   * una de nova el feia fallar sense que hi tingués res a veure.
+   */
+  async function baixaFinsA(nom: string): Promise<string[]> {
+    const desfetes: string[] = [];
+    for (;;) {
+      const feta = await migrateDown(conn.db, engine);
+      expect(feta, `no s'ha trobat ${nom} baixant`).not.toBeNull();
+      desfetes.push(feta!);
+      if (feta === nom) return desfetes;
+    }
+  }
+
   describe('el refet dels adjunts', () => {
     it('els adjunts que ja hi eren sobreviuen a la migració, sencers', async () => {
       const pujat = await adjunt('upload');
@@ -98,8 +115,7 @@ describe.each(motors)('la 013 · $engine', (motor) => {
 
       // Es desfan la 014 i la 013 i es tornen a aplicar **amb les files posades**: els dos
       // refets, dues vegades cadascun.
-      expect(await migrateDown(conn.db, engine)).toBe('014-mail-visibility');
-      expect(await migrateDown(conn.db, engine)).toBe('013-mail-sources');
+      expect(await baixaFinsA('013-mail-sources')).toContain('014-mail-visibility');
       expect(await compta()).toBe(2);
       await migrateToLatest(conn.db, { engine });
 
@@ -149,7 +165,7 @@ describe.each(motors)('la 013 · $engine', (motor) => {
        * `mail_attach` de la prova anterior a taula, la 013 s'ha de negar.
        */
       // La 014 se'n va sense problema; és la 013 la que s'ha de negar.
-      expect(await migrateDown(conn.db, engine)).toBe('014-mail-visibility');
+      await baixaFinsA('014-mail-visibility');
       await expect(migrateDown(conn.db, engine)).rejects.toThrow(/adjunts de correu/u);
       expect(await compta()).toBe(3);
 
@@ -179,7 +195,7 @@ describe.each(motors)('la 013 · $engine', (motor) => {
      * buida, aquest bloc passaria en verd sense executar ni una línia dels tres `UPDATE`.
      */
     it('cap correu es queda esperant una conversió que ja no existeix', async () => {
-      expect(await migrateDown(conn.db, engine)).toBe('014-mail-visibility');
+      await baixaFinsA('014-mail-visibility');
 
       const compte = uuidv7();
       const fil = uuidv7();

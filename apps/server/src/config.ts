@@ -6,6 +6,7 @@
  */
 
 import { readFileSync } from 'node:fs';
+import { parseInstanceScopeMode, type InstanceScopeMode } from './policy/scope-mode.js';
 
 /**
  * Llegeix FEMHO_<name>, o el contingut de FEMHO_<name>_FILE si hi és.
@@ -77,6 +78,21 @@ function envRegistration(): RegistrationMode {
  * de "qualsevol cosa que no sigui buit és cert", un `FEMHO_ALLOW_REGISTRATION=nope`
  * deixaria el registre obert de bat a bat.
  */
+/**
+ * Multiàmbit, monoàmbit, o que cadascú triï.
+ *
+ * Es valida i **es llança** si no s'entén, com `FEMHO_REGISTRATION`: arrencar amb el
+ * defecte davant d'un `FEMHO_SCOPE_MODE=mono` faria que l'opció semblés inexistent i que
+ * el problema es busqués a un altre lloc.
+ */
+function envScopeMode(): InstanceScopeMode {
+  const { mode, invalid } = parseInstanceScopeMode(env('SCOPE_MODE'));
+  if (invalid !== null) {
+    throw new Error(`FEMHO_SCOPE_MODE ha de ser both, single o multi, i és "${invalid}"`);
+  }
+  return mode;
+}
+
 function envBool(name: string): boolean | undefined {
   const raw = env(name);
   if (raw === undefined) return undefined;
@@ -165,6 +181,13 @@ export interface Config {
   databaseUrl: string;
   registration: RegistrationMode;
   /**
+   * Si aquesta instància deixa triar entre multiàmbit i monoàmbit, o imposa un dels dos.
+   *
+   * `both` per defecte: la decisió és de cada persona i l'operador només l'acota si vol
+   * que al seu equip es treballi d'una manera. Veure `policy/scope-mode.ts`.
+   */
+  scopeMode: InstanceScopeMode;
+  /**
    * Deixar que els avatars surtin de Gravatar.
    *
    * **Apagat per defecte, i no per prudència genèrica.** Fem-ho és autoallotjat: encendre
@@ -245,6 +268,7 @@ export function loadConfig(version: string): Config {
     maxUploadBytes: (Number(env('MAX_UPLOAD_MB')) || 25) * 1_048_576,
     databaseUrl: env('DATABASE_URL') ?? 'sqlite:///data/femho.db',
     registration: envRegistration(),
+    scopeMode: envScopeMode(),
     gravatar: envBool('GRAVATAR') ?? false,
     mailAllowHosts: (env('MAIL_ALLOW_HOSTS') ?? '')
       .split(',')

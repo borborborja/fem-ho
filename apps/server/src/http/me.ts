@@ -8,6 +8,8 @@
 
 import type { FastifyInstance } from 'fastify';
 import { auditedTransaction } from '../audit/audited-transaction.js';
+import { canChooseScopeMode } from '../policy/scope-mode.js';
+import { PolicyError } from '../policy/errors.js';
 import { isMailbox } from '../policy/mailbox.js';
 import {
   changePassword,
@@ -138,6 +140,25 @@ export function registerMeRoutes(app: FastifyInstance): void {
   app.patch('/api/v1/auth/settings', async (request, reply) =>
     handle(app, request, reply, async (principal) => {
       const input = body(request);
+
+      /**
+       * **El mode no es pot triar si la instància l'ha acotat.**
+       *
+       * Es rebutja en comptes de desar-ho sense aplicar-ho: guardar una preferència que
+       * no farà res és el pitjor dels dos —la pantalla diria una cosa i l'app en faria
+       * una altra—. El que ja hi hagués desat abans de l'acotació **no es toca**, i per
+       * això treure-la torna a deixar cadascú com estava.
+       */
+      if (input.scope_mode !== undefined && !canChooseScopeMode(app.config.scopeMode)) {
+        throw new PolicyError(
+          'scope-mode-fixed',
+          'Scope mode is fixed',
+          422,
+          `This instance is configured as "${app.config.scopeMode}" and the mode cannot be chosen.`,
+          { scope_mode: app.config.scopeMode },
+        );
+      }
+
       return auditedTransaction(db().db, principal, (ctx) =>
         updateSettings(ctx, principal, {
           done_cleared_at: nullable(input, 'done_cleared_at'),
@@ -152,6 +173,8 @@ export function registerMeRoutes(app: FastifyInstance): void {
             ? input.collapsed_groups.filter((v): v is string => typeof v === 'string')
             : undefined,
           week_start: typeof input.week_start === 'string' ? input.week_start : undefined,
+          // `null` explícit torna a «no ho ha dit» i fa tornar a sortir el wizard.
+          scope_mode: nullable(input, 'scope_mode'),
           hidden_calendar_ids: Array.isArray(input.hidden_calendar_ids)
             ? input.hidden_calendar_ids.filter((v): v is string => typeof v === 'string')
             : undefined,
