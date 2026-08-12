@@ -31,6 +31,7 @@
     <string name="ai_attention_pending">{count} tareas esperan tu respuesta</string>
     <string name="ai_attention_waiting">El agente espera una respuesta tuya para poder seguir. Se va cuando respondas.</string>
     <string name="ai_lock_card">El agente trabaja en ella</string>
+    <string name="ai_lock_working">El agente está trabajando en ella. Se desbloquea sola a las {time}.</string>
     <string name="ai_mode_assisted">Con ayuda</string>
     <string name="ai_mode_cycle">Cambia el modo de IA</string>
     <string name="ai_mode_delegated">IA</string>
@@ -40,6 +41,8 @@
     <string name="ai_proof_togglelease">Reserva</string>
     <string name="ai_status_configuredbutunused">Hay credenciales de un modelo, y todavía no hay nada que las use.</string>
     <string name="ai_status_credentialswithoutprovider">Hay una clave o un modelo configurados sin proveedor: no se usarán.</string>
+    <string name="ai_takeover_action">Me la quedo yo</string>
+    <string name="ai_takeover_where">¿A qué columna?</string>
     <string name="ai_unseen">Ha habido un cambio autónomo que no has visto</string>
     <string name="app_name">Fem-ho</string>
     <string name="board_card_advance">Mover a {column}</string>

@@ -185,3 +185,96 @@ test("l'agent pregunta, es veu sense entrar-hi, i la marca marxa quan respons", 
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('ai-attention-count')).toHaveCount(0);
 });
+
+test("una tasca que l'agent té a les mans no es toca, i quan la deixa te la pots endur", async ({
+  page,
+}) => {
+  await enterAsNew(page, COMPTE);
+  await obreIA(page);
+
+  const hermes = page.locator('[data-testid^="agent-"]', { hasText: 'Hermes' }).first();
+  const idHermes = (await hermes.getAttribute('data-testid'))!.replace('agent-', '');
+  await page.locator(`[data-testid="agent-credential-new-${idHermes}"]`).click();
+  const credencial = await page
+    .locator(`[data-testid="agent-credential-value-${idHermes}"]`)
+    .inputValue();
+  const comAgent = { authorization: `Bearer ${credencial}` };
+  const meu = { authorization: `Bearer ${await token(page)}` };
+
+  const ambits = await page.request.get('/api/v1/scopes', { headers: meu });
+  const ambit = ((await ambits.json()) as { id: string; name: string }[]).find(
+    (scope) => scope.name === 'Feina delegada',
+  )!;
+
+  const creada = await page.request.post('/api/v1/tasks', {
+    headers: meu,
+    data: { scope_id: ambit.id, title: 'Migrar el servidor' },
+  });
+  const tascaId = ((await creada.json()) as { id: string }).id;
+  await page.request.post(`/api/v1/tasks/${tascaId}/ai-mode`, {
+    headers: meu,
+    data: { ai_mode: 'delegated' },
+  });
+
+  // L'agent l'agafa i hi treballa: reserva, la mou i hi deixa el que ha trobat.
+  await page.request.post(`/api/v1/ai/tasks/${tascaId}/claim`, { headers: comAgent });
+  await page.request.post(`/api/v1/tasks/${tascaId}/move`, {
+    headers: comAgent,
+    data: { status: 'doing' },
+  });
+  await page.request.post(`/api/v1/tasks/${tascaId}/comments`, {
+    headers: comAgent,
+    data: { body: 'He fet la còpia de seguretat.' },
+  });
+
+  await page.goto(`/?scopes=${ambit.id}`);
+  await page.getByTestId('ai-board-toggle').click();
+
+  // El cadenat es veu **amb text**: saber per què no es pot moure abans de provar-ho.
+  const targeta = page.locator('[data-testid^="task-"]', { hasText: 'Migrar el servidor' }).first();
+  await expect(targeta.getByTestId('task-locked')).toContainText("L'agent hi treballa");
+
+  // I dins, no hi ha botó de reclamar-la: hi ha l'explicació i l'hora en què es deixa anar.
+  await targeta.getByText('Migrar el servidor').click();
+  await expect(page.getByTestId('task-locked-notice')).toBeVisible();
+  await expect(page.getByTestId('task-take-over')).toHaveCount(0);
+  await page.keyboard.press('Escape');
+
+  // L'agent pregunta: això el desbloqueja, perquè un agent que espera no treballa.
+  await page.request.post(`/api/v1/ai/tasks/${tascaId}/ask-user`, {
+    headers: comAgent,
+    data: { question: 'Reinicio ara o de matinada?' },
+  });
+
+  await page.reload();
+  await page.getByTestId('ai-board-toggle').click();
+  await targeta.getByText('Migrar el servidor').click();
+
+  await page.getByTestId('task-take-over').click();
+  await page.getByTestId('task-take-over-doing').click();
+
+  /**
+   * **I es queda tot.** El que l'agent hi va deixar escrit és de la tasca i no del mode: si
+   * en reclamar-la desaparegués, reclamar-la seria començar de zero.
+   */
+  await expect(page.getByTestId('task-take-over')).toHaveCount(0);
+  await expect(page.getByTestId('task-ai-conversation')).toContainText(
+    'He fet la còpia de seguretat.',
+  );
+  await expect(page.getByTestId('task-ai-conversation')).toContainText('Reinicio ara');
+
+  /**
+   * I ara és al tauler humà, a «Fent» —que és on l'has demanada— i ja no al de la IA. Es
+   * recarrega la pàgina en comptes de tancar el modal: així es comprova de passada que el
+   * canvi és al servidor i no només a la pantalla que l'ha fet.
+   */
+  await page.goto(`/?scopes=${ambit.id}`);
+  await expect(
+    page.locator('[data-column-status="doing"]').getByText('Migrar el servidor'),
+  ).toBeVisible();
+
+  await page.getByTestId('ai-board-toggle').click();
+  await expect(
+    page.locator('[data-column-status="doing"]').getByText('Migrar el servidor'),
+  ).toHaveCount(0);
+});

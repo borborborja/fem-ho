@@ -31,6 +31,7 @@
     <string name="ai_attention_pending">{count} tasques esperen resposta teva</string>
     <string name="ai_attention_waiting">L\'agent espera una resposta teva per poder seguir. Marxa quan responguis.</string>
     <string name="ai_lock_card">L\'agent hi treballa</string>
+    <string name="ai_lock_working">L\'agent hi està treballant. Es desbloqueja sola a les {time}.</string>
     <string name="ai_mode_assisted">Amb ajuda</string>
     <string name="ai_mode_cycle">Canvia el mode d\'IA</string>
     <string name="ai_mode_delegated">IA</string>
@@ -40,6 +41,8 @@
     <string name="ai_proof_togglelease">Reserva</string>
     <string name="ai_status_configuredbutunused">Hi ha credencials d’un model, i encara no hi ha res que les faci servir.</string>
     <string name="ai_status_credentialswithoutprovider">Hi ha una clau o un model configurats sense proveïdor: no es faran servir.</string>
+    <string name="ai_takeover_action">Ho agafo jo</string>
+    <string name="ai_takeover_where">A quina columna?</string>
     <string name="ai_unseen">Hi ha hagut un canvi autònom que no has vist</string>
     <string name="app_name">Fem-ho</string>
     <string name="board_card_advance">Moure a {column}</string>

@@ -104,7 +104,7 @@ export const TOOLS: ToolSpec[] = [
     name: 'get_briefing',
     title: 'Briefing for agents',
     description:
-      'Scopes with their instructions, projects, what is pending and what is delegated. **Saves six calls**: it is the second one an agent should call, after `whoami`.',
+      'Scopes with their instructions, projects, what is pending and what is delegated, plus `taken_over`: the tasks a person has taken off you in the last day. **Saves six calls**: it is the second one an agent should call, after `whoami`.',
     inputSchema: { scope_id: z.string().optional() },
     annotations: READ,
   },

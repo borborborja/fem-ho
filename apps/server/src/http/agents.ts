@@ -95,10 +95,12 @@ export function registerAgentRoutes(app: FastifyInstance): void {
    * comprovar allà, que és la mena de comprovació que un dia falta.
    *
    * Les capacitats són **les que un agent necessita i cap més**, i cadascuna té la seva
-   * feina: les tasques i les llistes perquè pugui treballar, els comentaris perquè és la
-   * via principal per reportar i per preguntar (docs/09 §6), els adjunts en lectura perquè
-   * el traspàs els porta com a enllaç, i el calendari en lectura perquè hi ha feina que
-   * depèn del dia. Res de gestionar usuaris, ni tokens, ni la instància, ni el correu.
+   * feina: les tasques i les llistes perquè pugui treballar, els àmbits i els projectes en
+   * lectura perquè **les seves instruccions manen sobre el criteri de l'agent** i sense
+   * poder-los llegir `get_briefing` responia «no tens la capacitat», els comentaris perquè
+   * són la via principal per reportar i per preguntar (docs/09 §6), els adjunts en lectura
+   * perquè el traspàs els porta com a enllaç, i el calendari en lectura perquè hi ha feina
+   * que depèn del dia. Res de gestionar usuaris, ni tokens, ni la instància, ni el correu.
    *
    * **Els noms surten de `CAPABILITIES`.** Aquí hi havia un `calendar:read` que no existeix
    * enlloc: no donava cap error i el que feia era no donar cap permís de calendari.
@@ -116,6 +118,11 @@ export function registerAgentRoutes(app: FastifyInstance): void {
             capabilities: [
               'tasks:read',
               'tasks:write',
+              // Les instruccions de l'àmbit i del projecte manen sobre el seu criteri, i
+              // per llegir-les cal poder llegir els àmbits: sense això `get_briefing` —la
+              // segona crida que fa un agent— responia «no tens la capacitat».
+              'scopes:read',
+              'projects:read',
               'checklists:read',
               'checklists:write',
               'comments:read',

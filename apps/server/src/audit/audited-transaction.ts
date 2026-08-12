@@ -38,6 +38,9 @@ export type AuditVerb =
   // has respost», que és exactament el que ha passat.
   | 'asked'
   | 'answered'
+  // Una persona s'ha endut una tasca que era de la IA. És el que llegeix l'agent per saber
+  // per què la seva següent escriptura ha fallat.
+  | 'taken_over'
   // Un refresc d'un origen extern. Es distingeix d'una edició perquè no l'ha fet ningú
   // d'aquí: ve d'un calendari de fora, i a l'historial s'ha de poder llegir així.
   | 'refreshed'

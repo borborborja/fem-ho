@@ -31,6 +31,7 @@
     <string name="ai_attention_pending">{count} tasks are waiting for your reply</string>
     <string name="ai_attention_waiting">The agent needs a reply from you to carry on. It goes away when you answer.</string>
     <string name="ai_lock_card">The agent is on it</string>
+    <string name="ai_lock_working">The agent is working on it. It unlocks on its own at {time}.</string>
     <string name="ai_mode_assisted">Assisted</string>
     <string name="ai_mode_cycle">Change the AI mode</string>
     <string name="ai_mode_delegated">AI</string>
@@ -40,6 +41,8 @@
     <string name="ai_proof_togglelease">Claim</string>
     <string name="ai_status_configuredbutunused">There are model credentials, and nothing uses them yet.</string>
     <string name="ai_status_credentialswithoutprovider">There is a key or a model configured without a provider: they will not be used.</string>
+    <string name="ai_takeover_action">I\'ll take it</string>
+    <string name="ai_takeover_where">Which column?</string>
     <string name="ai_unseen">There was an autonomous change you have not seen</string>
     <string name="app_name">Fem-ho</string>
     <string name="board_card_advance">Move to {column}</string>

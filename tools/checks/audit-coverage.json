@@ -72,6 +72,7 @@
     "setAiMode": "apps/server/src/http/tokens.test.ts · \"els tres modes es poden posar, i queden a l'historial\"",
     "setEventInboxVisibility": "apps/server/src/http/inbox-sources.test.ts · \"la marca NO viatja pel sync: és una preferència personal\"",
     "subscribePush": "apps/server/src/services/notifications.test.ts · \"el mateix endpoint actualitza, no duplica\"",
+    "takeOverTask": "apps/server/src/http/take-over.test.ts · \"es reclama i queda a l'historial com el que és\"",
     "unpinChecklist": "apps/server/src/http/checklists.test.ts · \"es pot despinejar\"",
     "unsubscribePush": "apps/server/src/services/notifications.test.ts · \"desubscriure una cosa que no hi és no és un error\"",
     "updateAgent": "apps/server/src/http/api-surface.test.ts · \"desactivar-lo allibera les seves reserves\"",

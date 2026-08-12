@@ -21,6 +21,7 @@ import type { Connection } from '../db/connection.js';
 import { PolicyError } from '../policy/errors.js';
 import type { Principal } from '../policy/principal.js';
 import { claim, leaseOf, nextTask, release } from '../services/leases.js';
+import { recentTakeOvers } from '../services/activity.js';
 import { addComment, askUser } from '../services/comments.js';
 import { listEventOccurrences } from '../services/events.js';
 import { updateChecklistItem } from '../services/checklists.js';
@@ -152,7 +153,16 @@ function buildHandlers(
           delegated: totes.data.filter((task) => task.ai_mode === 'delegated').length,
         });
       }
-      return ok(briefing);
+
+      /**
+       * **El que t'han reclamat.** Un protocol de consulta no té timbre: sense això,
+       * assabentar-se que una tasca ja no és teva vol dir descobrir-ho quan la teva
+       * escriptura falla, després d'haver-hi treballat una estona.
+       */
+      const ahir = new Date(Date.now() - 24 * 60 * 60_000).toISOString();
+      const takenOver = await recentTakeOvers(db, principal, ahir);
+
+      return ok({ scopes: briefing, taken_over: takenOver });
     },
 
     list_scopes: async () => ok(await listScopes(db, principal)),

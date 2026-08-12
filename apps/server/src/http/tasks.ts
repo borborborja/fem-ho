@@ -56,8 +56,10 @@ import {
   listTasks,
   moveTask,
   setAssignee,
+  takeOverTask,
   updateTask,
 } from '../services/tasks.js';
+import { PolicyError } from '../policy/errors.js';
 import { isMailbox, type Mailbox } from '../policy/mailbox.js';
 import { getProfile, getSettings } from '../services/users.js';
 import { body, bool, handle, ids, nullable, num, query, str, today } from './handle.js';
@@ -212,6 +214,27 @@ export function registerTaskRoutes(app: FastifyInstance): void {
         completeTask(ctx, principal, request.params.id),
       ),
     ),
+  );
+
+  /**
+   * **Ho agafo jo.** L'estat va al cos i no s'endevina: una tasca que l'agent tenia a
+   * «Fent» pot ser que la vulguis continuar tu o pot ser que la vulguis tornar a la cua.
+   */
+  app.post<{ Params: { id: string } }>('/api/v1/tasks/:id/take-over', async (request, reply) =>
+    handle(app, request, reply, async (principal) => {
+      const status = body(request).status;
+      if (status !== 'todo' && status !== 'doing') {
+        throw new PolicyError(
+          'invalid-take-over-status',
+          'Invalid column',
+          422,
+          'Taking a task over needs a status: `todo` or `doing`.',
+        );
+      }
+      return auditedTransaction(db().db, principal, (ctx) =>
+        takeOverTask(ctx, principal, request.params.id, status),
+      );
+    }),
   );
 
   app.post<{ Params: { id: string; userId: string } }>(

@@ -12,10 +12,10 @@
  */
 
 import { useEffect, useState } from 'react';
-import { dateTime, getLocale, t, type TaskStatus } from '@fem-ho/contracts';
+import { dateTime, getLocale, shortTime, t, type TaskStatus } from '@fem-ho/contracts';
 import { v7 as uuidv7 } from 'uuid';
 import { ActivityTimeline, ChecklistRow, EmptyState } from '@fem-ho/design-system/femho';
-import { api } from '../app/api.js';
+import { api, failureText } from '../app/api.js';
 import { Attachments } from '../app/Attachments.js';
 import { useSessionData } from '../app/session.js';
 import { useApi, useMutation } from '../app/useApi.js';
@@ -145,6 +145,9 @@ export function TaskModal({
   });
   const [newSubtask, setNewSubtask] = useState('');
   const [newComment, setNewComment] = useState('');
+  /** Reclamar-la va en dos temps: el botó, i llavors a quina columna la vols. */
+  const [takingOver, setTakingOver] = useState(false);
+  const [takeOverError, setTakeOverError] = useState<string | null>(null);
   const [activityFilter, setActivityFilter] = useState<'all' | 'ai' | 'human'>('all');
   const labels = useApi<Label[]>('/api/v1/labels');
   /** El nom que s'està escrivint per a una etiqueta nova; `null` si no n'hi ha cap. */
@@ -246,8 +249,19 @@ export function TaskModal({
   const scope = scopes.find((candidate) => candidate.id === data?.scope_id);
   const scopeLabels = (labels.data ?? []).filter((entry) => entry.scope_id === data?.scope_id);
 
-  /** La tasca és de la IA: delegada o assistida. En `manual` no hi ha cap agent al darrere. */
-  const ia = data !== undefined && data.ai_mode !== 'manual';
+  /**
+   * Quan s'ensenya la conversa amb la IA.
+   *
+   * **També després de reclamar-la.** Si només depengués del mode, agafar una tasca a mig
+   * fer li esborraria de la vista tot el que l'agent hi va deixar dit —que és justament el
+   * que la fa valdre la pena reclamar—: la conversa és de la tasca, no del mode.
+   */
+  const ia =
+    (data !== undefined && data.ai_mode !== 'manual') ||
+    (comments.data ?? []).some((comment) => comment.agent_id !== null);
+
+  /** Qui la té ara mateix, si algun agent hi està treballant. */
+  const bloquejada = data?.locked_until != null;
 
   const label = (text: string) => (
     <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--ink-soft)' }}>{text}</span>
@@ -878,6 +892,84 @@ export function TaskModal({
               style={{ display: 'grid', gap: 6 }}
             >
               {label(ia ? t('task.aiConversation') : t('task.comments'))}
+
+              {/*
+                **El pany i el camí de tornada, junts.** Van al mateix lloc perquè són la
+                mateixa pregunta —«qui la té?»— i la resposta canvia el que pots fer: amb
+                l'agent a dins no es toca, i quan surt te la pots endur amb tot el que hi ha
+                escrit.
+              */}
+              {ia && !creating && data !== undefined ? (
+                bloquejada ? (
+                  <p
+                    data-testid="task-locked-notice"
+                    style={{
+                      margin: 0,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      padding: '7px 11px',
+                      borderRadius: 12,
+                      background: 'var(--ghost-bg)',
+                      fontSize: 12,
+                      color: 'var(--ink-soft)',
+                    }}
+                  >
+                    <span aria-hidden="true">🔒</span>
+                    {t('ai.lock.working', {
+                      time: shortTime(getLocale(), new Date(data.locked_until ?? '')),
+                    })}
+                  </p>
+                ) : data.ai_mode !== 'manual' ? (
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                    {takingOver ? (
+                      <>
+                        {/* A quina columna. Endevinar-ho seria decidir-ho per tu. */}
+                        <span style={{ fontSize: 12, color: 'var(--ink-soft)' }}>
+                          {t('ai.takeOver.where')}
+                        </span>
+                        {(['todo', 'doing'] as const).map((status) => (
+                          <button
+                            key={status}
+                            type="button"
+                            className="plou-btn plou-btn-ghost"
+                            data-testid={`task-take-over-${status}`}
+                            style={{ fontSize: 12 }}
+                            onClick={() => {
+                              void api
+                                .post(`/api/v1/tasks/${taskId ?? ''}/take-over`, { status })
+                                .then(() => {
+                                  setTakingOver(false);
+                                  task.reload();
+                                  activity.reload();
+                                  onChanged();
+                                })
+                                .catch((cause: unknown) => setTakeOverError(failureText(cause)));
+                            }}
+                          >
+                            {t(`board.column.${status}`)}
+                          </button>
+                        ))}
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        className="plou-btn plou-btn-ghost"
+                        data-testid="task-take-over"
+                        style={{ fontSize: 12 }}
+                        onClick={() => setTakingOver(true)}
+                      >
+                        {t('ai.takeOver.action')}
+                      </button>
+                    )}
+                    {takeOverError === null ? null : (
+                      <span style={{ fontSize: 12, color: 'var(--danger-text)' }}>
+                        {takeOverError}
+                      </span>
+                    )}
+                  </div>
+                ) : null
+              ) : null}
 
               {/*
                 L'avís, amb icona i text i no només color (docs/04 §8). Marxa quan respons:

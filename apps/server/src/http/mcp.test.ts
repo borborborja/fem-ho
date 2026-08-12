@@ -271,14 +271,18 @@ describe('tools/call', () => {
     const response = await rpc('tools/call', { name: 'get_briefing', arguments: {} });
     const contingut = (result(response.body).content ?? []) as { text: string }[];
     const cos = JSON.parse(contingut[0]!.text) as {
-      scope: { ai_instructions: string };
-      projects: unknown[];
-      pending: number;
-    }[];
+      scopes: { scope: { ai_instructions: string }; projects: unknown[]; pending: number }[];
+      taken_over: { task_id: string }[];
+    };
 
     // Les instruccions de l'àmbit hi són: és el que fa que l'agent sàpiga com escriure.
-    expect(cos[0]?.scope.ai_instructions).toBe('Escriu sempre en català.');
-    expect(cos[0]?.pending).toBeGreaterThanOrEqual(0);
+    expect(cos.scopes[0]?.scope.ai_instructions).toBe('Escriu sempre en català.');
+    expect(cos.scopes[0]?.pending).toBeGreaterThanOrEqual(0);
+    /**
+     * I **el que t'han reclamat**, encara que sigui buit: és el timbre que un protocol de
+     * consulta pot tenir, i si el camp no hi fos sempre, un agent no podria confiar-hi.
+     */
+    expect(cos.taken_over).toEqual([]);
   });
 
   it('list_events sense finestra és un error LLEGIBLE, no un 500', async () => {

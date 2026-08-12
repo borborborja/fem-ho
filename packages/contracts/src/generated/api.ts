@@ -1596,6 +1596,35 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/tasks/{id}/take-over": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ho agafo jo
+         * @description Treu una tasca de la IA i la porta al tauler humà: `ai_mode` passa a `manual` i la
+         *     tasca va **a la columna que es demani**. Es demana i no s'endevina: una tasca que
+         *     l'agent tenia a «Fent» pot ser que la vulguis continuar tu, o pot ser que la
+         *     vulguis tornar a la cua.
+         *
+         *     **No esborra res.** Comentaris, adjunts i historial es queden: són de la tasca i no
+         *     del mode, i són justament el que fa que valgui la pena reclamar-la.
+         *
+         *     Un `409` vol dir que l'agent hi està treballant ara mateix. La reserva caduca sola
+         *     als 30 minuts; forçar-la seria trencar-li la feina a mig fer.
+         */
+        post: operations["takeOverTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/ai/attention": {
         parameters: {
             query?: never;
@@ -6966,6 +6995,55 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             /** @description Falta el motiu. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    takeOverTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    status: "todo" | "doing";
+                };
+            };
+        };
+        responses: {
+            /** @description La tasca, ja teva. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Task"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            /** @description L'agent hi està treballant. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Falta la columna, o no és `todo` ni `doing`. */
             422: {
                 headers: {
                     [name: string]: unknown;

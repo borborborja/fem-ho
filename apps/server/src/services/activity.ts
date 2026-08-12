@@ -232,3 +232,37 @@ export async function hasUnseenAiChanges(
   `.execute(db);
   return Number(found.rows[0]?.n ?? 0) > 0;
 }
+
+/**
+ * Les tasques que una persona ha reclamat a la IA darrerament.
+ *
+ * **És el timbre que un protocol de consulta pot tenir.** L'agent se n'assabenta segur quan
+ * la seva següent escriptura falla, però això vol dir descobrir-ho **després** d'haver-hi
+ * treballat una estona. Amb això, un agent que comença el seu cicle amb `get_briefing` ho
+ * sap abans de tocar res.
+ *
+ * Es mira l'historial i no `ai_mode`: «ara és manual» no distingeix una tasca que t'has
+ * endut fa deu minuts d'una que ningú no ha delegat mai.
+ */
+export async function recentTakeOvers(
+  db: MigrationDb,
+  principal: Principal,
+  since: string,
+): Promise<{ task_id: string; title: string; at: string }[]> {
+  if (principal.scopeIds !== null && principal.scopeIds.size === 0) return [];
+
+  const abast =
+    principal.scopeIds === null
+      ? sql`TRUE`
+      : sql`t.scope_id IN (${sql.join([...principal.scopeIds].map((id) => sql`${id}`))})`;
+
+  const found = await sql<{ task_id: string; title: string; at: string }>`
+    SELECT a.entity_id AS task_id, t.title AS title, a.created_at AS at
+    FROM activity_log a
+    JOIN tasks t ON t.id = a.entity_id AND t.deleted_at IS NULL
+    WHERE a.verb = 'taken_over' AND a.created_at > ${since} AND ${abast}
+    ORDER BY a.created_at DESC
+    LIMIT 20
+  `.execute(db);
+  return found.rows;
+}

@@ -29,7 +29,7 @@ import { listInboxEvents, type InboxEvent } from './events.js';
 import { listInboxMail, type InboxMail } from './mail.js';
 import { refusalError, refuseTaskWrite, type WriteIntent } from '../policy/ai-writes.js';
 import { clearAttention } from './attention.js';
-import { leaseOf } from './leases.js';
+import { leaseOf, releaseIfHeld } from './leases.js';
 import { assertScopeAccess, listScopes } from './scopes.js';
 
 export interface TaskRow {
@@ -735,6 +735,75 @@ export async function moveTask(
     `.execute(ctx.tx);
     await createNextOccurrence(ctx, principal, id, current);
   }
+
+  const updated = await sql<TaskRow>`
+    SELECT ${TASK_COLUMNS} FROM tasks WHERE id = ${id}
+  `.execute(ctx.tx);
+  const [task] = await withAssignees(ctx.tx, updated.rows);
+  if (task === undefined) throw notFound('task', id);
+  return task;
+}
+
+/**
+ * Reclamar una tasca que estava a mans de la IA.
+ *
+ * **El camí de tornada que no existia.** Fins avui una tasca delegada només sortia del
+ * kanban d'IA arrossegant-la a la bústia, que la deixa a `manual` però també la treu de la
+ * columna on era: la manera d'agafar una cosa a mig fer era desfer-li el lloc.
+ *
+ * Tres coses hi passen, i cap n'esborra res:
+ *
+ *   - Passa a `manual` i **a la columna que triïs**. Per això el paràmetre existeix: una
+ *     tasca que l'agent tenia a «Fent» pot ser que la vulguis continuar tu, o pot ser que
+ *     la vulguis tornar a la cua. Endevinar-ho seria decidir-ho per tu.
+ *   - **Baixa la marca d'atenció**, si esperava resposta: ja no espera ningú.
+ *   - **Deixa anar la reserva.** Només arriba aquí si no estava bloquejada —`assertWritable`
+ *     ho ha comprovat—, però una reserva caducada que quedés a la taula faria que el pany
+ *     tornés a sortir sol quan l'agent la renovés.
+ *
+ * Els comentaris, els adjunts i l'historial es queden: són de la tasca, no del mode. És
+ * literalment el que la fa útil de reclamar —el que l'agent ja hi ha deixat escrit.
+ */
+export async function takeOverTask(
+  ctx: AuditContext,
+  principal: Principal,
+  id: string,
+  status: 'todo' | 'doing',
+): Promise<Task> {
+  if (!hasCapability(principal, 'tasks:write')) throw missingCapability('tasks:write');
+
+  const found = await sql<TaskRow>`
+    SELECT ${TASK_COLUMNS} FROM tasks WHERE id = ${id} AND deleted_at IS NULL
+  `.execute(ctx.tx);
+  const current = found.rows[0];
+  if (current === undefined) throw notFound('task', id);
+  await assertScopeAccess(ctx.tx, principal, current.scope_id, { type: 'La tasca', id });
+  await assertWritable(ctx, principal, current, 'take-over');
+
+  await sql`
+    UPDATE tasks
+    SET ai_mode = 'manual', status = ${status}, updated_at = ${ctx.now}, version = version + 1
+    WHERE id = ${id}
+  `.execute(ctx.tx);
+
+  await clearAttention(ctx, id);
+  await releaseIfHeld(ctx, id, 'Una persona ha assumit la tasca.');
+
+  /**
+   * **`taken_over` i no `updated`.** L'historial és el que llegeix l'agent per saber què
+   * ha passat, i «ha canviat `ai_mode` de delegated a manual» no diu qui se l'ha enduta
+   * ni per què la seva següent crida falla.
+   */
+  ctx.record({
+    entityType: 'task',
+    entityId: id,
+    scopeId: current.scope_id,
+    verb: 'taken_over',
+    changes: {
+      ai_mode: { from: current.ai_mode, to: 'manual' },
+      status: { from: current.status, to: status },
+    },
+  });
 
   const updated = await sql<TaskRow>`
     SELECT ${TASK_COLUMNS} FROM tasks WHERE id = ${id}
