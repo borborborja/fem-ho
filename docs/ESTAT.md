@@ -109,7 +109,7 @@ Les dotze seccions de `docs/02`:
 | --- | --- |
 | §1 Estructura general | fet |
 | §2 Login | fet |
-| §3 Barra superior | fet, les vuit peces |
+| §3 Barra superior | fet, les vuit peces; en monoàmbit hi ha el selector d'àmbit i els xips de projecte (P24), i el nom/logo surten de la instància |
 | §4 Kanban | fet, amb arrossegament de ratolí i de teclat; **la columna Fet no ensenyava res** fins que `move` va segellar `completed_at` (P14) |
 | §5 Calendari | fet: mes, setmana, dia i rail configurable; les URL de CalDAV ja tenen el botó de copiar. **No ensenyava cap tasca** fins a P18 |
 | §6 Vista de llista senzilla | fet |
@@ -118,6 +118,7 @@ Les dotze seccions de `docs/02`:
 | §9 Ajustos | fet, les vuit pestanyes; l'Admin i el camp de netejar la instància es van arreglar a P23 |
 | §10 Responsive | fet; el kanban del mòbil es va **arreglar** en ajustar-se al disseny, i a P19 la pàgina va deixar de moure's de costat i Ajustos va passar a ser usable al telèfon |
 | §11 Dreceres de teclat | fet, amb la paleta d'ordres |
+| §13 La primera pregunta | fet: surt un cop a qui no ho ha dit mai, i no si `FEMHO_SCOPE_MODE` ja ho decideix |
 | §12 Estats buits, càrrega i error | fet. **La cua de sortida (`sync/outbox.ts`) no la fa servir cap pantalla de debò**, només la de prova: el tauler no enqueua res sense xarxa. El que sí que està tancat és que no es perdi el que escrius (P21) |
 
 ### Els adjunts (§7), que abans hi faltaven
