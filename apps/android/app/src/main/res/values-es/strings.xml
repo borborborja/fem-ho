@@ -262,9 +262,14 @@
     <string name="settings_accent_mono_warm">Cálido</string>
     <string name="settings_accent_soft">Suave</string>
     <string name="settings_addmember">+ Añadir miembro</string>
+    <string name="settings_agentallscopes">Todos los ámbitos</string>
     <string name="settings_agentcancreate">Puede crear tareas</string>
+    <string name="settings_agentcredentials">Credenciales</string>
     <string name="settings_agentenabled">Activo</string>
+    <string name="settings_agentnewcredential">+ Nueva credencial</string>
     <string name="settings_agents">Agentes</string>
+    <string name="settings_agentscopes">Ámbitos que lleva</string>
+    <string name="settings_agentscopetaken">Este ámbito lo lleva «{name}»: un ámbito solo puede tener un agente.</string>
     <string name="settings_branding">Logo de la instancia</string>
     <string name="settings_branding_fixed">El logo lo pone la configuración del servidor (FEMHO_LOGO_URL) y no se puede cambiar desde aquí.</string>
     <string name="settings_branding_help">SVG, PNG o WebP, como mucho 512 KB. Se ve en la barra, en el login y en la página de un enlace compartido.</string>
@@ -559,6 +564,9 @@
     <string name="task_status">Estado</string>
     <string name="task_subtasks">Subtareas</string>
     <string name="task_title">Título</string>
+    <string name="tokens_aiowned">Credencial de IA de «{name}»</string>
+    <string name="tokens_aiownedgo">Ir al agente</string>
+    <string name="tokens_aiownedhelp">Las credenciales de IA se crean y se revocan en Usuario IA, donde también se dice qué ámbitos lleva cada agente.</string>
     <string name="tokens_capabilities">Capacidades</string>
     <string name="tokens_copied">Copiado</string>
     <string name="tokens_copy">Copia</string>

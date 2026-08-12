@@ -207,7 +207,7 @@ export function SettingsScreen() {
           {tab === 'scopes' ? <ScopesTab /> : null}
           {tab === 'calendars' ? <CalendarsTab /> : null}
           {tab === 'mail' ? <MailTab /> : null}
-          {tab === 'mcp' ? <McpTab /> : null}
+          {tab === 'mcp' ? <McpTab onGoToAgent={() => setTab('ai')} /> : null}
           {tab === 'ai' ? <AiTab /> : null}
           {tab === 'shares' ? <SharesTab /> : null}
           {tab === 'profile' ? <ProfileTab /> : null}
@@ -1404,8 +1404,14 @@ function SourcesForScope({
   );
 }
 
-function McpTab() {
+function McpTab({ onGoToAgent }: { onGoToAgent: () => void }) {
   const tokens = useApi<{ data: ApiTokenSummary[] }>('/api/v1/tokens');
+  /**
+   * **Els agents, per poder dir de qui és cada credencial d'IA.** Una credencial que surt
+   * a la llista sense dir a què pertany i que no es deixa revocar aquí seria un misteri;
+   * amb el nom de l'agent i un botó, és un camí.
+   */
+  const agents = useApi<Agent[]>('/api/v1/ai/agents');
   const [name, setName] = useState('');
   const [created, setCreated] = useState<string | null>(null);
 
@@ -1466,41 +1472,84 @@ function McpTab() {
           </div>
         ) : null}
 
-        {(tokens.data?.data ?? []).map((token) => (
-          <div
-            key={token.id}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-              fontSize: 12.5,
-              color: 'var(--ink-soft)',
-            }}
-          >
-            <span style={{ fontWeight: 600, color: 'var(--ink)' }}>{token.name}</span>
-            <span style={{ fontFamily: 'monospace' }}>{token.token_prefix}</span>
-            <span>{token.last_used_at ?? t('tokens.never')}</span>
-            <button
-              type="button"
-              data-testid={`token-revoke-${token.id}`}
-              onClick={() => {
-                void api.delete(`/api/v1/tokens/${token.id}`).then(() => {
-                  tokens.reload();
-                });
-              }}
+        {(tokens.data?.data ?? []).map((token) => {
+          /**
+           * Una credencial d'IA es veu aquí —és on la gent busca els tokens— però **no es
+           * toca aquí**: els seus àmbits els hereta de l'agent, i revocar-la sense veure de
+           * qui era deixaria un agent aturat sense saber per què.
+           */
+          const agent =
+            token.ai_agent_id === null
+              ? undefined
+              : (agents.data ?? []).find((row) => row.id === token.ai_agent_id);
+
+          return (
+            <div
+              key={token.id}
               style={{
-                border: 'none',
-                background: 'transparent',
-                font: 'inherit',
-                fontSize: 12,
-                cursor: 'pointer',
-                color: 'var(--danger-text)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                fontSize: 12.5,
+                color: 'var(--ink-soft)',
               }}
             >
-              {t('tokens.revoke')}
-            </button>
-          </div>
-        ))}
+              <span style={{ fontWeight: 600, color: 'var(--ink)' }}>{token.name}</span>
+              <span style={{ fontFamily: 'monospace' }}>{token.token_prefix}</span>
+              <span>{token.last_used_at ?? t('tokens.never')}</span>
+              {token.ai_agent_id === null ? (
+                <button
+                  type="button"
+                  data-testid={`token-revoke-${token.id}`}
+                  onClick={() => {
+                    void api.delete(`/api/v1/tokens/${token.id}`).then(() => {
+                      tokens.reload();
+                    });
+                  }}
+                  style={{
+                    border: 'none',
+                    background: 'transparent',
+                    font: 'inherit',
+                    fontSize: 12,
+                    cursor: 'pointer',
+                    color: 'var(--danger-text)',
+                  }}
+                >
+                  {t('tokens.revoke')}
+                </button>
+              ) : (
+                <>
+                  {/* Icona i text, mai el color sol (docs/04 §8). */}
+                  <span className="plou-tag plou-tag-accent" data-testid={`token-ai-${token.id}`}>
+                    🤖 {t('tokens.aiOwned', { name: agent?.name ?? '…' })}
+                  </span>
+                  <button
+                    type="button"
+                    data-testid={`token-ai-go-${token.id}`}
+                    onClick={onGoToAgent}
+                    style={{
+                      border: 'none',
+                      background: 'transparent',
+                      font: 'inherit',
+                      fontSize: 12,
+                      cursor: 'pointer',
+                      color: 'var(--kicker)',
+                      fontWeight: 600,
+                    }}
+                  >
+                    {t('tokens.aiOwnedGo')}
+                  </button>
+                </>
+              )}
+            </div>
+          );
+        })}
+
+        {(tokens.data?.data ?? []).some((token) => token.ai_agent_id !== null) ? (
+          <p style={{ margin: 0, fontSize: 11.5, color: 'var(--ink-faint)', lineHeight: 1.45 }}>
+            {t('tokens.aiOwnedHelp')}
+          </p>
+        ) : null}
 
         <div style={{ display: 'flex', gap: 8 }}>
           <input
@@ -1528,6 +1577,13 @@ function McpTab() {
 function AiTab() {
   const agents = useApi<Agent[]>('/api/v1/ai/agents');
   const [name, setName] = useState('');
+  /**
+   * **Un canvi en un agent en canvia un altre.** Assignar «Feina» a l'Hermes fa que la
+   * casella del Codex hagi de sortir desactivada, i la disponibilitat la sap el servidor:
+   * aquest comptador la fa tornar a demanar a **totes** les files, no només a la que s'ha
+   * tocat. Sense això, la casella presa es podria marcar fins que algú recarregués.
+   */
+  const [versio, setVersio] = useState(0);
 
   return (
     <Group title={t('settings.agents')}>
@@ -1535,34 +1591,15 @@ function AiTab() {
         <EmptyState>{t('settings.empty.agents')}</EmptyState>
       ) : (
         (agents.data ?? []).map((agent) => (
-          <div
+          <AgentRow
             key={agent.id}
-            style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 12.5 }}
-          >
-            <span style={{ fontWeight: 600 }}>{agent.name}</span>
-            <Toggle
-              testId={`agent-enabled-${agent.id}`}
-              label={t('settings.agentEnabled')}
-              checked={agent.enabled}
-              onChange={(value) => {
-                void api.patch(`/api/v1/ai/agents/${agent.id}`, { enabled: value }).then(() => {
-                  agents.reload();
-                });
-              }}
-            />
-            <Toggle
-              testId={`agent-create-${agent.id}`}
-              label={t('settings.agentCanCreate')}
-              checked={agent.can_create_tasks}
-              onChange={(value) => {
-                void api
-                  .patch(`/api/v1/ai/agents/${agent.id}`, { can_create_tasks: value })
-                  .then(() => {
-                    agents.reload();
-                  });
-              }}
-            />
-          </div>
+            agent={agent}
+            versio={versio}
+            onChanged={() => {
+              agents.reload();
+              setVersio((value) => value + 1);
+            }}
+          />
         ))
       )}
 
@@ -1578,8 +1615,8 @@ function AiTab() {
           type="button"
           className="plou-btn plou-btn-primary"
           data-testid="agent-create"
+          disabled={name.trim() === ''}
           onClick={() => {
-            if (name.trim() === '') return;
             void api.post('/api/v1/ai/agents', { id: uuidv7(), name: name.trim() }).then(() => {
               setName('');
               agents.reload();
@@ -1590,6 +1627,208 @@ function AiTab() {
         </button>
       </div>
     </Group>
+  );
+}
+
+/**
+ * Un agent: què pot fer, **d'on agafa feina**, i amb què s'hi connecta.
+ *
+ * Els tres blocs són el que cal per posar-lo a treballar, i van junts perquè és una sola
+ * decisió: qui és, què porta i com hi entra. Repartits per pantalles, configurar un agent
+ * seria anar i tornar tres vegades.
+ */
+function AgentRow({
+  agent,
+  versio,
+  onChanged,
+}: {
+  agent: Agent;
+  versio: number;
+  onChanged: () => void;
+}) {
+  const { scopes } = useSessionData();
+  const disponibilitat = useApi<{
+    data: { scope_id: string; taken_by: { name: string } | null }[];
+  }>(`/api/v1/ai/agents/${agent.id}/scope-availability`, [versio]);
+  const credencials = useApi<{ data: ApiTokenSummary[] }>(
+    `/api/v1/ai/agents/${agent.id}/credentials`,
+  );
+  const [nova, setNova] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const presa = (scopeId: string): string | null =>
+    disponibilitat.data?.data.find((row) => row.scope_id === scopeId)?.taken_by?.name ?? null;
+
+  /** Desa el conjunt sencer: la pantalla envia les caselles tal com han quedat. */
+  const desa = (next: { scope_ids: string[]; all_scopes: boolean }): void => {
+    setError(null);
+    void api
+      .put(`/api/v1/ai/agents/${agent.id}/scopes`, next)
+      .then(onChanged)
+      .catch((cause: unknown) => setError(failureText(cause)));
+  };
+
+  return (
+    <div
+      data-testid={`agent-${agent.id}`}
+      style={{
+        display: 'grid',
+        gap: 10,
+        padding: 12,
+        border: '1px solid var(--card-border)',
+        borderRadius: 'var(--radius-card)',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 12.5 }}>
+        <span style={{ fontWeight: 600 }}>{agent.name}</span>
+        <Toggle
+          testId={`agent-enabled-${agent.id}`}
+          label={t('settings.agentEnabled')}
+          checked={agent.enabled}
+          onChange={(value) => {
+            void api.patch(`/api/v1/ai/agents/${agent.id}`, { enabled: value }).then(onChanged);
+          }}
+        />
+        <Toggle
+          testId={`agent-create-${agent.id}`}
+          label={t('settings.agentCanCreate')}
+          checked={agent.can_create_tasks}
+          onChange={(value) => {
+            void api
+              .patch(`/api/v1/ai/agents/${agent.id}`, { can_create_tasks: value })
+              .then(onChanged);
+          }}
+        />
+      </div>
+
+      {/*
+        **D'on agafa feina.** Un àmbit té un sol agent: els que ja té un altre surten
+        desactivats **amb el seu nom**, perquè saber a qui anar és el següent pas i deixar
+        marcar per respondre amb un error després no ho és.
+      */}
+      <div style={{ display: 'grid', gap: 6 }}>
+        <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--ink-soft)' }}>
+          {t('settings.agentScopes')}
+        </span>
+        <Toggle
+          testId={`agent-all-scopes-${agent.id}`}
+          label={t('settings.agentAllScopes')}
+          checked={agent.all_scopes}
+          onChange={(value) => desa({ scope_ids: value ? [] : agent.scope_ids, all_scopes: value })}
+        />
+        {agent.all_scopes ? null : (
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            {scopes.map((scope) => {
+              const altre = presa(scope.id);
+              return (
+                <label
+                  key={scope.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 5,
+                    fontSize: 12,
+                    color: altre === null ? 'var(--ink)' : 'var(--ink-faint)',
+                  }}
+                  title={
+                    altre === null ? undefined : t('settings.agentScopeTaken', { name: altre })
+                  }
+                >
+                  <input
+                    type="checkbox"
+                    data-testid={`agent-scope-${agent.id}-${scope.id}`}
+                    checked={agent.scope_ids.includes(scope.id)}
+                    disabled={altre !== null}
+                    onChange={(event) =>
+                      desa({
+                        all_scopes: false,
+                        scope_ids: event.target.checked
+                          ? [...agent.scope_ids, scope.id]
+                          : agent.scope_ids.filter((id) => id !== scope.id),
+                      })
+                    }
+                  />
+                  {scope.name}
+                  {altre === null ? null : ` · ${altre}`}
+                </label>
+              );
+            })}
+          </div>
+        )}
+        {error === null ? null : (
+          <p style={{ margin: 0, fontSize: 12, color: 'var(--danger-text)' }}>{error}</p>
+        )}
+      </div>
+
+      {/*
+        **Amb què s'hi connecta.** El testimoni surt una sola vegada —del hash no se'n pot
+        treure— i per això va amb el botó de copiar (P17) i amb l'avís al costat.
+      */}
+      <div style={{ display: 'grid', gap: 6 }}>
+        <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--ink-soft)' }}>
+          {t('settings.agentCredentials')}
+        </span>
+        {(credencials.data?.data ?? []).map((cred) => (
+          <div
+            key={cred.id}
+            style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12 }}
+          >
+            <span style={{ fontFamily: 'monospace' }}>{cred.token_prefix}…</span>
+            <span style={{ color: 'var(--ink-faint)' }}>{cred.name}</span>
+            <button
+              type="button"
+              className="plou-btn plou-btn-ghost"
+              data-testid={`agent-credential-revoke-${cred.id}`}
+              onClick={() => {
+                void api.delete(`/api/v1/tokens/${cred.id}`).then(() => credencials.reload());
+              }}
+              style={{ fontSize: 11.5, color: 'var(--danger-text)' }}
+            >
+              {t('tokens.revoke')}
+            </button>
+          </div>
+        ))}
+
+        {nova === null ? null : (
+          <div style={{ display: 'grid', gap: 5 }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input
+                readOnly
+                className="plou-input"
+                data-testid={`agent-credential-value-${agent.id}`}
+                value={nova}
+                onFocus={(event) => event.currentTarget.select()}
+                style={{ fontSize: 12, flex: 1 }}
+              />
+              <CopyButton value={nova} />
+            </div>
+            <p style={{ margin: 0, fontSize: 11.5, color: 'var(--danger-text)' }}>
+              {t('tokens.onceWarning')}
+            </p>
+          </div>
+        )}
+
+        <button
+          type="button"
+          className="plou-btn plou-btn-ghost"
+          data-testid={`agent-credential-new-${agent.id}`}
+          onClick={() => {
+            void api
+              .post<{ token: string }>(`/api/v1/ai/agents/${agent.id}/credentials`, {
+                name: agent.name,
+              })
+              .then((result) => {
+                setNova(result.token);
+                credencials.reload();
+              })
+              .catch((cause: unknown) => setError(failureText(cause)));
+          }}
+          style={{ fontSize: 12, width: 'fit-content' }}
+        >
+          {t('settings.agentNewCredential')}
+        </button>
+      </div>
+    </div>
   );
 }
 

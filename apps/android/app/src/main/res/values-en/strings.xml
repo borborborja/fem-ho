@@ -262,9 +262,14 @@
     <string name="settings_accent_mono_warm">Warm</string>
     <string name="settings_accent_soft">Soft</string>
     <string name="settings_addmember">+ Add member</string>
+    <string name="settings_agentallscopes">All scopes</string>
     <string name="settings_agentcancreate">Can create tasks</string>
+    <string name="settings_agentcredentials">Credentials</string>
     <string name="settings_agentenabled">Active</string>
+    <string name="settings_agentnewcredential">+ New credential</string>
     <string name="settings_agents">Agents</string>
+    <string name="settings_agentscopes">Scopes it handles</string>
+    <string name="settings_agentscopetaken">“{name}” handles this scope: a scope can only have one agent.</string>
     <string name="settings_branding">Instance logo</string>
     <string name="settings_branding_fixed">The logo comes from the server configuration (FEMHO_LOGO_URL) and cannot be changed here.</string>
     <string name="settings_branding_help">SVG, PNG or WebP, 512 KB at most. It appears in the bar, on the login page and on a shared link.</string>
@@ -559,6 +564,9 @@
     <string name="task_status">Status</string>
     <string name="task_subtasks">Subtasks</string>
     <string name="task_title">Title</string>
+    <string name="tokens_aiowned">AI credential for “{name}”</string>
+    <string name="tokens_aiownedgo">Go to the agent</string>
+    <string name="tokens_aiownedhelp">AI credentials are created and revoked in AI user, which also says which scopes each agent handles.</string>
     <string name="tokens_capabilities">Capabilities</string>
     <string name="tokens_copied">Copied</string>
     <string name="tokens_copy">Copy</string>

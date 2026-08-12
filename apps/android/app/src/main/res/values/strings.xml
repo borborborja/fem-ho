@@ -262,9 +262,14 @@
     <string name="settings_accent_mono_warm">Càlid</string>
     <string name="settings_accent_soft">Suau</string>
     <string name="settings_addmember">+ Afegir membre</string>
+    <string name="settings_agentallscopes">Tots els àmbits</string>
     <string name="settings_agentcancreate">Pot crear tasques</string>
+    <string name="settings_agentcredentials">Credencials</string>
     <string name="settings_agentenabled">Actiu</string>
+    <string name="settings_agentnewcredential">+ Nova credencial</string>
     <string name="settings_agents">Agents</string>
+    <string name="settings_agentscopes">Àmbits que porta</string>
+    <string name="settings_agentscopetaken">Aquest àmbit el porta «{name}»: un àmbit només pot tenir un agent.</string>
     <string name="settings_branding">Logo de la instància</string>
     <string name="settings_branding_fixed">El logo el posa la configuració del servidor (FEMHO_LOGO_URL) i no es pot canviar des d’aquí.</string>
     <string name="settings_branding_help">SVG, PNG o WebP, com a molt 512 KB. Es veu a la barra, al login i a la pàgina d’un enllaç compartit.</string>
@@ -559,6 +564,9 @@
     <string name="task_status">Estat</string>
     <string name="task_subtasks">Subtasques</string>
     <string name="task_title">Títol</string>
+    <string name="tokens_aiowned">Credencial d\'IA de «{name}»</string>
+    <string name="tokens_aiownedgo">Anar a l\'agent</string>
+    <string name="tokens_aiownedhelp">Les credencials d\'IA es creen i es revoquen a Usuari IA, on també es diu quins àmbits porta cada agent.</string>
     <string name="tokens_capabilities">Capacitats</string>
     <string name="tokens_copied">Copiat</string>
     <string name="tokens_copy">Copia</string>

@@ -168,7 +168,7 @@ async function refresh(): Promise<boolean> {
 }
 
 export interface RequestOptions {
-  method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   body?: unknown;
   /** Capçaleres extra. `Authorization` i `content-type` les posa el client. */
   headers?: Record<string, string>;
@@ -224,6 +224,9 @@ export const api = {
     request<T>(path, { method: 'POST', ...(body === undefined ? {} : { body }) }),
   patch: <T>(path: string, body: unknown): Promise<T> =>
     request<T>(path, { method: 'PATCH', body }),
+  // `PUT` i no `PATCH` per als àmbits d'un agent: es desa **el conjunt sencer**, perquè
+  // treure'n un és tan normal com afegir-n'hi un i amb un pedaç no se sabria dir.
+  put: <T>(path: string, body: unknown): Promise<T> => request<T>(path, { method: 'PUT', body }),
   delete: <T>(path: string): Promise<T> => request<T>(path, { method: 'DELETE' }),
 
   /**
