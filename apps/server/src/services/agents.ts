@@ -19,7 +19,12 @@ import type { MigrationDb } from '../db/migration-db.js';
 import { PolicyError, missingCapability, notFound } from '../policy/errors.js';
 import { hasCapability, type Principal } from '../policy/principal.js';
 import { visibleScopeIds } from '../policy/scope-visibility.js';
-import { assignmentConflict, availability, type AgentAssignment } from '../policy/agent-scopes.js';
+import {
+  assignmentConflict,
+  availability,
+  holders,
+  type AgentAssignment,
+} from '../policy/agent-scopes.js';
 
 export interface AgentView {
   id: string;
@@ -406,4 +411,40 @@ export async function deleteAgent(
 
   ctx.record({ entityType: 'ai_agent', entityId: id, verb: 'deleted' });
   return { released: Number(released.numAffectedRows ?? 0n) };
+}
+
+/**
+ * Quins àmbits tenen agent, i si l'agent està engegat.
+ *
+ * **Perquè una tasca delegada a un àmbit orfe no s'hi quedi per sempre.** El kanban d'IA no
+ * distingeix una tasca que un agent està a punt d'agafar d'una que no agafarà mai ningú, i
+ * la diferència no és de la tasca sinó de l'àmbit: si no hi ha cap agent que el porti —o el
+ * que el porta està aturat—, allò no es farà i s'ha de dir en el moment de deixar-la-hi.
+ */
+export async function agentCoverage(
+  db: MigrationDb,
+  principal: Principal,
+): Promise<{ scope_id: string; agent: { id: string; name: string; enabled: boolean } | null }[]> {
+  if (!hasCapability(principal, 'tasks:read')) throw missingCapability('tasks:read');
+
+  const visibles = await visibleScopeIds(db, principal.userId);
+  const ordenats = await sql<{ id: string }>`
+    SELECT id FROM scopes WHERE deleted_at IS NULL ORDER BY position, id
+  `.execute(db);
+
+  const actius = await sql<{ id: string; enabled: unknown }>`
+    SELECT id, enabled FROM ai_agents WHERE on_behalf_of_user_id = ${principal.userId}
+  `.execute(db);
+  const engegat = new Map(actius.rows.map((row) => [row.id, isTrue(row.enabled)]));
+
+  return holders(
+    ordenats.rows.map((row) => row.id).filter((scopeId) => visibles.has(scopeId)),
+    await assignments(db, principal.userId),
+  ).map((row) => ({
+    scope_id: row.scopeId,
+    agent:
+      row.agent === null
+        ? null
+        : { id: row.agent.id, name: row.agent.name, enabled: engegat.get(row.agent.id) ?? false },
+  }));
 }

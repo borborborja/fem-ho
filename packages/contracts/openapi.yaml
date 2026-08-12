@@ -2714,6 +2714,43 @@ paths:
           content:
             { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
 
+  /ai/coverage:
+    get:
+      tags: [tasks]
+      operationId: listAgentCoverage
+      summary: Quins àmbits tenen agent
+      description: |
+        Per a cada àmbit visible, quin agent el porta i si està engegat. `null` vol dir que
+        no el porta ningú: **una tasca delegada a un àmbit orfe no la farà mai ningú**, i
+        això és el que permet dir-ho en el moment de deixar-la-hi en comptes de deixar-la
+        esperant per sempre.
+      responses:
+        '200':
+          description: La cobertura, en l'ordre dels àmbits a la barra.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      required: [scope_id, agent]
+                      properties:
+                        scope_id: { type: string }
+                        agent:
+                          oneOf:
+                            - type: object
+                              required: [id, name, enabled]
+                              properties:
+                                id: { type: string }
+                                name: { type: string }
+                                enabled: { type: boolean }
+                            - type: 'null'
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+
   /ai/attention:
     get:
       tags: [tasks]

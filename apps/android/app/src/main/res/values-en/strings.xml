@@ -30,6 +30,9 @@
     <string name="ai_attention_card">Waiting on you</string>
     <string name="ai_attention_pending">{count} tasks are waiting for your reply</string>
     <string name="ai_attention_waiting">The agent needs a reply from you to carry on. It goes away when you answer.</string>
+    <string name="ai_coverage_disabled">The agent “{agent}”, which handles “{scope}”, is stopped: it will pick nothing up.</string>
+    <string name="ai_coverage_fix">Assign one</string>
+    <string name="ai_coverage_none">No agent handles “{scope}”: whatever you leave here will not get done.</string>
     <string name="ai_lock_card">The agent is on it</string>
     <string name="ai_lock_working">The agent is working on it. It unlocks on its own at {time}.</string>
     <string name="ai_mode_assisted">Assisted</string>

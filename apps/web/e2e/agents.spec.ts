@@ -291,3 +291,74 @@ test("una tasca que l'agent té a les mans no es toca, i quan la deixa te la pot
     page.locator('[data-column-status="doing"]').getByText('Migrar el servidor'),
   ).toHaveCount(0);
 });
+
+test('deixar una tasca a un àmbit sense agent avisa que no la farà ningú', async ({ page }) => {
+  /**
+   * **Aquest és el forat que la resta de la tanda tapa.** Arrossegar al tauler d'IA posava
+   * «amb ajuda» i `next_task` només reparteix «delegada»: el que hi deixaves no l'agafava
+   * cap agent, mai, i res ho deia. Ara el gest delega de debò —i quan l'àmbit no té ningú,
+   * es diu al moment i es queda dit mentre duri.
+   */
+  await enterAsNew(page, {
+    name: 'Sense agent',
+    email: 'sense-agent@example.com',
+    password: 'la-contrasenya-de-prova',
+  });
+
+  /**
+   * **Dos àmbits i un agent que només en porta un.** És el cas real: tens un agent per a
+   * Feina i un dia deixes una cosa a Casa. Amb cap agent enlloc no hi hauria ni tauler
+   * d'IA —el commutador surt quan n'hi ha algun d'engegat—, o sigui que el forat que això
+   * prova només existeix quan la IA ja funciona per a una altra banda.
+   */
+  await page.goto('/settings');
+  await page.locator('[data-testid="settings-tab-scopes"]').click();
+  for (const nom of ['Coberta', 'Òrfena']) {
+    await page.locator('[data-testid="new-scope-name"]').fill(nom);
+    await page.locator('[data-testid="new-scope-create"]').click();
+    await expect(page.locator('[data-testid^="scope-row-"]', { hasText: nom })).toBeVisible();
+  }
+  const fila = page.locator('[data-testid^="scope-row-"]', { hasText: 'Òrfena' });
+  const ambit = (await fila.getAttribute('data-testid'))!.replace('scope-row-', '');
+  const coberta = (await page
+    .locator('[data-testid^="scope-row-"]', { hasText: 'Coberta' })
+    .getAttribute('data-testid'))!.replace('scope-row-', '');
+
+  await obreIA(page);
+  await creaAgent(page, 'Hermes de proves');
+  const agent = page.locator('[data-testid^="agent-"]', { hasText: 'Hermes de proves' }).first();
+  const idAgent = (await agent.getAttribute('data-testid'))!.replace('agent-', '');
+  // Un agent neix engegat; el que se li ha de dir és quin àmbit porta.
+  await page.locator(`[data-testid="agent-scope-${idAgent}-${coberta}"]`).click();
+  await expect(page.locator(`[data-testid="agent-enabled-${idAgent}"]`)).toBeChecked();
+
+  const meu = { authorization: `Bearer ${await token(page)}` };
+  const creada = await page.request.post('/api/v1/tasks', {
+    headers: meu,
+    data: { scope_id: ambit, title: 'Una que ningú farà' },
+  });
+  const tascaId = ((await creada.json()) as { id: string }).id;
+
+  await page.goto(`/?scopes=${ambit}`);
+  await page.getByTestId('ai-board-toggle').click();
+
+  // La banda hi és tan aviat com s'entra al tauler d'IA, i porta el remei a un clic.
+  await expect(page.getByTestId('ai-coverage-warning')).toContainText('Òrfena');
+
+  // I el gest d'avançar-la —el mateix camí que arrossegar— la delega **i avisa**.
+  await page
+    .getByTestId(`task-${tascaId}`)
+    .getByRole('button', { name: /Moure a/u })
+    .click();
+  await expect(page.getByTestId('board-notice')).toContainText('es quedarà sense fer');
+
+  /**
+   * I ha quedat **delegada**, que és el que fa que un agent la pugui agafar el dia que
+   * n'hi hagi: si quedés «amb ajuda», connectar l'agent no la faria aparèixer mai.
+   */
+  const tasca = await page.request.get(`/api/v1/tasks/${tascaId}`, { headers: meu });
+  expect(((await tasca.json()) as { ai_mode: string }).ai_mode).toBe('delegated');
+
+  await page.getByTestId('ai-coverage-fix').click();
+  await expect(page.getByTestId('agent-name')).toBeVisible();
+});

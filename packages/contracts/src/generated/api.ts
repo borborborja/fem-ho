@@ -1625,6 +1625,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/ai/coverage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Quins àmbits tenen agent
+         * @description Per a cada àmbit visible, quin agent el porta i si està engegat. `null` vol dir que
+         *     no el porta ningú: **una tasca delegada a un àmbit orfe no la farà mai ningú**, i
+         *     això és el que permet dir-ho en el moment de deixar-la-hi en comptes de deixar-la
+         *     esperant per sempre.
+         */
+        get: operations["listAgentCoverage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/ai/attention": {
         parameters: {
             query?: never;
@@ -7073,6 +7096,36 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+        };
+    };
+    listAgentCoverage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description La cobertura, en l'ordre dels àmbits a la barra. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            scope_id: string;
+                            agent: {
+                                id: string;
+                                name: string;
+                                enabled: boolean;
+                            } | null;
+                        }[];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
         };
     };
     listAttention: {

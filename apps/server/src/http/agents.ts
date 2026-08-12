@@ -9,6 +9,7 @@ import type { FastifyInstance } from 'fastify';
 import { auditedTransaction } from '../audit/audited-transaction.js';
 import { createToken, listTokens } from '../services/tokens.js';
 import {
+  agentCoverage,
   agentScopeAvailability,
   createAgent,
   deleteAgent,
@@ -182,6 +183,16 @@ export function registerAgentRoutes(app: FastifyInstance): void {
       // faria que un agent que consulta cada minut ho llegís com un error de configuració.
       return { task: found ?? null };
     }),
+  );
+
+  /**
+   * **Quins àmbits tenen agent.** Ho fa servir el tauler d'IA per dir, en el moment de
+   * deixar-hi una tasca, que allà no la farà ningú.
+   */
+  app.get('/api/v1/ai/coverage', async (request, reply) =>
+    handle(app, request, reply, async (principal) => ({
+      data: await agentCoverage(db().db, principal),
+    })),
   );
 
   /**

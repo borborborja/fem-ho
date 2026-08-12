@@ -111,14 +111,34 @@ export function availability(
   allExisting: string[],
   agents: AgentAssignment[],
 ): { scopeId: string; takenBy: { id: string; name: string } | null }[] {
-  const altres = agents.filter((agent) => agent.id !== agentId);
-  const totalitzador = altres.find((agent) => agent.allScopes);
+  // Els propis no surten mai presos: desar el que ja tens és el cas normal.
+  return holders(
+    allExisting,
+    agents.filter((agent) => agent.id !== agentId),
+  ).map((row) => ({
+    scopeId: row.scopeId,
+    takenBy: row.agent === null ? null : { id: row.agent.id, name: row.agent.name },
+  }));
+}
+
+/**
+ * De qui és cada àmbit.
+ *
+ * La mateixa pregunta que `availability` amb un públic diferent: allà serveix per desactivar
+ * caselles i aquí per dir **quins àmbits no té ningú**, que és el que fa que una tasca
+ * delegada a un àmbit orfe no es quedi esperant per sempre sense que res ho digui.
+ *
+ * Una funció i dues vistes, i no dues còpies de la mateixa regla: el dia que l'exclusivitat
+ * canviï, canvia aquí i les dues pantalles diuen el mateix.
+ */
+export function holders(
+  allExisting: string[],
+  agents: AgentAssignment[],
+): { scopeId: string; agent: AgentAssignment | null }[] {
+  const totalitzador = agents.find((agent) => agent.allScopes);
 
   return allExisting.map((scopeId) => {
-    if (totalitzador !== undefined) {
-      return { scopeId, takenBy: { id: totalitzador.id, name: totalitzador.name } };
-    }
-    const amo = altres.find((agent) => agent.scopeIds.includes(scopeId));
-    return { scopeId, takenBy: amo === undefined ? null : { id: amo.id, name: amo.name } };
+    if (totalitzador !== undefined) return { scopeId, agent: totalitzador };
+    return { scopeId, agent: agents.find((agent) => agent.scopeIds.includes(scopeId)) ?? null };
   });
 }

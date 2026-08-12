@@ -30,6 +30,9 @@
     <string name="ai_attention_card">Espera respuesta</string>
     <string name="ai_attention_pending">{count} tareas esperan tu respuesta</string>
     <string name="ai_attention_waiting">El agente espera una respuesta tuya para poder seguir. Se va cuando respondas.</string>
+    <string name="ai_coverage_disabled">El agente «{agent}», que lleva «{scope}», está parado: no cogerá nada.</string>
+    <string name="ai_coverage_fix">Asignar uno</string>
+    <string name="ai_coverage_none">Ningún agente lleva «{scope}»: lo que dejes aquí se quedará sin hacer.</string>
     <string name="ai_lock_card">El agente trabaja en ella</string>
     <string name="ai_lock_working">El agente está trabajando en ella. Se desbloquea sola a las {time}.</string>
     <string name="ai_mode_assisted">Con ayuda</string>
