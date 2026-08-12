@@ -26,6 +26,7 @@ import { api } from '../app/api.js';
 import { v7 as uuidv7 } from 'uuid';
 import { useSession, useSessionData } from '../app/session.js';
 import { useApi } from '../app/useApi.js';
+import { useRouter } from '../app/router.js';
 import type { Calendar, EventOccurrence, Inbox, InboxMail } from '../app/types.js';
 import { InboxRail } from '../board/InboxRail.js';
 import { ColumnQuickAdd } from '../board/ColumnQuickAdd.js';
@@ -78,7 +79,29 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
   const { updateSettings } = useSession();
   const mobile = useIsMobile();
   const [mode, setMode] = useState<Mode>('month');
-  const [selected, setSelected] = useState<string>(() => iso(new Date()));
+  /**
+   * El dia triat viu **també a l'adreça**.
+   *
+   * Era només estat de la pantalla: recarregaves —o tornaves enrere, o t'enviaves l'enllaç—
+   * i tornaves a avui. L'app ja posa els àmbits i els projectes a l'adreça; el dia que
+   * estàs mirant és de la mateixa família, i és el que fa que un enllaç a «el dimarts que
+   * ve» vulgui dir alguna cosa.
+   *
+   * S'escriu amb `replace`: navegar pel calendari és mirar, no anar a llocs, i omplir
+   * l'historial de dies faria que la fletxa d'enrere del navegador deixés de servir per
+   * sortir del calendari.
+   */
+  const { route, navigate } = useRouter();
+  const [selected, setSelectedState] = useState<string>(() => {
+    const fromUrl = route.query.get('date');
+    return fromUrl !== null && /^\d{4}-\d{2}-\d{2}$/u.test(fromUrl) ? fromUrl : iso(new Date());
+  });
+  const setSelected = (day: string): void => {
+    setSelectedState(day);
+    const query = new URLSearchParams(window.location.search);
+    query.set('date', day);
+    navigate(`${window.location.pathname}?${query.toString()}`, { replace: true });
+  };
   const [cursor, setCursor] = useState<Date>(() => new Date());
   /**
    * Quin esdeveniment s'ha obert.

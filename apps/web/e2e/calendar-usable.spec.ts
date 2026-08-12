@@ -6,9 +6,22 @@
  */
 
 import { expect, test, type Page } from '@playwright/test';
-import { enter, enterAsNew } from './entrar.js';
+import { enterAsNew } from './entrar.js';
 
 test.describe.configure({ mode: 'serial' });
+
+/**
+ * **Un usuari propi per a tot el fitxer.**
+ *
+ * Aquestes proves creen cites a dies concrets i vint-i-cinc tasques. La suite corre en
+ * paral·lel contra **una sola base**: amb l'usuari de tothom, una cita del dia 13 apareixia
+ * a la prova que comprova què hi ha demà, i la tombava sense tenir-hi res a veure.
+ */
+const MEU = {
+  name: 'Usable',
+  email: 'usable@example.com',
+  password: 'la-contrasenya-de-prova',
+};
 
 /** Una crida a l'API des de la pestanya, amb la sessió que hi ha. */
 async function apiCall(page: Page, method: string, path: string, body?: unknown): Promise<string> {
@@ -37,7 +50,7 @@ test('el «+» del calendari obre el modal, i no es queda carregant', async ({ p
    * s'obria demanant la tasca `''` al servidor, rebia un 404 i es quedava esperant. Un
    * identificador buit no és «cap tasca»: és una tasca que no existeix.
    */
-  await enter(page);
+  await enterAsNew(page, MEU);
   const fallides: string[] = [];
   page.on('response', (res) => {
     if (res.url().includes('/api/v1/tasks/') && !res.ok()) fallides.push(String(res.status()));
@@ -53,8 +66,29 @@ test('el «+» del calendari obre el modal, i no es queda carregant', async ({ p
   expect(fallides).toHaveLength(0);
 });
 
+test('el dia que mires viu a l’adreça, i sobreviu a una recàrrega', async ({ page }) => {
+  /**
+   * Era només estat de la pantalla: recarregaves —o tornaves enrere, o t'enviaves
+   * l'enllaç— i tornaves a avui. L'app ja posa els àmbits i els projectes a l'adreça; el
+   * dia que estàs mirant és de la mateixa família.
+   */
+  await enterAsNew(page, MEU);
+  await page.goto('/calendar?date=2026-08-20');
+
+  // La bústia del costat parla del dia de l'adreça i no d'avui.
+  await expect(page.getByTestId('day-2026-08-20')).toHaveAttribute('data-selected', 'true');
+
+  // I una recàrrega no et torna a avui.
+  await page.reload();
+  await expect(page.getByTestId('day-2026-08-20')).toHaveAttribute('data-selected', 'true');
+
+  // Clicar un altre dia actualitza l'adreça, perquè es pugui compartir.
+  await page.getByTestId('day-2026-08-24').click();
+  await expect.poll(() => new URL(page.url()).searchParams.get('date')).toBe('2026-08-24');
+});
+
 test('la vista de mes diu què hi ha cada dia, i no només que n’hi ha', async ({ page }) => {
-  await enter(page);
+  await enterAsNew(page, MEU);
 
   const scopes = JSON.parse(await apiCall(page, 'GET', '/api/v1/scopes')) as { id: string }[];
   const scopeId = scopes[0]!.id;
@@ -88,7 +122,7 @@ test('el mes sencer cap en una pantalla de portàtil', async ({ page }) => {
    * `aspect-ratio: 1` lligava l'alçada a l'amplada: a 1440px les cel·les feien 137px, el mes
    * en feia 926, i **les dues últimes setmanes queien sota la línia de flotació**.
    */
-  await enter(page);
+  await enterAsNew(page, MEU);
   await page.setViewportSize({ width: 1366, height: 700 });
   await page.goto('/calendar?date=2026-08-11');
 
@@ -109,7 +143,7 @@ test('els quatre camps d’afegida ràpida estan a la mateixa línia', async ({ 
    * tornava a posar a baix, i el camp quedava **catorze píxels més amunt** que el de la
    * bústia, que és la seva pròpia targeta. Es veia com una fila trencada, i era una suma.
    */
-  await enter(page);
+  await enterAsNew(page, MEU);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/board');
 
@@ -143,11 +177,7 @@ test('amb vint-i-cinc tasques, la columna es desplaça per dins', async ({ page 
    * amb això—. Fer-se un àmbit tampoc no basta: `design.spec` agafa **el primer xip**
    * d'àmbit, i un àmbit nou li canvia quin és.
    */
-  await enterAsNew(page, {
-    name: 'Volum',
-    email: 'volum@example.com',
-    password: 'la-contrasenya-de-prova',
-  });
+  await enterAsNew(page, MEU);
   await page.setViewportSize({ width: 1440, height: 900 });
 
   const scopes = JSON.parse(await apiCall(page, 'GET', '/api/v1/scopes')) as { id: string }[];
@@ -184,7 +214,7 @@ test('i la setmana diu quantes cites amaga', async ({ page }) => {
    * Un dia amb vuit cites n'ensenyava tres i **callava les altres cinc**. Amagar és
    * inevitable en una columna de 130 píxels; amagar en silenci, no.
    */
-  await enter(page);
+  await enterAsNew(page, MEU);
   const scopes = JSON.parse(await apiCall(page, 'GET', '/api/v1/scopes')) as { id: string }[];
   const cal = JSON.parse(
     await apiCall(page, 'POST', '/api/v1/calendars', {

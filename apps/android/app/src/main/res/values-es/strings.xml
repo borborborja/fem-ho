@@ -59,7 +59,9 @@
     <string name="board_ia_newtask">Nueva tarea para la IA</string>
     <string name="board_ia_toggle">Kanban de la IA</string>
     <string name="board_others">Ver tareas de otros</string>
-    <string name="board_quickadd_placeholder">+ Añadir a {column}… #Ámbito @Persona</string>
+    <string name="board_quickadd_placeholder_person">+ Añadir a {column}… @Persona</string>
+    <string name="board_quickadd_placeholder_plain">+ Añadir a {column}…</string>
+    <string name="board_quickadd_placeholder_scope">+ Añadir a {column}… #Ámbito</string>
     <string name="board_quickadd_revert">Devolver «{label}» a texto</string>
     <string name="board_quickadd_scoperequired">Indica el ámbito con #{scopes}</string>
     <string name="board_quickadd_scoperequiredprefix">Indica el ámbito con #</string>

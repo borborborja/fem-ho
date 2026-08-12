@@ -193,6 +193,23 @@ export function QuickAdd({ context, columnLabel, scopeColors = {}, onCreate }: Q
   }));
 
   /**
+   * El text del camp **anuncia només el que serveix per a alguna cosa**.
+   *
+   * Deia sempre `#Àmbit @Persona`. A una casa amb un sol àmbit i sense ningú més, cap dels
+   * dos sigils fa res: `#` no cal —s'agafa l'únic àmbit— i `@` no té a qui assignar. A sobre
+   * el text no cabia i es tallava a mitja paraula, que és el que et fa pensar que una cosa
+   * està trencada abans d'haver-la fet servir.
+   *
+   * Amb dos àmbits actius sí que cal dir-ne un, i llavors el sigil és la manera ràpida.
+   */
+  const placeholder =
+    context.activeScopeIds.length > 1
+      ? t('board.quickAdd.placeholder.scope', { column: columnLabel })
+      : context.people.length > 1
+        ? t('board.quickAdd.placeholder.person', { column: columnLabel })
+        : t('board.quickAdd.placeholder.plain', { column: columnLabel });
+
+  /**
    * Els àmbits per triar, quan la regla diu que en falta un.
    *
    * **Abans això era només una frase vermella** —«Indica l'àmbit amb #Personal, #Feina,
@@ -220,7 +237,7 @@ export function QuickAdd({ context, columnLabel, scopeColors = {}, onCreate }: Q
           if (submitted) setSubmitted(false);
         }}
         onSubmit={submit}
-        placeholder={t('board.quickAdd.placeholder', { column: columnLabel })}
+        placeholder={placeholder}
         tokens={chips}
         onRevertToken={(chip) => {
           const token = parsed.tokens.find(
