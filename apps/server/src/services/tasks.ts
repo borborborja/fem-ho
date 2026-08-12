@@ -198,6 +198,20 @@ export interface ListTasksFilters {
   cursor?: string | undefined;
   /** Text a buscar. Es normalitza igual que `search_text` (docs/01 §11). */
   search?: string | undefined;
+  /**
+   * Finestra de venciment, inclosa als dos extrems. `YYYY-MM-DD`.
+   *
+   * És el que el calendari necessita per ser **l'organitzador de la setmana o el mes**:
+   * fins ara la graella només sabia d'esdeveniments i de correu, i una tasca amb data no
+   * sortia enlloc del calendari —ni al mes, ni a la setmana, ni al dia—. Es filtra al
+   * servidor i no al client perquè baixar totes les tasques per quedar-se amb les de
+   * trenta dies és la mena de cosa que va bé fins que una casa en té dues mil.
+   *
+   * `due_date` és **data local sense fus** (docs/01 §11): la comparació és de text i és
+   * correcta, i per això aquí no hi entra cap zona horària.
+   */
+  dueFrom?: string | undefined;
+  dueTo?: string | undefined;
 }
 
 export interface TaskPage {
@@ -231,6 +245,8 @@ export async function listTasks(
       AND scope_id IN (${sql.join(allowed)})
       AND status IN (${sql.join(statuses)})
       ${filters.projectId === undefined ? sql`` : sql`AND project_id = ${filters.projectId}`}
+      ${filters.dueFrom === undefined ? sql`` : sql`AND due_date >= ${filters.dueFrom}`}
+      ${filters.dueTo === undefined ? sql`` : sql`AND due_date <= ${filters.dueTo}`}
       ${
         cursor === null
           ? sql``

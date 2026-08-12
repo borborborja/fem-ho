@@ -111,10 +111,10 @@ Les dotze seccions de `docs/02`:
 | §2 Login | fet |
 | §3 Barra superior | fet, les vuit peces |
 | §4 Kanban | fet, amb arrossegament de ratolí i de teclat; **la columna Fet no ensenyava res** fins que `move` va segellar `completed_at` (P14) |
-| §5 Calendari | fet: mes, setmana, dia i rail configurable; les URL de CalDAV ja tenen el botó de copiar |
+| §5 Calendari | fet: mes, setmana, dia i rail configurable; les URL de CalDAV ja tenen el botó de copiar. **No ensenyava cap tasca** fins a P18 |
 | §6 Vista de llista senzilla | fet |
 | §7 Modal d'edició completa | fet menys el commutador de context per a la IA; **les etiquetes eren un epígraf buit** fins a P15, i l'estat no s'hi podia canviar |
-| §8 Tauler general | fet |
+| §8 Tauler general | fet; el mini calendari no tenia els punts que `docs/02` §8 demana (P18) |
 | §9 Ajustos | fet, les vuit pestanyes |
 | §10 Responsive | fet; el kanban del mòbil es va **arreglar** en ajustar-se al disseny |
 | §11 Dreceres de teclat | fet, amb la paleta d'ordres |

@@ -682,6 +682,42 @@ copiat res és pitjor que no tenir-ne cap.
 
 ---
 
+### P18 · El calendari no ensenyava cap tasca
+
+**La resolució: la graella pinta les tasques amb venciment, i `GET /tasks` guanya
+`due_from`/`due_to`.**
+
+«Has d'imaginar el calendari com l'organitzador de tasques de la setmana o el mes.» La
+graella només sabia d'esdeveniments i de correu: una tasca amb venciment el dia 20 **no
+sortia enlloc** —ni al mes, ni a la setmana, ni al dia—, i el rail tampoc, perquè el rail
+és la bústia i una tasca a «Per fer» no hi és. El calendari deia que el dia 20 no tenies
+res el dia que havies de fer la declaració de la renda.
+
+`docs/02` §5 ja ho demanava —el rail diu «llista d'esdeveniments **i tasques**»— i §8
+demanava punts al mini calendari del tauler general. Cap de les dues coses hi era, i
+`MonthView` sabia pintar-les des del primer dia: `dotsByDate` existia i **ningú n'hi
+donava cap**. El mateix patró que la columna Fet (P14) i que les etiquetes (P15): el
+component correcte, alimentat amb no res.
+
+Quatre decisions dins d'aquesta:
+
+- **`due_from`/`due_to` al servidor i no un filtre al client.** Baixar totes les tasques
+  per quedar-se amb les de trenta dies va bé fins que una casa en té dues mil. `due_date`
+  és data local sense fus (`docs/01` §11), o sigui que la comparació és de text i no hi
+  entra cap zona horària.
+- **`done` no hi entra.** El que ja has fet no és una cosa que t'esperi aquell dia, i el
+  mes s'ompliria del que ja no cal mirar. Es mira a la columna Fet, que té el seu selector.
+- **Una tasca no va difuminada.** El difuminat vol dir «això no és a la teva bústia»
+  (P12); una tasca amb data ja és teva i ja és a la teva llista.
+- **La setmana surt de la mateixa llista que el mes.** Pintava ocurrències filtrant-les
+  pel seu compte, i així és com dues vistes de la mateixa setmana acaben ensenyant coses
+  diferents.
+
+El rail es queda sent la bústia: la graella diu què passa aquell dia, i el rail és on
+tries què puja a la llista. Són dues preguntes i P4 les manté amb un sol component.
+
+---
+
 ## Part 3 — Fets sospitosos de `research/`
 
 El crític va marcar 7 afirmacions com a probablement inventades, obsoletes o internament incoherents. **Cap `docs/` en depèn.**

@@ -4023,6 +4023,16 @@ export interface operations {
                 project_id?: string;
                 /** @description Valors múltiples separats per comes. */
                 status?: string;
+                /**
+                 * @description Venciment des de, inclòs. `YYYY-MM-DD`.
+                 *
+                 *     És el que fa que el calendari pugui ser l'organitzador de la setmana o el mes:
+                 *     sense això, la graella només sabia d'esdeveniments i de correu i una tasca amb
+                 *     data no sortia enlloc del calendari.
+                 */
+                due_from?: string;
+                /** @description Venciment fins a, inclòs. `YYYY-MM-DD`. */
+                due_to?: string;
                 limit?: number;
                 /** @description Cursor opac. El client no l'ha d'interpretar mai. */
                 cursor?: string;

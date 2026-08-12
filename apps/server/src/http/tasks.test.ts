@@ -337,6 +337,43 @@ describe('completar', () => {
    * deixaves anar es perdia de vista. La prova va per `/move` a posta: és el camí que la
    * gent fa servir, i el que no es prova és el que es trenca.
    */
+  /**
+   * **La finestra de venciment**, que és el que fa que el calendari pugui ser
+   * l'organitzador de la setmana o el mes. Sense això la graella només sabia
+   * d'esdeveniments i de correu, i una tasca amb data no sortia enlloc del calendari.
+   */
+  it('les tasques es poden demanar per finestra de venciment', async () => {
+    const scope = (
+      await api('POST', '/api/v1/scopes', { name: 'Agenda', color: '--femho-scope-4' })
+    ).json<{ id: string }>().id;
+
+    for (const [title, due] of [
+      ['Abans', '2026-07-31'],
+      ['El primer dia', '2026-08-01'],
+      ['Al mig', '2026-08-15'],
+      ['L últim dia', '2026-08-31'],
+      ['Després', '2026-09-01'],
+    ] as const) {
+      await api('POST', '/api/v1/tasks', { scope_id: scope, title, due_date: due });
+    }
+    // Una sense data no hi entra: no venç cap dia.
+    await api('POST', '/api/v1/tasks', { scope_id: scope, title: 'Sense data' });
+
+    const res = await api(
+      'GET',
+      `/api/v1/tasks?scope_id=${scope}&due_from=2026-08-01&due_to=2026-08-31`,
+    );
+    expect(res.statusCode).toBe(200);
+    const titles = res
+      .json<{ data: { title: string }[] }>()
+      .data.map((task) => task.title)
+      .sort();
+
+    // Els dos extrems hi entren: una finestra de mes que es deixés el dia 31 seria
+    // exactament la mena de defecte que ningú veu fins que arriba el dia 31.
+    expect(titles).toEqual(['Al mig', 'El primer dia', 'L últim dia']);
+  });
+
   it('moure una tasca a Fet la marca feta, i treure-la la desmarca', async () => {
     const scope = (
       await api('POST', '/api/v1/scopes', { name: 'Moguda', color: '--femho-scope-4' })

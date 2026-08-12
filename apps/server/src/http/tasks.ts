@@ -112,6 +112,8 @@ export function registerTaskRoutes(app: FastifyInstance): void {
         limit: num(q.limit),
         cursor: str(q.cursor),
         search: str(q.q),
+        dueFrom: str(q.due_from),
+        dueTo: str(q.due_to),
       });
     }),
   );

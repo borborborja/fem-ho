@@ -504,6 +504,23 @@ paths:
           description: Valors múltiples separats per comes.
           schema:
             type: string
+        - name: due_from
+          in: query
+          description: |
+            Venciment des de, inclòs. `YYYY-MM-DD`.
+
+            És el que fa que el calendari pugui ser l'organitzador de la setmana o el mes:
+            sense això, la graella només sabia d'esdeveniments i de correu i una tasca amb
+            data no sortia enlloc del calendari.
+          schema:
+            type: string
+            format: date
+        - name: due_to
+          in: query
+          description: Venciment fins a, inclòs. `YYYY-MM-DD`.
+          schema:
+            type: string
+            format: date
         - name: limit
           in: query
           schema:
