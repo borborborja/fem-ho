@@ -131,11 +131,18 @@ L'assignació de la reserva ha de ser atòmica: dos `next_task` simultanis han d
 | --- | --- |
 | Comença | `move_task` a `doing` |
 | Progrés | `add_comment` |
-| Té un dubte | `add_comment` **i** `release_task` — no es queda esperant |
+| Té un dubte que pot esperar | `ask_user` — la tasca queda marcada i **es veu sense obrir-la** |
+| Té un dubte i vol deixar-la anar | `add_comment` **i** `release_task` |
 | Acaba | `add_comment` amb el resultat, i `complete_task` |
 | No pot | `add_comment` amb el motiu i `release_task` |
 
 Un agent **mai** completa una tasca `assisted`. Si ho intenta, `403` amb el motiu explicat.
+
+**`ask_user` és `add_comment` amb conseqüència.** La pregunta surt a la conversa i a l'historial com tota la resta; el que hi afegeix és `needs_attention` a la tasca, que és el que fa el punt amb recompte al commutador d'IA i la targeta destacada al kanban —amb icona i text, mai el color sol.
+
+Qui la baixa: **una persona que respon**, i completar la tasca. No hi ha cap botó de «vist»: el que desencalla l'agent és la resposta, i marcar-ho com a vist deixaria la pantalla neta amb l'agent esperant per sempre. Un comentari del mateix agent no la baixa —seguiria parlant sol— i una persona no la pot aixecar: no vol dir «recorda-t'ho», vol dir «algú t'espera».
+
+Dins de la fitxa, quan la tasca no és `manual` la secció de comentaris **és** la conversa amb la IA: es veu qui parla, l'avís del que espera resposta, i que el que hi adjuntis li arriba amb el traspàs. És la mateixa conversa i no una pestanya a part, perquè amb dos llocs on mirar algú respondria al que no toca.
 
 ---
 

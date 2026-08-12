@@ -93,7 +93,7 @@ que no tenir-ne cap.
 
 Complet respecte de `docs/05` §4: **106 rutes**. Autenticació amb refresc rotatiu,
 capa de política única, `activity_log` dins de la mateixa transacció que el canvi,
-sincronització amb cursor, CalDAV en port propi, MCP amb 16 tools, compartits,
+sincronització amb cursor, CalDAV en port propi, MCP amb 17 tools, compartits,
 notificacions i administració.
 
 Els dos motors es proven: la suite `dual-engine` recorre els camins d'escriptura a
@@ -349,6 +349,21 @@ Amb el proveïdor posat i el model o la clau a faltar, **el servidor no arrenca*
 instància que sembla preparada i no ho està no dona cap símptoma fins al dia que algú
 espera que funcioni.
 
+**I el terreny ja té porta.** Fins ara la delegació era un terreny al qual no s'hi podia
+arribar: `createToken` no escrivia mai `ai_agent_id`, o sigui que cap token es resolia com a
+agent i `next_task` era inabastable. Ara la credencial es crea a Ajustos ▸ Usuari IA, un
+àmbit té **un sol agent** (`UNIQUE (scope_id)`), i un agent pot dir «no puc seguir sense tu»
+amb `ask_user`, que es veu al commutador d'IA i a la targeta sense obrir res.
+
+Comprovat amb una sessió d'MCP de debò contra el servidor: `whoami` diu l'agent i els seus
+àmbits, `next_task` reserva, `move_task` la porta a Fent, `ask_user` aixeca la marca, una
+resposta la baixa i `complete_task` la tanca — i l'historial ho llegeix tot barrejat, amb
+«IA · Hermes» i la persona a la mateixa columna. El que segueix sent cert és la frase de
+sobre: **el model és sempre de fora**; Fem-ho posa la porta, no la intel·ligència.
+
+El que encara no hi ha: el contenidor que ho automatitzi tot sol, i la pestanya IA a
+Android.
+
 ---
 
 ## Idiomes
@@ -433,7 +448,7 @@ que el producte no és teu.
 Els llegeixen agents d'MCP, DAVx⁵, Thunderbird i qui programi contra l'API — cap d'ells té
 catàleg ni idioma:
 
-- Les 16 tools d'MCP: títols, descripcions i tots els `.describe()`. Traduir-les per
+- Les 17 tools d'MCP: títols, descripcions i tots els `.describe()`. Traduir-les per
   idioma d'usuari no tindria on mirar-se —un token no és una persona— i faria que el
   mateix servidor descrivís les seves eines diferent segons qui preguntés.
 - Els ~20 missatges `text/plain` del camí DAV.

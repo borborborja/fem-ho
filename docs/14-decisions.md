@@ -872,6 +872,51 @@ Tres coses que se'n deriven:
 
 ---
 
+### P25 · Un àmbit té un agent, i el que atura un agent és una pregunta
+
+**La resolució: la feina d'un agent es reparteix per àmbit, i «no puc seguir» és un estat de
+la tasca.**
+
+El terreny de la delegació hi era sencer des de M11 —els agents, els tres modes, el kanban de
+la IA, les reserves, disset tools d'MCP— i **no s'hi podia arribar**: `createToken` no
+escrivia mai `ai_agent_id`, o sigui que cap token es resolia com a agent i `next_task` era
+inabastable. Un terreny que sembla una funció és pitjor que no tenir-lo.
+
+**Per àmbit i no per tasca.** L'alternativa —un `delegate_agent_id` a cada tasca, a més de
+l'àmbit— dona dos eixos que poden dir coses diferents: una tasca de l'àmbit d'en Hermes
+delegada a un altre agent no vol dir res i algú ho ha de resoldre cada vegada. Amb un àmbit
+per agent, «de qui és això» té sempre una resposta i només una, i delegar una tasca no
+obliga a triar ningú.
+
+L'exclusivitat viu **a la base** (`UNIQUE (scope_id)`) perquè una regla que només és al codi
+la trenca el primer que escrigui pel segon camí: una importació, una restauració. El servei
+la torna a comprovar per una altra raó: per poder dir **de qui és l'àmbit**. Un «no es pot»
+és una porta tancada; un «el té en Hermes» és el pas següent.
+
+**`all_scopes` és un indicador i no una llista.** Si en desar-ho es copiessin els àmbits
+d'avui, l'àmbit que es creï la setmana que ve no seria de ningú i la feina que hi caigués no
+la faria mai cap agent, sense que res ho digués.
+
+**I la marca d'atenció, que és el que fa que això es pugui deixar córrer sol.** Un agent que
+no pot decidir una cosa ho podia dir en un comentari, i allà es quedava. `ask_user` és el
+mateix comentari amb conseqüència: la tasca passa a demanar atenció, i es veu al commutador
+d'IA i a la targeta sense obrir res.
+
+- **La baixa respondre**, i completar la tasca. **No hi ha cap «vist»**: el que desencalla
+  l'agent és la resposta, i un botó de vist deixaria la pantalla neta amb l'agent esperant
+  per sempre —la pitjor de les dues mentides possibles.
+- **La conversa és la de comentaris, no una pestanya nova.** Amb dos llocs on mirar què s'ha
+  dit d'una tasca, algú respondria al que no toca i l'agent seguiria aturat.
+- **La pregunta és de l'agent i prou.** Que la pogués aixecar una persona la convertiria en
+  un recordatori, i llavors el punt del commutador ja no voldria dir «algú t'espera».
+
+**El transport és MCP i el comportament és un skill.** La pregunta de partida era «un skill o
+un MCP?» i té resposta perquè són coses diferents: l'MCP és per on parla —i ja hi era—, i el
+skill és el full que li diu quin bucle segueix i quan preguntar en comptes d'endevinar. És
+`docs/agent/SKILL.md`.
+
+---
+
 ## Part 3 — Fets sospitosos de `research/`
 
 El crític va marcar 7 afirmacions com a probablement inventades, obsoletes o internament incoherents. **Cap `docs/` en depèn.**
