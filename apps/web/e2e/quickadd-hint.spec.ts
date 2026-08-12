@@ -44,3 +44,40 @@ test("i amb més d'un àmbit actiu, sí que ofereix el sigil que cal", async ({ 
   const camp = page.locator('[data-testid="quick-add-todo"] input[role="combobox"]');
   await expect(camp).toHaveAttribute('placeholder', /#/);
 });
+
+test('si la creació no arriba, el camp recupera el que havies escrit', async ({ page }) => {
+  /**
+   * **Es perdia.** El camp es buida en prémer Enter —és el que fa que encadenar tasques
+   * sigui instantani (`docs/02` §4)— però es buidava **abans de saber si s'havia creat**.
+   * Sense connexió escrivies una tasca, premies Enter, el camp quedava net, la tasca no
+   * era enlloc, i el que havies escrit ja no existia.
+   *
+   * Ara torna, i diu per què. El camí ràpid no canvia: quan va bé, es buida igual.
+   */
+  await enterAsNew(page, {
+    name: 'Sensexarxa',
+    email: 'sense-xarxa@example.com',
+    password: 'la-contrasenya-de-prova',
+  });
+  await page.goto('/');
+
+  // El servidor no contesta: el mateix que passa amb el mòbil sense cobertura.
+  await page.route('**/api/v1/tasks', (route) =>
+    route.request().method() === 'POST' ? route.abort('failed') : route.continue(),
+  );
+
+  const camp = page.locator('[data-testid="quick-add-todo"] input[role="combobox"]');
+  await camp.fill('Comprar pinso per al gat');
+  await camp.press('Enter');
+
+  await expect(camp).toHaveValue('Comprar pinso per al gat');
+  await expect(page.getByText("No s'ha pogut crear. Torna-ho a provar.")).toBeVisible();
+
+  // I amb la xarxa de tornada, la mateixa tecla la crea i el camp sí que es buida.
+  await page.unroute('**/api/v1/tasks');
+  await camp.press('Enter');
+  await expect(camp).toHaveValue('');
+  await expect(page.locator('[data-column-status="todo"]')).toContainText(
+    'Comprar pinso per al gat',
+  );
+});

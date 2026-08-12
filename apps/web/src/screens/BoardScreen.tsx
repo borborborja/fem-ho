@@ -682,7 +682,8 @@ export function BoardScreen({
               status={status}
               context={context}
               scopes={scopes}
-              onCreate={(task) => void create(task, status)}
+              // Es torna la promesa: si peta, el camp recupera el que havies escrit.
+              onCreate={(task) => create(task, status)}
               // Des del tauler de la IA, el formulari s'obre ja amb els camps d'IA
               // desplegats: és l'únic peu que hi queda i seria absurd que no ho fes.
               onFullEdit={() => onNewTask(status, aiBoard)}

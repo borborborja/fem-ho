@@ -66,6 +66,7 @@
   "board.ia.newTask": "Nova tasca per a la IA",
   "board.ia.toggle": "Kanban de la IA",
   "board.others": "Veure tasques d'altres",
+  "board.quickAdd.failed": "No s'ha pogut crear. Torna-ho a provar.",
   "board.quickAdd.placeholder.person": "+ Afegir a {column}… @Persona",
   "board.quickAdd.placeholder.plain": "+ Afegir a {column}…",
   "board.quickAdd.placeholder.scope": "+ Afegir a {column}… #Àmbit",

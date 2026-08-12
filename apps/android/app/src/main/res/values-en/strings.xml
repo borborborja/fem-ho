@@ -59,6 +59,7 @@
     <string name="board_ia_newtask">New task for the AI</string>
     <string name="board_ia_toggle">AI board</string>
     <string name="board_others">See other people\'s tasks</string>
+    <string name="board_quickadd_failed">Could not create it. Try again.</string>
     <string name="board_quickadd_placeholder_person">+ Add to {column}… @Person</string>
     <string name="board_quickadd_placeholder_plain">+ Add to {column}…</string>
     <string name="board_quickadd_placeholder_scope">+ Add to {column}… #Scope</string>

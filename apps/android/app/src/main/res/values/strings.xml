@@ -59,6 +59,7 @@
     <string name="board_ia_newtask">Nova tasca per a la IA</string>
     <string name="board_ia_toggle">Kanban de la IA</string>
     <string name="board_others">Veure tasques d\'altres</string>
+    <string name="board_quickadd_failed">No s\'ha pogut crear. Torna-ho a provar.</string>
     <string name="board_quickadd_placeholder_person">+ Afegir a {column}… @Persona</string>
     <string name="board_quickadd_placeholder_plain">+ Afegir a {column}…</string>
     <string name="board_quickadd_placeholder_scope">+ Afegir a {column}… #Àmbit</string>

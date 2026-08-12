@@ -145,8 +145,10 @@ export function DashboardScreen({ onOpenTask, onPickScope, onNewTask }: Dashboar
             scopeColors={Object.fromEntries(
               scopes.map((scope) => [scope.id, `var(${scope.color})`]),
             )}
-            onCreate={(task) => {
-              void api
+            // Sense `void`: la promesa torna al camp, que la fa servir per recuperar el
+            // text si la crida no arriba.
+            onCreate={(task) =>
+              api
                 .post('/api/v1/tasks', {
                   id: uuidv7(),
                   scope_id: task.scopeId,
@@ -155,8 +157,8 @@ export function DashboardScreen({ onOpenTask, onPickScope, onNewTask }: Dashboar
                 })
                 .then(() => {
                   dashboard.reload();
-                });
-            }}
+                })
+            }
           />
         </div>
         <button

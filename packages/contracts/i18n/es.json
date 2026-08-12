@@ -64,6 +64,7 @@
   "board.ia.newTask": "Nueva tarea para la IA",
   "board.ia.toggle": "Kanban de la IA",
   "board.others": "Ver tareas de otros",
+  "board.quickAdd.failed": "No se ha podido crear. Inténtalo de nuevo.",
   "board.quickAdd.placeholder.person": "+ Añadir a {column}… @Persona",
   "board.quickAdd.placeholder.plain": "+ Añadir a {column}…",
   "board.quickAdd.placeholder.scope": "+ Añadir a {column}… #Ámbito",

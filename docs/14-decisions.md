@@ -770,6 +770,30 @@ no, i aquest botó surt a cada fila de cada cita, cada correu i cada titular.
 
 ---
 
+### P21 · Sense xarxa, el que escrivies desapareixia
+
+**La resolució: el camp es buida igual de ràpid, i el text torna si la crida no arriba.**
+
+L'afegida ràpida buida el camp en prémer `Enter` —és el que fa que encadenar tasques sigui
+instantani (`docs/02` §4)—, però el buidava **abans de saber si s'havia creat res**. Sense
+connexió: escrius una tasca, `Enter`, el camp queda net, la tasca no és a cap columna, i el
+que havies escrit **ja no existeix enlloc**. La píndola deia «Sense connexió» a baix a
+l'esquerra, que és cert i no és el mateix que dir-te que has perdut la frase.
+
+El camí ràpid no canvia: quan va bé, el camp es buida igual. Quan la promesa peta, el text
+torna i el camp diu per què — i **només si mentrestant no n'has escrit una altra**, perquè
+trepitjar el que estàs escrivint ara seria pitjor que perdre el d'abans.
+
+**El que això NO és.** No és la cua de sortida. `apps/web/src/sync/outbox.ts` existeix, està
+provat i **només el fa servir la pàgina de prova**: el tauler no hi enqueua res. Fer-ho de
+debò és una fita, no un retoc, i fer-ho a mitges seria pitjor que no fer-ho. El que aquí es
+tanca és la pèrdua silenciosa de dades, que no pot esperar-hi.
+
+L'error de crear deixa de portar els xips d'àmbit: oferir-te triar-ne un quan el que passa
+és que no hi ha xarxa diria que has triat malament.
+
+---
+
 ## Part 3 — Fets sospitosos de `research/`
 
 El crític va marcar 7 afirmacions com a probablement inventades, obsoletes o internament incoherents. **Cap `docs/` en depèn.**

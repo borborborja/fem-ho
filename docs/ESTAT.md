@@ -118,7 +118,7 @@ Les dotze seccions de `docs/02`:
 | §9 Ajustos | fet, les vuit pestanyes |
 | §10 Responsive | fet; el kanban del mòbil es va **arreglar** en ajustar-se al disseny, i a P19 la pàgina va deixar de moure's de costat i Ajustos va passar a ser usable al telèfon |
 | §11 Dreceres de teclat | fet, amb la paleta d'ordres |
-| §12 Estats buits, càrrega i error | fet |
+| §12 Estats buits, càrrega i error | fet. **La cua de sortida (`sync/outbox.ts`) no la fa servir cap pantalla de debò**, només la de prova: el tauler no enqueua res sense xarxa. El que sí que està tancat és que no es perdi el que escrius (P21) |
 
 ### Els adjunts (§7), que abans hi faltaven
 

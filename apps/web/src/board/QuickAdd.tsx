@@ -22,13 +22,17 @@ export interface QuickAddProps {
   columnLabel: string;
   /** Colors dels àmbits, per als punts del desplegable. */
   scopeColors?: Record<string, string> | undefined;
+  /**
+   * Crear-la. **Si la promesa peta, el camp recupera el text**: sense això, el que has
+   * escrit desapareix i sembla creat.
+   */
   onCreate: (task: {
     title: string;
     scopeId: string;
     projectId: string | null;
     assigneeIds: string[];
     aiMode: 'manual' | 'assisted' | 'delegated';
-  }) => void;
+  }) => void | Promise<void>;
 }
 
 interface Suggestion {
@@ -58,6 +62,8 @@ export function QuickAdd({ context, columnLabel, scopeColors = {}, onCreate }: Q
   const [text, setText] = useState('');
   const [active, setActive] = useState(0);
   const [submitted, setSubmitted] = useState(false);
+  /** L'última creació no ha arribat al servidor i el text ha tornat al camp. */
+  const [fallada, setFallada] = useState(false);
   /**
    * Escape tanca el desplegable **sense tocar el text**. Abans hi afegia un espai per
    * tancar-lo, i era un error: canviar el que l'usuari ha escrit per tancar un menú és
@@ -151,9 +157,19 @@ export function QuickAdd({ context, columnLabel, scopeColors = {}, onCreate }: Q
     return false;
   };
 
-  /** Crea i deixa el camp llest per a la següent. */
+  /**
+   * Crea i deixa el camp llest per a la següent.
+   *
+   * **El camp es buida de seguida i es torna a omplir si la crida falla.** Buidar-lo
+   * abans de saber-ho és el que fa que encadenar tasques sigui instantani (docs/02 §4);
+   * el que no pot passar és que si no hi ha xarxa —o el servidor diu que no— el text
+   * s'esfumi i sembli que s'ha creat. Passava: sense connexió escrivies una tasca,
+   * premies Enter, el camp es buidava, la tasca no era enlloc i **el que havies escrit
+   * ja no existia**.
+   */
   const crear = (scopeId: string): void => {
-    onCreate({
+    const escrit = text;
+    const resultat = onCreate({
       title: parsed.title,
       scopeId,
       projectId: parsed.projectId,
@@ -164,7 +180,18 @@ export function QuickAdd({ context, columnLabel, scopeColors = {}, onCreate }: Q
     // El camp es buida i MANTÉ EL FOCUS, per poder-ne encadenar (docs/02 §4).
     setText('');
     setSubmitted(false);
+    setFallada(false);
     inputRef.current?.focus();
+
+    if (resultat instanceof Promise) {
+      void resultat.catch(() => {
+        // Només es recupera si mentrestant no s'ha escrit res més: si ja n'estàs
+        // escrivint una altra, trepitjar-la seria pitjor que perdre la primera.
+        setText((actual) => (actual === '' ? escrit : actual));
+        setFallada(true);
+        inputRef.current?.focus();
+      });
+    }
   };
 
   const submit = (): void => {
@@ -174,8 +201,10 @@ export function QuickAdd({ context, columnLabel, scopeColors = {}, onCreate }: Q
     crear(parsed.scopeId);
   };
 
-  const errorMessage =
-    submitted && parsed.error === 'scope-required'
+  const errorMessage = fallada
+    ? // No ha arribat al servidor: el text ha tornat i cal dir per què hi ha tornat.
+      t('board.quickAdd.failed')
+    : submitted && parsed.error === 'scope-required'
       ? t('board.quickAdd.scopeRequired', {
           scopes: context.scopes
             .filter((scope) => context.activeScopeIds.includes(scope.id))
@@ -218,9 +247,12 @@ export function QuickAdd({ context, columnLabel, scopeColors = {}, onCreate }: Q
    * res** sense dir-ne un. El que canvia és que dir-lo costa un clic i no una relectura.
    */
   const perTriar =
-    errorMessage === undefined
-      ? []
-      : context.scopes.filter((scope) => context.activeScopeIds.includes(scope.id));
+    // **Només quan el que falta és l'àmbit.** Si el que ha passat és que la crida ha
+    // fallat, oferir els àmbits diria que has triat malament quan el que passa és que no
+    // hi ha xarxa.
+    submitted && parsed.error === 'scope-required'
+      ? context.scopes.filter((scope) => context.activeScopeIds.includes(scope.id))
+      : [];
 
   return (
     <div style={{ display: 'grid', gap: 6, minWidth: 0 }}>
@@ -229,6 +261,7 @@ export function QuickAdd({ context, columnLabel, scopeColors = {}, onCreate }: Q
         value={text}
         onChange={(next) => {
           setText(next);
+          setFallada(false);
           setActive(0);
           // Tornar a escriure reobre el desplegable: el descart val per a aquell moment,
           // no per a la resta de la sessió.

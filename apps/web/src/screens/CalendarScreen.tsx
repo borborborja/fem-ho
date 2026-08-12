@@ -445,8 +445,9 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
     (
       dueDate: string | null,
       input: { title: string; scopeId: string; projectId: string | null; assigneeIds: string[] },
-    ) => {
-      void api
+    ) =>
+      // Es torna la promesa: si peta, el camp recupera el que havies escrit.
+      api
         .post('/api/v1/tasks', {
           id: uuidv7(),
           scope_id: input.scopeId,
@@ -460,9 +461,9 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
         .then(() => {
           inbox.reload();
           events.reload();
-        });
-    },
-    [inbox, events],
+          tasques.reload();
+        }),
+    [inbox, events, tasques],
   );
 
   /**

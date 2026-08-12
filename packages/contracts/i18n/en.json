@@ -65,6 +65,7 @@
   "board.ia.newTask": "New task for the AI",
   "board.ia.toggle": "AI board",
   "board.others": "See other people's tasks",
+  "board.quickAdd.failed": "Could not create it. Try again.",
   "board.quickAdd.placeholder.person": "+ Add to {column}… @Person",
   "board.quickAdd.placeholder.plain": "+ Add to {column}…",
   "board.quickAdd.placeholder.scope": "+ Add to {column}… #Scope",
