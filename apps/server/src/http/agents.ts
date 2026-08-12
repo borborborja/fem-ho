@@ -7,7 +7,15 @@
 
 import type { FastifyInstance } from 'fastify';
 import { auditedTransaction } from '../audit/audited-transaction.js';
-import { createAgent, deleteAgent, getAgent, listAgents, updateAgent } from '../services/agents.js';
+import {
+  agentScopeAvailability,
+  createAgent,
+  deleteAgent,
+  getAgent,
+  listAgents,
+  setAgentScopes,
+  updateAgent,
+} from '../services/agents.js';
 import { claim, leaseOf, nextTask, release } from '../services/leases.js';
 import { body, handle, query, str } from './handle.js';
 
@@ -52,6 +60,36 @@ export function registerAgentRoutes(app: FastifyInstance): void {
         }),
       );
     }),
+  );
+
+  /**
+   * Els àmbits d'un agent.
+   *
+   * Va a part del `PATCH` de l'agent perquè és **una decisió d'una altra mena**: canviar el
+   * nom no pot fallar per culpa d'un altre agent, i això sí. Barrejats, desar el nom
+   * tornaria un 422 que parla d'àmbits.
+   */
+  app.put<{ Params: { id: string } }>('/api/v1/ai/agents/:id/scopes', async (request, reply) =>
+    handle(app, request, reply, async (principal) => {
+      const input = body(request);
+      return auditedTransaction(db().db, principal, (ctx) =>
+        setAgentScopes(ctx, principal, request.params.id, {
+          scope_ids: Array.isArray(input.scope_ids)
+            ? input.scope_ids.filter((id): id is string => typeof id === 'string')
+            : [],
+          all_scopes: input.all_scopes === true,
+        }),
+      );
+    }),
+  );
+
+  /** Quins àmbits pot marcar, i quins ja té un altre agent. Per a la pantalla. */
+  app.get<{ Params: { id: string } }>(
+    '/api/v1/ai/agents/:id/scope-availability',
+    async (request, reply) =>
+      handle(app, request, reply, async (principal) => ({
+        data: await agentScopeAvailability(db().db, principal, request.params.id),
+      })),
   );
 
   app.delete<{ Params: { id: string } }>('/api/v1/ai/agents/:id', async (request, reply) =>

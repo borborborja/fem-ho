@@ -2476,6 +2476,76 @@ paths:
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
 
+  /ai/agents/{id}/scopes:
+    put:
+      tags: [ai]
+      operationId: setAgentScopes
+      summary: Els àmbits d'on aquest agent agafa feina
+      description: |
+        **Un àmbit, un agent.** Es desa el conjunt sencer i no diferències: la pantalla
+        envia les caselles tal com han quedat, i calcular què s'ha afegit i què s'ha tret des
+        de fora és com dues pestanyes obertes deixen un àmbit sense agent.
+
+        Va a part del `PATCH` de l'agent perquè és una decisió d'una altra mena: canviar el
+        nom no pot fallar per culpa d'un altre agent, i això sí.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                scope_ids: { type: array, items: { type: string } }
+                all_scopes: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Assignat.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Agent' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422':
+          description: |
+            L'àmbit ja el porta un altre agent. El problema porta `params.agent_id` i
+            `params.agent_name` perquè el missatge sigui el següent pas —un botó que hi
+            porti— i no una porta tancada.
+          content:
+            { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+
+  /ai/agents/{id}/scope-availability:
+    get:
+      tags: [ai]
+      operationId: agentScopeAvailability
+      summary: Quins àmbits pot marcar aquest agent
+      description: |
+        Per desactivar la casella **dient de qui és** en comptes de deixar-la marcar i
+        respondre amb un error després.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '200':
+          description: Els àmbits visibles, amb qui els té.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      required: [scope_id, taken_by]
+                      properties:
+                        scope_id: { type: string }
+                        taken_by:
+                          type: [object, 'null']
+                          properties:
+                            id: { type: string }
+                            name: { type: string }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   /ai/next-task:
     get:
       tags: [tasks]
@@ -4169,6 +4239,8 @@ components:
           actor_user_id,
           can_create_tasks,
           enabled,
+          scope_ids,
+          all_scopes,
           created_at,
           version,
         ]
@@ -4183,6 +4255,24 @@ components:
           description: La fila d'usuari `kind='ai'`, que és qui signa l'historial i els comentaris.
         can_create_tasks: { type: boolean }
         enabled: { type: boolean }
+        scope_ids:
+          type: array
+          items: { type: string }
+          description: |
+            Els àmbits d'on aquest agent agafa feina. **Un àmbit té un sol agent**: si
+            «Feina» és d'en Hermes, cap altre agent no hi entra.
+
+            Va buida quan `all_scopes` és cert: llavors mana l'indicador.
+        all_scopes:
+          type: boolean
+          default: false
+          description: |
+            Aquest agent porta **tots** els àmbits de la persona en nom de qui actua,
+            inclosos els que es creïn més endavant.
+
+            És un indicador i no una còpia del conjunt d'avui: amb una còpia, l'àmbit que es
+            creï demà no seria de ningú i la feina que hi caigués no la faria mai cap agent,
+            sense que res ho digués.
         created_at: { type: string, format: date-time }
         version: { type: integer }
 

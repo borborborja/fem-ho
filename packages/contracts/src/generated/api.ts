@@ -1461,6 +1461,52 @@ export interface paths {
         patch: operations["updateAgent"];
         trace?: never;
     };
+    "/ai/agents/{id}/scopes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Els àmbits d'on aquest agent agafa feina
+         * @description **Un àmbit, un agent.** Es desa el conjunt sencer i no diferències: la pantalla
+         *     envia les caselles tal com han quedat, i calcular què s'ha afegit i què s'ha tret des
+         *     de fora és com dues pestanyes obertes deixen un àmbit sense agent.
+         *
+         *     Va a part del `PATCH` de l'agent perquè és una decisió d'una altra mena: canviar el
+         *     nom no pot fallar per culpa d'un altre agent, i això sí.
+         */
+        put: operations["setAgentScopes"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ai/agents/{id}/scope-availability": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Quins àmbits pot marcar aquest agent
+         * @description Per desactivar la casella **dient de qui és** en comptes de deixar-la marcar i
+         *     respondre amb un error després.
+         */
+        get: operations["agentScopeAvailability"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/ai/next-task": {
         parameters: {
             query?: never;
@@ -2766,6 +2812,23 @@ export interface components {
             actor_user_id: string;
             can_create_tasks: boolean;
             enabled: boolean;
+            /**
+             * @description Els àmbits d'on aquest agent agafa feina. **Un àmbit té un sol agent**: si
+             *     «Feina» és d'en Hermes, cap altre agent no hi entra.
+             *
+             *     Va buida quan `all_scopes` és cert: llavors mana l'indicador.
+             */
+            scope_ids: string[];
+            /**
+             * @description Aquest agent porta **tots** els àmbits de la persona en nom de qui actua,
+             *     inclosos els que es creïn més endavant.
+             *
+             *     És un indicador i no una còpia del conjunt d'avui: amb una còpia, l'àmbit que es
+             *     creï demà no seria de ningú i la feina que hi caigués no la faria mai cap agent,
+             *     sense que res ho digués.
+             * @default false
+             */
+            all_scopes: boolean;
             /** Format: date-time */
             created_at: string;
             version: number;
@@ -6551,6 +6614,83 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Agent"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    setAgentScopes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    scope_ids?: string[];
+                    /** @default false */
+                    all_scopes?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Assignat. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Agent"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            /**
+             * @description L'àmbit ja el porta un altre agent. El problema porta `params.agent_id` i
+             *     `params.agent_name` perquè el missatge sigui el següent pas —un botó que hi
+             *     porti— i no una porta tancada.
+             */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    agentScopeAvailability: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Els àmbits visibles, amb qui els té. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            scope_id: string;
+                            taken_by: {
+                                id?: string;
+                                name?: string;
+                            } | null;
+                        }[];
+                    };
                 };
             };
             401: components["responses"]["Unauthenticated"];

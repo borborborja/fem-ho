@@ -66,6 +66,7 @@
     "revokeApiToken": "apps/server/src/http/tokens.test.ts · \"deixa el token inservible i queda a l'historial\"",
     "revokeScopeInvite": "apps/server/src/services/grants.test.ts · \"un convit inventat i un de gastat responen igual\"",
     "revokeShare": "apps/server/src/http/shares.test.ts · \"un enllaç revocat deixa de servir\"",
+    "setAgentScopes": "apps/server/src/http/agent-scopes.test.ts · \"se li assigna un àmbit i el porta ell\"",
     "setAiMode": "apps/server/src/http/tokens.test.ts · \"els tres modes es poden posar, i queden a l'historial\"",
     "setEventInboxVisibility": "apps/server/src/http/inbox-sources.test.ts · \"la marca NO viatja pel sync: és una preferència personal\"",
     "subscribePush": "apps/server/src/services/notifications.test.ts · \"el mateix endpoint actualitza, no duplica\"",
