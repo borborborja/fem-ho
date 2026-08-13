@@ -129,7 +129,7 @@ jobs:
 
       - name: Desar la clau
         if: steps.key.outputs.present == 'true'
-        run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > apps/android/release.jks
+        run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > apps/android/app/release.jks
 
       - name: Construir
         env:
@@ -148,7 +148,7 @@ jobs:
       # La clau no es queda al disc del runner ni un pas més del que cal.
       - name: Esborrar la clau
         if: always()
-        run: rm -f apps/android/release.jks
+        run: rm -f apps/android/app/release.jks
 
       - uses: softprops/action-gh-release@v2
         with:
