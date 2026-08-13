@@ -1,6 +1,10 @@
 package ho.fem.designsystem
 
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ReadOnlyComposable
@@ -94,6 +98,33 @@ object FemhoText {
 }
 
 /**
+ * Sense `MaterialTheme`, els components M3 (camps de text, botons) usen l'esquema clar
+ * estàtic — `lightColorScheme()` — i en mode fosc el text del camp (onSurface fosc)
+ * s'invisibilitza sobre el fons fosc de Plou (confirmat mostrejant píxels).
+ *
+ * Aquesta funció mapeja els colors de Plou a l'esquema de Material 3.
+ * Tots els colors surten de `Femho.colors` i no de literals, per complir amb
+ * la comprovació `no-hardcoded-colors`.
+ */
+private fun femhoColorScheme(colors: FemhoColors, dark: Boolean): ColorScheme {
+    // La base tria el tema: els components de Material 3 que no es toquen aquí
+    // (superfícies de diàlegs, menús) han de seguir el tema del sistema.
+    val base = if (dark) darkColorScheme() else lightColorScheme()
+    return base.copy(
+        primary = colors.plouBlueInk,
+        onPrimary = colors.onBrand,
+        primaryContainer = colors.plouBlue,
+        onPrimaryContainer = colors.onBrand,
+        surface = colors.panelBg,
+        onSurface = colors.ink,
+        onSurfaceVariant = colors.inkSoft,
+        outline = colors.inputBorder,
+        outlineVariant = colors.inputBorder,
+        error = colors.dangerText,
+    )
+}
+
+/**
  * `system` no és un tercer tema, és "el que digui el sistema": es resol al moment i
  * torna a resoldre's si l'usuari canvia la preferència del sistema sense tocar l'app.
  */
@@ -113,11 +144,13 @@ fun FemhoTheme(
     // amb Glance, sense runtime de Compose, i han de donar exactament els mateixos
     // colors. Dos camins de resolució divergirien sense que cap prova ho digués.
     val chosen = accentOf(accent)
+    val colors = femhoColorsOf(dark, accent)
 
     CompositionLocalProvider(
-        LocalFemhoColors provides femhoColorsOf(dark, accent),
+        LocalFemhoColors provides colors,
         LocalFemhoAccent provides chosen,
         LocalFemhoGradients provides femhoGradientsOf(dark),
-        content = content,
-    )
+    ) {
+        MaterialTheme(colorScheme = femhoColorScheme(colors, dark), content = content)
+    }
 }
