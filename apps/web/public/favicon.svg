@@ -1,0 +1,12 @@
+<!-- GENERAT · no l'editis a mà. Surt de tools/gen/favicon.mjs -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108">
+  <defs>
+    <linearGradient id="marca" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#6EA8FF"/>
+      <stop offset="55%" stop-color="#FF9D4D"/>
+      <stop offset="100%" stop-color="#FF6FA0"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="108" height="108" rx="24" fill="url(#marca)"/>
+  <path d="M34,55 L48,69 L75,40" fill="none" stroke="#ffffff" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
