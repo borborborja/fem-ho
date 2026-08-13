@@ -35,6 +35,7 @@ class Container(context: Context) {
         .databaseBuilder(app, FemhoDatabase::class.java, "femho.db")
         // Sense migracions destructives: la base local és una memòria cau, però la cua
         // de sortida NO ho és, i esborrar-la perdria escriptures que ningú ha vist.
+        .addMigrations(FemhoDatabase.MIGRATION_1_2)
         .build()
 
     /**
