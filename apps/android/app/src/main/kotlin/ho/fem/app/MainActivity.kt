@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material3.Text
@@ -47,6 +48,7 @@ import ho.fem.designsystem.Femho
 import ho.fem.designsystem.FemhoSize
 import ho.fem.designsystem.FemhoText
 import ho.fem.designsystem.FemhoTheme
+import ho.fem.designsystem.FemhoShape
 import ho.fem.designsystem.ScopeChip
 import ho.fem.designsystem.scopeColor
 import ho.fem.model.Checklist
@@ -951,6 +953,25 @@ private fun TopBar(
  * seus projectes. El que no canvia és el criteri —**un àmbit sense res triat vol dir tots
  * els seus**— ni el vocabulari.
  */
+/**
+ * El contingut d'un desplegable és text que ha de ser llegible com a panell;
+ * sobre el fons de la pàgina (transparent) el text competeix amb el que hi ha al darrere —
+ * i lletres sobre fons 100% transparent no es llegeixen.
+ */
+@Composable
+private fun MenuPanel(content: @Composable () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(FemhoShape.card))
+            .background(Femho.colors.cardBg)
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        content()
+    }
+}
+
 @Composable
 private fun ScopeProjects(
     scopes: List<Scope>,
@@ -982,37 +1003,39 @@ private fun ScopeProjects(
         )
 
         if (open) {
-            ambProjectes.forEach { scope ->
-                val seus = projects.filter { it.scopeId == scope.id }
-                Text(
-                    text = scope.name,
-                    color = Femho.colors.inkFaint,
-                    fontSize = FemhoText.meta,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(top = 6.dp),
-                )
-                Text(
-                    text = (if (seus.none { it.id in activeProjects }) "✓ " else "· ") +
-                        stringResource(R.string.nav_allprojects),
-                    color = Femho.colors.ink,
-                    fontSize = FemhoText.body,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("projects-all-${'$'}{scope.id}")
-                        .then(Modifier.androidClickable { onAllProjects(scope.id) })
-                        .padding(vertical = 5.dp),
-                )
-                seus.forEach { project ->
+            MenuPanel {
+                ambProjectes.forEach { scope ->
+                    val seus = projects.filter { it.scopeId == scope.id }
                     Text(
-                        text = (if (project.id in activeProjects) "✓ " else "· ") + project.name,
+                        text = scope.name,
+                        color = Femho.colors.inkFaint,
+                        fontSize = FemhoText.meta,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(top = 6.dp),
+                    )
+                    Text(
+                        text = (if (seus.none { it.id in activeProjects }) "✓ " else "· ") +
+                            stringResource(R.string.nav_allprojects),
                         color = Femho.colors.ink,
                         fontSize = FemhoText.body,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .testTag("project-${'$'}{project.id}")
-                            .then(Modifier.androidClickable { onToggleProject(project.id) })
+                            .testTag("projects-all-${'$'}{scope.id}")
+                            .then(Modifier.androidClickable { onAllProjects(scope.id) })
                             .padding(vertical = 5.dp),
                     )
+                    seus.forEach { project ->
+                        Text(
+                            text = (if (project.id in activeProjects) "✓ " else "· ") + project.name,
+                            color = Femho.colors.ink,
+                            fontSize = FemhoText.body,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("project-${'$'}{project.id}")
+                                .then(Modifier.androidClickable { onToggleProject(project.id) })
+                                .padding(vertical = 5.dp),
+                        )
+                    }
                 }
             }
         }
@@ -1042,51 +1065,53 @@ private fun PinnedRow(pinned: List<Checklist>, onOpenList: (String) -> Unit) {
                 .padding(vertical = 6.dp),
         )
 
-        if (open && pinned.isEmpty()) {
-            /**
-             * **El buit diu on es pinegen** (`docs/14` P8).
-             *
-             * Sense això, pinejar una llista no es descobreix enlloc: el control que ho
-             * ensenyaria només apareixia quan ja sabies que existia.
-             */
-            Text(
-                text = stringResource(R.string.nav_nopinned),
-                color = Femho.colors.inkFaint,
-                fontSize = FemhoText.meta,
-                modifier = Modifier.testTag("pinned-empty").padding(vertical = 6.dp),
-            )
-        }
-
         if (open) {
-            pinned.forEach { checklist ->
-                val done = checklist.items.count { it.done }
-                Column(
-                    Modifier
-                        .fillMaxWidth()
-                        .testTag("pinned-${checklist.id}")
-                        .then(Modifier.androidClickable { onOpenList(checklist.id) })
-                        .padding(vertical = 6.dp),
-                ) {
+            MenuPanel {
+                if (pinned.isEmpty()) {
+                    /**
+                     * **El buit diu on es pinegen** (`docs/14` P8).
+                     *
+                     * Sense això, pinejar una llista no es descobreix enlloc: el control que ho
+                     * ensenyaria només apareixia quan ja sabies que existia.
+                     */
                     Text(
-                        // "Tasca · Llista", com als prototips: el nom sol no distingeix
-                        // dues llistes que es diguin igual en tasques diferents.
-                        text = checklist.taskTitle
-                            ?.takeIf { it.isNotEmpty() }
-                            ?.let { "${'$'}it · ${'$'}{checklist.name}" }
-                            ?: checklist.name,
-                        color = Femho.colors.ink,
-                        fontSize = FemhoText.body,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Text(
-                        // Els marcadors del catàleg són `{done}` i `{total}`: es
-                        // substitueixen a mà, com la resta de plantilles d'aquesta app.
-                        text = stringResource(R.string.nav_pinnedprogress)
-                            .replace("{done}", done.toString())
-                            .replace("{total}", checklist.items.size.toString()),
+                        text = stringResource(R.string.nav_nopinned),
                         color = Femho.colors.inkFaint,
                         fontSize = FemhoText.meta,
+                        modifier = Modifier.testTag("pinned-empty").padding(vertical = 6.dp),
                     )
+                } else {
+                    pinned.forEach { checklist ->
+                        val done = checklist.items.count { it.done }
+                        Column(
+                            Modifier
+                                .fillMaxWidth()
+                                .testTag("pinned-${checklist.id}")
+                                .then(Modifier.androidClickable { onOpenList(checklist.id) })
+                                .padding(vertical = 6.dp),
+                        ) {
+                            Text(
+                                // "Tasca · Llista", com als prototips: el nom sol no distingeix
+                                // dues llistes que es diguin igual en tasques diferents.
+                                text = checklist.taskTitle
+                                    ?.takeIf { it.isNotEmpty() }
+                                    ?.let { "${'$'}it · ${'$'}{checklist.name}" }
+                                    ?: checklist.name,
+                                color = Femho.colors.ink,
+                                fontSize = FemhoText.body,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                            Text(
+                                // Els marcadors del catàleg són `{done}` i `{total}`: es
+                                // substitueixen a mà, com la resta de plantilles d'aquesta app.
+                                text = stringResource(R.string.nav_pinnedprogress)
+                                    .replace("{done}", done.toString())
+                                    .replace("{total}", checklist.items.size.toString()),
+                                color = Femho.colors.inkFaint,
+                                fontSize = FemhoText.meta,
+                            )
+                        }
+                    }
                 }
             }
         }
