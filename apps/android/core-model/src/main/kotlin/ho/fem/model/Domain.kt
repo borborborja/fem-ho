@@ -79,6 +79,16 @@ data class Task(
      * això és nul·lable.
      */
     val progress: TaskProgress? = null,
+    val deadline: String? = null,
+    val rrule: String? = null,
+    @SerialName("recurrence_mode") val recurrenceMode: RecurrenceMode? = null,
+    @SerialName("ai_instructions") val aiInstructions: String? = null,
+    @SerialName("task_type_id") val taskTypeId: String? = null,
+    @SerialName("label_ids") val labelIds: List<String> = emptyList(),
+    @SerialName("locked_until") val lockedUntil: String? = null,
+    @SerialName("needs_attention") val needsAttention: Boolean = false,
+    @SerialName("ai_last_read_at") val aiLastReadAt: String? = null,
+    @SerialName("source_event") val sourceEvent: SourceEvent? = null,
     val version: Int = 1,
 )
 
@@ -268,4 +278,271 @@ data class Inbox(
 data class AuthTokens(
     @SerialName("access_token") val accessToken: String,
     @SerialName("refresh_token") val refreshToken: String,
+)
+
+/* ---------------------------------------------------------------------------
+ * Models de paritat amb la web (onades 2-10 del pla). El nom de camp és el wire
+ * del servidor via @SerialName; els enums nous segueixen el patró de TaskStatus.
+ * ------------------------------------------------------------------------- */
+
+@Serializable
+enum class SharePermission {
+    @SerialName("view") VIEW,
+    @SerialName("check") CHECK,
+    @SerialName("comment") COMMENT,
+}
+
+@Serializable
+enum class CalendarOrigin {
+    @SerialName("local") LOCAL,
+    @SerialName("subscription") SUBSCRIPTION,
+}
+
+@Serializable
+enum class SourceKind {
+    @SerialName("caldav") CALDAV,
+    @SerialName("ical") ICAL,
+    @SerialName("rss") RSS,
+}
+
+@Serializable
+enum class MailSecurity {
+    @SerialName("tls") TLS,
+    @SerialName("starttls") STARTTLS,
+}
+
+@Serializable
+enum class RecurrenceMode {
+    @SerialName("schedule") SCHEDULE,
+    @SerialName("completion") COMPLETION,
+}
+
+/** L'origen d'una tasca creada a partir d'una cita (P6: neix independent). */
+@Serializable
+data class SourceEvent(
+    @SerialName("calendar_id") val calendarId: String,
+    val uid: String,
+    @SerialName("recurrence_id") val recurrenceId: String? = null,
+)
+
+@Serializable
+data class Label(
+    val id: String,
+    @SerialName("scope_id") val scopeId: String,
+    val name: String,
+    val color: String? = null,
+    @SerialName("created_at") val createdAt: String? = null,
+)
+
+@Serializable
+data class TaskType(
+    val id: String,
+    @SerialName("scope_id") val scopeId: String,
+    val name: String,
+    val color: String? = null,
+    val position: String? = null,
+    val required: Boolean = false,
+)
+
+@Serializable
+data class Comment(
+    val id: String,
+    @SerialName("task_id") val taskId: String,
+    @SerialName("author_id") val authorId: String? = null,
+    @SerialName("author_name") val authorName: String? = null,
+    @SerialName("agent_id") val agentId: String? = null,
+    val body: String,
+    @SerialName("created_at") val createdAt: String,
+)
+
+@Serializable
+data class Attachment(
+    val id: String,
+    @SerialName("task_id") val taskId: String? = null,
+    @SerialName("event_id") val eventId: String? = null,
+    @SerialName("scope_id") val scopeId: String? = null,
+    val filename: String,
+    @SerialName("mime_type") val mimeType: String,
+    @SerialName("size_bytes") val sizeBytes: Long,
+    @SerialName("is_ai_context") val isAiContext: Boolean = false,
+    @SerialName("created_at") val createdAt: String,
+)
+
+/** El bloc base que s'escriu sencer (no hi ha cronòmetre: P27). */
+@Serializable
+data class Session(
+    val id: String,
+    @SerialName("task_id") val taskId: String,
+    @SerialName("scope_id") val scopeId: String? = null,
+    @SerialName("user_id") val userId: String,
+    @SerialName("started_at") val startedAt: String,
+    @SerialName("ended_at") val endedAt: String? = null,
+    val source: String? = null,
+    val note: String? = null,
+)
+
+/** El bloc enriquit que torna GET /sessions, amb la tasca i el projecte resolts. */
+@Serializable
+data class SessionEntry(
+    val id: String,
+    @SerialName("task_id") val taskId: String,
+    @SerialName("task_title") val taskTitle: String? = null,
+    @SerialName("project_id") val projectId: String? = null,
+    @SerialName("project_name") val projectName: String? = null,
+    @SerialName("scope_id") val scopeId: String? = null,
+    @SerialName("user_id") val userId: String,
+    @SerialName("user_name") val userName: String? = null,
+    @SerialName("task_type_id") val taskTypeId: String? = null,
+    @SerialName("task_type_name") val taskTypeName: String? = null,
+    @SerialName("started_at") val startedAt: String,
+    @SerialName("ended_at") val endedAt: String? = null,
+    val note: String? = null,
+)
+
+@Serializable
+data class SessionTotals(
+    @SerialName("total_minutes") val totalMinutes: Long = 0,
+    @SerialName("per_project") val perProject: Map<String, Long> = emptyMap(),
+    @SerialName("per_person") val perPerson: Map<String, Long> = emptyMap(),
+    @SerialName("per_day") val perDay: Map<String, Long> = emptyMap(),
+)
+
+@Serializable
+data class SessionReport(
+    val data: List<SessionEntry> = emptyList(),
+    val totals: SessionTotals = SessionTotals(),
+)
+
+@Serializable
+data class SessionStats(
+    @SerialName("total_minutes") val totalMinutes: Long = 0,
+    @SerialName("task_count") val taskCount: Int = 0,
+    @SerialName("project_count") val projectCount: Int = 0,
+    @SerialName("average_minutes") val averageMinutes: Double = 0.0,
+    @SerialName("weekly") val weekly: List<WeekBucket> = emptyList(),
+    @SerialName("per_task_type") val perTaskType: Map<String, Long> = emptyMap(),
+    @SerialName("per_project") val perProject: Map<String, Long> = emptyMap(),
+    @SerialName("per_person") val perPerson: Map<String, Long> = emptyMap(),
+    @SerialName("overtime_per_project") val overtimePerProject: Map<String, Long> = emptyMap(),
+)
+
+@Serializable
+data class WeekBucket(
+    val week: String,
+    val minutes: Long = 0,
+)
+
+@Serializable
+data class MailAccount(
+    val id: String,
+    val name: String,
+    val host: String,
+    val username: String,
+    /** El servidor mai retorna la contrasenya; només diu si n'hi ha una de desada. */
+    @SerialName("has_secret") val hasSecret: Boolean = false,
+    val security: MailSecurity = MailSecurity.TLS,
+    @SerialName("created_at") val createdAt: String? = null,
+)
+
+@Serializable
+data class MailRule(
+    val id: String,
+    @SerialName("account_id") val accountId: String? = null,
+    @SerialName("account_name") val accountName: String? = null,
+    val folder: String,
+    @SerialName("scope_id") val scopeId: String? = null,
+    @SerialName("project_id") val projectId: String? = null,
+    @SerialName("title_template") val titleTemplate: String? = null,
+    @SerialName("inbox_visible") val inboxVisible: Boolean? = null,
+)
+
+@Serializable
+data class MailTestResult(
+    val ok: Boolean = false,
+    val error: String? = null,
+)
+
+@Serializable
+data class Calendar(
+    val id: String,
+    @SerialName("scope_id") val scopeId: String? = null,
+    @SerialName("project_id") val projectId: String? = null,
+    val name: String,
+    val color: String? = null,
+    val origin: CalendarOrigin = CalendarOrigin.LOCAL,
+    @SerialName("source_kind") val sourceKind: SourceKind? = null,
+    @SerialName("source_url") val sourceUrl: String? = null,
+    val writable: Boolean = false,
+    @SerialName("refresh_interval") val refreshInterval: Int? = null,
+    @SerialName("inbox_visible") val inboxVisible: Boolean? = null,
+    @SerialName("last_refreshed_at") val lastRefreshedAt: String? = null,
+    @SerialName("last_error") val lastError: String? = null,
+    @SerialName("shared_with_scope_id") val sharedWithScopeId: String? = null,
+)
+
+@Serializable
+data class ShareSummary(
+    val id: String,
+    @SerialName("task_id") val taskId: String? = null,
+    @SerialName("checklist_id") val checklistId: String? = null,
+    val permission: SharePermission = SharePermission.VIEW,
+    @SerialName("require_name") val requireName: Boolean = false,
+    @SerialName("has_password") val hasPassword: Boolean = false,
+    @SerialName("expires_at") val expiresAt: String? = null,
+    @SerialName("max_views") val maxViews: Int? = null,
+    val views: Int = 0,
+    @SerialName("revoked_at") val revokedAt: String? = null,
+)
+
+@Serializable
+data class ShareAccess(
+    val id: String,
+    val label: String? = null,
+    @SerialName("first_seen") val firstSeen: String? = null,
+    @SerialName("last_seen") val lastSeen: String? = null,
+)
+
+@Serializable
+data class ScopeSettings(
+    @SerialName("time_tracking") val timeTracking: Boolean = false,
+    @SerialName("work_start") val workStart: String? = null,
+    @SerialName("work_end") val workEnd: String? = null,
+    @SerialName("work_days") val workDays: List<Int> = emptyList(),
+    @SerialName("overtime_visible") val overtimeVisible: Boolean = false,
+    @SerialName("long_session_hours") val longSessionHours: Int = 8,
+    @SerialName("project_noun") val projectNoun: String = "project",
+    @SerialName("task_types_enabled") val taskTypesEnabled: Boolean = false,
+)
+
+@Serializable
+data class AdminUser(
+    val id: String,
+    val name: String,
+    val email: String,
+    val role: String = "member",
+    @SerialName("created_at") val createdAt: String? = null,
+    @SerialName("invite_pending") val invitePending: Boolean = false,
+)
+
+@Serializable
+data class ApiTokenSummary(
+    val id: String,
+    val prefix: String,
+    @SerialName("created_at") val createdAt: String,
+    @SerialName("last_used_at") val lastUsedAt: String? = null,
+    @SerialName("revoked_at") val revokedAt: String? = null,
+    @SerialName("ai_agent_id") val aiAgentId: String? = null,
+    val capabilities: List<String> = emptyList(),
+)
+
+/** L'agent estès que Ajustos ▸ Usuari IA necessita (el simple ja viu a dalt). */
+@Serializable
+data class AgentDetail(
+    val id: String,
+    val name: String = "",
+    val enabled: Boolean = false,
+    @SerialName("can_create_tasks") val canCreateTasks: Boolean = false,
+    @SerialName("scope_ids") val scopeIds: List<String> = emptyList(),
+    @SerialName("all_scopes") val allScopes: Boolean = false,
+    @SerialName("created_at") val createdAt: String? = null,
 )
