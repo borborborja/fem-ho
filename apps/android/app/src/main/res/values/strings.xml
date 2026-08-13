@@ -356,9 +356,15 @@
     <string name="settings_day_thu">dj</string>
     <string name="settings_day_tue">dt</string>
     <string name="settings_day_wed">dc</string>
+    <string name="settings_empty_admin">Encara no hi ha contingut per a Admin.</string>
     <string name="settings_empty_agents">Encara no has creat cap agent.</string>
-    <string name="settings_empty_calendars">Aquest àmbit encara no té cap calendari.</string>
-    <string name="settings_empty_shares">Encara no has creat cap enllaç compartit. Se’n fa un obrint una tasca i prement «Compartir».</string>
+    <string name="settings_empty_ai">Encara no hi ha contingut per a Usuari IA.</string>
+    <string name="settings_empty_calendars">Encara no hi ha contingut per a Calendaris.</string>
+    <string name="settings_empty_mail">Encara no hi ha contingut per a Correu.</string>
+    <string name="settings_empty_mcp">Encara no hi ha contingut per a MCP i API.</string>
+    <string name="settings_empty_profile">Encara no hi ha contingut per a Perfil.</string>
+    <string name="settings_empty_scopes">Encara no hi ha contingut per a Àmbits.</string>
+    <string name="settings_empty_shares">Encara no hi ha contingut per a Compartits.</string>
     <string name="settings_enableai">Activar l\'usuari IA</string>
     <string name="settings_events_ondelete">En esborrar una tasca feta des d\'una cita</string>
     <string name="settings_events_ondelete_hide">La cita es queda fora</string>

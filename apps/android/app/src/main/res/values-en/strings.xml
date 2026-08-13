@@ -356,9 +356,15 @@
     <string name="settings_day_thu">Th</string>
     <string name="settings_day_tue">Tu</string>
     <string name="settings_day_wed">We</string>
+    <string name="settings_empty_admin">No content for Admin yet.</string>
     <string name="settings_empty_agents">You have not created any agent yet.</string>
-    <string name="settings_empty_calendars">This scope has no calendars yet.</string>
-    <string name="settings_empty_shares">You have not created any share link yet. You make one by opening a task and pressing “Share”.</string>
+    <string name="settings_empty_ai">No content for AI user yet.</string>
+    <string name="settings_empty_calendars">No content for Calendars yet.</string>
+    <string name="settings_empty_mail">No content for Mail yet.</string>
+    <string name="settings_empty_mcp">No content for MCP and API yet.</string>
+    <string name="settings_empty_profile">No content for Profile yet.</string>
+    <string name="settings_empty_scopes">No content for Scopes yet.</string>
+    <string name="settings_empty_shares">No content for Shared yet.</string>
     <string name="settings_enableai">Turn on the AI user</string>
     <string name="settings_events_ondelete">When you delete a task made from an event</string>
     <string name="settings_events_ondelete_hide">The event stays out</string>

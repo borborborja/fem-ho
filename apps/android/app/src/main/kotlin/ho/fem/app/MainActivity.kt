@@ -61,8 +61,10 @@ import ho.fem.calendar.InboxLabels
 import ho.fem.calendar.InboxRail
 import ho.fem.calendar.MonthView
 import ho.fem.calendar.WeekList
+import ho.fem.settings.SettingsEmptyStates
 import ho.fem.settings.SettingsLabels
 import ho.fem.settings.SettingsScreen
+import ho.fem.settings.SettingsTabs
 import ho.fem.tasks.BoardLabels
 import ho.fem.designsystem.CardAddForm
 import ho.fem.designsystem.CardList
@@ -1147,6 +1149,27 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
             ),
             server = stringResource(R.string.login_server),
             logout = stringResource(R.string.nav_logout),
+            tabs = SettingsTabs(
+                general = stringResource(R.string.settings_tab_general),
+                scopes = stringResource(R.string.settings_tab_scopes),
+                calendars = stringResource(R.string.settings_tab_calendars),
+                mail = stringResource(R.string.settings_tab_mail),
+                mcp = stringResource(R.string.settings_tab_mcp),
+                ai = stringResource(R.string.settings_tab_ai),
+                shares = stringResource(R.string.settings_tab_shares),
+                profile = stringResource(R.string.settings_tab_profile),
+                admin = stringResource(R.string.settings_tab_admin),
+            ),
+            emptyStates = SettingsEmptyStates(
+                scopes = stringResource(R.string.settings_empty_scopes),
+                calendars = stringResource(R.string.settings_empty_calendars),
+                mail = stringResource(R.string.settings_empty_mail),
+                mcp = stringResource(R.string.settings_empty_mcp),
+                ai = stringResource(R.string.settings_empty_ai),
+                shares = stringResource(R.string.settings_empty_shares),
+                profile = stringResource(R.string.settings_empty_profile),
+                admin = stringResource(R.string.settings_empty_admin),
+            ),
         ),
         theme = theme,
         accent = accent,
