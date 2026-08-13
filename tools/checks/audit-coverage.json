@@ -100,7 +100,8 @@
     "updateUser": "apps/server/src/http/api-surface.test.ts · \"i un altre usuari sí, amb rastre\"",
     "uploadEventAttachment": "apps/server/src/services/attachments.test.ts · \"d'un calendari compartit el membre el veu sencer\"",
     "uploadTaskAttachment": "apps/server/src/services/attachments.test.ts · \"es puja amb el cos cru i torna les metadades sense la ruta d'emmagatzematge\"",
-    "wipeInstance": "apps/server/src/http/api-surface.test.ts · \"i amb el nom exacte, buida i deixa constància\""
+    "wipeInstance": "apps/server/src/http/api-surface.test.ts · \"i amb el nom exacte, buida i deixa constància\"",
+    "undoActivityEntry": "apps/server/src/http/tokens.test.ts · \"AQUESTA és la de docs/09 §7: Desfés NO esborra res de l'historial\""
   },
   "exempt": {
     "refresh": "Rotar un token de refresc no és un canvi d'estat del producte: no toca cap tasca, cap àmbit ni cap dada de l'usuari. La sessió ja va quedar registrada al login, i registrar cada refresc ofegaria la taula amb una entrada cada quinze minuts per dispositiu. La reutilització d'un token gastat SÍ que es registra, però al log del servidor i com a avís, perquè és un incident de seguretat i no una acció de ningú.",
