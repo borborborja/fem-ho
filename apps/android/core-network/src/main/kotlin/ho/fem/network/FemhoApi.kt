@@ -165,6 +165,12 @@ class FemhoApi(
     private suspend inline fun <reified T> post(path: String, body: Any? = null): T =
         json.decodeFromString(raw("POST", path, body?.let { encode(it) }, authenticated = true))
 
+    private suspend inline fun <reified T> patch(path: String, body: Any? = null): T =
+        json.decodeFromString(raw("PATCH", path, body?.let { encode(it) }, authenticated = true))
+
+    private suspend inline fun <reified T> put(path: String, body: Any? = null): T =
+        json.decodeFromString(raw("PUT", path, body?.let { encode(it) }, authenticated = true))
+
     private fun encode(body: Any): String = when (body) {
         is String -> body
         is Map<*, *> -> body.entries.joinToString(",", "{", "}") { (key, value) ->
@@ -506,7 +512,7 @@ class FemhoApi(
     ): Session = post("/api/v1/sessions", mapOf("id" to id, "task_id" to taskId, "started_at" to startedAt, "ended_at" to endedAt, "note" to note))
 
     suspend fun updateSession(id: String, startedAt: String? = null, endedAt: String? = null, taskId: String? = null, note: String? = null): Session =
-        post("/api/v1/sessions/$id", buildMap {
+        patch("/api/v1/sessions/$id", buildMap {
             if (startedAt != null) put("started_at", startedAt)
             if (endedAt != null) put("ended_at", endedAt)
             if (taskId != null) put("task_id", taskId)
@@ -542,7 +548,7 @@ class FemhoApi(
     suspend fun shareAccesses(id: String): List<ShareAccess> = get("/api/v1/shares/$id/accesses")
 
     suspend fun updateShare(id: String, permission: String? = null, requireName: Boolean? = null, password: String? = null, expiresAt: String? = null, maxViews: Int? = null): ShareSummary =
-        post("/api/v1/shares/$id", buildMap {
+        patch("/api/v1/shares/$id", buildMap {
             if (permission != null) put("permission", permission)
             if (requireName != null) put("require_name", requireName)
             if (password != null) put("password", password)
@@ -571,7 +577,7 @@ class FemhoApi(
     suspend fun scopeMembers(scopeId: String): List<Map<String, Any>> = get("/api/v1/scopes/$scopeId/members")
 
     suspend fun updateMember(scopeId: String, memberId: String, role: String): Map<String, Any> =
-        post("/api/v1/scopes/$scopeId/members/$memberId", mapOf("role" to role))
+        patch("/api/v1/scopes/$scopeId/members/$memberId", mapOf("role" to role))
 
     suspend fun removeMember(scopeId: String, memberId: String) {
         raw("DELETE", "/api/v1/scopes/$scopeId/members/$memberId", null, authenticated = true)
@@ -589,7 +595,7 @@ class FemhoApi(
         post("/api/v1/mail/accounts", mapOf("name" to name, "host" to host, "username" to username, "password" to password, "security" to security))
 
     suspend fun updateMailAccount(id: String, name: String? = null, host: String? = null, username: String? = null, password: String? = null, security: String? = null): MailAccount =
-        post("/api/v1/mail/accounts/$id", buildMap {
+        patch("/api/v1/mail/accounts/$id", buildMap {
             if (name != null) put("name", name)
             if (host != null) put("host", host)
             if (username != null) put("username", username)
@@ -619,7 +625,7 @@ class FemhoApi(
         })
 
     suspend fun updateMailRule(id: String, folder: String? = null, scopeId: String? = null, projectId: String? = null, titleTemplate: String? = null, inboxVisible: Boolean? = null): MailRule =
-        post("/api/v1/mail/rules/$id", buildMap {
+        patch("/api/v1/mail/rules/$id", buildMap {
             if (folder != null) put("folder", folder)
             if (scopeId != null) put("scope_id", scopeId)
             if (projectId != null) put("project_id", projectId)
@@ -680,7 +686,7 @@ class FemhoApi(
     })
 
     suspend fun updateCalendar(id: String, name: String? = null, color: String? = null, sourceUrl: String? = null, sourceUsername: String? = null, sourceSecret: String? = null, refreshInterval: Int? = null, inboxVisible: Boolean? = null): Calendar =
-        post("/api/v1/calendars/$id", buildMap {
+        patch("/api/v1/calendars/$id", buildMap {
             if (name != null) put("name", name)
             if (color != null) put("color", color)
             if (sourceUrl != null) put("source_url", sourceUrl)
@@ -724,7 +730,7 @@ class FemhoApi(
         post("/api/v1/task-types", mapOf("scope_id" to scopeId, "name" to name, "color" to color, "required" to required))
 
     suspend fun updateTaskType(id: String, name: String? = null, color: String? = null, required: Boolean? = null): TaskType =
-        post("/api/v1/task-types/$id", buildMap {
+        patch("/api/v1/task-types/$id", buildMap {
             if (name != null) put("name", name)
             if (color != null) put("color", color)
             if (required != null) put("required", required)
@@ -740,7 +746,7 @@ class FemhoApi(
         post("/api/v1/projects", mapOf("scope_id" to scopeId, "name" to name))
 
     suspend fun updateProject(id: String, name: String? = null, archived: Boolean? = null): Project =
-        post("/api/v1/projects/$id", buildMap {
+        patch("/api/v1/projects/$id", buildMap {
             if (name != null) put("name", name)
             if (archived != null) put("archived", archived)
         })
@@ -760,7 +766,7 @@ class FemhoApi(
         })
 
     suspend fun updateScope(id: String, name: String? = null, color: String? = null, icon: String? = null): Scope =
-        post("/api/v1/scopes/$id", buildMap {
+        patch("/api/v1/scopes/$id", buildMap {
             if (name != null) put("name", name)
             if (color != null) put("color", color)
             if (icon != null) put("icon", icon)
@@ -782,7 +788,7 @@ class FemhoApi(
         longSessionHours: Int? = null,
         projectNoun: String? = null,
         taskTypesEnabled: Boolean? = null,
-    ): ScopeSettings = post("/api/v1/scopes/$scopeId/settings", buildMap {
+    ): ScopeSettings = patch("/api/v1/scopes/$scopeId/settings", buildMap {
         if (timeTracking != null) put("time_tracking", timeTracking)
         if (workStart != null) put("work_start", workStart)
         if (workEnd != null) put("work_end", workEnd)
@@ -807,7 +813,7 @@ class FemhoApi(
     // ------------------------------------------------------------------ IA / Agents
 
     suspend fun updateAgentScopes(agentId: String, scopeIds: List<String>, allScopes: Boolean): Map<String, Any> =
-        post("/api/v1/ai/agents/$agentId/scopes", mapOf("scope_ids" to scopeIds, "all_scopes" to allScopes))
+        put("/api/v1/ai/agents/$agentId/scopes", mapOf("scope_ids" to scopeIds, "all_scopes" to allScopes))
 
     suspend fun createAgentCredential(agentId: String): Map<String, Any> =
         post("/api/v1/ai/agents/$agentId/credentials", emptyMap<String, Any>())
@@ -836,7 +842,7 @@ class FemhoApi(
 
     suspend fun updateTask(id: String, fields: Map<String, Any?>): Task {
         val filtered = fields.filterValues { it != null }.mapValues { it.value!! }
-        return post("/api/v1/tasks/$id", filtered as Map<String, Any>)
+        return patch("/api/v1/tasks/$id", filtered as Map<String, Any>)
     }
 
     suspend fun deleteTask(id: String) {
@@ -877,7 +883,7 @@ class FemhoApi(
         post("/api/v1/admin/users/invite", mapOf("email" to email, "name" to name))
 
     suspend fun updateAdminUser(id: String, name: String? = null, role: String? = null): Map<String, Any> =
-        post("/api/v1/admin/users/$id", buildMap {
+        patch("/api/v1/admin/users/$id", buildMap {
             if (name != null) put("name", name)
             if (role != null) put("role", role)
         })
@@ -895,7 +901,7 @@ class FemhoApi(
         post("/api/v1/auth/password", mapOf("current_password" to current, "new_password" to new))
 
     suspend fun updateProfile(name: String? = null, locale: String? = null, theme: String? = null, accent: String? = null): UserProfile =
-        post("/api/v1/auth/me", buildMap {
+        patch("/api/v1/auth/me", buildMap {
             if (name != null) put("name", name)
             if (locale != null) put("locale", locale)
             if (theme != null) put("theme", theme)
@@ -920,6 +926,6 @@ class FemhoApi(
             if (inboxPosition != null) put("inbox_position", inboxPosition)
             if (inboxShowOverdue != null) put("inbox_show_overdue", inboxShowOverdue)
         }
-        return post("/api/v1/auth/settings", fields)
+        return patch("/api/v1/auth/settings", fields)
     }
 }
