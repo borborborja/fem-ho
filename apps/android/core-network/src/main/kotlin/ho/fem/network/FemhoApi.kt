@@ -1,18 +1,35 @@
 package ho.fem.network
 
 import ho.fem.model.Agent
+import ho.fem.model.AgentDetail
+import ho.fem.model.ApiTokenSummary
+import ho.fem.model.Attachment
 import ho.fem.model.AuthTokens
 import ho.fem.model.Board
+import ho.fem.model.Calendar
 import ho.fem.model.Checklist
+import ho.fem.model.Comment
 import ho.fem.model.EventOccurrence
 import ho.fem.model.Inbox
 import ho.fem.model.InboxMark
 import ho.fem.model.InstanceInfo
+import ho.fem.model.Label
+import ho.fem.model.MailAccount
+import ho.fem.model.MailRule
+import ho.fem.model.MailTestResult
 import ho.fem.model.Person
 import ho.fem.model.Project
 import ho.fem.model.Scope
+import ho.fem.model.ScopeSettings
+import ho.fem.model.Session
+import ho.fem.model.SessionEntry
+import ho.fem.model.SessionReport
+import ho.fem.model.SessionStats
+import ho.fem.model.ShareAccess
+import ho.fem.model.ShareSummary
 import ho.fem.model.Subtask
 import ho.fem.model.Task
+import ho.fem.model.TaskType
 import ho.fem.model.UserProfile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
@@ -367,4 +384,542 @@ class FemhoApi(
 
     suspend fun sync(cursor: String?): String =
         raw("GET", "/api/v1/sync" + (cursor?.let { "?cursor=$it" } ?: ""), null, authenticated = true)
+
+    // ------------------------------------------------------------------ Adjunts
+
+    suspend fun listTaskAttachments(taskId: String): List<Attachment> =
+        get("/api/v1/tasks/$taskId/attachments")
+
+    suspend fun uploadTaskAttachment(taskId: String, filename: String, bytes: ByteArray, aiContext: Boolean = false): Attachment {
+        val path = "/api/v1/tasks/$taskId/attachments?filename=${java.net.URLEncoder.encode(filename, "UTF-8")}&ai_context=$aiContext"
+        val body = bytes.toRequestBody("application/octet-stream".toMediaType())
+        val request = Request.Builder()
+            .url(url(path))
+            .post(body)
+            .header("Authorization", "Bearer ${tokens.access() ?: throw ApiException(401, "")}")
+            .header("X-Femho-Source", "android")
+            .build()
+        val response = client.newCall(request).execute()
+        val text = response.body?.string().orEmpty()
+        if (!response.isSuccessful) throw ApiException(response.code, detailOf(text))
+        return json.decodeFromString(text)
+    }
+
+    suspend fun uploadEventAttachment(eventId: String, filename: String, bytes: ByteArray): Attachment {
+        val path = "/api/v1/events/$eventId/attachments?filename=${java.net.URLEncoder.encode(filename, "UTF-8")}"
+        val body = bytes.toRequestBody("application/octet-stream".toMediaType())
+        val request = Request.Builder()
+            .url(url(path))
+            .post(body)
+            .header("Authorization", "Bearer ${tokens.access() ?: throw ApiException(401, "")}")
+            .header("X-Femho-Source", "android")
+            .build()
+        val response = client.newCall(request).execute()
+        val text = response.body?.string().orEmpty()
+        if (!response.isSuccessful) throw ApiException(response.code, detailOf(text))
+        return json.decodeFromString(text)
+    }
+
+    suspend fun listEventAttachments(eventId: String): List<Attachment> =
+        get("/api/v1/events/$eventId/attachments")
+
+    suspend fun attachmentContent(id: String): ByteArray {
+        val request = Request.Builder()
+            .url(url("/api/v1/attachments/$id/content"))
+            .get()
+            .header("Authorization", "Bearer ${tokens.access() ?: throw ApiException(401, "")}")
+            .header("X-Femho-Source", "android")
+            .build()
+        val response = client.newCall(request).execute()
+        val bytes = response.body?.bytes() ?: throw ApiException(response.code, "No content")
+        if (!response.isSuccessful) throw ApiException(response.code, detailOf(response.body?.string().orEmpty()))
+        return bytes
+    }
+
+    suspend fun deleteAttachment(id: String) {
+        raw("DELETE", "/api/v1/attachments/$id", null, authenticated = true)
+    }
+
+    // ------------------------------------------------------------------ Sessions
+
+    suspend fun sessions(
+        from: String? = null,
+        to: String? = null,
+        scopeIds: List<String>? = null,
+        projectId: String? = null,
+        userId: String? = null,
+        search: String? = null,
+    ): SessionReport {
+        val query = buildList {
+            if (from != null) add("from=$from")
+            if (to != null) add("to=$to")
+            if (scopeIds != null && scopeIds.isNotEmpty()) add("scope_ids=" + scopeIds.joinToString(","))
+            if (projectId != null) add("project_id=$projectId")
+            if (userId != null) add("user_id=$userId")
+            if (search != null) add("search=${java.net.URLEncoder.encode(search, "UTF-8")}")
+        }.joinToString("&")
+        return get("/api/v1/sessions" + if (query.isEmpty()) "" else "?$query")
+    }
+
+    suspend fun sessionStats(
+        from: String? = null,
+        to: String? = null,
+        scopeIds: List<String>? = null,
+        projectId: String? = null,
+        userId: String? = null,
+    ): SessionStats {
+        val query = buildList {
+            if (from != null) add("from=$from")
+            if (to != null) add("to=$to")
+            if (scopeIds != null && scopeIds.isNotEmpty()) add("scope_ids=" + scopeIds.joinToString(","))
+            if (projectId != null) add("project_id=$projectId")
+            if (userId != null) add("user_id=$userId")
+        }.joinToString("&")
+        return get("/api/v1/sessions/stats" + if (query.isEmpty()) "" else "?$query")
+    }
+
+    suspend fun exportSessionsCsv(
+        from: String? = null,
+        to: String? = null,
+        scopeIds: List<String>? = null,
+        projectId: String? = null,
+        userId: String? = null,
+        search: String? = null,
+    ): String {
+        val query = buildList {
+            if (from != null) add("from=$from")
+            if (to != null) add("to=$to")
+            if (scopeIds != null && scopeIds.isNotEmpty()) add("scope_ids=" + scopeIds.joinToString(","))
+            if (projectId != null) add("project_id=$projectId")
+            if (userId != null) add("user_id=$userId")
+            if (search != null) add("search=${java.net.URLEncoder.encode(search, "UTF-8")}")
+        }.joinToString("&")
+        return raw("GET", "/api/v1/sessions/export.csv" + if (query.isEmpty()) "" else "?$query", null, authenticated = true)
+    }
+
+    suspend fun createSession(
+        id: String,
+        taskId: String,
+        startedAt: String,
+        endedAt: String? = null,
+        note: String? = null,
+    ): Session = post("/api/v1/sessions", mapOf("id" to id, "task_id" to taskId, "started_at" to startedAt, "ended_at" to endedAt, "note" to note))
+
+    suspend fun updateSession(id: String, startedAt: String? = null, endedAt: String? = null, taskId: String? = null, note: String? = null): Session =
+        post("/api/v1/sessions/$id", buildMap {
+            if (startedAt != null) put("started_at", startedAt)
+            if (endedAt != null) put("ended_at", endedAt)
+            if (taskId != null) put("task_id", taskId)
+            if (note != null) put("note", note)
+        })
+
+    suspend fun deleteSession(id: String) {
+        raw("DELETE", "/api/v1/sessions/$id", null, authenticated = true)
+    }
+
+    // ------------------------------------------------------------------ Compartits
+
+    suspend fun shares(): List<ShareSummary> = get("/api/v1/shares")
+
+    suspend fun createShare(
+        taskId: String? = null,
+        checklistId: String? = null,
+        permission: String,
+        requireName: Boolean = false,
+        password: String? = null,
+        expiresAt: String? = null,
+        maxViews: Int? = null,
+    ): Map<String, Any> = post("/api/v1/shares", buildMap {
+        if (taskId != null) put("task_id", taskId)
+        if (checklistId != null) put("checklist_id", checklistId)
+        put("permission", permission)
+        put("require_name", requireName)
+        if (password != null) put("password", password)
+        if (expiresAt != null) put("expires_at", expiresAt)
+        if (maxViews != null) put("max_views", maxViews)
+    })
+
+    suspend fun shareAccesses(id: String): List<ShareAccess> = get("/api/v1/shares/$id/accesses")
+
+    suspend fun updateShare(id: String, permission: String? = null, requireName: Boolean? = null, password: String? = null, expiresAt: String? = null, maxViews: Int? = null): ShareSummary =
+        post("/api/v1/shares/$id", buildMap {
+            if (permission != null) put("permission", permission)
+            if (requireName != null) put("require_name", requireName)
+            if (password != null) put("password", password)
+            if (expiresAt != null) put("expires_at", expiresAt)
+            if (maxViews != null) put("max_views", maxViews)
+        })
+
+    suspend fun revokeShare(id: String) {
+        raw("DELETE", "/api/v1/shares/$id", null, authenticated = true)
+    }
+
+    // ------------------------------------------------------------------ Convits i membres
+
+    suspend fun scopeInvites(scopeId: String): List<Map<String, Any>> = get("/api/v1/scopes/$scopeId/invites")
+
+    suspend fun createScopeInvite(scopeId: String): Map<String, Any> = post("/api/v1/scopes/$scopeId/invites", emptyMap<String, Any>())
+
+    suspend fun revokeScopeInvite(scopeId: String, grantId: String) {
+        raw("DELETE", "/api/v1/scopes/$scopeId/invites/$grantId", null, authenticated = true)
+    }
+
+    suspend fun joinPreview(token: String): Map<String, Any> = get("/api/v1/join/$token")
+
+    suspend fun acceptJoin(token: String): Map<String, Any> = post("/api/v1/join/$token", emptyMap<String, Any>())
+
+    suspend fun scopeMembers(scopeId: String): List<Map<String, Any>> = get("/api/v1/scopes/$scopeId/members")
+
+    suspend fun updateMember(scopeId: String, memberId: String, role: String): Map<String, Any> =
+        post("/api/v1/scopes/$scopeId/members/$memberId", mapOf("role" to role))
+
+    suspend fun removeMember(scopeId: String, memberId: String) {
+        raw("DELETE", "/api/v1/scopes/$scopeId/members/$memberId", null, authenticated = true)
+    }
+
+    suspend fun leaveScope(scopeId: String) {
+        raw("DELETE", "/api/v1/scopes/$scopeId/members/me", null, authenticated = true)
+    }
+
+    // ------------------------------------------------------------------ Correu
+
+    suspend fun mailAccounts(): List<MailAccount> = get("/api/v1/mail/accounts")
+
+    suspend fun createMailAccount(name: String, host: String, username: String, password: String, security: String): MailAccount =
+        post("/api/v1/mail/accounts", mapOf("name" to name, "host" to host, "username" to username, "password" to password, "security" to security))
+
+    suspend fun updateMailAccount(id: String, name: String? = null, host: String? = null, username: String? = null, password: String? = null, security: String? = null): MailAccount =
+        post("/api/v1/mail/accounts/$id", buildMap {
+            if (name != null) put("name", name)
+            if (host != null) put("host", host)
+            if (username != null) put("username", username)
+            if (password != null) put("password", password)
+            if (security != null) put("security", security)
+        })
+
+    suspend fun deleteMailAccount(id: String) {
+        raw("DELETE", "/api/v1/mail/accounts/$id", null, authenticated = true)
+    }
+
+    suspend fun testMailAccount(id: String, password: String? = null): MailTestResult =
+        post("/api/v1/mail/accounts/$id/test", if (password != null) mapOf("password" to password) else emptyMap())
+
+    suspend fun mailFolders(id: String): List<Map<String, Any>> = get("/api/v1/mail/accounts/$id/folders")
+
+    suspend fun mailRules(): List<MailRule> = get("/api/v1/mail/rules")
+
+    suspend fun createMailRule(accountId: String, folder: String, scopeId: String? = null, projectId: String? = null, titleTemplate: String? = null, inboxVisible: Boolean? = null): MailRule =
+        post("/api/v1/mail/rules", buildMap {
+            put("account_id", accountId)
+            put("folder", folder)
+            if (scopeId != null) put("scope_id", scopeId)
+            if (projectId != null) put("project_id", projectId)
+            if (titleTemplate != null) put("title_template", titleTemplate)
+            if (inboxVisible != null) put("inbox_visible", inboxVisible)
+        })
+
+    suspend fun updateMailRule(id: String, folder: String? = null, scopeId: String? = null, projectId: String? = null, titleTemplate: String? = null, inboxVisible: Boolean? = null): MailRule =
+        post("/api/v1/mail/rules/$id", buildMap {
+            if (folder != null) put("folder", folder)
+            if (scopeId != null) put("scope_id", scopeId)
+            if (projectId != null) put("project_id", projectId)
+            if (titleTemplate != null) put("title_template", titleTemplate)
+            if (inboxVisible != null) put("inbox_visible", inboxVisible)
+        })
+
+    suspend fun deleteMailRule(id: String) {
+        raw("DELETE", "/api/v1/mail/rules/$id", null, authenticated = true)
+    }
+
+    suspend fun mailMessages(from: String, to: String, scopeIds: List<String>? = null): List<Map<String, Any>> {
+        val query = buildList {
+            add("from=$from")
+            add("to=$to")
+            if (scopeIds != null && scopeIds.isNotEmpty()) add("scope_ids=" + scopeIds.joinToString(","))
+        }.joinToString("&")
+        return get("/api/v1/mail/messages?$query")
+    }
+
+    suspend fun convertMailMessage(id: String): Map<String, Any> = post("/api/v1/mail/messages/$id/convert", emptyMap<String, Any>())
+
+    suspend fun dismissMailMessage(id: String) {
+        raw("DELETE", "/api/v1/mail/messages/$id", null, authenticated = true)
+    }
+
+    suspend fun setMailInInbox(messageId: String, visible: Boolean?): Map<String, Any> =
+        post("/api/v1/inbox/mail", mapOf("message_id" to messageId, "visible" to visible))
+
+    // ------------------------------------------------------------------ Calendaris
+
+    suspend fun calendars(): List<Calendar> = get("/api/v1/calendars")
+
+    suspend fun createCalendar(
+        scopeId: String? = null,
+        projectId: String? = null,
+        name: String,
+        color: String? = null,
+        origin: String = "local",
+        sourceKind: String? = null,
+        sourceUrl: String? = null,
+        sourceUsername: String? = null,
+        sourceSecret: String? = null,
+        refreshInterval: Int? = null,
+        inboxVisible: Boolean? = null,
+    ): Calendar = post("/api/v1/calendars", buildMap {
+        if (scopeId != null) put("scope_id", scopeId)
+        if (projectId != null) put("project_id", projectId)
+        put("name", name)
+        if (color != null) put("color", color)
+        put("origin", origin)
+        if (sourceKind != null) put("source_kind", sourceKind)
+        if (sourceUrl != null) put("source_url", sourceUrl)
+        if (sourceUsername != null) put("source_username", sourceUsername)
+        if (sourceSecret != null) put("source_secret", sourceSecret)
+        if (refreshInterval != null) put("refresh_interval", refreshInterval)
+        if (inboxVisible != null) put("inbox_visible", inboxVisible)
+    })
+
+    suspend fun updateCalendar(id: String, name: String? = null, color: String? = null, sourceUrl: String? = null, sourceUsername: String? = null, sourceSecret: String? = null, refreshInterval: Int? = null, inboxVisible: Boolean? = null): Calendar =
+        post("/api/v1/calendars/$id", buildMap {
+            if (name != null) put("name", name)
+            if (color != null) put("color", color)
+            if (sourceUrl != null) put("source_url", sourceUrl)
+            if (sourceUsername != null) put("source_username", sourceUsername)
+            if (sourceSecret != null) put("source_secret", sourceSecret)
+            if (refreshInterval != null) put("refresh_interval", refreshInterval)
+            if (inboxVisible != null) put("inbox_visible", inboxVisible)
+        })
+
+    suspend fun deleteCalendar(id: String) {
+        raw("DELETE", "/api/v1/calendars/$id", null, authenticated = true)
+    }
+
+    // ------------------------------------------------------------------ Etiquetes
+
+    suspend fun labels(): List<Label> = get("/api/v1/labels")
+
+    suspend fun createLabel(scopeId: String, name: String, color: String? = null): Label =
+        post("/api/v1/labels", mapOf("scope_id" to scopeId, "name" to name, "color" to color))
+
+    suspend fun deleteLabel(id: String) {
+        raw("DELETE", "/api/v1/labels/$id", null, authenticated = true)
+    }
+
+    suspend fun addTaskLabel(taskId: String, labelId: String) {
+        raw("POST", "/api/v1/tasks/$taskId/labels/$labelId", null, authenticated = true)
+    }
+
+    suspend fun removeTaskLabel(taskId: String, labelId: String) {
+        raw("DELETE", "/api/v1/tasks/$taskId/labels/$labelId", null, authenticated = true)
+    }
+
+    // ------------------------------------------------------------------ Tipologies
+
+    suspend fun taskTypes(scopeId: String? = null): List<TaskType> {
+        val query = if (scopeId != null) "?scope_id=$scopeId" else ""
+        return get("/api/v1/task-types$query")
+    }
+
+    suspend fun createTaskType(scopeId: String, name: String, color: String? = null, required: Boolean = false): TaskType =
+        post("/api/v1/task-types", mapOf("scope_id" to scopeId, "name" to name, "color" to color, "required" to required))
+
+    suspend fun updateTaskType(id: String, name: String? = null, color: String? = null, required: Boolean? = null): TaskType =
+        post("/api/v1/task-types/$id", buildMap {
+            if (name != null) put("name", name)
+            if (color != null) put("color", color)
+            if (required != null) put("required", required)
+        })
+
+    suspend fun deleteTaskType(id: String) {
+        raw("DELETE", "/api/v1/task-types/$id", null, authenticated = true)
+    }
+
+    // ------------------------------------------------------------------ Projectes
+
+    suspend fun createProject(scopeId: String, name: String): Project =
+        post("/api/v1/projects", mapOf("scope_id" to scopeId, "name" to name))
+
+    suspend fun updateProject(id: String, name: String? = null, archived: Boolean? = null): Project =
+        post("/api/v1/projects/$id", buildMap {
+            if (name != null) put("name", name)
+            if (archived != null) put("archived", archived)
+        })
+
+    suspend fun deleteProject(id: String) {
+        raw("DELETE", "/api/v1/projects/$id", null, authenticated = true)
+    }
+
+    // ------------------------------------------------------------------ Àmbits
+
+    suspend fun createScope(name: String, color: String, kind: String = "individual", icon: String? = null): Scope =
+        post("/api/v1/scopes", buildMap {
+            put("name", name)
+            put("color", color)
+            put("kind", kind)
+            if (icon != null) put("icon", icon)
+        })
+
+    suspend fun updateScope(id: String, name: String? = null, color: String? = null, icon: String? = null): Scope =
+        post("/api/v1/scopes/$id", buildMap {
+            if (name != null) put("name", name)
+            if (color != null) put("color", color)
+            if (icon != null) put("icon", icon)
+        })
+
+    suspend fun deleteScope(id: String) {
+        raw("DELETE", "/api/v1/scopes/$id", null, authenticated = true)
+    }
+
+    suspend fun scopeSettings(scopeId: String): ScopeSettings = get("/api/v1/scopes/$scopeId/settings")
+
+    suspend fun updateScopeSettings(
+        scopeId: String,
+        timeTracking: Boolean? = null,
+        workStart: String? = null,
+        workEnd: String? = null,
+        workDays: List<Int>? = null,
+        overtimeVisible: Boolean? = null,
+        longSessionHours: Int? = null,
+        projectNoun: String? = null,
+        taskTypesEnabled: Boolean? = null,
+    ): ScopeSettings = post("/api/v1/scopes/$scopeId/settings", buildMap {
+        if (timeTracking != null) put("time_tracking", timeTracking)
+        if (workStart != null) put("work_start", workStart)
+        if (workEnd != null) put("work_end", workEnd)
+        if (workDays != null) put("work_days", workDays)
+        if (overtimeVisible != null) put("overtime_visible", overtimeVisible)
+        if (longSessionHours != null) put("long_session_hours", longSessionHours)
+        if (projectNoun != null) put("project_noun", projectNoun)
+        if (taskTypesEnabled != null) put("task_types_enabled", taskTypesEnabled)
+    })
+
+    // ------------------------------------------------------------------ Tokens d'API
+
+    suspend fun apiTokens(): List<ApiTokenSummary> = get("/api/v1/tokens")
+
+    suspend fun createApiToken(name: String, capabilities: List<String>): Map<String, Any> =
+        post("/api/v1/tokens", mapOf("name" to name, "capabilities" to capabilities))
+
+    suspend fun revokeApiToken(id: String) {
+        raw("DELETE", "/api/v1/tokens/$id", null, authenticated = true)
+    }
+
+    // ------------------------------------------------------------------ IA / Agents
+
+    suspend fun updateAgentScopes(agentId: String, scopeIds: List<String>, allScopes: Boolean): Map<String, Any> =
+        post("/api/v1/ai/agents/$agentId/scopes", mapOf("scope_ids" to scopeIds, "all_scopes" to allScopes))
+
+    suspend fun createAgentCredential(agentId: String): Map<String, Any> =
+        post("/api/v1/ai/agents/$agentId/credentials", emptyMap<String, Any>())
+
+    suspend fun agentSkill(): String = raw("GET", "/api/v1/ai/skill", null, authenticated = true)
+
+    suspend fun aiAttention(): Map<String, Any> = get("/api/v1/ai/attention")
+
+    suspend fun aiCoverage(): Map<String, Any> = get("/api/v1/ai/coverage")
+
+    suspend fun aiStatus(): Map<String, Any> = get("/api/v1/ai/status")
+
+    suspend fun takeOverTask(taskId: String): Task = post("/api/v1/tasks/$taskId/take-over", emptyMap<String, Any>())
+
+    suspend fun claimTask(taskId: String): Task = post("/api/v1/tasks/$taskId/claim", emptyMap<String, Any>())
+
+    suspend fun releaseTask(taskId: String): Task = post("/api/v1/tasks/$taskId/release", emptyMap<String, Any>())
+
+    suspend fun askUser(taskId: String, question: String): Map<String, Any> =
+        post("/api/v1/tasks/$taskId/ask-user", mapOf("question" to question))
+
+    suspend fun resumeTask(taskId: String, learned: String): Task =
+        post("/api/v1/tasks/$taskId/resume", mapOf("learned" to learned))
+
+    // ------------------------------------------------------------------ Tasques (extres)
+
+    suspend fun updateTask(id: String, fields: Map<String, Any?>): Task {
+        val filtered = fields.filterValues { it != null }.mapValues { it.value!! }
+        return post("/api/v1/tasks/$id", filtered as Map<String, Any>)
+    }
+
+    suspend fun deleteTask(id: String) {
+        raw("DELETE", "/api/v1/tasks/$id", null, authenticated = true)
+    }
+
+    suspend fun addAssignee(taskId: String, userId: String) {
+        raw("POST", "/api/v1/tasks/$taskId/assignees/$userId", null, authenticated = true)
+    }
+
+    suspend fun removeAssignee(taskId: String, userId: String) {
+        raw("DELETE", "/api/v1/tasks/$taskId/assignees/$userId", null, authenticated = true)
+    }
+
+    suspend fun taskComments(taskId: String): List<Comment> = get("/api/v1/tasks/$taskId/comments")
+
+    suspend fun addComment(taskId: String, body: String): Comment =
+        post("/api/v1/tasks/$taskId/comments", mapOf("body" to body))
+
+    suspend fun taskActivity(taskId: String): List<Map<String, Any>> = get("/api/v1/tasks/$taskId/activity")
+
+    suspend fun undoActivity(id: String): Map<String, Any> = post("/api/v1/activity/$id/undo", emptyMap<String, Any>())
+
+    // ------------------------------------------------------------------ Cerca
+
+    suspend fun search(q: String, limit: Int? = null): Map<String, Any> {
+        val query = if (limit != null) "?q=${java.net.URLEncoder.encode(q, "UTF-8")}&limit=$limit" else "?q=${java.net.URLEncoder.encode(q, "UTF-8")}"
+        return get("/api/v1/search$query")
+    }
+
+    // ------------------------------------------------------------------ Dashboard
+
+    suspend fun dashboard(): Map<String, Any> = get("/api/v1/dashboard")
+
+    // ------------------------------------------------------------------ Admin
+
+    suspend fun inviteAdminUser(email: String, name: String): Map<String, Any> =
+        post("/api/v1/admin/users/invite", mapOf("email" to email, "name" to name))
+
+    suspend fun updateAdminUser(id: String, name: String? = null, role: String? = null): Map<String, Any> =
+        post("/api/v1/admin/users/$id", buildMap {
+            if (name != null) put("name", name)
+            if (role != null) put("role", role)
+        })
+
+    suspend fun deleteAdminUser(id: String) {
+        raw("DELETE", "/api/v1/admin/users/$id", null, authenticated = true)
+    }
+
+    suspend fun wipeInstance(confirmation: String): Map<String, Any> =
+        post("/api/v1/admin/wipe", mapOf("confirmation" to confirmation))
+
+    // ------------------------------------------------------------------ Auth
+
+    suspend fun changePassword(current: String, new: String): Map<String, Any> =
+        post("/api/v1/auth/password", mapOf("current_password" to current, "new_password" to new))
+
+    suspend fun updateProfile(name: String? = null, locale: String? = null, theme: String? = null, accent: String? = null): UserProfile =
+        post("/api/v1/auth/me", buildMap {
+            if (name != null) put("name", name)
+            if (locale != null) put("locale", locale)
+            if (theme != null) put("theme", theme)
+            if (accent != null) put("accent", accent)
+        })
+
+    suspend fun updateSettings(
+        gravatar: Boolean? = null,
+        weekStart: String? = null,
+        eventTaskDeleted: String? = null,
+        showCalendarWidget: Boolean? = null,
+        showOverdueSection: Boolean? = null,
+        inboxPosition: String? = null,
+        inboxShowOverdue: Boolean? = null,
+    ): Map<String, Any> {
+        val fields = buildMap<String, Any> {
+            if (gravatar != null) put("gravatar", gravatar)
+            if (weekStart != null) put("week_start", weekStart)
+            if (eventTaskDeleted != null) put("event_task_deleted", eventTaskDeleted)
+            if (showCalendarWidget != null) put("show_calendar_widget", showCalendarWidget)
+            if (showOverdueSection != null) put("show_overdue_section", showOverdueSection)
+            if (inboxPosition != null) put("inbox_position", inboxPosition)
+            if (inboxShowOverdue != null) put("inbox_show_overdue", inboxShowOverdue)
+        }
+        return post("/api/v1/auth/settings", fields)
+    }
 }
