@@ -2,6 +2,7 @@ package ho.fem.data
 
 import android.content.Context
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -105,6 +106,14 @@ class Settings(private val context: Context) {
     private val projectsKey = stringPreferencesKey("active_projects")
     private val themeKey = stringPreferencesKey("theme")
     private val accentKey = stringPreferencesKey("accent")
+    // Preferències de la pestanya General (paritat amb la web)
+    private val localeKey = stringPreferencesKey("locale")
+    private val weekStartKey = stringPreferencesKey("week_start")
+    private val eventTaskDeletedKey = stringPreferencesKey("event_task_deleted")
+    private val showCalendarWidgetKey = booleanPreferencesKey("show_calendar_widget")
+    private val showOverdueSectionKey = booleanPreferencesKey("show_overdue_section")
+    private val inboxPositionKey = stringPreferencesKey("inbox_position")
+    private val inboxShowOverdueKey = booleanPreferencesKey("inbox_show_overdue")
 
     val serverUrl: Flow<String?> = read(serverKey)
     val activeScopes: Flow<List<String>> =
@@ -113,8 +122,18 @@ class Settings(private val context: Context) {
         read(projectsKey).map { it?.split(",")?.filter(String::isNotEmpty) ?: emptyList() }
     val theme: Flow<String> = read(themeKey).map { it ?: "system" }
     val accent: Flow<String> = read(accentKey).map { it ?: "default" }
+    val locale: Flow<String> = read(localeKey).map { it ?: "ca" }
+    val weekStart: Flow<String> = read(weekStartKey).map { it ?: "auto" }
+    val eventTaskDeleted: Flow<String> = read(eventTaskDeletedKey).map { it ?: "return_to_inbox" }
+    val showCalendarWidget: Flow<Boolean> = readBoolean(showCalendarWidgetKey).map { it ?: true }
+    val showOverdueSection: Flow<Boolean> = readBoolean(showOverdueSectionKey).map { it ?: true }
+    val inboxPosition: Flow<String> = read(inboxPositionKey).map { it ?: "right" }
+    val inboxShowOverdue: Flow<Boolean> = readBoolean(inboxShowOverdueKey).map { it ?: true }
 
     private fun read(key: Preferences.Key<String>): Flow<String?> =
+        context.dataStore.data.map { it[key] }
+
+    private fun readBoolean(key: Preferences.Key<Boolean>): Flow<Boolean?> =
         context.dataStore.data.map { it[key] }
 
     suspend fun setServerUrl(value: String) = write(serverKey, value)
@@ -122,8 +141,20 @@ class Settings(private val context: Context) {
     suspend fun setActiveProjects(value: List<String>) = write(projectsKey, value.joinToString(","))
     suspend fun setTheme(value: String) = write(themeKey, value)
     suspend fun setAccent(value: String) = write(accentKey, value)
+    // Preferències de la pestanya General
+    suspend fun setLocale(value: String) = write(localeKey, value)
+    suspend fun setWeekStart(value: String) = write(weekStartKey, value)
+    suspend fun setEventTaskDeleted(value: String) = write(eventTaskDeletedKey, value)
+    suspend fun setShowCalendarWidget(value: Boolean) = writeBoolean(showCalendarWidgetKey, value)
+    suspend fun setShowOverdueSection(value: Boolean) = writeBoolean(showOverdueSectionKey, value)
+    suspend fun setInboxPosition(value: String) = write(inboxPositionKey, value)
+    suspend fun setInboxShowOverdue(value: Boolean) = writeBoolean(inboxShowOverdueKey, value)
 
     private suspend fun write(key: Preferences.Key<String>, value: String) {
+        context.dataStore.edit { it[key] = value }
+    }
+
+    private suspend fun writeBoolean(key: Preferences.Key<Boolean>, value: Boolean) {
         context.dataStore.edit { it[key] = value }
     }
 }

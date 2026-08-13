@@ -420,6 +420,78 @@ class AppViewModel(private val container: Container) : ViewModel() {
         viewModelScope.launch { container.settings.setAccent(value) }
     }
 
+    fun setLocale(value: String) {
+        viewModelScope.launch {
+            container.settings.setLocale(value)
+            applyProfileLocale(value)
+            // Persistir al servidor si hi ha sessió
+            if (_session.value is Session.Ready) {
+                val base = (_session.value as Session.Ready).serverUrl
+                container.api(base).updateProfile(locale = value)
+            }
+        }
+    }
+
+    fun setWeekStart(value: String) {
+        viewModelScope.launch {
+            container.settings.setWeekStart(value)
+            if (_session.value is Session.Ready) {
+                val base = (_session.value as Session.Ready).serverUrl
+                container.api(base).updateSettings(weekStart = value)
+            }
+        }
+    }
+
+    fun setEventTaskDeleted(value: String) {
+        viewModelScope.launch {
+            container.settings.setEventTaskDeleted(value)
+            if (_session.value is Session.Ready) {
+                val base = (_session.value as Session.Ready).serverUrl
+                container.api(base).updateSettings(eventTaskDeleted = value)
+            }
+        }
+    }
+
+    fun setShowCalendarWidget(value: Boolean) {
+        viewModelScope.launch {
+            container.settings.setShowCalendarWidget(value)
+            if (_session.value is Session.Ready) {
+                val base = (_session.value as Session.Ready).serverUrl
+                container.api(base).updateSettings(showCalendarWidget = value)
+            }
+        }
+    }
+
+    fun setShowOverdueSection(value: Boolean) {
+        viewModelScope.launch {
+            container.settings.setShowOverdueSection(value)
+            if (_session.value is Session.Ready) {
+                val base = (_session.value as Session.Ready).serverUrl
+                container.api(base).updateSettings(showOverdueSection = value)
+            }
+        }
+    }
+
+    fun setInboxPosition(value: String) {
+        viewModelScope.launch {
+            container.settings.setInboxPosition(value)
+            if (_session.value is Session.Ready) {
+                val base = (_session.value as Session.Ready).serverUrl
+                container.api(base).updateSettings(inboxPosition = value)
+            }
+        }
+    }
+
+    fun setInboxShowOverdue(value: Boolean) {
+        viewModelScope.launch {
+            container.settings.setInboxShowOverdue(value)
+            if (_session.value is Session.Ready) {
+                val base = (_session.value as Session.Ready).serverUrl
+                container.api(base).updateSettings(inboxShowOverdue = value)
+            }
+        }
+    }
+
     fun move(task: Task, status: TaskStatus) {
         val base = serverUrl ?: return
         viewModelScope.launch {
