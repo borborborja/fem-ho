@@ -43,6 +43,7 @@
     "dev:web": "npm run dev -w @fem-ho/web",
     "e2e": "playwright test",
     "e2e:update": "playwright test --update-snapshots",
+    "favicon:gen": "node tools/gen/favicon.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "i18n:android": "node tools/i18n/strings-xml.mjs",
