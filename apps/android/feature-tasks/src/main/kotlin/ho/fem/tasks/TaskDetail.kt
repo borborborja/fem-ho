@@ -77,7 +77,10 @@ fun TaskDetail(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(Femho.colors.cardBg)
+            // El full d'edició és una superfície a pantalla completa. `cardBg` és semi-transparent
+            // en mode fosc (blanc al 6%) i deixaria veure el tauler de fons, barrejant els textos.
+            // `dialogBg` és el token opac per a superfícies de diàleg i fulls.
+            .background(Femho.colors.dialogBg)
             .verticalScroll(rememberScrollState())
             .padding(16.dp)
             .testTag("task-detail"),
