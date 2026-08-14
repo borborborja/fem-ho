@@ -437,6 +437,7 @@
   "settings.mail.username": "Usuario",
   "settings.mcpEnable": "Activar MCP",
   "settings.mcpInstructions": "Para conectar un cliente, usa esta dirección y un token con las capacidades que le quieras dar.",
+  "settings.mcpUrl": "URL MCP",
   "settings.memberRemove": "Quitar",
   "settings.members": "Miembros",
   "settings.newAgent": "+ Nuevo agente",

@@ -438,6 +438,7 @@
     <string name="settings_mail_username">User</string>
     <string name="settings_mcpenable">Turn on MCP</string>
     <string name="settings_mcpinstructions">To connect a client, use this address and a token with the capabilities you want to give it.</string>
+    <string name="settings_mcpurl">MCP URL</string>
     <string name="settings_memberremove">Remove</string>
     <string name="settings_members">Members</string>
     <string name="settings_newagent">+ New agent</string>

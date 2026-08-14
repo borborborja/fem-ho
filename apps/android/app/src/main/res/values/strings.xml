@@ -438,6 +438,7 @@
     <string name="settings_mail_username">Usuari</string>
     <string name="settings_mcpenable">Activar MCP</string>
     <string name="settings_mcpinstructions">Per connectar-hi un client, fes servir aquesta adreça i un token amb les capacitats que li vulguis donar.</string>
+    <string name="settings_mcpurl">URL MCP</string>
     <string name="settings_memberremove">Treure</string>
     <string name="settings_members">Membres</string>
     <string name="settings_newagent">+ Nou agent</string>

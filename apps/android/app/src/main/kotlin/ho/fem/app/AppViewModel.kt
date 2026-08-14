@@ -75,6 +75,12 @@ class AppViewModel(private val container: Container) : ViewModel() {
     private val _gravatarEnabled = MutableStateFlow(true)
     val gravatarEnabled: StateFlow<Boolean> = _gravatarEnabled.asStateFlow()
 
+    private val _tokens = MutableStateFlow<List<ho.fem.model.ApiTokenSummary>>(emptyList())
+    val tokens: StateFlow<List<ho.fem.model.ApiTokenSummary>> = _tokens.asStateFlow()
+
+    private val _createdToken = MutableStateFlow<String?>(null)
+    val createdToken: StateFlow<String?> = _createdToken.asStateFlow()
+
     private val _events = MutableStateFlow<List<EventOccurrence>>(emptyList())
     val events: StateFlow<List<EventOccurrence>> = _events.asStateFlow()
 
@@ -560,6 +566,68 @@ class AppViewModel(private val container: Container) : ViewModel() {
                     onError((error as? FemhoApi.ApiException)?.detail.orEmpty())
                 }
         }
+    }
+
+    /**
+     * Carrega la llista de tokens d'API.
+     *
+     * GET /api/v1/tokens. Es crida en obrir la pestanya MCP i API d'Ajustos.
+     */
+    fun loadTokens() {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).apiTokens() }
+                .onSuccess { _tokens.value = it }
+        }
+    }
+
+    /**
+     * Crea un token d'API nou.
+     *
+     * POST /api/v1/tokens {name, capabilities}. El token complet es retorna i es mostra
+     * UN SOL COP (P17: mai més es podrà veure). Les capacitats per defecte són les de
+     * la web: tasks:read, tasks:write, checklists:read, checklists:write.
+     *
+     * @param name el nom del token
+     * @param capabilities les capacitats del token
+     */
+    fun createToken(name: String, capabilities: List<String>) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).createApiToken(name, capabilities) }
+                .onSuccess { result ->
+                    // El token es mostra un sol cop
+                    _createdToken.value = result["token"] as? String
+                    // Recarrega la llista
+                    loadTokens()
+                }
+        }
+    }
+
+    /**
+     * Revoca un token d'API.
+     *
+     * DELETE /api/v1/tokens/{id}. El token desapareix de la llista immediatament.
+     *
+     * @param id l'identificador del token a revocar
+     */
+    fun revokeToken(id: String) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).revokeApiToken(id) }
+                .onSuccess { loadTokens() }
+        }
+    }
+
+    /**
+     * Copia un text al porta-retalls.
+     *
+     * @param text el text a copiar
+     */
+    fun copyToClipboard(text: String) {
+        val clipboard = container.appContext.getSystemService(android.content.ClipboardManager::class.java)
+        val clip = android.content.ClipData.newPlainText("Fem-ho", text)
+        clipboard.setPrimaryClip(clip)
     }
 
     fun move(task: Task, status: TaskStatus) {

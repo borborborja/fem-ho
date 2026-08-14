@@ -1132,6 +1132,8 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
     val accent by model.accent.collectAsStateWithLifecycle()
     val profile by model.profile.collectAsStateWithLifecycle()
     val gravatarEnabled by model.gravatarEnabled.collectAsStateWithLifecycle()
+    val tokens by model.tokens.collectAsStateWithLifecycle()
+    val createdToken by model.createdToken.collectAsStateWithLifecycle()
 
     SettingsScreen(
         labels = SettingsLabels(
@@ -1217,6 +1219,18 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
             newPassword = stringResource(R.string.settings_newpassword),
             passwordChanged = stringResource(R.string.settings_passwordchanged),
             navSave = stringResource(R.string.nav_save),
+            // MCP i API
+            mcpInstructions = stringResource(R.string.settings_mcpinstructions),
+            mcpUrl = stringResource(R.string.settings_mcpurl),
+            tokensTitle = stringResource(R.string.tokens_title),
+            tokensName = stringResource(R.string.tokens_name),
+            tokensCreate = stringResource(R.string.tokens_create),
+            tokensOnceWarning = stringResource(R.string.tokens_oncewarning),
+            tokensPrefix = stringResource(R.string.tokens_prefix),
+            tokensLastUsed = stringResource(R.string.tokens_lastused),
+            tokensNever = stringResource(R.string.tokens_never),
+            tokensRevoke = stringResource(R.string.tokens_revoke),
+            tokensCopy = stringResource(R.string.tokens_copy),
         ),
         profileName = profile?.name.orEmpty(),
         profileEmail = profile?.email.orEmpty(),
@@ -1225,6 +1239,9 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
         theme = theme,
         accent = accent,
         serverUrl = serverUrl,
+        mcpUrl = "$serverUrl/mcp",
+        tokens = tokens,
+        createdToken = createdToken,
         onTheme = model::setTheme,
         onAccent = model::setAccent,
         onLocale = model::setLocale,
@@ -1240,5 +1257,8 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
         onSetName = model::setName,
         onSetGravatar = model::setGravatar,
         onChangePassword = model::changePassword,
+        onCreateToken = model::createToken,
+        onRevokeToken = model::revokeToken,
+        onCopyToClipboard = model::copyToClipboard,
     )
 }
