@@ -525,8 +525,13 @@ class Repository(
 
     // ------------------------------------------------------------- convits
 
-    suspend fun acceptJoin(token: String): Map<String, Any> =
+    suspend fun acceptJoin(token: String) {
         api.acceptJoin(token)
+    }
+
+    suspend fun inviteAccept(token: String, password: String) {
+        api.inviteAccept(token, password)
+    }
 
     // --------------------------------------------------------------- cerca
 

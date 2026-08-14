@@ -236,6 +236,11 @@ data class SettingsLabels(
     val agentSkillNoToken: String,
     /** El botó de crear (agent, àmbit, token...): "Crea". */
     val create: String,
+    // Compartits (la pestanya: enllaços, accessos i revocar)
+    val shareAccesses: String,
+    val shareLastAccess: String,
+    val shareRevoke: String,
+    val shareRevoked: String,
 )
 
 data class SettingsTabs(
@@ -334,6 +339,10 @@ fun SettingsScreen(
     onRevokeAgentCredential: (String) -> Unit = {},
     onDeleteAgent: (ho.fem.model.AgentDetail) -> Unit = {},
     onAgentSkill: () -> Unit = {},
+    // Compartits (la pestanya)
+    shares: List<ho.fem.model.ShareSummary> = emptyList(),
+    shareAccesses: Map<String, List<ho.fem.model.ShareAccess>> = emptyMap(),
+    onRevokeShare: (String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     var selectedTab by remember { mutableStateOf("general") }
@@ -492,7 +501,12 @@ fun SettingsScreen(
                     onAgentSkill = onAgentSkill,
                     onCopyToClipboard = onCopyToClipboard,
                 )
-                "shares" -> EmptyState(labels.emptyStates.shares)
+                "shares" -> SharesTab(
+                    labels = labels,
+                    shares = shares,
+                    shareAccesses = shareAccesses,
+                    onRevokeShare = onRevokeShare,
+                )
                 "profile" -> ProfileTab(
                     labels = labels,
                     name = profileName,
@@ -2840,6 +2854,83 @@ private fun AgentRow(
             color = Femho.colors.inkFaint,
             fontSize = FemhoText.meta,
         )
+    }
+}
+
+/** La pestanya Compartits: enllaços, accessos i revocar. */
+@Composable
+private fun SharesTab(
+    labels: SettingsLabels,
+    shares: List<ho.fem.model.ShareSummary>,
+    shareAccesses: Map<String, List<ho.fem.model.ShareAccess>>,
+    onRevokeShare: (String) -> Unit,
+) {
+    if (shares.isEmpty()) {
+        EmptyState(labels.emptyStates.shares)
+        return
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        shares.forEach { share ->
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(FemhoShape.card))
+                    .background(Femho.colors.cardBg)
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = share.permission.name.lowercase(),
+                        color = Femho.colors.ink,
+                        fontSize = FemhoText.body,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (share.revokedAt != null) {
+                        Text(
+                            text = labels.shareRevoked,
+                            color = Femho.colors.inkFaint,
+                            fontSize = FemhoText.body,
+                        )
+                    } else {
+                        Text(
+                            text = labels.shareRevoke,
+                            color = Femho.colors.dangerText,
+                            fontSize = FemhoText.body,
+                            modifier = Modifier
+                                .clickable { onRevokeShare(share.id) }
+                                .heightIn(min = FemhoSize.touch)
+                                .padding(vertical = 8.dp)
+                                .testTag("share-revoke-${share.id}"),
+                        )
+                    }
+                }
+                // Els accessos: pseudònim sempre (no hi ha cap columna d'IP enlloc, D10).
+                shareAccesses[share.id].orEmpty().forEach { access ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Text(
+                            text = access.label.orEmpty(),
+                            color = Femho.colors.inkFaint,
+                            fontSize = FemhoText.meta,
+                        )
+                        Text(
+                            text = access.lastSeen.orEmpty().take(10),
+                            color = Femho.colors.inkFaint,
+                            fontSize = FemhoText.meta,
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 

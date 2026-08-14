@@ -112,6 +112,93 @@ class AppViewModel(private val container: Container) : ViewModel() {
     private val _openShares = MutableStateFlow<List<ho.fem.model.ShareSummary>>(emptyList())
     val openShares: StateFlow<List<ho.fem.model.ShareSummary>> = _openShares.asStateFlow()
 
+    /** Totes les shares, per a la pestanya Compartits. */
+    private val _allShares = MutableStateFlow<List<ho.fem.model.ShareSummary>>(emptyList())
+    val allShares: StateFlow<List<ho.fem.model.ShareSummary>> = _allShares.asStateFlow()
+
+    /** Els accessos de cada share (pseudònim i última visita), per la pestanya. */
+    private val _shareAccesses = MutableStateFlow<Map<String, List<ho.fem.model.ShareAccess>>>(emptyMap())
+    val shareAccesses: StateFlow<Map<String, List<ho.fem.model.ShareAccess>>> =
+        _shareAccesses.asStateFlow()
+
+    /** El preview d'un convit d'àmbit que es mira (deep link femho://join/{token}). */
+    private val _joinPreview = MutableStateFlow<ho.fem.model.JoinPreview?>(null)
+    val joinPreview: StateFlow<ho.fem.model.JoinPreview?> = _joinPreview.asStateFlow()
+
+    /** L'error d'un convit que no es pot mirar ni acceptar. */
+    private val _joinError = MutableStateFlow<String?>(null)
+    val joinError: StateFlow<String?> = _joinError.asStateFlow()
+
+    /** True quan el convit s'ha acceptat (per passar de pantalla). */
+    private val _joinDone = MutableStateFlow(false)
+    val joinDone: StateFlow<Boolean> = _joinDone.asStateFlow()
+
+    fun consumeJoin() {
+        _joinPreview.value = null
+        _joinError.value = null
+        _joinDone.value = false
+    }
+
+    /** Carrega totes les shares i els seus accessos, per a la pestanya Compartits. */
+    fun loadAllShares() {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).shares() }
+                .onSuccess { shares ->
+                    _allShares.value = shares
+                    shares.forEach { share ->
+                        runCatching { container.api(base).shareAccesses(share.id) }
+                            .onSuccess { _shareAccesses.value = _shareAccesses.value + (share.id to it) }
+                    }
+                }
+        }
+    }
+
+    /** Revoca una share des de la pestanya Compartits. DELETE /shares/{id}. */
+    fun revokeShare(shareId: String) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).revokeShare(shareId) }
+                .onSuccess { loadAllShares() }
+        }
+    }
+
+    /** El preview d'un convit d'àmbit, per mirar-lo abans d'acceptar. */
+    fun loadJoinPreview(token: String) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).joinPreview(token) }
+                .onSuccess { _joinPreview.value = it }
+                .onFailure { _joinError.value = it.message }
+        }
+    }
+
+    /** Accepta un convit d'àmbit. POST /join/{token}. */
+    fun acceptJoin(token: String) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).acceptJoin(token) }
+                .onSuccess {
+                    _joinDone.value = true
+                    loadEntityData()
+                    refresh()
+                }
+                .onFailure { _joinError.value = it.message }
+        }
+    }
+
+    /**
+     * Accepta un convit a la instància (crea el compte). POST /invite/{token}.
+     * No requereix sessió: és com s'entra per primera vegada.
+     */
+    fun acceptInvite(token: String, password: String) {
+        viewModelScope.launch {
+            runCatching { container.api(serverUrl ?: return@launch).inviteAccept(token, password) }
+                .onSuccess { _joinDone.value = true }
+                .onFailure { _joinError.value = it.message }
+        }
+    }
+
     /** L'URL acabat de crear: es mostra una sola vegada, i després es descarta. */
     private val _createdShareUrl = MutableStateFlow<String?>(null)
     val createdShareUrl: StateFlow<String?> = _createdShareUrl.asStateFlow()

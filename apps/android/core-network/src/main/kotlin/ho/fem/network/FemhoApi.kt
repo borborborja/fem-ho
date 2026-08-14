@@ -17,6 +17,7 @@ import ho.fem.model.EventOccurrence
 import ho.fem.model.Inbox
 import ho.fem.model.InboxMark
 import ho.fem.model.InstanceInfo
+import ho.fem.model.JoinPreview
 import ho.fem.model.Label
 import ho.fem.model.MailAccount
 import ho.fem.model.MailRule
@@ -575,9 +576,21 @@ class FemhoApi(
         raw("DELETE", "/api/v1/scopes/$scopeId/invites/$grantId", null, authenticated = true)
     }
 
-    suspend fun joinPreview(token: String): Map<String, Any> = get("/api/v1/join/$token")
+    /** El preview d'un convit d'àmbit, per mirar-lo abans d'acceptar. GET /api/v1/join/{token}. */
+    suspend fun joinPreview(token: String): JoinPreview = get("/api/v1/join/$token")
 
-    suspend fun acceptJoin(token: String): Map<String, Any> = post("/api/v1/join/$token", emptyMap<String, Any>())
+    /** Accepta un convit d'àmbit. POST /api/v1/join/{token}. */
+    suspend fun acceptJoin(token: String) {
+        raw("POST", "/api/v1/join/$token", null, authenticated = true)
+    }
+
+    /**
+     * Accepta un convit a la instància (crea el compte). POST /invite/{token}.
+     * **No requereix sessió**: encara no n'hi ha cap, és com s'entra.
+     */
+    suspend fun inviteAccept(token: String, password: String) {
+        raw("POST", "/invite/$token", encode(mapOf("password" to password)), authenticated = false)
+    }
 
     suspend fun scopeMembers(scopeId: String): List<Map<String, Any>> = get("/api/v1/scopes/$scopeId/members")
 

@@ -15,7 +15,7 @@ import android.content.Intent
  * arriben amb component explícit, o sigui que no cal exposar cap superfície nova a la
  * resta del telèfon per fer això.
  */
-enum class Screen { BOARD, CALENDAR, SETTINGS, REGISTRE, ESTADISTIQUES }
+enum class Screen { BOARD, CALENDAR, SETTINGS, REGISTRE, ESTADISTIQUES, JOIN, INVITE }
 
 object Route {
     const val EXTRA_SCREEN = "ho.fem.screen"
@@ -53,5 +53,22 @@ object Route {
         if (taskId != null) putExtra(EXTRA_TASK, taskId)
         if (quickAdd) putExtra(EXTRA_QUICK_ADD, true)
         if (draft != null) putExtra(EXTRA_DRAFT, draft)
+    }
+
+    /**
+     * El token d'un convit d'àmbit, si l'intent és un deep link de `join`.
+     *
+     * Accepta `femho://join/{token}` i `https://<servidor>/join/{token}`; el token és
+     * l'últim segment del camí, que és on el servidor el posa en generar l'enllaç.
+     */
+    fun joinTokenOf(intent: Intent?): String? = tokenOf(intent, "join")
+
+    /** El token d'un convit a la instància, si l'intent és un deep link d'`invite`. */
+    fun inviteTokenOf(intent: Intent?): String? = tokenOf(intent, "invite")
+
+    private fun tokenOf(intent: Intent?, host: String): String? {
+        val data = intent?.data ?: return null
+        if (data.host != host) return null
+        return data.pathSegments.lastOrNull()
     }
 }

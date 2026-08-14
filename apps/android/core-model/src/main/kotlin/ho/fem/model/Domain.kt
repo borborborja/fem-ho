@@ -618,6 +618,15 @@ data class ShareCreated(
     val token: String = "",
 )
 
+/** El preview d'un convit d'àmbit, per mirar-lo abans d'acceptar (docs/10). */
+@Serializable
+data class JoinPreview(
+    val kind: String = "scope_invite",
+    @SerialName("scope_name") val scopeName: String = "",
+    val role: String = "collaborator",
+    @SerialName("invited_by") val invitedBy: String = "",
+)
+
 @Serializable
 data class ScopeSettings(
     @SerialName("time_tracking") val timeTracking: Boolean = false,

@@ -28,6 +28,27 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!--
+              Els convits arriben com a deep links: femho://join/{token} per entrar a
+              l'àmbit d'algú altre i femho://invite/{token} per crear el compte de la
+              instància (docs/10 §7). El mateix intent respon als https del servidor.
+              Van en dos filters: un `data` per esquema i un altre per als https, que
+              són els que porten el path de la ruta.
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="femho" android:host="join" />
+                <data android:scheme="femho" android:host="invite" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="femho.app" android:pathPrefix="/join/" />
+                <data android:scheme="https" android:host="femho.app" android:pathPrefix="/invite/" />
+            </intent-filter>
         </activity>
 
         <!--

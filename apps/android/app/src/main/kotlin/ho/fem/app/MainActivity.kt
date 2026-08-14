@@ -166,6 +166,9 @@ class MainActivity : ComponentActivity() {
 private fun Root(model: AppViewModel, pending: MutableState<Intent?>) {
     val session by model.session.collectAsStateWithLifecycle()
     var screen by remember { mutableStateOf(Screen.BOARD) }
+    // El token d'un convit que arriba per deep link (femho://join|invite/{token}).
+    var joinToken by remember { mutableStateOf<String?>(null) }
+    var inviteToken by remember { mutableStateOf<String?>(null) }
 
     /**
      * L'intent s'atén i **es consumeix**.
@@ -179,6 +182,18 @@ private fun Root(model: AppViewModel, pending: MutableState<Intent?>) {
         screen = Route.screenOf(intent)
         Route.taskOf(intent)?.let { model.openById(it) }
         if (Route.quickAddOf(intent)) model.requestQuickAdd(Route.draftOf(intent) ?: "")
+        // Els deep links de convit: el token el guarda la pantalla d'acceptar.
+        Route.joinTokenOf(intent)?.let { token ->
+            screen = Screen.JOIN
+            model.consumeJoin()
+            joinToken = token
+            model.loadJoinPreview(token)
+        }
+        Route.inviteTokenOf(intent)?.let { token ->
+            screen = Screen.INVITE
+            model.consumeJoin()
+            inviteToken = token
+        }
         pending.value = null
     }
 
@@ -215,6 +230,24 @@ private fun Root(model: AppViewModel, pending: MutableState<Intent?>) {
                 model = model,
                 onBoard = { screen = Screen.BOARD },
             )
+            Screen.JOIN -> JoinScreen(
+                model = model,
+                token = joinToken.orEmpty(),
+                onDone = {
+                    screen = Screen.BOARD
+                    model.consumeJoin()
+                    joinToken = null
+                },
+            )
+            Screen.INVITE -> InviteScreen(
+                model = model,
+                token = inviteToken.orEmpty(),
+                onDone = {
+                    screen = Screen.BOARD
+                    model.consumeJoin()
+                    inviteToken = null
+                },
+            )
         }
     }
 }
@@ -223,6 +256,179 @@ private fun Root(model: AppViewModel, pending: MutableState<Intent?>) {
 private fun Loading() {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Text(stringResource(R.string.state_loading), color = Femho.colors.inkFaint)
+    }
+}
+
+/**
+ * La pantalla d'acceptar un convit d'àmbit (deep link femho://join/{token}).
+ *
+ * Es mira abans d'acceptar —qui convida i a què— perquè acceptar a cegues una cosa que
+ * et dona accés a les dades d'una altra persona és exactament el gest que la gent es
+ * penedeix d'haver fet (el mateix criteri que JoinScopeScreen a la web).
+ */
+@Composable
+private fun JoinScreen(model: AppViewModel, token: String, onDone: () -> Unit) {
+    val preview by model.joinPreview.collectAsStateWithLifecycle()
+    val error by model.joinError.collectAsStateWithLifecycle()
+    val done by model.joinDone.collectAsStateWithLifecycle()
+
+    Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(FemhoShape.card))
+                .background(Femho.colors.cardBg)
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.join_title),
+                fontSize = FemhoText.columnTitle,
+                fontWeight = FontWeight.Black,
+                color = Femho.colors.ink,
+            )
+            when {
+                done -> Text(
+                    text = stringResource(R.string.join_done),
+                    color = Femho.colors.ink,
+                    fontSize = FemhoText.body,
+                )
+                error != null -> Text(
+                    text = stringResource(R.string.join_invalid),
+                    color = Femho.colors.dangerText,
+                    fontSize = FemhoText.body,
+                )
+                preview != null -> {
+                    Text(
+                        text = stringResource(R.string.join_subtitle)
+                            .replace("{who}", preview!!.invitedBy)
+                            .replace("{scope}", preview!!.scopeName),
+                        color = Femho.colors.inkSoft,
+                        fontSize = FemhoText.body,
+                    )
+                    Text(
+                        text = stringResource(R.string.join_accept),
+                        color = Femho.onBrand,
+                        fontSize = FemhoText.body,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(FemhoShape.pill))
+                            .background(Femho.brandGradient2)
+                            .clickable { model.acceptJoin(token) }
+                            .padding(vertical = 12.dp),
+                        textAlign = TextAlign.Center,
+                    )
+                }
+                else -> Loading()
+            }
+            Text(
+                text = stringResource(R.string.nav_close),
+                color = Femho.colors.inkSoft,
+                fontSize = FemhoText.body,
+                modifier = Modifier
+                    .clickable(onClick = onDone)
+                    .padding(vertical = 6.dp),
+            )
+        }
+    }
+}
+
+/**
+ * L'acceptació d'un convit a la instància (deep link femho://invite/{token}).
+ *
+ * Crea el compte amb una contrasenya de 10+ caràcters, com la web (GateScreens).
+ * L'enllaç serveix un sol cop.
+ */
+@Composable
+private fun InviteScreen(model: AppViewModel, token: String, onDone: () -> Unit) {
+    val error by model.joinError.collectAsStateWithLifecycle()
+    val done by model.joinDone.collectAsStateWithLifecycle()
+    var password by remember { mutableStateOf("") }
+    var repeat by remember { mutableStateOf("") }
+    var localError by remember { mutableStateOf<String?>(null) }
+
+    Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(FemhoShape.card))
+                .background(Femho.colors.cardBg)
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.invite_title),
+                fontSize = FemhoText.columnTitle,
+                fontWeight = FontWeight.Black,
+                color = Femho.colors.ink,
+            )
+            Text(
+                text = stringResource(R.string.invite_subtitle),
+                color = Femho.colors.inkSoft,
+                fontSize = FemhoText.body,
+            )
+            if (done) {
+                Text(
+                    text = stringResource(R.string.invite_done),
+                    color = Femho.colors.ink,
+                    fontSize = FemhoText.body,
+                )
+            } else {
+                androidx.compose.material3.TextField(
+                    value = password,
+                    onValueChange = { password = it },
+                    label = { Text(stringResource(R.string.invite_password)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().testTag("invite-password"),
+                )
+                androidx.compose.material3.TextField(
+                    value = repeat,
+                    onValueChange = { repeat = it },
+                    label = { Text(stringResource(R.string.invite_repeat)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().testTag("invite-repeat"),
+                )
+                val tooShortText = stringResource(R.string.invite_tooshort)
+                val mismatchText = stringResource(R.string.invite_mismatch)
+                val visibleError = localError ?: error
+                if (visibleError != null) {
+                    Text(
+                        text = visibleError,
+                        color = Femho.colors.dangerText,
+                        fontSize = FemhoText.meta,
+                    )
+                }
+                Text(
+                    text = stringResource(R.string.nav_save),
+                    color = Femho.onBrand,
+                    fontSize = FemhoText.body,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(FemhoShape.pill))
+                        .background(Femho.brandGradient2)
+                        .clickable {
+                            localError = when {
+                                password.length < 10 -> tooShortText
+                                password != repeat -> mismatchText
+                                else -> null
+                            }
+                            if (localError == null) model.acceptInvite(token, password)
+                        }
+                        .padding(vertical = 12.dp),
+                    textAlign = TextAlign.Center,
+                )
+            }
+            Text(
+                text = stringResource(R.string.nav_close),
+                color = Femho.colors.inkSoft,
+                fontSize = FemhoText.body,
+                modifier = Modifier
+                    .clickable(onClick = onDone)
+                    .padding(vertical = 6.dp),
+            )
+        }
     }
 }
 
@@ -1324,12 +1530,15 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
     val agentCredentials by model.agentCredentials.collectAsStateWithLifecycle()
     val createdAgentToken by model.createdAgentToken.collectAsStateWithLifecycle()
     val agentSkill by model.agentSkill.collectAsStateWithLifecycle()
+    val allShares by model.allShares.collectAsStateWithLifecycle()
+    val allShareAccesses by model.shareAccesses.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) {
         model.loadEntityData()
         model.loadCalendars()
         model.loadMailData()
         model.loadAgentManagement()
+        model.loadAllShares()
     }
 
     SettingsScreen(
@@ -1446,6 +1655,10 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
             agentMcpHasToken = stringResource(R.string.settings_agentmcphastoken),
             agentSkillNoToken = stringResource(R.string.settings_agentskillnotoken),
             create = stringResource(R.string.nav_create),
+            shareAccesses = stringResource(R.string.share_accesses),
+            shareLastAccess = stringResource(R.string.share_lastaccess),
+            shareRevoke = stringResource(R.string.share_revoke),
+            shareRevoked = stringResource(R.string.share_revoked),
             scopeSection = stringResource(R.string.settings_scopesection),
             entityProjects = stringResource(R.string.settings_entityprojects),
             entityLabels = stringResource(R.string.settings_entitylabels),
@@ -1602,6 +1815,9 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
         onAgentNewCredential = model::createAgentCredential,
         onRevokeAgentCredential = model::revokeAgentCredential,
         onAgentSkill = model::loadAgentSkill,
+        shares = allShares,
+        shareAccesses = allShareAccesses,
+        onRevokeShare = model::revokeShare,
         onCreateScope = model::createScope,
         onUpdateScope = model::updateScope,
         onDeleteScope = model::deleteScope,
