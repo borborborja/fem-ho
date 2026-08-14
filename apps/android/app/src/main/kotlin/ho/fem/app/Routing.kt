@@ -15,7 +15,7 @@ import android.content.Intent
  * arriben amb component explícit, o sigui que no cal exposar cap superfície nova a la
  * resta del telèfon per fer això.
  */
-enum class Screen { BOARD, CALENDAR, SETTINGS, REGISTRE, ESTADISTIQUES, JOIN, INVITE }
+enum class Screen { BOARD, CALENDAR, SETTINGS, REGISTRE, ESTADISTIQUES, SEARCH, DASHBOARD, JOIN, INVITE }
 
 object Route {
     const val EXTRA_SCREEN = "ho.fem.screen"
@@ -34,6 +34,7 @@ object Route {
         "settings" -> Screen.SETTINGS
         "registre" -> Screen.REGISTRE
         "estadistiques" -> Screen.ESTADISTIQUES
+        "search" -> Screen.SEARCH
         else -> Screen.BOARD
     }
 

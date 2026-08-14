@@ -117,6 +117,12 @@ data class InstanceInfo(
     val version: String,
     /** `open`, `invite` o `disabled` (docs/12 §3). Decideix si s'ofereix registrar-se. */
     val registration: String = "disabled",
+    /**
+     * `both`, `multi` o `single`. `both` vol dir que cada persona pot triar el seu mode
+     * d'àmbits (docs/12 §3); qualsevol altre valor ho ha decidit la instància per tothom
+     * i el wizard no s'ofereix.
+     */
+    val scopeMode: String = "both",
 )
 
 /**

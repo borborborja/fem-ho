@@ -52,9 +52,19 @@ class AppViewModel(private val container: Container) : ViewModel() {
     sealed interface Session {
         data object Checking : Session
         data class NeedsServer(val message: String? = null) : Session
-        data class NeedsLogin(val serverUrl: String, val instanceName: String) : Session
+        data class NeedsLogin(
+            val serverUrl: String,
+            val instanceName: String,
+            /** `open`, `invite` o `disabled`: si s'ofereix registrar-se (docs/12 §3). */
+            val registration: String = "disabled",
+        ) : Session
         /** El servidor és més nou que l'app: convé actualitzar-la (docs/03 §11). */
-        data class NeedsLoginNewer(val serverUrl: String, val instanceName: String) : Session
+        data class NeedsLoginNewer(
+            val serverUrl: String,
+            val instanceName: String,
+            /** `open`, `invite` o `disabled`: si s'ofereix registrar-se (docs/12 §3). */
+            val registration: String = "disabled",
+        ) : Session
         /** Certificat autofirmat o de CA pròpia: cal confirmar l'empremta (docs/03 §2:38). */
         data class NeedsCertConfirm(val serverUrl: String, val fingerprint: String) : Session
         data class Ready(val serverUrl: String) : Session
@@ -99,6 +109,20 @@ class AppViewModel(private val container: Container) : ViewModel() {
 
     private val _profile = MutableStateFlow<UserProfile?>(null)
     val profile: StateFlow<UserProfile?> = _profile.asStateFlow()
+
+    /**
+     * Si cal mostrar el wizard de la primera entrada (mode d'àmbits multi/mono).
+     *
+     * La mateixa regla que la web (scope-mode.ts): `scope_mode` encara és `null` i la
+     * instància deixa triar (`instance.scope_mode == 'both'`). Es recalcula al login i
+     * al registre; `setScopeMode` el tanca.
+     */
+    private val _needsScopeModeWizard = MutableStateFlow(false)
+    val needsScopeModeWizard: StateFlow<Boolean> = _needsScopeModeWizard.asStateFlow()
+
+    /** El nom de la instància, per a la confirmació del wipe (s'hi ha d'escriure). */
+    private val _instanceName = MutableStateFlow("")
+    val instanceName: StateFlow<String> = _instanceName.asStateFlow()
 
     private val _gravatarEnabled = MutableStateFlow(true)
     val gravatarEnabled: StateFlow<Boolean> = _gravatarEnabled.asStateFlow()
@@ -238,6 +262,29 @@ class AppViewModel(private val container: Container) : ViewModel() {
     private val _stats = MutableStateFlow<ho.fem.model.SessionStats>(ho.fem.model.SessionStats())
     val stats: StateFlow<ho.fem.model.SessionStats> = _stats.asStateFlow()
 
+    // ------------------------------------------------------------------ Dashboard
+
+    private val _dashboard = MutableStateFlow<ho.fem.model.DashboardView>(ho.fem.model.DashboardView())
+    val dashboard: StateFlow<ho.fem.model.DashboardView> = _dashboard.asStateFlow()
+
+    private val _showOverdueSection = MutableStateFlow(true)
+    val showOverdueSection: StateFlow<Boolean> = _showOverdueSection.asStateFlow()
+
+    private val _showCalendarWidget = MutableStateFlow(true)
+    val showCalendarWidget: StateFlow<Boolean> = _showCalendarWidget.asStateFlow()
+
+    /** Carrega el dashboard global. El wordmark l'obre (docs/03 §3:50). */
+    fun loadDashboard() {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            // Les seccions que s'amaguen a Ajustos no es pinten (docs/02 §8).
+            _showOverdueSection.value = container.settings.showOverdueSection.first()
+            _showCalendarWidget.value = container.settings.showCalendarWidget.first()
+            runCatching { container.api(base).dashboard() }
+                .onSuccess { _dashboard.value = it }
+        }
+    }
+
     /** Carrega les Estadístiques de dedicació. GET /api/v1/sessions/stats. */
     fun loadStats(from: String?, to: String?, userId: String?) {
         val base = serverUrl ?: return
@@ -317,6 +364,105 @@ class AppViewModel(private val container: Container) : ViewModel() {
     private val _openTask = MutableStateFlow<Task?>(null)
     val openTask: StateFlow<Task?> = _openTask.asStateFlow()
 
+    // ------------------------------------------------------------------ Cerca
+
+    private val _searchResults = MutableStateFlow<List<Task>>(emptyList())
+    val searchResults: StateFlow<List<Task>> = _searchResults.asStateFlow()
+
+    private val _searchLoading = MutableStateFlow(false)
+    val searchLoading: StateFlow<Boolean> = _searchLoading.asStateFlow()
+
+    /**
+     * Cerca de tasques, amb el mateix límit que la web (8).
+     *
+     * El debounce viu a la pantalla (250ms), com a la web: aquí només es demana quan la
+     * pantalla ja ha decidit que toca. `q` ja arriba retallada i amb mínim 2 caràcters.
+     */
+    fun search(q: String) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            _searchLoading.value = true
+            runCatching { container.api(base).search(q, 8) }
+                .onSuccess { _searchResults.value = it.data }
+                .onFailure { _searchResults.value = emptyList() }
+            _searchLoading.value = false
+        }
+    }
+
+    fun clearSearch() {
+        _searchResults.value = emptyList()
+    }
+
+    // ------------------------------------------------------------------ Admin
+
+    private val _adminUsers = MutableStateFlow<List<ho.fem.model.AdminUser>>(emptyList())
+    val adminUsers: StateFlow<List<ho.fem.model.AdminUser>> = _adminUsers.asStateFlow()
+
+    private val _adminInviteUrl = MutableStateFlow<String?>(null)
+    val adminInviteUrl: StateFlow<String?> = _adminInviteUrl.asStateFlow()
+
+    private val _adminError = MutableStateFlow<String?>(null)
+    val adminError: StateFlow<String?> = _adminError.asStateFlow()
+
+    /** Carrega la llista d'usuaris de la pestanya Admin. */
+    fun loadAdminUsers() {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).adminUsers() }
+                .onSuccess { _adminUsers.value = it }
+                .onFailure { _adminError.value = it.message }
+        }
+    }
+
+    /** Convida un membre. L'enllaç només es veu un cop (server: InviteResult). */
+    fun inviteAdminUser(email: String, name: String, role: String, onDone: () -> Unit) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).adminInvite(email, name, role) }
+                .onSuccess {
+                    _adminInviteUrl.value = it.inviteUrl
+                    loadAdminUsers()
+                    onDone()
+                }
+                .onFailure { _adminError.value = it.message }
+        }
+    }
+
+    fun consumeAdminInviteUrl() {
+        _adminInviteUrl.value = null
+    }
+
+    fun setAdminRole(id: String, role: String) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).adminUpdateRole(id, role) }
+                .onSuccess { loadAdminUsers() }
+                .onFailure { _adminError.value = it.message }
+        }
+    }
+
+    fun deleteAdminUser(id: String) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).adminDeleteUser(id) }
+                .onSuccess { loadAdminUsers() }
+                .onFailure { _adminError.value = it.message }
+        }
+    }
+
+    /** Neteja la instància; el servidor també exigeix el nom exacte de confirmació. */
+    fun wipeInstance(confirmation: String, onDone: () -> Unit) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).adminWipe(confirmation) }
+                .onSuccess {
+                    _adminError.value = null
+                    onDone()
+                }
+                .onFailure { _adminError.value = it.message }
+        }
+    }
+
     private val _openChecklists = MutableStateFlow<List<Checklist>>(emptyList())
     val openChecklists: StateFlow<List<Checklist>> = _openChecklists.asStateFlow()
 
@@ -358,6 +504,12 @@ class AppViewModel(private val container: Container) : ViewModel() {
                     else Session.NeedsLogin(saved, "")
                 if (container.tokens.refresh() != null) {
                     observe(saved)
+                    // El nom de la instància, per a la confirmació del wipe: també quan
+                    // la sessió ja era desada i no s'ha passat per la pantalla de login.
+                    viewModelScope.launch {
+                        runCatching { container.api(saved).info() }
+                            .onSuccess { _instanceName.value = it.name }
+                    }
                     /**
                      * **I es demana al servidor.**
                      *
@@ -429,9 +581,9 @@ class AppViewModel(private val container: Container) : ViewModel() {
                 // servidor: si aquest és més nou, s'avisa a la pantalla d'entrada.
                 val appVersion = ho.fem.app.BuildConfig.VERSION_NAME
                 _session.value = if (serverIsNewer(appVersion, info.version)) {
-                    Session.NeedsLoginNewer(candidate, info.name)
+                    Session.NeedsLoginNewer(candidate, info.name, info.registration)
                 } else {
-                    Session.NeedsLogin(candidate, info.name)
+                    Session.NeedsLogin(candidate, info.name, info.registration)
                 }
                 return@launch
             }
@@ -475,11 +627,58 @@ class AppViewModel(private val container: Container) : ViewModel() {
             runCatching { container.api(base).login(email, password) }
                 .onSuccess {
                     _session.value = Session.Ready(base)
+                    _instanceName.value = (container.api(base).runCatching { info() }.getOrNull()?.name).orEmpty()
                     observe(base)
                     refresh()
+                    refreshScopeModeWizard(base)
                 }
                 .onFailure { error ->
                     onError((error as? FemhoApi.ApiException)?.detail.orEmpty())
+                }
+        }
+    }
+
+    /** Registra un compte nou a una instància amb registre obert (docs/12 §3). */
+    fun register(name: String, email: String, password: String, onError: (String) -> Unit) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).register(name, email, password) }
+                .onSuccess {
+                    _session.value = Session.Ready(base)
+                    _instanceName.value = (container.api(base).runCatching { info() }.getOrNull()?.name).orEmpty()
+                    observe(base)
+                    refresh()
+                    refreshScopeModeWizard(base)
+                }
+                .onFailure { error ->
+                    onError((error as? FemhoApi.ApiException)?.detail.orEmpty())
+                }
+        }
+    }
+
+    /**
+     * Decideix si cal mostrar el wizard de la primera entrada.
+     *
+     * La mateixa regla que la web (scope-mode.ts): `scope_mode` encara és `null` i la
+     * instància deixa triar (`instance.scope_mode == 'both'`).
+     */
+    private fun refreshScopeModeWizard(base: String) {
+        viewModelScope.launch {
+            val settings = runCatching { container.api(base).settings() }.getOrNull()
+            val instance = runCatching { container.api(base).info() }.getOrNull()
+            _needsScopeModeWizard.value =
+                settings?.settings?.scopeMode == null && (instance?.scopeMode ?: "both") == "both"
+        }
+    }
+
+    /** El wizard ha triat mode d'àmbits: es desa al servidor i es tanca el wizard. */
+    fun setScopeMode(mode: String) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).updateSettings(scopeMode = mode) }
+                .onSuccess {
+                    _needsScopeModeWizard.value = false
+                    refresh()
                 }
         }
     }

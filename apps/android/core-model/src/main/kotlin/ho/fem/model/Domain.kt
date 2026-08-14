@@ -291,6 +291,44 @@ data class Board(val columns: List<BoardColumn> = emptyList()) {
     val tasks: List<Task> get() = columns.flatMap { column -> column.groups.flatMap { it.tasks } }
 }
 
+/**
+ * Una pàgina de resultats de la cerca (`GET /api/v1/search`).
+ *
+ * El mateix `TaskPage` de la web (openapi.yaml:5923): l'app només en fa servir la
+ * primera pàgina, amb `limit=8`, i els altres camps no cal ni llegir-los.
+ */
+@Serializable
+data class TaskPage(
+    val data: List<Task> = emptyList(),
+    @SerialName("next_cursor") val nextCursor: String? = null,
+    @SerialName("has_more") val hasMore: Boolean = false,
+)
+
+/** Un àmbit amb el recompte de pendents i vençudes, per a la targeta del dashboard. */
+@Serializable
+data class DashboardScope(
+    @SerialName("scope_id") val scopeId: String,
+    val name: String,
+    val color: String = "",
+    val pending: Int = 0,
+    val overdue: Int = 0,
+)
+
+/**
+ * El dashboard global (`GET /api/v1/dashboard`). docs/02 §8.
+ *
+ * **Ignora la selecció d'àmbits i de projecte: ho ensenya tot.** És el que el distingeix
+ * del tauler, i el servidor no accepta cap filtre d'àmbit per la mateixa raó.
+ */
+@Serializable
+data class DashboardView(
+    val date: String = "",
+    val scopes: List<DashboardScope> = emptyList(),
+    val today: List<Task> = emptyList(),
+    val overdue: List<Task> = emptyList(),
+    val doing: List<Task> = emptyList(),
+)
+
 @Serializable
 data class Inbox(
     val date: String,
@@ -310,6 +348,25 @@ data class Inbox(
 data class AuthTokens(
     @SerialName("access_token") val accessToken: String,
     @SerialName("refresh_token") val refreshToken: String,
+)
+
+/**
+ * Les settings de l'usuari, el que el wizard de la primera entrada necessita.
+ *
+ * `scope_mode` és `null` fins que la persona tria — i és exactament quan el wizard es
+ * mostra (docs/12 §3, scope-mode.ts). El servidor el retorna dins de l'embolcall
+ * `{profile, settings}` de `GET /auth/settings`.
+ */
+@Serializable
+data class UserSettingsView(
+    @SerialName("scope_mode") val scopeMode: String? = null,
+)
+
+/** La resposta de `GET /auth/settings`: el perfil i les settings juntes. */
+@Serializable
+data class AuthSettingsEnvelope(
+    val profile: UserProfile? = null,
+    val settings: UserSettingsView = UserSettingsView(),
 )
 
 /* ---------------------------------------------------------------------------
@@ -648,6 +705,14 @@ data class AdminUser(
     val role: String = "member",
     @SerialName("created_at") val createdAt: String? = null,
     @SerialName("invite_pending") val invitePending: Boolean = false,
+)
+
+/** El resultat de convidar algú: l'usuari creat i l'enllaç, que només es veu un cop. */
+@Serializable
+data class InviteResult(
+    val user: AdminUser = AdminUser("", "", ""),
+    @SerialName("invite_url") val inviteUrl: String = "",
+    @SerialName("expires_at") val expiresAt: String = "",
 )
 
 @Serializable

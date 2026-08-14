@@ -2,17 +2,21 @@ package ho.fem.network
 
 import ho.fem.model.Agent
 import ho.fem.model.AgentDetail
+import ho.fem.model.AdminUser
+import ho.fem.model.InviteResult
 import ho.fem.model.AgentScopeAvailability
 import ho.fem.model.AgentScopeEnvelope
 import ho.fem.model.ActivityEnvelope
 import ho.fem.model.ApiTokenSummary
 import ho.fem.model.Attachment
+import ho.fem.model.AuthSettingsEnvelope
 import ho.fem.model.AuthTokens
 import ho.fem.model.Board
 import ho.fem.model.Calendar
 import ho.fem.model.Checklist
 import ho.fem.model.Comment
 import ho.fem.model.CredentialEnvelope
+import ho.fem.model.DashboardView
 import ho.fem.model.EventOccurrence
 import ho.fem.model.Inbox
 import ho.fem.model.InboxMark
@@ -35,6 +39,7 @@ import ho.fem.model.ShareCreated
 import ho.fem.model.ShareSummary
 import ho.fem.model.Subtask
 import ho.fem.model.Task
+import ho.fem.model.TaskPage
 import ho.fem.model.TaskType
 import ho.fem.model.UserProfile
 import kotlinx.coroutines.Dispatchers
@@ -250,6 +255,22 @@ class FemhoApi(
         )
         return json.decodeFromString<AuthTokens>(text).also { tokens.save(it) }
     }
+
+    /** Registra un compte nou a una instància amb registre obert (docs/12 §3). */
+    suspend fun register(name: String, email: String, password: String): AuthTokens {
+        val text = raw(
+            "POST",
+            "/api/v1/auth/register",
+            encode(mapOf("name" to name, "email" to email, "password" to password)),
+            authenticated = false,
+        )
+        // Igual que el login: el registre ja deixa la sessió oberta, i sense desar el
+        // testimoni cap crida autenticada posterior (settings, updateSettings) funcionaria.
+        return json.decodeFromString<AuthTokens>(text).also { tokens.save(it) }
+    }
+
+    /** Les settings de l'usuari: `scope_mode` decideix si cal el wizard (docs/12 §3). */
+    suspend fun settings(): AuthSettingsEnvelope = get("/api/v1/auth/settings")
 
     suspend fun logout() {
         runCatching { raw("POST", "/api/v1/auth/logout", null, authenticated = true) }
@@ -948,16 +969,41 @@ class FemhoApi(
 
     suspend fun undoActivity(id: String): Map<String, Any> = post("/api/v1/activity/$id/undo", emptyMap<String, Any>())
 
+    // ------------------------------------------------------------------ Admin
+
+    /** La llista d'usuaris, amb el rol i si el convit encara és pendent. */
+    suspend fun adminUsers(): List<AdminUser> = get("/api/v1/admin/users")
+
+    /** Convida un membre i torna l'enllaç d'un sol ús (AdminUser + invite_url). */
+    suspend fun adminInvite(email: String, name: String, role: String): InviteResult =
+        post(
+            "/api/v1/admin/users/invite",
+            mapOf("email" to email, "name" to name, "role" to role),
+        )
+
+    suspend fun adminUpdateRole(id: String, role: String): AdminUser =
+        patch("/api/v1/admin/users/$id", mapOf("role" to role))
+
+    suspend fun adminDeleteUser(id: String) {
+        raw("DELETE", "/api/v1/admin/users/$id", null, authenticated = true)
+    }
+
+    /** Neteja la instància; el servidor també comprova el nom de confirmació. */
+    suspend fun adminWipe(confirmation: String): Map<String, Any> =
+        post("/api/v1/admin/wipe", mapOf("confirmation" to confirmation))
+
     // ------------------------------------------------------------------ Cerca
 
-    suspend fun search(q: String, limit: Int? = null): Map<String, Any> {
-        val query = if (limit != null) "?q=${java.net.URLEncoder.encode(q, "UTF-8")}&limit=$limit" else "?q=${java.net.URLEncoder.encode(q, "UTF-8")}"
+    /** La primera pàgina de la cerca, amb el límit que demana la pantalla (8). */
+    suspend fun search(q: String, limit: Int? = null): TaskPage {
+        val query = "?q=${java.net.URLEncoder.encode(q, "UTF-8")}" +
+            (if (limit != null) "&limit=$limit" else "")
         return get("/api/v1/search$query")
     }
 
     // ------------------------------------------------------------------ Dashboard
 
-    suspend fun dashboard(): Map<String, Any> = get("/api/v1/dashboard")
+    suspend fun dashboard(): DashboardView = get("/api/v1/dashboard")
 
     // ------------------------------------------------------------------ Admin
 
@@ -998,7 +1044,8 @@ class FemhoApi(
         showOverdueSection: Boolean? = null,
         inboxPosition: String? = null,
         inboxShowOverdue: Boolean? = null,
-    ): Map<String, Any> {
+        scopeMode: String? = null,
+    ) {
         val fields = buildMap<String, Any> {
             if (gravatar != null) put("gravatar", gravatar)
             if (weekStart != null) put("week_start", weekStart)
@@ -1007,7 +1054,11 @@ class FemhoApi(
             if (showOverdueSection != null) put("show_overdue_section", showOverdueSection)
             if (inboxPosition != null) put("inbox_position", inboxPosition)
             if (inboxShowOverdue != null) put("inbox_show_overdue", inboxShowOverdue)
+            if (scopeMode != null) put("scope_mode", scopeMode)
         }
-        return patch("/api/v1/auth/settings", fields)
+        // No es deserialitza la resposta: el servidor hi torna l'objecte settings sencer,
+        // amb camps null que `Map<String, Any>` no pot representar, i cap caller no en
+        // fa servir el valor. El que importa és que el PATCH arribi (o que llanci).
+        raw("PATCH", "/api/v1/auth/settings", encode(fields), authenticated = true)
     }
 }

@@ -6,6 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -60,6 +61,7 @@ import ho.fem.designsystem.FemhoText
 import ho.fem.designsystem.FemhoTheme
 import ho.fem.designsystem.FemhoShape
 import ho.fem.designsystem.ScopeChip
+import ho.fem.designsystem.TaskCard
 import ho.fem.designsystem.scopeColor
 import ho.fem.model.Checklist
 import ho.fem.model.Project
@@ -91,6 +93,7 @@ import ho.fem.model.QuickAddContext
 import ho.fem.model.QuickAddPerson
 import ho.fem.model.QuickAddProject
 import ho.fem.model.QuickAddScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -207,56 +210,80 @@ private fun Root(model: AppViewModel, pending: MutableState<Intent?>) {
 
         is AppViewModel.Session.NeedsServer -> ServerScreen(model, state.message)
 
-        is AppViewModel.Session.NeedsLogin -> LoginScreen(model, state.instanceName, false)
+        is AppViewModel.Session.NeedsLogin -> LoginScreen(model, state.instanceName, false, state.registration)
 
-        is AppViewModel.Session.NeedsLoginNewer -> LoginScreen(model, state.instanceName, true)
+        is AppViewModel.Session.NeedsLoginNewer -> LoginScreen(model, state.instanceName, true, state.registration)
 
         is AppViewModel.Session.NeedsCertConfirm -> CertConfirmScreen(model, state.fingerprint)
 
-        is AppViewModel.Session.Ready -> when (screen) {
-            Screen.BOARD -> BoardHost(
-                model = model,
-                onSettings = { screen = Screen.SETTINGS },
-                onCalendar = { screen = Screen.CALENDAR },
-                onRegistre = { screen = Screen.REGISTRE },
-                onEstadistiques = { screen = Screen.ESTADISTIQUES },
-            )
-            Screen.CALENDAR -> CalendarHost(
-                model = model,
-                onSettings = { screen = Screen.SETTINGS },
-                onBoard = { screen = Screen.BOARD },
-            )
-            Screen.SETTINGS -> SettingsHost(
-                model = model,
-                serverUrl = state.serverUrl,
-                onBack = { screen = Screen.BOARD },
-            )
-            Screen.REGISTRE -> RegistreHost(
-                model = model,
-                onBoard = { screen = Screen.BOARD },
-            )
-            Screen.ESTADISTIQUES -> EstadistiquesHost(
-                model = model,
-                onBoard = { screen = Screen.BOARD },
-            )
-            Screen.JOIN -> JoinScreen(
-                model = model,
-                token = joinToken.orEmpty(),
-                onDone = {
-                    screen = Screen.BOARD
-                    model.consumeJoin()
-                    joinToken = null
-                },
-            )
-            Screen.INVITE -> InviteScreen(
-                model = model,
-                token = inviteToken.orEmpty(),
-                onDone = {
-                    screen = Screen.BOARD
+        is AppViewModel.Session.Ready -> {
+            // El wizard de la primera entrada, si la persona no ha triat mai el mode
+            // d'àmbits i la instància deixa triar (docs/12 §3).
+            val needsWizard by model.needsScopeModeWizard.collectAsStateWithLifecycle()
+            if (needsWizard) {
+                WelcomeScreen(model)
+            } else {
+                when (screen) {
+                Screen.BOARD -> BoardHost(
+                    model = model,
+                    onSettings = { screen = Screen.SETTINGS },
+                    onCalendar = { screen = Screen.CALENDAR },
+                    onRegistre = { screen = Screen.REGISTRE },
+                    onEstadistiques = { screen = Screen.ESTADISTIQUES },
+                    onSearch = { screen = Screen.SEARCH },
+                    onDashboard = { screen = Screen.DASHBOARD },
+                )
+                Screen.DASHBOARD -> DashboardHost(
+                    model = model,
+                    onBoard = { screen = Screen.BOARD },
+                    onSettings = { screen = Screen.SETTINGS },
+                )
+                Screen.SEARCH -> SearchHost(
+                    model = model,
+                    onBoard = { screen = Screen.BOARD },
+                )
+                Screen.CALENDAR -> CalendarHost(
+                    model = model,
+                    onSettings = { screen = Screen.SETTINGS },
+                    onBoard = { screen = Screen.BOARD },
+                    onDashboard = { screen = Screen.DASHBOARD },
+                )
+                Screen.SETTINGS -> SettingsHost(
+                    model = model,
+                    serverUrl = state.serverUrl,
+                    onBack = { screen = Screen.BOARD },
+                )
+                Screen.REGISTRE -> RegistreHost(
+                    model = model,
+                    onBoard = { screen = Screen.BOARD },
+                )
+                Screen.ESTADISTIQUES -> EstadistiquesHost(
+                    model = model,
+                    onBoard = { screen = Screen.BOARD },
+                )
+                Screen.JOIN -> JoinScreen(
+                    model = model,
+                    token = joinToken.orEmpty(),
+                    onDone = {
+                        screen = Screen.BOARD
+                        model.consumeJoin()
+                        joinToken = null
+                    },
+                )
+                Screen.INVITE -> InviteScreen(
+                    model = model,
+                    token = inviteToken.orEmpty(),
+                    onDone = {
+                        screen = Screen.BOARD
                     model.consumeJoin()
                     inviteToken = null
                 },
             )
+            }
+            }
+
+            // El full de detall, per sobre de qualsevol pantalla (cerca inclosa).
+            TaskDetailSheet(model)
         }
     }
 }
@@ -553,10 +580,17 @@ private fun CertConfirmScreen(model: AppViewModel, fingerprint: String) {
 }
 
 @Composable
-private fun LoginScreen(model: AppViewModel, instanceName: String, serverNewer: Boolean) {
+private fun LoginScreen(model: AppViewModel, instanceName: String, serverNewer: Boolean, registration: String = "disabled") {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
+    // Si la instància té registre obert, es pot passar a crear un compte (docs/12 §3).
+    var showRegister by remember { mutableStateOf(false) }
+
+    if (showRegister) {
+        RegisterScreen(model, instanceName) { showRegister = false }
+        return
+    }
 
     Column(
         modifier = Modifier.fillMaxSize().padding(24.dp).testTag("login-screen"),
@@ -608,11 +642,184 @@ private fun LoginScreen(model: AppViewModel, instanceName: String, serverNewer: 
         ) {
             Text(stringResource(R.string.login_submit))
         }
+
+        if (registration == "open") {
+            Text(
+                text = stringResource(R.string.login_register),
+                color = Femho.colors.inkSoft,
+                fontSize = FemhoText.body,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier
+                    .padding(top = 4.dp)
+                    .testTag("login-register")
+                    .androidClickable { showRegister = true },
+            )
+        }
     }
 }
 
 @Composable
-private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: () -> Unit, onRegistre: () -> Unit, onEstadistiques: () -> Unit) {
+private fun RegisterScreen(model: AppViewModel, instanceName: String, onBack: () -> Unit) {
+    var name by remember { mutableStateOf("") }
+    var email by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+    // El text es resol aquí i no dins del callback: `stringResource` és @Composable.
+    val tooShortError = stringResource(R.string.invite_tooshort)
+
+    Column(
+        modifier = Modifier.fillMaxSize().padding(24.dp).testTag("register-screen"),
+        verticalArrangement = Arrangement.spacedBy(14.dp, Alignment.CenterVertically),
+    ) {
+        Wordmark()
+        Text(
+            text = instanceName.ifEmpty { stringResource(R.string.login_subtitle) },
+            color = Femho.colors.inkSoft,
+            fontSize = FemhoText.body,
+        )
+        Text(
+            stringResource(R.string.register_title),
+            color = Femho.colors.ink,
+            fontSize = FemhoText.columnTitle,
+            fontWeight = FontWeight.Black,
+        )
+        Text(
+            stringResource(R.string.register_subtitle),
+            color = Femho.colors.inkSoft,
+            fontSize = FemhoText.meta,
+        )
+
+        androidx.compose.material3.OutlinedTextField(
+            value = name,
+            onValueChange = { name = it },
+            singleLine = true,
+            label = { Text(stringResource(R.string.register_name)) },
+            modifier = Modifier.fillMaxWidth().testTag("register-name"),
+        )
+        androidx.compose.material3.OutlinedTextField(
+            value = email,
+            onValueChange = { email = it },
+            singleLine = true,
+            label = { Text(stringResource(R.string.login_email)) },
+            modifier = Modifier.fillMaxWidth().testTag("register-email"),
+        )
+        androidx.compose.material3.OutlinedTextField(
+            value = password,
+            onValueChange = { password = it },
+            singleLine = true,
+            visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+            label = { Text(stringResource(R.string.login_password)) },
+            modifier = Modifier.fillMaxWidth().testTag("register-password"),
+        )
+
+        if (error != null) {
+            Text(
+                stringResource(R.string.register_error),
+                color = Femho.colors.dangerText,
+                fontSize = FemhoText.body,
+                modifier = Modifier.testTag("register-error"),
+            )
+        }
+
+        androidx.compose.material3.Button(
+            onClick = {
+                // El servidor demana contrasenyes de com a mínim 10 caràcters (invite.tooShort).
+                if (password.length < 10) {
+                    error = tooShortError
+                } else {
+                    model.register(name.trim(), email.trim(), password) { error = it }
+                }
+            },
+            modifier = Modifier.fillMaxWidth().testTag("register-submit"),
+        ) {
+            Text(stringResource(R.string.register_submit))
+        }
+
+        Text(
+            text = stringResource(R.string.register_haveaccount),
+            color = Femho.colors.inkSoft,
+            fontSize = FemhoText.body,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier
+                .padding(top = 4.dp)
+                .testTag("register-back")
+                .androidClickable(onBack),
+        )
+    }
+}
+
+@Composable
+private fun WelcomeScreen(model: AppViewModel) {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(24.dp).testTag("welcome-screen"),
+        verticalArrangement = Arrangement.spacedBy(14.dp, Alignment.CenterVertically),
+    ) {
+        Wordmark()
+        Text(
+            text = stringResource(R.string.welcome_title),
+            color = Femho.colors.ink,
+            fontSize = FemhoText.columnTitle,
+            fontWeight = FontWeight.Black,
+        )
+        Text(
+            text = stringResource(R.string.welcome_lead),
+            color = Femho.colors.inkSoft,
+            fontSize = FemhoText.body,
+        )
+
+        // Les dues targetes del wizard, igual que a la web (WelcomeScreen.tsx): triar
+        // una desa el mode d'àmbits i tanca el wizard.
+        WelcomeCard(
+            title = stringResource(R.string.welcome_multi),
+            body = stringResource(R.string.welcome_multi_body),
+            testTag = "welcome-multi",
+            onClick = { model.setScopeMode("multi") },
+        )
+        WelcomeCard(
+            title = stringResource(R.string.welcome_single),
+            body = stringResource(R.string.welcome_single_body),
+            testTag = "welcome-single",
+            onClick = { model.setScopeMode("single") },
+        )
+
+        Text(
+            text = stringResource(R.string.welcome_changeable),
+            color = Femho.colors.inkFaint,
+            fontSize = FemhoText.meta,
+            modifier = Modifier.padding(top = 4.dp),
+        )
+    }
+}
+
+@Composable
+private fun WelcomeCard(title: String, body: String, testTag: String, onClick: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(FemhoShape.card))
+            .background(Femho.colors.cardBg)
+            .border(1.dp, Femho.colors.cardBorder, RoundedCornerShape(FemhoShape.card))
+            .clickable(onClick = onClick)
+            .padding(16.dp)
+            .testTag(testTag),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text(
+            text = title,
+            color = Femho.colors.ink,
+            fontSize = FemhoText.body,
+            fontWeight = FontWeight.Bold,
+        )
+        Text(
+            text = body,
+            color = Femho.colors.inkSoft,
+            fontSize = FemhoText.meta,
+        )
+    }
+}
+
+@Composable
+private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: () -> Unit, onRegistre: () -> Unit, onEstadistiques: () -> Unit, onSearch: () -> Unit, onDashboard: () -> Unit) {
     val tasks by model.tasks.collectAsStateWithLifecycle()
     val scopes by model.scopes.collectAsStateWithLifecycle()
     val pending by model.pending.collectAsStateWithLifecycle()
@@ -731,11 +938,13 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: (
                 active = if (next.isEmpty()) emptySet() else next
             },
             onSettings = onSettings,
+            onDashboard = onDashboard,
             onView = {
                 when (it) {
                     Screen.CALENDAR -> onCalendar()
                     Screen.REGISTRE -> onRegistre()
                     Screen.ESTADISTIQUES -> onEstadistiques()
+                    Screen.SEARCH -> onSearch()
                     else -> Unit
                 }
             },
@@ -917,7 +1126,29 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: (
         )
     }
 
-    // El full de detall va per sobre de tot, com a la web.
+    // El full de detall es crida des de `Session.Ready`, per sobre de totes les
+    // pantalles: si visqués aquí dins, la cerca no el podria obrir (tasca 31).
+}
+
+@Composable
+private fun TaskDetailSheet(model: AppViewModel) {
+    val openTask by model.openTask.collectAsStateWithLifecycle()
+    val openChecklists by model.openChecklists.collectAsStateWithLifecycle()
+    val openComments by model.openComments.collectAsStateWithLifecycle()
+    val openActivity by model.openActivity.collectAsStateWithLifecycle()
+    val openShares by model.openShares.collectAsStateWithLifecycle()
+    val createdShareUrl by model.createdShareUrl.collectAsStateWithLifecycle()
+    val openAttachments by model.openAttachments.collectAsStateWithLifecycle()
+    val attachmentError by model.attachmentError.collectAsStateWithLifecycle()
+    val scopes by model.scopes.collectAsStateWithLifecycle()
+    val projects by model.projects.collectAsStateWithLifecycle()
+    val people by model.people.collectAsStateWithLifecycle()
+    val taskTypes by model.taskTypes.collectAsStateWithLifecycle()
+    val labels by model.labels.collectAsStateWithLifecycle()
+    val manualLabel = stringResource(R.string.ai_mode_manual)
+    val assistedLabel = stringResource(R.string.ai_mode_assisted)
+    val delegatedLabel = stringResource(R.string.ai_mode_delegated)
+
     openTask?.let { task ->
         val context = androidx.compose.ui.platform.LocalContext.current
         val picker = androidx.activity.compose.rememberLauncherForActivityResult(
@@ -1096,7 +1327,7 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: (
 }
 
 @Composable
-private fun CalendarHost(model: AppViewModel, onSettings: () -> Unit, onBoard: () -> Unit) {
+private fun CalendarHost(model: AppViewModel, onSettings: () -> Unit, onBoard: () -> Unit, onDashboard: () -> Unit) {
     val scopes by model.scopes.collectAsStateWithLifecycle()
     val pending by model.pending.collectAsStateWithLifecycle()
     val events by model.events.collectAsStateWithLifecycle()
@@ -1160,6 +1391,7 @@ private fun CalendarHost(model: AppViewModel, onSettings: () -> Unit, onBoard: (
                 active = if (next.isEmpty()) emptySet() else next
             },
             onSettings = onSettings,
+            onDashboard = onDashboard,
             onView = { if (it == Screen.BOARD) onBoard() },
         )
 
@@ -1279,6 +1511,8 @@ private fun TopBar(
     view: Screen,
     onToggle: (String) -> Unit,
     onSettings: () -> Unit,
+    /** El wordmark obre el dashboard global (docs/03 §3:50). */
+    onDashboard: () -> Unit,
     onView: (Screen) -> Unit,
     /** El Registre només surt si algun àmbit porta registre de dedicació. */
     showRegistre: Boolean = false,
@@ -1317,7 +1551,10 @@ private fun TopBar(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Wordmark()
+            Wordmark(
+                // El wordmark és el botó del dashboard global (docs/03 §3:50).
+                modifier = Modifier.androidClickable(onDashboard),
+            )
             Row(verticalAlignment = Alignment.CenterVertically) {
                 // El commutador Tasques / Calendari / Registre, igual que a la web (docs/02 §3).
                 val targets = buildList {
@@ -1338,6 +1575,18 @@ private fun TopBar(
                             .androidClickable { onView(target) },
                     )
                 }
+
+                // La lupa de la cerca, com a la web: un text, com la resta d'icones.
+                Text(
+                    text = "⌕",
+                    color = if (view == Screen.SEARCH) Femho.colors.ink else Femho.colors.inkSoft,
+                    fontSize = FemhoText.body,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .padding(horizontal = 8.dp, vertical = 12.dp)
+                        .testTag("open-search")
+                        .androidClickable { onView(Screen.SEARCH) },
+                )
 
                 if (aiEnabled && view == Screen.BOARD) {
                     Box {
@@ -1638,6 +1887,10 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
     val agentSkill by model.agentSkill.collectAsStateWithLifecycle()
     val allShares by model.allShares.collectAsStateWithLifecycle()
     val allShareAccesses by model.shareAccesses.collectAsStateWithLifecycle()
+    val adminUsers by model.adminUsers.collectAsStateWithLifecycle()
+    val adminInviteUrl by model.adminInviteUrl.collectAsStateWithLifecycle()
+    val adminError by model.adminError.collectAsStateWithLifecycle()
+    val instanceName by model.instanceName.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) {
         model.loadEntityData()
@@ -1857,6 +2110,7 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
             roleCollaborator = stringResource(R.string.settings_role_collaborator),
             roleViewer = stringResource(R.string.settings_role_viewer),
             roleOwner = stringResource(R.string.settings_role_owner),
+            roleMember = stringResource(R.string.settings_role_member),
             inviteCreate = stringResource(R.string.settings_invitecreate),
             inviteRevoke = stringResource(R.string.settings_inviterevoke),
             inviteOnce = stringResource(R.string.settings_inviteonce),
@@ -1864,6 +2118,15 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
             invites = stringResource(R.string.settings_invites),
             noInvites = stringResource(R.string.settings_invitenone),
             noMembers = stringResource(R.string.settings_nomembers),
+            users = stringResource(R.string.settings_users),
+            inviteEmail = stringResource(R.string.settings_inviteemail),
+            inviteName = stringResource(R.string.settings_invitename),
+            invitePending = stringResource(R.string.settings_invitepending),
+            wipe = stringResource(R.string.settings_wipe),
+            wipeWarning = stringResource(R.string.settings_wipewarning),
+            wipeConfirm = stringResource(R.string.settings_wipeconfirm),
+            errorLastAdmin = stringResource(R.string.error_last_admin),
+            delete = stringResource(R.string.nav_delete),
             scopeEdit = stringResource(R.string.settings_scopeedit),
             scopeSave = stringResource(R.string.settings_scopesave),
             scopeCancel = stringResource(R.string.settings_scopecancel),
@@ -1944,6 +2207,17 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
         onTestMailAccount = model::testMailAccount,
          onCreateMailRule = model::createMailRule,
          onDeleteMailRule = model::deleteMailRule,
+        isAdmin = profile?.role == "admin",
+        adminUsers = adminUsers,
+        adminInviteUrl = adminInviteUrl,
+        adminError = adminError,
+        instanceName = instanceName,
+        onLoadAdminUsers = model::loadAdminUsers,
+        onInviteAdminUser = model::inviteAdminUser,
+        onConsumeAdminInviteUrl = model::consumeAdminInviteUrl,
+        onSetAdminRole = model::setAdminRole,
+        onDeleteAdminUser = model::deleteAdminUser,
+        onWipeInstance = model::wipeInstance,
      )
  }
 
@@ -2510,6 +2784,239 @@ private fun RegistreHost(model: AppViewModel, onBoard: () -> Unit) {
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DashboardHost(model: AppViewModel, onBoard: () -> Unit, onSettings: () -> Unit) {
+    val dashboard by model.dashboard.collectAsStateWithLifecycle()
+    val scopes by model.scopes.collectAsStateWithLifecycle()
+    val showOverdueSection by model.showOverdueSection.collectAsStateWithLifecycle()
+    val showCalendarWidget by model.showCalendarWidget.collectAsStateWithLifecycle()
+
+    LaunchedEffect(Unit) { model.loadDashboard() }
+
+    val appLocale = androidx.compose.ui.platform.LocalConfiguration.current.locales[0]
+        ?.language ?: "ca"
+    val weekStart = Dates.weekStart(appLocale)
+    val calendarLabels = CalendarLabels(
+        weekdays = Dates.weekdayNames(appLocale, weekStart),
+        months = (1..12).map { Dates.monthName(appLocale, it) },
+        emptyDay = stringResource(R.string.calendar_empty_day),
+        emptyWeek = stringResource(R.string.calendar_empty_week),
+    )
+
+    // Els punts del calendari: fins a tres colors per dia, els dels àmbits de les
+    // tasques que el tenen (docs/02 §5). El dashboard ignora la selecció d'àmbits.
+    val palette = Femho.colors
+    val colors = scopes.associate { it.id to palette.scopeColor(it.color) }
+    val dots: Map<java.time.LocalDate, List<androidx.compose.ui.graphics.Color>> =
+        remember(dashboard, colors) {
+            val result = mutableMapOf<java.time.LocalDate, MutableList<androidx.compose.ui.graphics.Color>>()
+            (dashboard.today + dashboard.overdue + dashboard.doing).forEach { task ->
+                val day = task.dueDate ?: return@forEach
+                val color = colors[task.scopeId] ?: palette.inkFaint
+                val list = result.getOrPut(java.time.LocalDate.parse(day)) { mutableListOf() }
+                if (list.size < 3 && color !in list) list.add(color)
+            }
+            result
+        }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Femho.pageBackground)
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.dashboard_title),
+            color = Femho.colors.ink,
+            fontSize = FemhoText.columnTitle,
+            fontWeight = FontWeight.ExtraBold,
+            modifier = Modifier.testTag("dashboard-screen"),
+        )
+
+        // Les targetes per àmbit: pendents i vençudes, amb la vora del color (la web).
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            dashboard.scopes.forEach { scope ->
+                val pendingLabel = stringResource(R.string.dashboard_pending)
+                    .replace("{count}", scope.pending.toString())
+                val overdueLabel = stringResource(R.string.dashboard_overduecount)
+                    .replace("{count}", scope.overdue.toString())
+                Text(
+                    text = "${scope.name}\n$pendingLabel" +
+                        if (scope.overdue > 0) " · $overdueLabel" else "",
+                    color = Femho.colors.ink,
+                    fontSize = FemhoText.meta,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(FemhoShape.card))
+                        .background(Femho.colors.cardBg)
+                        .border(1.dp, Femho.colors.cardBorder, RoundedCornerShape(FemhoShape.card))
+                        .padding(12.dp)
+                        .testTag("dashboard-scope-${scope.scopeId}"),
+                )
+            }
+        }
+
+        Section(
+            title = stringResource(R.string.dashboard_today),
+            tasks = dashboard.today,
+            empty = stringResource(R.string.dashboard_empty_today),
+            scopes = scopes,
+            onOpen = { model.open(it) },
+            testTag = "dashboard-today",
+        )
+
+        if (showOverdueSection) {
+            Section(
+                title = stringResource(R.string.dashboard_overdue),
+                tasks = dashboard.overdue,
+                empty = stringResource(R.string.dashboard_empty_overdue),
+                scopes = scopes,
+                onOpen = { model.open(it) },
+                testTag = "dashboard-overdue",
+            )
+        }
+
+        if (showCalendarWidget) {
+            val avui = java.time.LocalDate.now()
+            MonthView(
+                year = avui.year,
+                month = avui.monthValue,
+                selected = avui,
+                today = avui,
+                dots = dots,
+                labels = calendarLabels,
+                onSelect = { },
+                weekStart = weekStart,
+                modifier = Modifier.testTag("dashboard-calendar"),
+            )
+        }
+
+        Section(
+            title = stringResource(R.string.dashboard_doing),
+            tasks = dashboard.doing,
+            empty = stringResource(R.string.dashboard_empty_doing),
+            scopes = scopes,
+            onOpen = { model.open(it) },
+            testTag = "dashboard-doing",
+        )
+    }
+}
+
+/** Una secció del dashboard: títol, i les tasques com a targetes amb l'àmbit. */
+@Composable
+private fun Section(
+    title: String,
+    tasks: List<ho.fem.model.Task>,
+    empty: String,
+    scopes: List<Scope>,
+    onOpen: (ho.fem.model.Task) -> Unit,
+    testTag: String,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            text = title,
+            color = Femho.colors.ink,
+            fontSize = FemhoText.columnTitle,
+            fontWeight = FontWeight.ExtraBold,
+        )
+        if (tasks.isEmpty()) {
+            Text(
+                text = empty,
+                color = Femho.colors.inkSoft,
+                fontSize = FemhoText.body,
+            )
+        } else {
+            tasks.forEach { task ->
+                TaskCard(
+                    title = task.title,
+                    project = scopes.firstOrNull { it.id == task.scopeId }?.name,
+                    time = task.dueTime,
+                    done = task.status == TaskStatus.DONE,
+                    onOpen = { onOpen(task) },
+                    modifier = Modifier.testTag("$testTag-task"),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SearchHost(model: AppViewModel, onBoard: () -> Unit) {
+    val results by model.searchResults.collectAsStateWithLifecycle()
+    val loading by model.searchLoading.collectAsStateWithLifecycle()
+    val scopes by model.scopes.collectAsStateWithLifecycle()
+    var query by remember { mutableStateOf("") }
+
+    // El debounce de 250ms de la web (SearchScreen.tsx:39): no es demana a cada tecla.
+    androidx.compose.runtime.LaunchedEffect(query) {
+        delay(250)
+        val q = query.trim()
+        if (q.length >= 2) model.search(q) else model.clearSearch()
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Femho.pageBackground)
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.nav_backtoboard),
+            color = Femho.colors.inkSoft,
+            fontSize = FemhoText.body,
+            modifier = Modifier
+                .clickable(onClick = onBoard)
+                .heightIn(min = FemhoSize.touch)
+                .padding(vertical = 12.dp)
+                .testTag("search-back"),
+        )
+        Text(
+            text = stringResource(R.string.nav_search),
+            color = Femho.colors.ink,
+            fontSize = FemhoText.columnTitle,
+            fontWeight = FontWeight.ExtraBold,
+        )
+
+        androidx.compose.material3.OutlinedTextField(
+            value = query,
+            onValueChange = { query = it },
+            singleLine = true,
+            placeholder = { Text(stringResource(R.string.nav_search)) },
+            modifier = Modifier.fillMaxWidth().testTag("search-input"),
+        )
+
+        when {
+            query.trim().length < 2 -> Unit
+            loading -> Loading()
+            results.isEmpty() -> Text(
+                text = stringResource(R.string.state_empty_search),
+                color = Femho.colors.inkSoft,
+                fontSize = FemhoText.body,
+                modifier = Modifier.testTag("search-empty"),
+            )
+            else -> results.forEach { task ->
+                TaskCard(
+                    title = task.title,
+                    // La pastilla d'àmbit a cada resultat: aquí es barregen tots (la web).
+                    project = scopes.firstOrNull { it.id == task.scopeId }?.name,
+                    time = task.dueTime,
+                    done = task.status == TaskStatus.DONE,
+                    onOpen = { model.open(task) },
+                    modifier = Modifier.testTag("search-result-${'$'}{task.id}"),
+                )
             }
         }
     }
