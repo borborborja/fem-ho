@@ -151,7 +151,7 @@ data class CalendarEntity(
     @ColumnInfo(name = "inbox_visible") val inboxVisible: Boolean? = null,
     @ColumnInfo(name = "last_refreshed_at") val lastRefreshedAt: String?,
     @ColumnInfo(name = "last_error") val lastError: String?,
-    @ColumnInfo(name = "shared_with_scope_id") val sharedWithScopeId: String?,
+    @ColumnInfo(name = "shared_with_scope") val sharedWithScope: Boolean = false,
 )
 
 /**
@@ -627,7 +627,7 @@ abstract class FemhoDatabase : RoomDatabase() {
                         "`inbox_visible` INTEGER, " +
                         "`last_refreshed_at` TEXT, " +
                         "`last_error` TEXT, " +
-                        "`shared_with_scope_id` TEXT)",
+                        "`shared_with_scope` INTEGER NOT NULL DEFAULT 0)",
                 )
                 // Comptes de correu
                 database.execSQL(

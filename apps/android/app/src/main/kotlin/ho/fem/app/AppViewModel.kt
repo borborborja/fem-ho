@@ -90,6 +90,9 @@ class AppViewModel(private val container: Container) : ViewModel() {
     private val _tokens = MutableStateFlow<List<ho.fem.model.ApiTokenSummary>>(emptyList())
     val tokens: StateFlow<List<ho.fem.model.ApiTokenSummary>> = _tokens.asStateFlow()
 
+    private val _calendars = MutableStateFlow<List<ho.fem.model.Calendar>>(emptyList())
+    val calendars: StateFlow<List<ho.fem.model.Calendar>> = _calendars.asStateFlow()
+
     private val _createdToken = MutableStateFlow<String?>(null)
     val createdToken: StateFlow<String?> = _createdToken.asStateFlow()
 
@@ -628,6 +631,78 @@ class AppViewModel(private val container: Container) : ViewModel() {
         viewModelScope.launch {
             runCatching { container.api(base).revokeApiToken(id) }
                 .onSuccess { loadTokens() }
+        }
+    }
+
+    /** Carrega els calendaris per a Ajustos ▸ Calendaris. GET /api/v1/calendars. */
+    fun loadCalendars() {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).calendars() }
+                .onSuccess { _calendars.value = it }
+        }
+    }
+
+    /** Crea una font de calendari (CalDAV, iCal o RSS). POST /api/v1/calendars. */
+    fun createCalendar(
+        scopeId: String,
+        name: String,
+        origin: String,
+        sourceKind: String? = null,
+        sourceUrl: String? = null,
+        sourceUsername: String? = null,
+        sourceSecret: String? = null,
+        inboxVisible: Boolean? = null,
+    ) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching {
+                container.api(base).createCalendar(
+                    scopeId = scopeId,
+                    name = name,
+                    origin = origin,
+                    sourceKind = sourceKind,
+                    sourceUrl = sourceUrl,
+                    sourceUsername = sourceUsername,
+                    sourceSecret = sourceSecret,
+                    inboxVisible = inboxVisible,
+                )
+            }.onSuccess { loadCalendars() }
+        }
+    }
+
+    /** Actualitza un calendari. PATCH /api/v1/calendars/{id}. */
+    fun updateCalendar(
+        id: String,
+        name: String? = null,
+        sourceUrl: String? = null,
+        sourceUsername: String? = null,
+        sourceSecret: String? = null,
+        refreshInterval: Int? = null,
+        inboxVisible: Boolean? = null,
+    ) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching {
+                container.api(base).updateCalendar(
+                    id,
+                    name = name,
+                    sourceUrl = sourceUrl,
+                    sourceUsername = sourceUsername,
+                    sourceSecret = sourceSecret,
+                    refreshInterval = refreshInterval,
+                    inboxVisible = inboxVisible,
+                )
+            }.onSuccess { loadCalendars() }
+        }
+    }
+
+    /** Esborra un calendari. DELETE /api/v1/calendars/{id}. */
+    fun deleteCalendar(id: String) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).deleteCalendar(id) }
+                .onSuccess { loadCalendars() }
         }
     }
 

@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -155,6 +156,31 @@ data class SettingsLabels(
     val longSessionHours: String,
     val nounProject: String,
     val nounClient: String,
+    // Calendaris: URL CalDAV, fonts i compartits
+    val caldavUrls: String,
+    val caldavEvents: String,
+    val caldavTodos: String,
+    val sourcesTitle: String,
+    val sourcesAdd: String,
+    val sourcesEmpty: String,
+    val sourcesFailed: String,
+    val sourcesInbox: String,
+    val sourcesKindCaldav: String,
+    val sourcesKindIcal: String,
+    val sourcesKindRss: String,
+    val sourcesName: String,
+    val sourcesNever: String,
+    val sourcesPassword: String,
+    val sourcesReadOnly: String,
+    val sourcesRefreshed: String,
+    val sourcesRemove: String,
+    val sourcesUrl: String,
+    val sourcesUrlRequired: String,
+    val sourcesUsername: String,
+    val calendarShared: String,
+    val sharedCalendars: String,
+    val calendarPrivate: String,
+    val calendarCredWarning: String,
 )
 
 data class SettingsTabs(
@@ -195,6 +221,7 @@ fun SettingsScreen(
     labelsList: List<ho.fem.model.Label> = emptyList(),
     taskTypes: List<ho.fem.model.TaskType> = emptyList(),
     scopeSettings: Map<String, ho.fem.model.ScopeSettings> = emptyMap(),
+    calendars: List<ho.fem.model.Calendar> = emptyList(),
     mcpUrl: String = "",
     tokens: List<ho.fem.model.ApiTokenSummary> = emptyList(),
     createdToken: String? = null,
@@ -226,6 +253,9 @@ fun SettingsScreen(
     onUpdateTaskType: (String, String?, Boolean?) -> Unit = { _, _, _ -> },
     onDeleteTaskType: (String) -> Unit = {},
     onUpdateScopeSettings: (String, Boolean?, String?, String?, Boolean?, Int?, String?, Boolean?) -> Unit = { _, _, _, _, _, _, _, _ -> },
+    onCreateCalendar: (String, String, String, String?, String?, String?, String?, Boolean?) -> Unit = { _, _, _, _, _, _, _, _ -> },
+    onUpdateCalendar: (String, String?, String?, String?, String?, Int?, Boolean?) -> Unit = { _, _, _, _, _, _, _ -> },
+    onDeleteCalendar: (String) -> Unit = {},
     onCopyToClipboard: (String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
@@ -336,7 +366,16 @@ fun SettingsScreen(
                     onUpdateScopeSettings = onUpdateScopeSettings,
                     onCopyToClipboard = onCopyToClipboard,
                 )
-                "calendars" -> EmptyState(labels.emptyStates.calendars)
+                "calendars" -> CalendarsTab(
+                    labels = labels,
+                    scopes = scopes,
+                    calendars = calendars,
+                    serverUrl = serverUrl,
+                    onCreateCalendar = onCreateCalendar,
+                    onUpdateCalendar = onUpdateCalendar,
+                    onDeleteCalendar = onDeleteCalendar,
+                    onCopyToClipboard = onCopyToClipboard,
+                )
                 "mail" -> EmptyState(labels.emptyStates.mail)
                 "mcp" -> McpTab(
                     labels = labels,
@@ -1054,6 +1093,265 @@ private fun McpTab(
  * - Per a cada àmbit col·lectiu: membres amb canvi de rol i treure
  * - Convits: crear enllaç d'un sol ús amb botó de copiar, revocar convits
  */
+@Composable
+private fun CalendarsTab(
+    labels: SettingsLabels,
+    scopes: List<ho.fem.model.Scope>,
+    calendars: List<ho.fem.model.Calendar>,
+    serverUrl: String,
+    onCreateCalendar: (String, String, String, String?, String?, String?, String?, Boolean?) -> Unit,
+    onUpdateCalendar: (String, String?, String?, String?, String?, Int?, Boolean?) -> Unit,
+    onDeleteCalendar: (String) -> Unit,
+    onCopyToClipboard: (String) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        scopes.forEach { scope ->
+            Group(scope.name) {
+                val sources = calendars.filter { it.scopeId == scope.id && it.origin == ho.fem.model.CalendarOrigin.SUBSCRIPTION }
+                val shared = calendars.filter { it.sharedWithScope }
+
+                if (sources.isEmpty()) {
+                    Text(
+                        text = labels.sourcesEmpty,
+                        color = Femho.colors.inkFaint,
+                        fontSize = FemhoText.meta,
+                    )
+                } else {
+                    sources.forEach { source ->
+                        Row(
+                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = source.name,
+                                    color = Femho.colors.ink,
+                                    fontSize = FemhoText.body,
+                                )
+                                val lastError = source.lastError
+                                val lastRefreshedAt = source.lastRefreshedAt
+                                val status = when {
+                                    lastError != null -> labels.sourcesFailed.replace("{reason}", lastError)
+                                    lastRefreshedAt == null -> labels.sourcesNever
+                                    else -> labels.sourcesRefreshed.replace("{when}", lastRefreshedAt)
+                                }
+                                Text(
+                                    text = status,
+                                    color = if (source.lastError != null) Femho.colors.dangerText else Femho.colors.inkFaint,
+                                    fontSize = FemhoText.meta,
+                                )
+                            }
+                            androidx.compose.material3.Switch(
+                                checked = source.inboxVisible ?: true,
+                                onCheckedChange = { on ->
+                                    onUpdateCalendar(source.id, null, null, null, null, null, on)
+                                },
+                            )
+                            Text(
+                                text = labels.sourcesRemove,
+                                color = Femho.colors.dangerText,
+                                fontSize = FemhoText.meta,
+                                modifier = Modifier
+                                    .clickable { onDeleteCalendar(source.id) }
+                                    .heightIn(min = FemhoSize.touch)
+                                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                            )
+                        }
+                    }
+                }
+
+                var newSourceKind by remember(scope.id) { mutableStateOf("ical") }
+                var newSourceName by remember(scope.id) { mutableStateOf("") }
+                var newSourceUrl by remember(scope.id) { mutableStateOf("") }
+                var newSourceUsername by remember(scope.id) { mutableStateOf("") }
+                var newSourcePassword by remember(scope.id) { mutableStateOf("") }
+
+                Text(
+                    text = labels.sourcesTitle,
+                    color = Femho.colors.inkSoft,
+                    fontSize = FemhoText.body,
+                    fontWeight = FontWeight.Medium,
+                )
+                Chips(
+                    options = listOf(
+                        "caldav" to labels.sourcesKindCaldav,
+                        "ical" to labels.sourcesKindIcal,
+                        "rss" to labels.sourcesKindRss,
+                    ),
+                    value = newSourceKind,
+                    onChange = { newSourceKind = it },
+                    tag = "source-kind",
+                )
+                androidx.compose.foundation.text.BasicTextField(
+                    value = newSourceName,
+                    onValueChange = { newSourceName = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(FemhoShape.pill))
+                        .background(Femho.colors.ghostBg)
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    decorationBox = { innerTextField ->
+                        Box(modifier = Modifier.padding(vertical = 2.dp)) {
+                            if (newSourceName.isEmpty()) {
+                                Text(
+                                    text = labels.sourcesName,
+                                    color = Femho.colors.inkFaint,
+                                    fontSize = FemhoText.body,
+                                )
+                            }
+                            innerTextField()
+                        }
+                    },
+                )
+                androidx.compose.foundation.text.BasicTextField(
+                    value = newSourceUrl,
+                    onValueChange = { newSourceUrl = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(FemhoShape.pill))
+                        .background(Femho.colors.ghostBg)
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    decorationBox = { innerTextField ->
+                        Box(modifier = Modifier.padding(vertical = 2.dp)) {
+                            if (newSourceUrl.isEmpty()) {
+                                Text(
+                                    text = labels.sourcesUrl,
+                                    color = Femho.colors.inkFaint,
+                                    fontSize = FemhoText.body,
+                                )
+                            }
+                            innerTextField()
+                        }
+                    },
+                )
+                if (newSourceKind == "caldav") {
+                    androidx.compose.foundation.text.BasicTextField(
+                        value = newSourceUsername,
+                        onValueChange = { newSourceUsername = it },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(FemhoShape.pill))
+                            .background(Femho.colors.ghostBg)
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        decorationBox = { innerTextField ->
+                            Box(modifier = Modifier.padding(vertical = 2.dp)) {
+                                if (newSourceUsername.isEmpty()) {
+                                    Text(
+                                        text = labels.sourcesUsername,
+                                        color = Femho.colors.inkFaint,
+                                        fontSize = FemhoText.body,
+                                    )
+                                }
+                                innerTextField()
+                            }
+                        },
+                    )
+                    androidx.compose.foundation.text.BasicTextField(
+                        value = newSourcePassword,
+                        onValueChange = { newSourcePassword = it },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(FemhoShape.pill))
+                            .background(Femho.colors.ghostBg)
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        decorationBox = { innerTextField ->
+                            Box(modifier = Modifier.padding(vertical = 2.dp)) {
+                                if (newSourcePassword.isEmpty()) {
+                                    Text(
+                                        text = labels.sourcesPassword,
+                                        color = Femho.colors.inkFaint,
+                                        fontSize = FemhoText.body,
+                                    )
+                                }
+                                innerTextField()
+                            }
+                        },
+                    )
+                }
+                Text(
+                    text = labels.sourcesAdd,
+                    color = Femho.colors.ink,
+                    fontSize = FemhoText.body,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier
+                        .clickable {
+                            if (newSourceUrl.isNotBlank()) {
+                                onCreateCalendar(
+                                    scope.id,
+                                    newSourceName.trim().ifEmpty { newSourceUrl.trim() },
+                                    "subscription",
+                                    newSourceKind,
+                                    newSourceUrl.trim(),
+                                    if (newSourceKind == "caldav" && newSourceUsername.isNotBlank()) newSourceUsername.trim() else null,
+                                    if (newSourceKind == "caldav" && newSourcePassword.isNotBlank()) newSourcePassword.trim() else null,
+                                    null,
+                                )
+                                newSourceName = ""
+                                newSourceUrl = ""
+                                newSourceUsername = ""
+                                newSourcePassword = ""
+                            }
+                        }
+                        .heightIn(min = FemhoSize.touch)
+                        .padding(vertical = 8.dp),
+                )
+
+                if (shared.isNotEmpty()) {
+                    Text(
+                        text = labels.sharedCalendars,
+                        color = Femho.colors.inkSoft,
+                        fontSize = FemhoText.body,
+                        fontWeight = FontWeight.Medium,
+                    )
+                    shared.forEach { calendar ->
+                        Text(
+                            text = calendar.name,
+                            color = Femho.colors.ink,
+                            fontSize = FemhoText.body,
+                        )
+                    }
+                }
+
+                Text(
+                    text = labels.caldavUrls,
+                    color = Femho.colors.inkSoft,
+                    fontSize = FemhoText.body,
+                    fontWeight = FontWeight.Medium,
+                )
+                listOf("events" to labels.caldavEvents, "todos" to labels.caldavTodos).forEach { (kind, kindLabel) ->
+                    Row(
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(
+                            text = kindLabel,
+                            color = Femho.colors.inkFaint,
+                            fontSize = FemhoText.meta,
+                            modifier = Modifier.width(90.dp),
+                        )
+                        val url = "$serverUrl/dav/calendars/${scope.id}-$kind/"
+                        Text(
+                            text = url,
+                            color = Femho.colors.inkSoft,
+                            fontSize = FemhoText.meta,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Text(
+                            text = labels.tokensCopy,
+                            color = Femho.colors.ink,
+                            fontSize = FemhoText.meta,
+                            modifier = Modifier
+                                .clickable { onCopyToClipboard(url) }
+                                .heightIn(min = FemhoSize.touch)
+                                .padding(horizontal = 8.dp, vertical = 6.dp),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun ScopesTab(
     labels: SettingsLabels,

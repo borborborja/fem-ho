@@ -1139,8 +1139,12 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
     val labels by model.labels.collectAsStateWithLifecycle()
     val taskTypes by model.taskTypes.collectAsStateWithLifecycle()
     val scopeSettings by model.scopeSettings.collectAsStateWithLifecycle()
+    val calendars by model.calendars.collectAsStateWithLifecycle()
 
-    LaunchedEffect(Unit) { model.loadEntityData() }
+    LaunchedEffect(Unit) {
+        model.loadEntityData()
+        model.loadCalendars()
+    }
 
     SettingsScreen(
         labels = SettingsLabels(
@@ -1261,6 +1265,30 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
             longSessionHours = stringResource(R.string.settings_longsessionhours),
             nounProject = stringResource(R.string.settings_noun_project),
             nounClient = stringResource(R.string.settings_noun_client),
+            caldavUrls = stringResource(R.string.settings_caldavurls),
+            caldavEvents = stringResource(R.string.settings_caldavevents),
+            caldavTodos = stringResource(R.string.settings_caldavtodos),
+            sourcesTitle = stringResource(R.string.settings_sources),
+            sourcesAdd = stringResource(R.string.settings_sources_add),
+            sourcesEmpty = stringResource(R.string.settings_sources_empty),
+            sourcesFailed = stringResource(R.string.settings_sources_failed),
+            sourcesInbox = stringResource(R.string.settings_sources_inbox),
+            sourcesKindCaldav = stringResource(R.string.settings_sources_kind_caldav),
+            sourcesKindIcal = stringResource(R.string.settings_sources_kind_ical),
+            sourcesKindRss = stringResource(R.string.settings_sources_kind_rss),
+            sourcesName = stringResource(R.string.settings_sources_name),
+            sourcesNever = stringResource(R.string.settings_sources_never),
+            sourcesPassword = stringResource(R.string.settings_sources_password),
+            sourcesReadOnly = stringResource(R.string.settings_sources_readonly),
+            sourcesRefreshed = stringResource(R.string.settings_sources_refreshed),
+            sourcesRemove = stringResource(R.string.settings_sources_remove),
+            sourcesUrl = stringResource(R.string.settings_sources_url),
+            sourcesUrlRequired = stringResource(R.string.settings_sources_urlrequired),
+            sourcesUsername = stringResource(R.string.settings_sources_username),
+            calendarShared = stringResource(R.string.settings_calendarshared),
+            sharedCalendars = stringResource(R.string.settings_sharedcalendars),
+            calendarPrivate = stringResource(R.string.settings_calendarprivate),
+            calendarCredWarning = stringResource(R.string.settings_calendarcredwarning),
             scopeType = stringResource(R.string.settings_scopetype),
             scopeTypeIndividual = stringResource(R.string.settings_scopetype_individual),
             scopeTypeCollective = stringResource(R.string.settings_scopetype_collective),
@@ -1296,6 +1324,7 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
         labelsList = labels,
         taskTypes = taskTypes,
         scopeSettings = scopeSettings,
+        calendars = calendars,
         theme = theme,
         accent = accent,
         serverUrl = serverUrl,
@@ -1331,5 +1360,8 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
         onUpdateTaskType = model::updateTaskType,
         onDeleteTaskType = model::deleteTaskType,
         onUpdateScopeSettings = model::updateScopeSettings,
+        onCreateCalendar = model::createCalendar,
+        onUpdateCalendar = model::updateCalendar,
+        onDeleteCalendar = model::deleteCalendar,
     )
 }

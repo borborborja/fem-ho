@@ -265,7 +265,7 @@ class SerializationTest {
     @Test
     fun `Calendar es deserialitza d'un JSON real del servidor`() {
         val calendarJson = """
-            {"id":"cal-1","scope_id":"s1","project_id":"p1","name":"Escola","color":"--plou-pink","origin":"subscription","source_kind":"ical","source_url":"https://example.com/calendar.ics","writable":false,"refresh_interval":3600,"inbox_visible":true,"last_refreshed_at":"2026-08-11T10:00:00.000Z","last_error":null,"shared_with_scope_id":"s2"}
+            {"id":"cal-1","scope_id":"s1","project_id":"p1","name":"Escola","color":"--plou-pink","origin":"subscription","source_kind":"ical","source_url":"https://example.com/calendar.ics","writable":false,"refresh_interval":3600,"inbox_visible":true,"last_refreshed_at":"2026-08-11T10:00:00.000Z","last_error":null,"shared_with_scope":true}
         """.trimIndent()
         val calendar = json.decodeFromString<Calendar>(calendarJson)
         assertEquals("cal-1", calendar.id)
@@ -276,12 +276,25 @@ class SerializationTest {
         assertEquals("https://example.com/calendar.ics", calendar.sourceUrl)
         assertEquals(false, calendar.writable)
         assertEquals(3600, calendar.refreshInterval)
+        assertTrue(calendar.sharedWithScope)
+    }
+
+    @Test
+    fun `Calendar amb booleans de SQLite (0 i 1) es deserialitza`() {
+        val calendarJson = """
+            {"id":"cal-4","scope_id":"s1","project_id":null,"name":"Feina","color":null,"origin":"subscription","source_kind":"caldav","source_url":"https://example.com/dav/","writable":1,"refresh_interval":null,"inbox_visible":null,"last_refreshed_at":null,"last_error":null,"shared_with_scope":1,"has_credentials":1}
+        """.trimIndent()
+        val calendar = json.decodeFromString<Calendar>(calendarJson)
+        assertEquals(true, calendar.writable)
+        assertEquals(null, calendar.inboxVisible)
+        assertTrue(calendar.sharedWithScope)
+        assertTrue(calendar.hasCredentials)
     }
 
     @Test
     fun `Calendar amb source_kind caldav es deserialitza correctament`() {
         val calendarJson = """
-            {"id":"cal-2","scope_id":"s1","project_id":null,"name":"Feina","color":"--plou-blue","origin":"local","source_kind":"caldav","source_url":null,"writable":true,"refresh_interval":null,"inbox_visible":true,"last_refreshed_at":null,"last_error":null,"shared_with_scope_id":null}
+            {"id":"cal-2","scope_id":"s1","project_id":null,"name":"Feina","color":"--plou-blue","origin":"local","source_kind":"caldav","source_url":null,"writable":true,"refresh_interval":null,"inbox_visible":true,"last_refreshed_at":null,"last_error":null,"shared_with_scope":false}
         """.trimIndent()
         val calendar = json.decodeFromString<Calendar>(calendarJson)
         assertEquals(SourceKind.CALDAV, calendar.sourceKind)
@@ -291,7 +304,7 @@ class SerializationTest {
     @Test
     fun `Calendar amb source_kind rss es deserialitza correctament`() {
         val calendarJson = """
-            {"id":"cal-3","scope_id":"s1","project_id":null,"name":"Notícies","color":null,"origin":"subscription","source_kind":"rss","source_url":"https://example.com/rss.xml","writable":false,"refresh_interval":1800,"inbox_visible":false,"last_refreshed_at":"2026-08-11T10:00:00.000Z","last_error":null,"shared_with_scope_id":null}
+            {"id":"cal-3","scope_id":"s1","project_id":null,"name":"Notícies","color":null,"origin":"subscription","source_kind":"rss","source_url":"https://example.com/rss.xml","writable":false,"refresh_interval":1800,"inbox_visible":false,"last_refreshed_at":"2026-08-11T10:00:00.000Z","last_error":null,"shared_with_scope":false}
         """.trimIndent()
         val calendar = json.decodeFromString<Calendar>(calendarJson)
         assertEquals(SourceKind.RSS, calendar.sourceKind)

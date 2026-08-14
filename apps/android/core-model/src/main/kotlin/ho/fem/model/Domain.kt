@@ -1,7 +1,16 @@
 package ho.fem.model
 
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.descriptors.PrimitiveKind
+import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
+import kotlinx.serialization.json.JsonDecoder
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.intOrNull
 
 /**
  * Els models de domini. docs/01, docs/05 §4.
@@ -19,6 +28,29 @@ import kotlinx.serialization.Serializable
  * `ServerUrl.kt`, que són anteriors i els fan servir. Declarar-los una segona vegada
  * hauria donat dos tipus amb el mateix nom i una conversió pel mig.
  */
+
+/**
+ * Booleans que SQLite entrega com a 0/1.
+ *
+ * El servidor serialitza algunes columnes de booleans directament des de SQLite
+ * (writable, shared_with_scope, has_credentials) i surten com a enters 0/1, mentre que
+ * d'altres (inbox_visible) passen per `maybeBool` i surten com a booleans de veritat.
+ * Un serialitzador estricte trencaria la deserialització dels calendaris sense que res
+ * fallés: l'error cauria dins d'un `runCatching` i la llista semblaria buida.
+ */
+object BooleanCoerce : KSerializer<Boolean> {
+    override val descriptor = PrimitiveSerialDescriptor("BooleanCoerce", PrimitiveKind.BOOLEAN)
+
+    override fun serialize(encoder: Encoder, value: Boolean) {
+        encoder.encodeBoolean(value)
+    }
+
+    override fun deserialize(decoder: Decoder): Boolean {
+        val element = (decoder as? JsonDecoder)?.decodeJsonElement() as? JsonPrimitive ?: return decoder.decodeBoolean()
+        // Parèntesi obligatoris: `?:` lliga més fort que `!=` i `false != 0` seria true.
+        return element.booleanOrNull ?: ((element.intOrNull ?: 0) != 0)
+    }
+}
 
 @Serializable
 enum class TaskStatus {
@@ -472,12 +504,16 @@ data class Calendar(
     val origin: CalendarOrigin = CalendarOrigin.LOCAL,
     @SerialName("source_kind") val sourceKind: SourceKind? = null,
     @SerialName("source_url") val sourceUrl: String? = null,
-    val writable: Boolean = false,
+    @SerialName("source_username") val sourceUsername: String? = null,
+    @Serializable(with = BooleanCoerce::class) val writable: Boolean = false,
     @SerialName("refresh_interval") val refreshInterval: Int? = null,
     @SerialName("inbox_visible") val inboxVisible: Boolean? = null,
+    @SerialName("inbox_visible_default") val inboxVisibleDefault: Boolean = true,
     @SerialName("last_refreshed_at") val lastRefreshedAt: String? = null,
     @SerialName("last_error") val lastError: String? = null,
-    @SerialName("shared_with_scope_id") val sharedWithScopeId: String? = null,
+    @SerialName("last_error_at") val lastErrorAt: String? = null,
+    @SerialName("shared_with_scope") @Serializable(with = BooleanCoerce::class) val sharedWithScope: Boolean = false,
+    @SerialName("has_credentials") @Serializable(with = BooleanCoerce::class) val hasCredentials: Boolean = false,
 )
 
 @Serializable

@@ -715,7 +715,7 @@ internal fun CalendarEntity.toDomain(): Calendar =
         inboxVisible = inboxVisible,
         lastRefreshedAt = lastRefreshedAt,
         lastError = lastError,
-        sharedWithScopeId = sharedWithScopeId,
+        sharedWithScope = sharedWithScope,
     )
 
 internal fun Calendar.toEntity(): CalendarEntity =
@@ -732,7 +732,7 @@ internal fun Calendar.toEntity(): CalendarEntity =
         inboxVisible = inboxVisible,
         lastRefreshedAt = lastRefreshedAt,
         lastError = lastError,
-        sharedWithScopeId = sharedWithScopeId,
+        sharedWithScope = sharedWithScope,
     )
 
 internal fun MailAccountEntity.toDomain(): MailAccount =
