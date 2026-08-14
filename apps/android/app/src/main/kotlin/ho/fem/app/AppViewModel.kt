@@ -317,6 +317,35 @@ class AppViewModel(private val container: Container) : ViewModel() {
     private val _openTask = MutableStateFlow<Task?>(null)
     val openTask: StateFlow<Task?> = _openTask.asStateFlow()
 
+    // ------------------------------------------------------------------ Cerca
+
+    private val _searchResults = MutableStateFlow<List<Task>>(emptyList())
+    val searchResults: StateFlow<List<Task>> = _searchResults.asStateFlow()
+
+    private val _searchLoading = MutableStateFlow(false)
+    val searchLoading: StateFlow<Boolean> = _searchLoading.asStateFlow()
+
+    /**
+     * Cerca de tasques, amb el mateix límit que la web (8).
+     *
+     * El debounce viu a la pantalla (250ms), com a la web: aquí només es demana quan la
+     * pantalla ja ha decidit que toca. `q` ja arriba retallada i amb mínim 2 caràcters.
+     */
+    fun search(q: String) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            _searchLoading.value = true
+            runCatching { container.api(base).search(q, 8) }
+                .onSuccess { _searchResults.value = it.data }
+                .onFailure { _searchResults.value = emptyList() }
+            _searchLoading.value = false
+        }
+    }
+
+    fun clearSearch() {
+        _searchResults.value = emptyList()
+    }
+
     private val _openChecklists = MutableStateFlow<List<Checklist>>(emptyList())
     val openChecklists: StateFlow<List<Checklist>> = _openChecklists.asStateFlow()
 

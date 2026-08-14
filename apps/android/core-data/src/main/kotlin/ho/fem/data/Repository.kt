@@ -21,6 +21,7 @@ import ho.fem.model.ShareAccess
 import ho.fem.model.ShareCreated
 import ho.fem.model.ShareSummary
 import ho.fem.model.Task
+import ho.fem.model.TaskPage
 import ho.fem.model.TaskStatus
 import ho.fem.model.TaskType
 import ho.fem.model.UserProfile
@@ -535,7 +536,7 @@ class Repository(
 
     // --------------------------------------------------------------- cerca
 
-    suspend fun search(q: String, limit: Int? = null): Map<String, Any> =
+    suspend fun search(q: String, limit: Int? = null): TaskPage =
         api.search(q, limit)
 
     // ----------------------------------------------------------- dashboard

@@ -60,6 +60,7 @@ import ho.fem.designsystem.FemhoText
 import ho.fem.designsystem.FemhoTheme
 import ho.fem.designsystem.FemhoShape
 import ho.fem.designsystem.ScopeChip
+import ho.fem.designsystem.TaskCard
 import ho.fem.designsystem.scopeColor
 import ho.fem.model.Checklist
 import ho.fem.model.Project
@@ -91,6 +92,7 @@ import ho.fem.model.QuickAddContext
 import ho.fem.model.QuickAddPerson
 import ho.fem.model.QuickAddProject
 import ho.fem.model.QuickAddScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -213,50 +215,60 @@ private fun Root(model: AppViewModel, pending: MutableState<Intent?>) {
 
         is AppViewModel.Session.NeedsCertConfirm -> CertConfirmScreen(model, state.fingerprint)
 
-        is AppViewModel.Session.Ready -> when (screen) {
-            Screen.BOARD -> BoardHost(
-                model = model,
-                onSettings = { screen = Screen.SETTINGS },
-                onCalendar = { screen = Screen.CALENDAR },
-                onRegistre = { screen = Screen.REGISTRE },
-                onEstadistiques = { screen = Screen.ESTADISTIQUES },
-            )
-            Screen.CALENDAR -> CalendarHost(
-                model = model,
-                onSettings = { screen = Screen.SETTINGS },
-                onBoard = { screen = Screen.BOARD },
-            )
-            Screen.SETTINGS -> SettingsHost(
-                model = model,
-                serverUrl = state.serverUrl,
-                onBack = { screen = Screen.BOARD },
-            )
-            Screen.REGISTRE -> RegistreHost(
-                model = model,
-                onBoard = { screen = Screen.BOARD },
-            )
-            Screen.ESTADISTIQUES -> EstadistiquesHost(
-                model = model,
-                onBoard = { screen = Screen.BOARD },
-            )
-            Screen.JOIN -> JoinScreen(
-                model = model,
-                token = joinToken.orEmpty(),
-                onDone = {
-                    screen = Screen.BOARD
-                    model.consumeJoin()
-                    joinToken = null
-                },
-            )
-            Screen.INVITE -> InviteScreen(
-                model = model,
-                token = inviteToken.orEmpty(),
-                onDone = {
-                    screen = Screen.BOARD
+        is AppViewModel.Session.Ready -> {
+            when (screen) {
+                Screen.BOARD -> BoardHost(
+                    model = model,
+                    onSettings = { screen = Screen.SETTINGS },
+                    onCalendar = { screen = Screen.CALENDAR },
+                    onRegistre = { screen = Screen.REGISTRE },
+                    onEstadistiques = { screen = Screen.ESTADISTIQUES },
+                    onSearch = { screen = Screen.SEARCH },
+                )
+                Screen.SEARCH -> SearchHost(
+                    model = model,
+                    onBoard = { screen = Screen.BOARD },
+                )
+                Screen.CALENDAR -> CalendarHost(
+                    model = model,
+                    onSettings = { screen = Screen.SETTINGS },
+                    onBoard = { screen = Screen.BOARD },
+                )
+                Screen.SETTINGS -> SettingsHost(
+                    model = model,
+                    serverUrl = state.serverUrl,
+                    onBack = { screen = Screen.BOARD },
+                )
+                Screen.REGISTRE -> RegistreHost(
+                    model = model,
+                    onBoard = { screen = Screen.BOARD },
+                )
+                Screen.ESTADISTIQUES -> EstadistiquesHost(
+                    model = model,
+                    onBoard = { screen = Screen.BOARD },
+                )
+                Screen.JOIN -> JoinScreen(
+                    model = model,
+                    token = joinToken.orEmpty(),
+                    onDone = {
+                        screen = Screen.BOARD
+                        model.consumeJoin()
+                        joinToken = null
+                    },
+                )
+                Screen.INVITE -> InviteScreen(
+                    model = model,
+                    token = inviteToken.orEmpty(),
+                    onDone = {
+                        screen = Screen.BOARD
                     model.consumeJoin()
                     inviteToken = null
                 },
             )
+            }
+
+            // El full de detall, per sobre de qualsevol pantalla (cerca inclosa).
+            TaskDetailSheet(model)
         }
     }
 }
@@ -612,7 +624,7 @@ private fun LoginScreen(model: AppViewModel, instanceName: String, serverNewer: 
 }
 
 @Composable
-private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: () -> Unit, onRegistre: () -> Unit, onEstadistiques: () -> Unit) {
+private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: () -> Unit, onRegistre: () -> Unit, onEstadistiques: () -> Unit, onSearch: () -> Unit) {
     val tasks by model.tasks.collectAsStateWithLifecycle()
     val scopes by model.scopes.collectAsStateWithLifecycle()
     val pending by model.pending.collectAsStateWithLifecycle()
@@ -736,6 +748,7 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: (
                     Screen.CALENDAR -> onCalendar()
                     Screen.REGISTRE -> onRegistre()
                     Screen.ESTADISTIQUES -> onEstadistiques()
+                    Screen.SEARCH -> onSearch()
                     else -> Unit
                 }
             },
@@ -917,7 +930,29 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: (
         )
     }
 
-    // El full de detall va per sobre de tot, com a la web.
+    // El full de detall es crida des de `Session.Ready`, per sobre de totes les
+    // pantalles: si visqués aquí dins, la cerca no el podria obrir (tasca 31).
+}
+
+@Composable
+private fun TaskDetailSheet(model: AppViewModel) {
+    val openTask by model.openTask.collectAsStateWithLifecycle()
+    val openChecklists by model.openChecklists.collectAsStateWithLifecycle()
+    val openComments by model.openComments.collectAsStateWithLifecycle()
+    val openActivity by model.openActivity.collectAsStateWithLifecycle()
+    val openShares by model.openShares.collectAsStateWithLifecycle()
+    val createdShareUrl by model.createdShareUrl.collectAsStateWithLifecycle()
+    val openAttachments by model.openAttachments.collectAsStateWithLifecycle()
+    val attachmentError by model.attachmentError.collectAsStateWithLifecycle()
+    val scopes by model.scopes.collectAsStateWithLifecycle()
+    val projects by model.projects.collectAsStateWithLifecycle()
+    val people by model.people.collectAsStateWithLifecycle()
+    val taskTypes by model.taskTypes.collectAsStateWithLifecycle()
+    val labels by model.labels.collectAsStateWithLifecycle()
+    val manualLabel = stringResource(R.string.ai_mode_manual)
+    val assistedLabel = stringResource(R.string.ai_mode_assisted)
+    val delegatedLabel = stringResource(R.string.ai_mode_delegated)
+
     openTask?.let { task ->
         val context = androidx.compose.ui.platform.LocalContext.current
         val picker = androidx.activity.compose.rememberLauncherForActivityResult(
@@ -1338,6 +1373,18 @@ private fun TopBar(
                             .androidClickable { onView(target) },
                     )
                 }
+
+                // La lupa de la cerca, com a la web: un text, com la resta d'icones.
+                Text(
+                    text = "⌕",
+                    color = if (view == Screen.SEARCH) Femho.colors.ink else Femho.colors.inkSoft,
+                    fontSize = FemhoText.body,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .padding(horizontal = 8.dp, vertical = 12.dp)
+                        .testTag("open-search")
+                        .androidClickable { onView(Screen.SEARCH) },
+                )
 
                 if (aiEnabled && view == Screen.BOARD) {
                     Box {
@@ -2510,6 +2557,77 @@ private fun RegistreHost(model: AppViewModel, onBoard: () -> Unit) {
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SearchHost(model: AppViewModel, onBoard: () -> Unit) {
+    val results by model.searchResults.collectAsStateWithLifecycle()
+    val loading by model.searchLoading.collectAsStateWithLifecycle()
+    val scopes by model.scopes.collectAsStateWithLifecycle()
+    var query by remember { mutableStateOf("") }
+
+    // El debounce de 250ms de la web (SearchScreen.tsx:39): no es demana a cada tecla.
+    androidx.compose.runtime.LaunchedEffect(query) {
+        delay(250)
+        val q = query.trim()
+        if (q.length >= 2) model.search(q) else model.clearSearch()
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Femho.pageBackground)
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.nav_backtoboard),
+            color = Femho.colors.inkSoft,
+            fontSize = FemhoText.body,
+            modifier = Modifier
+                .clickable(onClick = onBoard)
+                .heightIn(min = FemhoSize.touch)
+                .padding(vertical = 12.dp)
+                .testTag("search-back"),
+        )
+        Text(
+            text = stringResource(R.string.nav_search),
+            color = Femho.colors.ink,
+            fontSize = FemhoText.columnTitle,
+            fontWeight = FontWeight.ExtraBold,
+        )
+
+        androidx.compose.material3.OutlinedTextField(
+            value = query,
+            onValueChange = { query = it },
+            singleLine = true,
+            placeholder = { Text(stringResource(R.string.nav_search)) },
+            modifier = Modifier.fillMaxWidth().testTag("search-input"),
+        )
+
+        when {
+            query.trim().length < 2 -> Unit
+            loading -> Loading()
+            results.isEmpty() -> Text(
+                text = stringResource(R.string.state_empty_search),
+                color = Femho.colors.inkSoft,
+                fontSize = FemhoText.body,
+                modifier = Modifier.testTag("search-empty"),
+            )
+            else -> results.forEach { task ->
+                TaskCard(
+                    title = task.title,
+                    // La pastilla d'àmbit a cada resultat: aquí es barregen tots (la web).
+                    project = scopes.firstOrNull { it.id == task.scopeId }?.name,
+                    time = task.dueTime,
+                    done = task.status == TaskStatus.DONE,
+                    onOpen = { model.open(task) },
+                    modifier = Modifier.testTag("search-result-${'$'}{task.id}"),
+                )
             }
         }
     }

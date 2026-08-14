@@ -35,6 +35,7 @@ import ho.fem.model.ShareCreated
 import ho.fem.model.ShareSummary
 import ho.fem.model.Subtask
 import ho.fem.model.Task
+import ho.fem.model.TaskPage
 import ho.fem.model.TaskType
 import ho.fem.model.UserProfile
 import kotlinx.coroutines.Dispatchers
@@ -950,8 +951,10 @@ class FemhoApi(
 
     // ------------------------------------------------------------------ Cerca
 
-    suspend fun search(q: String, limit: Int? = null): Map<String, Any> {
-        val query = if (limit != null) "?q=${java.net.URLEncoder.encode(q, "UTF-8")}&limit=$limit" else "?q=${java.net.URLEncoder.encode(q, "UTF-8")}"
+    /** La primera pàgina de la cerca, amb el límit que demana la pantalla (8). */
+    suspend fun search(q: String, limit: Int? = null): TaskPage {
+        val query = "?q=${java.net.URLEncoder.encode(q, "UTF-8")}" +
+            (if (limit != null) "&limit=$limit" else "")
         return get("/api/v1/search$query")
     }
 

@@ -291,6 +291,19 @@ data class Board(val columns: List<BoardColumn> = emptyList()) {
     val tasks: List<Task> get() = columns.flatMap { column -> column.groups.flatMap { it.tasks } }
 }
 
+/**
+ * Una pàgina de resultats de la cerca (`GET /api/v1/search`).
+ *
+ * El mateix `TaskPage` de la web (openapi.yaml:5923): l'app només en fa servir la
+ * primera pàgina, amb `limit=8`, i els altres camps no cal ni llegir-los.
+ */
+@Serializable
+data class TaskPage(
+    val data: List<Task> = emptyList(),
+    @SerialName("next_cursor") val nextCursor: String? = null,
+    @SerialName("has_more") val hasMore: Boolean = false,
+)
+
 @Serializable
 data class Inbox(
     val date: String,
