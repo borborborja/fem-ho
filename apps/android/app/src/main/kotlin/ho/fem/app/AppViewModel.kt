@@ -108,6 +108,18 @@ class AppViewModel(private val container: Container) : ViewModel() {
     private val _openActivity = MutableStateFlow<List<ho.fem.model.ActivityEntry>>(emptyList())
     val openActivity: StateFlow<List<ho.fem.model.ActivityEntry>> = _openActivity.asStateFlow()
 
+    /** Els enllaços compartits de la tasca oberta, per revocar-los. */
+    private val _openShares = MutableStateFlow<List<ho.fem.model.ShareSummary>>(emptyList())
+    val openShares: StateFlow<List<ho.fem.model.ShareSummary>> = _openShares.asStateFlow()
+
+    /** L'URL acabat de crear: es mostra una sola vegada, i després es descarta. */
+    private val _createdShareUrl = MutableStateFlow<String?>(null)
+    val createdShareUrl: StateFlow<String?> = _createdShareUrl.asStateFlow()
+
+    fun consumeCreatedShareUrl() {
+        _createdShareUrl.value = null
+    }
+
     private val _sessions = MutableStateFlow<ho.fem.model.SessionReport>(ho.fem.model.SessionReport())
     val sessions: StateFlow<ho.fem.model.SessionReport> = _sessions.asStateFlow()
 
@@ -437,6 +449,45 @@ class AppViewModel(private val container: Container) : ViewModel() {
                 .onSuccess { _openComments.value = it }
             runCatching { container.api(base).taskActivity(task.id) }
                 .onSuccess { _openActivity.value = it }
+            runCatching { container.api(base).shares() }
+                .onSuccess { all -> _openShares.value = all.filter { it.taskId == task.id } }
+        }
+    }
+
+    /** Crea un enllaç compartit. POST /shares. L'URL surt una sola vegada. */
+    fun createTaskShare(
+        task: Task,
+        permission: String,
+        requireName: Boolean,
+        password: String?,
+        expiresAt: String?,
+        maxViews: String?,
+    ) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching {
+                container.api(base).createShare(
+                    taskId = task.id,
+                    permission = permission,
+                    requireName = requireName,
+                    password = password,
+                    expiresAt = expiresAt,
+                    maxViews = maxViews?.toIntOrNull(),
+                )
+            }.onSuccess { result ->
+                _createdShareUrl.value = result.url
+                open(task)
+            }
+        }
+    }
+
+    /** Revoca un enllaç compartit. DELETE /shares/{id}. */
+    fun revokeTaskShare(shareId: String) {
+        val base = serverUrl ?: return
+        val task = _openTask.value ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).revokeShare(shareId) }
+                .onSuccess { open(task) }
         }
     }
 

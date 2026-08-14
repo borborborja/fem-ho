@@ -18,6 +18,7 @@ import ho.fem.model.ScopeKind
 import ho.fem.model.ScopeSettings
 import ho.fem.model.Session
 import ho.fem.model.ShareAccess
+import ho.fem.model.ShareCreated
 import ho.fem.model.ShareSummary
 import ho.fem.model.Task
 import ho.fem.model.TaskStatus
@@ -512,7 +513,7 @@ class Repository(
         password: String? = null,
         expiresAt: String? = null,
         maxViews: Int? = null,
-    ): Map<String, Any> =
+    ): ShareCreated =
         api.createShare(taskId, checklistId, permission, requireName, password, expiresAt, maxViews)
 
     suspend fun revokeShare(id: String) {

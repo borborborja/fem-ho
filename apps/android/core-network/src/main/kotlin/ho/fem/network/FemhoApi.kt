@@ -30,6 +30,7 @@ import ho.fem.model.SessionEntry
 import ho.fem.model.SessionReport
 import ho.fem.model.SessionStats
 import ho.fem.model.ShareAccess
+import ho.fem.model.ShareCreated
 import ho.fem.model.ShareSummary
 import ho.fem.model.Subtask
 import ho.fem.model.Task
@@ -539,7 +540,7 @@ class FemhoApi(
         password: String? = null,
         expiresAt: String? = null,
         maxViews: Int? = null,
-    ): Map<String, Any> = post("/api/v1/shares", buildMap {
+    ): ShareCreated = post("/api/v1/shares", buildMap {
         if (taskId != null) put("task_id", taskId)
         if (checklistId != null) put("checklist_id", checklistId)
         put("permission", permission)

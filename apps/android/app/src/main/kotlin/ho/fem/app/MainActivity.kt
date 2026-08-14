@@ -368,6 +368,8 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: (
     val openChecklists by model.openChecklists.collectAsStateWithLifecycle()
     val openComments by model.openComments.collectAsStateWithLifecycle()
     val openActivity by model.openActivity.collectAsStateWithLifecycle()
+    val openShares by model.openShares.collectAsStateWithLifecycle()
+    val createdShareUrl by model.createdShareUrl.collectAsStateWithLifecycle()
     val pinned by model.pinned.collectAsStateWithLifecycle()
     val activeProjects by model.activeProjects.collectAsStateWithLifecycle()
     val expandedCards by model.expandedCards.collectAsStateWithLifecycle()
@@ -697,6 +699,24 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: (
                 lockWorking = stringResource(R.string.ai_lock_working),
                 takeOverAction = stringResource(R.string.ai_takeover_action),
                 takeOverWhere = stringResource(R.string.ai_takeover_where),
+                share = stringResource(R.string.share_title),
+                sharePermission = stringResource(R.string.share_permission),
+                sharePermissionOptions = listOf(
+                    "view" to stringResource(R.string.share_permission_view),
+                    "check" to stringResource(R.string.share_permission_check),
+                    "comment" to stringResource(R.string.share_permission_comment),
+                ),
+                shareRequireName = stringResource(R.string.share_requirename),
+                sharePassword = stringResource(R.string.share_password),
+                sharePasswordPlaceholder = stringResource(R.string.share_passwordplaceholder),
+                shareExpiresAt = stringResource(R.string.share_expiresat),
+                shareMaxViews = stringResource(R.string.share_maxviews),
+                shareCreate = stringResource(R.string.nav_create),
+                shareCopy = stringResource(R.string.tokens_copy),
+                shareRevoke = stringResource(R.string.share_revoke),
+                shareRevoked = stringResource(R.string.share_revoked),
+                shareOnceWarning = stringResource(R.string.tokens_oncewarning),
+                shareClose = stringResource(R.string.nav_close),
                 activityVerbs = mapOf(
                     "answered" to stringResource(R.string.activity_verb_answered),
                     "asked" to stringResource(R.string.activity_verb_asked),
@@ -752,6 +772,13 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: (
             onDelete = { model.deleteTask(task) },
             onTakeOver = { model.takeOver(task, it) },
             onClose = model::closeTask,
+            shares = openShares,
+            createdShareUrl = createdShareUrl,
+            onCreateShare = { permission, requireName, password, expiresAt, maxViews ->
+                model.createTaskShare(task, permission, requireName, password, expiresAt, maxViews)
+            },
+            onRevokeShare = model::revokeTaskShare,
+            onCopyToClipboard = model::copyToClipboard,
         )
     }
 }

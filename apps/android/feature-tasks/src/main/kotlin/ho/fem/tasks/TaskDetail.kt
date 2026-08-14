@@ -85,6 +85,21 @@ data class TaskDetailLabels(
     val lockWorking: String,
     val takeOverAction: String,
     val takeOverWhere: String,
+    // Compartir (docs/10 §6): el diàleg del tot 24, com la web
+    val share: String,
+    val sharePermission: String,
+    val sharePermissionOptions: List<Pair<String, String>>,
+    val shareRequireName: String,
+    val sharePassword: String,
+    val sharePasswordPlaceholder: String,
+    val shareExpiresAt: String,
+    val shareMaxViews: String,
+    val shareCreate: String,
+    val shareCopy: String,
+    val shareRevoke: String,
+    val shareRevoked: String,
+    val shareOnceWarning: String,
+    val shareClose: String,
     val status: Map<TaskStatus, String>,
     val aiMode: Map<AiMode, String>,
     val checklists: String,
@@ -121,6 +136,14 @@ fun TaskDetail(
     onDelete: () -> Unit,
     onTakeOver: (String) -> Unit,
     onClose: () -> Unit,
+    /** Els enllaços compartits d'aquesta tasca, per revocar-los. */
+    shares: List<ho.fem.model.ShareSummary> = emptyList(),
+    /** L'URL acabat de crear: surt una sola vegada (del token no se'n pot treure). */
+    createdShareUrl: String? = null,
+    /** Crea un enllaç. POST /shares. Els arguments buits es deixen al servidor. */
+    onCreateShare: (permission: String, requireName: Boolean, password: String?, expiresAt: String?, maxViews: String?) -> Unit = { _, _, _, _, _ -> },
+    onRevokeShare: (String) -> Unit = {},
+    onCopyToClipboard: (String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     var title by remember(task.id) { mutableStateOf(task.title) }
@@ -135,6 +158,14 @@ fun TaskDetail(
     var newLabelName by remember(task.id) { mutableStateOf<String?>(null) }
     var commentDraft by remember(task.id) { mutableStateOf("") }
     var confirmingDelete by remember(task.id) { mutableStateOf(false) }
+    // El diàleg de compartir: com el de la web, no es tanca en crear sinó que passa
+    // a mostrar l'URL (docs/10 §6: del token no se'n pot treure).
+    var sharing by remember(task.id) { mutableStateOf(false) }
+    var sharePermission by remember(task.id) { mutableStateOf("view") }
+    var shareRequireName by remember(task.id) { mutableStateOf(false) }
+    var sharePassword by remember(task.id) { mutableStateOf("") }
+    var shareExpiresAt by remember(task.id) { mutableStateOf("") }
+    var shareMaxViews by remember(task.id) { mutableStateOf("") }
     var takingOver by remember(task.id) { mutableStateOf(false) }
 
     // El pany de l'agent (todo 22): locked_until al futur vol dir que la tasca està
@@ -676,6 +707,188 @@ fun TaskDetail(
                     .padding(vertical = 10.dp)
                     .testTag("task-delete"),
             )
+        }
+
+        // Compartir: el diàleg del tot 24, com la web (ShareTaskDialog).
+        if (!sharing) {
+            Text(
+                text = labels.share,
+                color = Femho.colors.ink,
+                fontSize = FemhoText.body,
+                modifier = Modifier
+                    .clickable { sharing = true }
+                    .heightIn(min = FemhoSize.touch)
+                    .padding(vertical = 10.dp)
+                    .testTag("task-share"),
+            )
+        } else {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(FemhoShape.card))
+                    .background(Femho.colors.cardBg)
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(labels.sharePermission, color = Femho.colors.inkSoft, fontSize = FemhoText.meta)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    labels.sharePermissionOptions.forEach { (value, optionLabel) ->
+                        Text(
+                            text = optionLabel,
+                            color = if (sharePermission == value) Femho.onBrand else Femho.colors.inkSoft,
+                            fontSize = FemhoText.meta,
+                            fontWeight = if (sharePermission == value) FontWeight.Bold else FontWeight.Medium,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(FemhoShape.pill))
+                                .background(if (sharePermission == value) Femho.colors.plouBlue else Femho.colors.ghostBg)
+                                .clickable { sharePermission = value }
+                                .padding(horizontal = 10.dp, vertical = 8.dp)
+                                .testTag("task-share-permission-$value"),
+                        )
+                    }
+                }
+
+                Text(
+                    text = labels.shareRequireName,
+                    color = if (shareRequireName) Femho.colors.ink else Femho.colors.inkSoft,
+                    fontSize = FemhoText.body,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { shareRequireName = !shareRequireName }
+                        .heightIn(min = FemhoSize.touch)
+                        .padding(vertical = 6.dp)
+                        .testTag("task-share-require-name"),
+                )
+
+                androidx.compose.material3.TextField(
+                    value = sharePassword,
+                    onValueChange = { sharePassword = it },
+                    label = { Text(labels.sharePassword) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().testTag("task-share-password"),
+                )
+                androidx.compose.material3.TextField(
+                    value = shareExpiresAt,
+                    onValueChange = { shareExpiresAt = it },
+                    label = { Text(labels.shareExpiresAt) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().testTag("task-share-expires"),
+                )
+                androidx.compose.material3.TextField(
+                    value = shareMaxViews,
+                    onValueChange = { shareMaxViews = it },
+                    label = { Text(labels.shareMaxViews) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().testTag("task-share-maxviews"),
+                )
+
+                Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                    Text(
+                        text = labels.shareCreate,
+                        color = Femho.onBrand,
+                        fontSize = FemhoText.body,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier
+                            .clickable {
+                                onCreateShare(
+                                    sharePermission,
+                                    shareRequireName,
+                                    sharePassword.ifBlank { null },
+                                    shareExpiresAt.ifBlank { null },
+                                    shareMaxViews.ifBlank { null },
+                                )
+                            }
+                            .heightIn(min = FemhoSize.touch)
+                            .padding(vertical = 10.dp)
+                            .testTag("task-share-create"),
+                    )
+                    Text(
+                        text = labels.shareClose,
+                        color = Femho.colors.inkSoft,
+                        fontSize = FemhoText.body,
+                        modifier = Modifier
+                            .clickable { sharing = false }
+                            .heightIn(min = FemhoSize.touch)
+                            .padding(vertical = 10.dp)
+                            .testTag("task-share-close"),
+                    )
+                }
+            }
+        }
+
+        // L'URL acabat de crear: es mostra una sola vegada (del token no se'n pot treure).
+        if (createdShareUrl != null) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(FemhoShape.card))
+                    .background(Femho.colors.cardBg)
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(
+                    text = createdShareUrl,
+                    color = Femho.colors.ink,
+                    fontSize = FemhoText.meta,
+                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                    modifier = Modifier.testTag("task-share-url"),
+                )
+                Text(
+                    text = labels.shareOnceWarning,
+                    color = Femho.colors.dangerText,
+                    fontSize = FemhoText.meta,
+                )
+                Text(
+                    text = labels.shareCopy,
+                    color = Femho.onBrand,
+                    fontSize = FemhoText.body,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier
+                        .clickable { onCopyToClipboard(createdShareUrl) }
+                        .heightIn(min = FemhoSize.touch)
+                        .padding(vertical = 8.dp)
+                        .testTag("task-share-copy"),
+                )
+            }
+        }
+
+        // Els enllaços existents, amb el botó de revocar (DELETE /shares/{id}).
+        if (shares.isNotEmpty()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(FemhoShape.card))
+                    .background(Femho.colors.cardBg)
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                shares.forEach { share ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = if (share.revokedAt != null) labels.shareRevoked else share.permission.name.lowercase(),
+                            color = if (share.revokedAt != null) Femho.colors.inkFaint else Femho.colors.ink,
+                            fontSize = FemhoText.meta,
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (share.revokedAt == null) {
+                            Text(
+                                text = labels.shareRevoke,
+                                color = Femho.colors.dangerText,
+                                fontSize = FemhoText.body,
+                                modifier = Modifier
+                                    .clickable { onRevokeShare(share.id) }
+                                    .heightIn(min = FemhoSize.touch)
+                                    .padding(vertical = 8.dp)
+                                    .testTag("task-share-revoke-${share.id}"),
+                            )
+                        }
+                    }
+                }
+            }
         }
 
         Text(

@@ -606,6 +606,18 @@ data class ShareAccess(
     @SerialName("last_seen") val lastSeen: String? = null,
 )
 
+/**
+ * La resposta de crear un enllaç compartit.
+ *
+ * L'URL sencer va aquí i enlloc més: del `token_hmac` no se'n pot treure (docs/10 §6).
+ * Els camps extra (el `share` complet) s'ignoren gràcies a `ignoreUnknownKeys`.
+ */
+@Serializable
+data class ShareCreated(
+    val url: String,
+    val token: String = "",
+)
+
 @Serializable
 data class ScopeSettings(
     @SerialName("time_tracking") val timeTracking: Boolean = false,
