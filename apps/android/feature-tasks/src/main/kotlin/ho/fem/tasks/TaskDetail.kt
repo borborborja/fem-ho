@@ -1,6 +1,7 @@
 package ho.fem.tasks
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -63,6 +64,15 @@ data class TaskDetailLabels(
     val recurrenceMonthly: String,
     val recurrenceYearly: String,
     val recurrenceFromCompletion: String,
+    val assignees: String,
+    val taskType: String,
+    val noType: String,
+    val labels: String,
+    val newLabel: String,
+    val newLabelPlaceholder: String,
+    val emptyLabels: String,
+    val labelAdd: String,
+    val labelRemove: String,
     val status: Map<TaskStatus, String>,
     val aiMode: Map<AiMode, String>,
     val checklists: String,
@@ -77,11 +87,21 @@ fun TaskDetail(
     task: Task,
     checklists: List<Checklist>,
     projects: List<ho.fem.model.Project>,
+    people: List<ho.fem.model.Person>,
+    taskTypes: List<ho.fem.model.TaskType>,
+    labelsList: List<ho.fem.model.Label>,
+    isCollectiveScope: Boolean,
     labels: TaskDetailLabels,
     onSave: (title: String, aiMode: AiMode) -> Unit,
     onUpdateDetails: (description: String?, projectId: String?, dueDate: String?, dueTime: String?, deadline: String?, rrule: String?, recurrenceMode: String?) -> Unit,
     onStatus: (TaskStatus) -> Unit,
     onToggleItem: (itemId: String, done: Boolean) -> Unit,
+    onAddAssignee: (String) -> Unit,
+    onRemoveAssignee: (String) -> Unit,
+    onSetTaskType: (String?) -> Unit,
+    onAddLabel: (String) -> Unit,
+    onRemoveLabel: (String) -> Unit,
+    onCreateLabel: (String) -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -94,6 +114,7 @@ fun TaskDetail(
     var deadline by remember(task.id) { mutableStateOf(task.deadline.orEmpty()) }
     var rrule by remember(task.id) { mutableStateOf(task.rrule.orEmpty()) }
     var recurrenceMode by remember(task.id) { mutableStateOf(task.recurrenceMode?.name?.lowercase() ?: "schedule") }
+    var newLabelName by remember(task.id) { mutableStateOf<String?>(null) }
 
     Column(
         modifier = modifier
@@ -237,6 +258,150 @@ fun TaskDetail(
                     onCheckedChange = { on ->
                         recurrenceMode = if (on) "completion" else "schedule"
                     },
+                )
+            }
+        }
+
+        // Assignats (només àmbits col·lectius; la web no ofereix assignació en els individuals)
+        if (isCollectiveScope && people.isNotEmpty()) {
+            Text(labels.assignees, color = Femho.colors.inkSoft, fontSize = FemhoText.meta)
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                people.forEach { person ->
+                    val assigned = task.assigneeIds.contains(person.id)
+                    Text(
+                        text = person.name,
+                        color = if (assigned) Femho.onBrand else Femho.colors.inkSoft,
+                        fontSize = FemhoText.meta,
+                        fontWeight = if (assigned) FontWeight.Bold else FontWeight.Medium,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(FemhoShape.pill))
+                            .background(if (assigned) Femho.colors.plouBlue else Femho.colors.ghostBg)
+                            .clickable {
+                                if (assigned) onRemoveAssignee(person.id) else onAddAssignee(person.id)
+                            }
+                            .heightIn(min = FemhoSize.touch)
+                            .padding(horizontal = 12.dp, vertical = 12.dp)
+                            .testTag("task-assignee-${person.id}"),
+                    )
+                }
+            }
+        }
+
+        // Tipologia: una i tancada (per això xips d'una sola selecció i no etiquetes)
+        val scopeTypes = taskTypes.filter { it.scopeId == task.scopeId }
+        if (scopeTypes.isNotEmpty()) {
+            Text(labels.taskType, color = Femho.colors.inkSoft, fontSize = FemhoText.meta)
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                val options = listOf<Triple<String?, String, String>>(Triple(null, labels.noType, "task-type-none")) +
+                    scopeTypes.map { Triple(it.id, "$${it.name}", "task-type-${it.id}") }
+                options.forEach { (optionId, optionLabel, tag) ->
+                    val active = task.taskTypeId == optionId
+                    Text(
+                        text = optionLabel,
+                        color = if (active) Femho.onBrand else Femho.colors.inkSoft,
+                        fontSize = FemhoText.meta,
+                        fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(FemhoShape.pill))
+                            .background(if (active) Femho.colors.plouBlue else Femho.colors.ghostBg)
+                            .clickable { onSetTaskType(optionId) }
+                            .heightIn(min = FemhoSize.touch)
+                            .padding(horizontal = 12.dp, vertical = 12.dp)
+                            .testTag(tag),
+                    )
+                }
+            }
+        }
+
+        // Etiquetes: xips plens si hi són, fantasma amb vora discontínua si no
+        Text(labels.labels, color = Femho.colors.inkSoft, fontSize = FemhoText.meta)
+        val scopeLabels = labelsList.filter { it.scopeId == task.scopeId }
+        if (scopeLabels.isEmpty() && newLabelName == null) {
+            Text(labels.emptyLabels, color = Femho.colors.inkFaint, fontSize = FemhoText.meta)
+        } else {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                scopeLabels.forEach { entry ->
+                    val posada = task.labelIds.contains(entry.id)
+                    Text(
+                        text = entry.name,
+                        color = if (posada) Femho.colors.ink else Femho.colors.inkSoft,
+                        fontSize = FemhoText.meta,
+                        fontWeight = if (posada) FontWeight.Bold else FontWeight.Medium,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(FemhoShape.pill))
+                            .background(if (posada) Femho.colors.ghostBg else Femho.colors.dialogBg)
+                            .then(
+                                if (!posada) {
+                                    Modifier.border(
+                                        1.dp,
+                                        Femho.colors.inkFaint,
+                                        RoundedCornerShape(FemhoShape.pill),
+                                    )
+                                } else {
+                                    Modifier
+                                },
+                            )
+                            .clickable {
+                                if (posada) onRemoveLabel(entry.id) else onAddLabel(entry.id)
+                            }
+                            .heightIn(min = FemhoSize.touch)
+                            .padding(horizontal = 12.dp, vertical = 12.dp)
+                            .testTag("task-label-${entry.id}"),
+                    )
+                }
+            }
+        }
+        if (newLabelName == null) {
+            Text(
+                text = labels.newLabel,
+                color = Femho.colors.inkSoft,
+                fontSize = FemhoText.meta,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier
+                    .clickable { newLabelName = "" }
+                    .heightIn(min = FemhoSize.touch)
+                    .padding(vertical = 8.dp)
+                    .testTag("task-label-new"),
+            )
+        } else {
+            OutlinedTextField(
+                value = newLabelName.orEmpty(),
+                onValueChange = { newLabelName = it },
+                singleLine = true,
+                placeholder = { Text(labels.newLabelPlaceholder) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("task-label-name"),
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = labels.save,
+                    color = Femho.onBrand,
+                    fontSize = FemhoText.body,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(FemhoShape.pill))
+                        .background(Femho.brandGradient2)
+                        .clickable {
+                            val name = newLabelName?.trim()
+                            if (!name.isNullOrEmpty()) {
+                                onCreateLabel(name)
+                                newLabelName = null
+                            }
+                        }
+                        .heightIn(min = FemhoSize.touch)
+                        .padding(horizontal = 16.dp, vertical = 10.dp)
+                        .testTag("task-label-create"),
+                )
+                Text(
+                    text = labels.close,
+                    color = Femho.colors.inkSoft,
+                    fontSize = FemhoText.body,
+                    modifier = Modifier
+                        .clickable { newLabelName = null }
+                        .heightIn(min = FemhoSize.touch)
+                        .padding(vertical = 10.dp)
+                        .testTag("task-label-cancel"),
                 )
             }
         }

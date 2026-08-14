@@ -840,6 +840,8 @@ class FemhoApi(
 
     // ------------------------------------------------------------------ Tasques (extres)
 
+    suspend fun getTask(id: String): Task = get("/api/v1/tasks/$id")
+
     suspend fun updateTask(id: String, fields: Map<String, Any?>): Task {
         val filtered = fields.filterValues { it != null }.mapValues { it.value!! }
         return patch("/api/v1/tasks/$id", filtered as Map<String, Any>)

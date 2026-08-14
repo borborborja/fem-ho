@@ -337,6 +337,8 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: (
     val pending by model.pending.collectAsStateWithLifecycle()
     val projects by model.projects.collectAsStateWithLifecycle()
     val people by model.people.collectAsStateWithLifecycle()
+    val taskTypes by model.taskTypes.collectAsStateWithLifecycle()
+    val labels by model.labels.collectAsStateWithLifecycle()
     val openTask by model.openTask.collectAsStateWithLifecycle()
     val openChecklists by model.openChecklists.collectAsStateWithLifecycle()
     val pinned by model.pinned.collectAsStateWithLifecycle()
@@ -603,6 +605,10 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: (
             task = task,
             checklists = openChecklists,
             projects = projects,
+            people = people,
+            taskTypes = taskTypes,
+            labelsList = labels,
+            isCollectiveScope = scopes.any { it.id == task.scopeId && it.kind == ho.fem.model.ScopeKind.COLLECTIVE },
             labels = TaskDetailLabels(
                 title = stringResource(R.string.task_title),
                 description = stringResource(R.string.task_description),
@@ -618,6 +624,15 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: (
                 recurrenceMonthly = stringResource(R.string.task_recurrence_monthly),
                 recurrenceYearly = stringResource(R.string.task_recurrence_yearly),
                 recurrenceFromCompletion = stringResource(R.string.task_recurrence_fromcompletion),
+                assignees = stringResource(R.string.task_assignees),
+                taskType = stringResource(R.string.task_tasktype),
+                noType = stringResource(R.string.stats_notype),
+                labels = stringResource(R.string.task_labels),
+                newLabel = stringResource(R.string.task_newlabel),
+                newLabelPlaceholder = stringResource(R.string.task_newlabel_placeholder),
+                emptyLabels = stringResource(R.string.task_empty_labels),
+                labelAdd = stringResource(R.string.task_label_add),
+                labelRemove = stringResource(R.string.task_label_remove),
                 status = mapOf(
                     TaskStatus.INBOX to stringResource(R.string.board_column_inbox),
                     TaskStatus.TODO to stringResource(R.string.board_column_todo),
@@ -645,6 +660,12 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: (
             },
             onStatus = { model.move(task, it) },
             onToggleItem = model::toggleItem,
+            onAddAssignee = { model.addAssignee(task, it) },
+            onRemoveAssignee = { model.removeAssignee(task, it) },
+            onSetTaskType = { model.setTaskType(task, it) },
+            onAddLabel = { model.addTaskLabel(task, it) },
+            onRemoveLabel = { model.removeTaskLabel(task, it) },
+            onCreateLabel = { model.createTaskLabel(task, it) },
             onClose = model::closeTask,
         )
     }

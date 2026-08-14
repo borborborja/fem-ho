@@ -928,6 +928,82 @@ class AppViewModel(private val container: Container) : ViewModel() {
         }
     }
 
+    /** Assigna una persona a una tasca. POST /api/v1/tasks/{id}/assignees/{userId}. */
+    fun addAssignee(task: Task, userId: String) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).addAssignee(task.id, userId) }
+                .onSuccess { refreshTask(task) }
+        }
+    }
+
+    /** Treu una persona d'una tasca. DELETE /api/v1/tasks/{id}/assignees/{userId}. */
+    fun removeAssignee(task: Task, userId: String) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).removeAssignee(task.id, userId) }
+                .onSuccess { refreshTask(task) }
+        }
+    }
+
+    /** Posa la tipologia d'una tasca (null per desassignar-la). PATCH /api/v1/tasks/{id}. */
+    fun setTaskType(task: Task, taskTypeId: String?) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching {
+                container.api(base).updateTask(
+                    task.id,
+                    mapOf("task_type_id" to (taskTypeId ?: "")),
+                )
+            }.onSuccess { updated ->
+                _openTask.value = updated
+                refresh()
+            }
+        }
+    }
+
+    /** Posa una etiqueta a una tasca. POST /api/v1/tasks/{id}/labels/{labelId}. */
+    fun addTaskLabel(task: Task, labelId: String) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).addTaskLabel(task.id, labelId) }
+                .onSuccess { refreshTask(task) }
+        }
+    }
+
+    /** Treu una etiqueta d'una tasca. DELETE /api/v1/tasks/{id}/labels/{labelId}. */
+    fun removeTaskLabel(task: Task, labelId: String) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).removeTaskLabel(task.id, labelId) }
+                .onSuccess { refreshTask(task) }
+        }
+    }
+
+    /** Crea una etiqueta nova i la posa a la tasca que la demana. POST /api/v1/labels. */
+    fun createTaskLabel(task: Task, name: String) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).createLabel(task.scopeId, name) }
+                .onSuccess { label ->
+                    loadEntityData()
+                    runCatching { container.api(base).addTaskLabel(task.id, label.id) }
+                        .onSuccess { refreshTask(task) }
+                }
+        }
+    }
+
+    private fun refreshTask(task: Task) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).getTask(task.id) }
+                .onSuccess { updated ->
+                    _openTask.value = updated
+                    refresh()
+                }
+        }
+    }
+
     /** Crea una tipologia dins d'un àmbit. POST /api/v1/task-types. */
     fun createTaskType(scopeId: String, name: String) {
         val base = serverUrl ?: return
