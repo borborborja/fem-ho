@@ -1132,6 +1132,7 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
     val accent by model.accent.collectAsStateWithLifecycle()
     val profile by model.profile.collectAsStateWithLifecycle()
     val gravatarEnabled by model.gravatarEnabled.collectAsStateWithLifecycle()
+    val scopes by model.scopes.collectAsStateWithLifecycle()
     val tokens by model.tokens.collectAsStateWithLifecycle()
     val createdToken by model.createdToken.collectAsStateWithLifecycle()
 
@@ -1231,11 +1232,37 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
             tokensNever = stringResource(R.string.tokens_never),
             tokensRevoke = stringResource(R.string.tokens_revoke),
             tokensCopy = stringResource(R.string.tokens_copy),
+            scopeType = stringResource(R.string.settings_scopetype),
+            scopeTypeIndividual = stringResource(R.string.settings_scopetype_individual),
+            scopeTypeCollective = stringResource(R.string.settings_scopetype_collective),
+            scopeColor = stringResource(R.string.settings_scopecolor),
+            members = stringResource(R.string.settings_members),
+            memberRemove = stringResource(R.string.settings_memberremove),
+            roleAdmin = stringResource(R.string.settings_role_admin),
+            roleCollaborator = stringResource(R.string.settings_role_collaborator),
+            roleViewer = stringResource(R.string.settings_role_viewer),
+            roleOwner = stringResource(R.string.settings_role_owner),
+            inviteCreate = stringResource(R.string.settings_invitecreate),
+            inviteRevoke = stringResource(R.string.settings_inviterevoke),
+            inviteOnce = stringResource(R.string.settings_inviteonce),
+            inviteUrl = stringResource(R.string.settings_inviteurl),
+            invites = stringResource(R.string.settings_invites),
+            noInvites = stringResource(R.string.settings_invitenone),
+            noMembers = stringResource(R.string.settings_nomembers),
+            scopeEdit = stringResource(R.string.settings_scopeedit),
+            scopeSave = stringResource(R.string.settings_scopesave),
+            scopeCancel = stringResource(R.string.settings_scopecancel),
+            scopeDelete = stringResource(R.string.settings_scopedelete),
+            scopeDeleteConfirm = stringResource(R.string.settings_scopedeleteconfirm),
+            scopeName = stringResource(R.string.settings_scopename),
+            navCreate = stringResource(R.string.nav_create),
+            newScope = stringResource(R.string.settings_newscope),
         ),
         profileName = profile?.name.orEmpty(),
         profileEmail = profile?.email.orEmpty(),
         profileTimezone = profile?.timezone.orEmpty(),
         gravatarEnabled = gravatarEnabled,
+        scopes = scopes,
         theme = theme,
         accent = accent,
         serverUrl = serverUrl,
@@ -1260,5 +1287,8 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
         onCreateToken = model::createToken,
         onRevokeToken = model::revokeToken,
         onCopyToClipboard = model::copyToClipboard,
+        onCreateScope = model::createScope,
+        onUpdateScope = model::updateScope,
+        onDeleteScope = model::deleteScope,
     )
 }

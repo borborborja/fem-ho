@@ -391,6 +391,8 @@
     <string name="settings_invitepending">Invited, has not signed in yet</string>
     <string name="settings_inviterevoke">Revoke</string>
     <string name="settings_inviterole">What they can do</string>
+    <string name="settings_invites">Invitations</string>
+    <string name="settings_inviteurl">Invitation link</string>
     <string name="settings_language">Language</string>
     <string name="settings_longsession">Flag for review from (hours)</string>
     <string name="settings_mail_accounts">Accounts</string>
@@ -446,6 +448,8 @@
     <string name="settings_newpassword">New password</string>
     <string name="settings_newproject">New project</string>
     <string name="settings_newscope">+ New scope</string>
+    <string name="settings_noinvites">No open invitations.</string>
+    <string name="settings_nomembers">No members.</string>
     <string name="settings_noprojects">No projects in this scope.</string>
     <string name="settings_noun_client">Clients</string>
     <string name="settings_noun_project">Projects</string>
@@ -490,6 +494,9 @@
     <string name="settings_scopesource_remote">From another server</string>
     <string name="settings_scopesourcehelp">Whoever shares the scope gives you a token. From this same server the token is enough; from another one, the address too.</string>
     <string name="settings_scopetoken">Paste the invitation token</string>
+    <string name="settings_scopetype">Type</string>
+    <string name="settings_scopetype_collective">Collective</string>
+    <string name="settings_scopetype_individual">Individual</string>
     <string name="settings_sharedcalendars">Shared calendars</string>
     <string name="settings_showcalendarwidget">Small calendar</string>
     <string name="settings_showoverduesection">Overdue section</string>

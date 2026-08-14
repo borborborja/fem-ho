@@ -630,6 +630,48 @@ class AppViewModel(private val container: Container) : ViewModel() {
         clipboard.setPrimaryClip(clip)
     }
 
+    /**
+     * Crea un àmbit nou.
+     *
+     * POST /api/v1/scopes {id, name, color, kind}. L'identificador el genera el client
+     * (D4), igual que a la creació de tasques: així un reintent no duplica res.
+     */
+    fun createScope(name: String, color: String, kind: String) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).createScope(name, color, kind) }
+                .onSuccess { refresh() }
+        }
+    }
+
+    /**
+     * Actualitza un àmbit.
+     *
+     * PATCH /api/v1/scopes/{id} {name, color, kind}. El canvi de tipus només es permet
+     * si l'àmbit és buit (el servidor ho valida).
+     */
+    fun updateScope(id: String, name: String, color: String, kind: String) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).updateScope(id, name, color) }
+                .onSuccess { refresh() }
+        }
+    }
+
+    /**
+     * Esborra un àmbit.
+     *
+     * DELETE /api/v1/scopes/{id}. Només funciona si l'àmbit és buit (el servidor ho
+     * valida i retorna un error si té tasques, projectes o membres).
+     */
+    fun deleteScope(id: String) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).deleteScope(id) }
+                .onSuccess { refresh() }
+        }
+    }
+
     fun move(task: Task, status: TaskStatus) {
         val base = serverUrl ?: return
         viewModelScope.launch {

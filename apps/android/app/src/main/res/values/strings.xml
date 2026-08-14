@@ -381,7 +381,7 @@
     <string name="settings_inboxposition">Posició del rail d\'Inbox</string>
     <string name="settings_inboxshowoverdue">L\'Inbox ensenya les endarrerides</string>
     <string name="settings_invite">Convidar algú</string>
-    <string name="settings_invitecreate">Crear el convit</string>
+    <string name="settings_invitecreate">Crear convit</string>
     <string name="settings_inviteemail">Correu</string>
     <string name="settings_invitelink">Enllaç d\'invitació</string>
     <string name="settings_invitename">Nom</string>
@@ -391,6 +391,8 @@
     <string name="settings_invitepending">Convidat, encara no ha entrat</string>
     <string name="settings_inviterevoke">Revocar</string>
     <string name="settings_inviterole">Què podrà fer</string>
+    <string name="settings_invites">Convits</string>
+    <string name="settings_inviteurl">Enllaç d\'invitació</string>
     <string name="settings_language">Idioma</string>
     <string name="settings_longsession">Marca per revisar a partir de (hores)</string>
     <string name="settings_mail_accounts">Comptes</string>
@@ -446,6 +448,8 @@
     <string name="settings_newpassword">Contrasenya nova</string>
     <string name="settings_newproject">Projecte nou</string>
     <string name="settings_newscope">+ Nou àmbit</string>
+    <string name="settings_noinvites">Cap convit actiu.</string>
+    <string name="settings_nomembers">Cap membre.</string>
     <string name="settings_noprojects">Cap projecte en aquest àmbit.</string>
     <string name="settings_noun_client">Clients</string>
     <string name="settings_noun_project">Projectes</string>
@@ -490,6 +494,9 @@
     <string name="settings_scopesource_remote">D\'un altre servidor</string>
     <string name="settings_scopesourcehelp">Qui comparteix l\'àmbit et dona un token. Si és d\'aquest mateix servidor només cal el token; si és d\'un altre, també l\'adreça.</string>
     <string name="settings_scopetoken">Enganxa el token del convit</string>
+    <string name="settings_scopetype">Tipus</string>
+    <string name="settings_scopetype_collective">Col·lectiu</string>
+    <string name="settings_scopetype_individual">Individual</string>
     <string name="settings_sharedcalendars">Calendaris que es comparteixen</string>
     <string name="settings_showcalendarwidget">Calendari en miniatura</string>
     <string name="settings_showoverduesection">Secció d\'endarrerides</string>
