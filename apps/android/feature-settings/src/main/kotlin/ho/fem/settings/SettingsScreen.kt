@@ -181,6 +181,42 @@ data class SettingsLabels(
     val sharedCalendars: String,
     val calendarPrivate: String,
     val calendarCredWarning: String,
+    // Correu: comptes IMAP i regles
+    val mailIntro: String,
+    val mailAccounts: String,
+    val mailAdd: String,
+    val mailName: String,
+    val mailHost: String,
+    val mailUsername: String,
+    val mailPassword: String,
+    val mailPasswordKept: String,
+    val mailSecurity: String,
+    val mailSecurityTls: String,
+    val mailSecurityStarttls: String,
+    val mailTest: String,
+    val mailTestOk: String,
+    val mailTestFail: String,
+    val mailAppPassword: String,
+    val mailEmpty: String,
+    val mailRules: String,
+    val mailRulesEmpty: String,
+    val mailAddRule: String,
+    val mailFolder: String,
+    val mailFolderPlaceholder: String,
+    val mailPickFolder: String,
+    val mailLoadingFolders: String,
+    val mailFoldersFailed: String,
+    val mailScope: String,
+    val mailProject: String,
+    val mailProjectNone: String,
+    val mailTemplate: String,
+    val mailTemplatePreset: String,
+    val mailTemplatePreview: String,
+    val mailTemplateUnknown: String,
+    val mailFirstRun: String,
+    val mailNotTouched: String,
+    val mailRemove: String,
+    val mailSave: String,
 )
 
 data class SettingsTabs(
@@ -222,6 +258,8 @@ fun SettingsScreen(
     taskTypes: List<ho.fem.model.TaskType> = emptyList(),
     scopeSettings: Map<String, ho.fem.model.ScopeSettings> = emptyMap(),
     calendars: List<ho.fem.model.Calendar> = emptyList(),
+    mailAccounts: List<ho.fem.model.MailAccount> = emptyList(),
+    mailRules: List<ho.fem.model.MailRule> = emptyList(),
     mcpUrl: String = "",
     tokens: List<ho.fem.model.ApiTokenSummary> = emptyList(),
     createdToken: String? = null,
@@ -256,6 +294,12 @@ fun SettingsScreen(
     onCreateCalendar: (String, String, String, String?, String?, String?, String?, Boolean?) -> Unit = { _, _, _, _, _, _, _, _ -> },
     onUpdateCalendar: (String, String?, String?, String?, String?, Int?, Boolean?) -> Unit = { _, _, _, _, _, _, _ -> },
     onDeleteCalendar: (String) -> Unit = {},
+    onCreateMailAccount: (String, String, String, String, String) -> Unit = { _, _, _, _, _ -> },
+    onUpdateMailAccount: (String, String?, String?, String?, String?, String?) -> Unit = { _, _, _, _, _, _ -> },
+    onDeleteMailAccount: (String) -> Unit = {},
+    onTestMailAccount: (String, (ho.fem.model.MailTestResult) -> Unit) -> Unit = { _, _ -> },
+    onCreateMailRule: (String, String, String?, String?) -> Unit = { _, _, _, _ -> },
+    onDeleteMailRule: (String) -> Unit = {},
     onCopyToClipboard: (String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
@@ -376,7 +420,18 @@ fun SettingsScreen(
                     onDeleteCalendar = onDeleteCalendar,
                     onCopyToClipboard = onCopyToClipboard,
                 )
-                "mail" -> EmptyState(labels.emptyStates.mail)
+                "mail" -> MailTab(
+                    labels = labels,
+                    mailAccounts = mailAccounts,
+                    mailRules = mailRules,
+                    scopes = scopes,
+                    onCreateMailAccount = onCreateMailAccount,
+                    onUpdateMailAccount = onUpdateMailAccount,
+                    onDeleteMailAccount = onDeleteMailAccount,
+                    onTestMailAccount = onTestMailAccount,
+                    onCreateMailRule = onCreateMailRule,
+                    onDeleteMailRule = onDeleteMailRule,
+                )
                 "mcp" -> McpTab(
                     labels = labels,
                     mcpUrl = mcpUrl,
@@ -1347,6 +1402,341 @@ private fun CalendarsTab(
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MailTab(
+    labels: SettingsLabels,
+    mailAccounts: List<ho.fem.model.MailAccount>,
+    mailRules: List<ho.fem.model.MailRule>,
+    scopes: List<ho.fem.model.Scope>,
+    onCreateMailAccount: (String, String, String, String, String) -> Unit,
+    onUpdateMailAccount: (String, String?, String?, String?, String?, String?) -> Unit,
+    onDeleteMailAccount: (String) -> Unit,
+    onTestMailAccount: (String, (ho.fem.model.MailTestResult) -> Unit) -> Unit,
+    onCreateMailRule: (String, String, String?, String?) -> Unit,
+    onDeleteMailRule: (String) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(
+            text = labels.mailIntro,
+            color = Femho.colors.inkFaint,
+            fontSize = FemhoText.meta,
+        )
+        Text(
+            text = labels.mailNotTouched,
+            color = Femho.colors.inkFaint,
+            fontSize = FemhoText.meta,
+        )
+
+        // Comptes
+        Group(labels.mailAccounts) {
+            var newName by remember { mutableStateOf("") }
+            var newHost by remember { mutableStateOf("") }
+            var newUsername by remember { mutableStateOf("") }
+            var newPassword by remember { mutableStateOf("") }
+            var newSecurity by remember { mutableStateOf("tls") }
+            val testResults = remember { mutableStateOf<Map<String, ho.fem.model.MailTestResult>>(emptyMap()) }
+
+            if (mailAccounts.isEmpty()) {
+                Text(
+                    text = labels.mailEmpty,
+                    color = Femho.colors.inkFaint,
+                    fontSize = FemhoText.meta,
+                )
+            } else {
+                mailAccounts.forEach { account ->
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Row(
+                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = account.name,
+                                    color = Femho.colors.ink,
+                                    fontSize = FemhoText.body,
+                                )
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Text(
+                                        text = account.host,
+                                        color = Femho.colors.inkFaint,
+                                        fontSize = FemhoText.meta,
+                                    )
+                                    Text(
+                                        text = account.username,
+                                        color = Femho.colors.inkFaint,
+                                        fontSize = FemhoText.meta,
+                                    )
+                                }
+                            }
+                            Text(
+                                text = labels.mailRemove,
+                                color = Femho.colors.dangerText,
+                                fontSize = FemhoText.meta,
+                                modifier = Modifier
+                                    .clickable { onDeleteMailAccount(account.id) }
+                                    .heightIn(min = FemhoSize.touch)
+                                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                            )
+                        }
+                        Text(
+                            text = labels.mailTest,
+                            color = Femho.colors.ink,
+                            fontSize = FemhoText.meta,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier
+                                .clickable {
+                                    onTestMailAccount(account.id) { result ->
+                                        testResults.value = testResults.value + (account.id to result)
+                                    }
+                                }
+                                .heightIn(min = FemhoSize.touch)
+                                .padding(vertical = 6.dp),
+                        )
+                        testResults.value[account.id]?.let { result ->
+                            Text(
+                                text = if (result.ok) labels.mailTestOk.replace("{count}", "—") else labels.mailTestFail.replace("{error}", result.error.orEmpty()),
+                                color = if (result.ok) Femho.colors.ink else Femho.colors.dangerText,
+                                fontSize = FemhoText.meta,
+                            )
+                        }
+                        if (account.hasSecret) {
+                            Text(
+                                text = labels.mailPasswordKept,
+                                color = Femho.colors.inkFaint,
+                                fontSize = FemhoText.meta,
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Formulari d'afegir compte
+            androidx.compose.foundation.text.BasicTextField(
+                value = newName,
+                onValueChange = { newName = it },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(FemhoShape.pill))
+                    .background(Femho.colors.ghostBg)
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                decorationBox = { innerTextField ->
+                    Box(modifier = Modifier.padding(vertical = 2.dp)) {
+                        if (newName.isEmpty()) {
+                            Text(text = labels.mailName, color = Femho.colors.inkFaint, fontSize = FemhoText.body)
+                        }
+                        innerTextField()
+                    }
+                },
+            )
+            androidx.compose.foundation.text.BasicTextField(
+                value = newHost,
+                onValueChange = { newHost = it },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(FemhoShape.pill))
+                    .background(Femho.colors.ghostBg)
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                decorationBox = { innerTextField ->
+                    Box(modifier = Modifier.padding(vertical = 2.dp)) {
+                        if (newHost.isEmpty()) {
+                            Text(text = labels.mailHost, color = Femho.colors.inkFaint, fontSize = FemhoText.body)
+                        }
+                        innerTextField()
+                    }
+                },
+            )
+            androidx.compose.foundation.text.BasicTextField(
+                value = newUsername,
+                onValueChange = { newUsername = it },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(FemhoShape.pill))
+                    .background(Femho.colors.ghostBg)
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                decorationBox = { innerTextField ->
+                    Box(modifier = Modifier.padding(vertical = 2.dp)) {
+                        if (newUsername.isEmpty()) {
+                            Text(text = labels.mailUsername, color = Femho.colors.inkFaint, fontSize = FemhoText.body)
+                        }
+                        innerTextField()
+                    }
+                },
+            )
+            androidx.compose.foundation.text.BasicTextField(
+                value = newPassword,
+                onValueChange = { newPassword = it },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(FemhoShape.pill))
+                    .background(Femho.colors.ghostBg)
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                decorationBox = { innerTextField ->
+                    Box(modifier = Modifier.padding(vertical = 2.dp)) {
+                        if (newPassword.isEmpty()) {
+                            Text(text = labels.mailPassword, color = Femho.colors.inkFaint, fontSize = FemhoText.body)
+                        }
+                        innerTextField()
+                    }
+                },
+            )
+            Text(
+                text = labels.mailSecurity,
+                color = Femho.colors.inkSoft,
+                fontSize = FemhoText.meta,
+            )
+            Chips(
+                options = listOf(
+                    "tls" to labels.mailSecurityTls,
+                    "starttls" to labels.mailSecurityStarttls,
+                ),
+                value = newSecurity,
+                onChange = { newSecurity = it },
+                tag = "mail-security",
+            )
+            Text(
+                text = labels.mailAdd,
+                color = Femho.colors.ink,
+                fontSize = FemhoText.body,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier
+                    .clickable {
+                        if (newName.isNotBlank() && newHost.isNotBlank() && newUsername.isNotBlank()) {
+                            onCreateMailAccount(newName.trim(), newHost.trim(), newUsername.trim(), newPassword.trim(), newSecurity)
+                            newName = ""
+                            newHost = ""
+                            newUsername = ""
+                            newPassword = ""
+                        }
+                    }
+                    .heightIn(min = FemhoSize.touch)
+                    .padding(vertical = 8.dp),
+            )
+        }
+
+        // Regles (carpetes mapades)
+        Group(labels.mailRules) {
+            var ruleAccount by remember { mutableStateOf<String?>(null) }
+            var ruleFolder by remember { mutableStateOf("") }
+            var ruleScope by remember { mutableStateOf<String?>(null) }
+            var ruleTemplate by remember { mutableStateOf("") }
+
+            if (mailRules.isEmpty()) {
+                Text(
+                    text = labels.mailRulesEmpty,
+                    color = Femho.colors.inkFaint,
+                    fontSize = FemhoText.meta,
+                )
+            } else {
+                mailRules.forEach { rule ->
+                    val ruleAccountName = mailAccounts.firstOrNull { it.id == rule.accountId }?.name
+                    Row(
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "${ruleAccountName ?: "—"} · ${rule.folder}",
+                                color = Femho.colors.ink,
+                                fontSize = FemhoText.body,
+                            )
+                            val titleTemplate = rule.titleTemplate
+                            if (!titleTemplate.isNullOrEmpty()) {
+                                Text(
+                                    text = titleTemplate,
+                                    color = Femho.colors.inkFaint,
+                                    fontSize = FemhoText.meta,
+                                )
+                            }
+                        }
+                        Text(
+                            text = labels.mailRemove,
+                            color = Femho.colors.dangerText,
+                            fontSize = FemhoText.meta,
+                            modifier = Modifier
+                                .clickable { onDeleteMailRule(rule.id) }
+                                .heightIn(min = FemhoSize.touch)
+                                .padding(horizontal = 8.dp, vertical = 6.dp),
+                        )
+                    }
+                }
+            }
+
+            if (mailAccounts.isNotEmpty()) {
+                Chips(
+                    options = mailAccounts.map { it.id to it.name },
+                    value = ruleAccount.orEmpty(),
+                    onChange = { ruleAccount = it },
+                    tag = "rule-account",
+                )
+                androidx.compose.foundation.text.BasicTextField(
+                    value = ruleFolder,
+                    onValueChange = { ruleFolder = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(FemhoShape.pill))
+                        .background(Femho.colors.ghostBg)
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    decorationBox = { innerTextField ->
+                        Box(modifier = Modifier.padding(vertical = 2.dp)) {
+                            if (ruleFolder.isEmpty()) {
+                                Text(text = labels.mailFolderPlaceholder, color = Femho.colors.inkFaint, fontSize = FemhoText.body)
+                            }
+                            innerTextField()
+                        }
+                    },
+                )
+                Chips(
+                    options = listOf("" to labels.mailProjectNone) + scopes.map { it.id to it.name },
+                    value = ruleScope ?: "",
+                    onChange = { ruleScope = it.ifEmpty { null } },
+                    tag = "rule-scope",
+                )
+                androidx.compose.foundation.text.BasicTextField(
+                    value = ruleTemplate,
+                    onValueChange = { ruleTemplate = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(FemhoShape.pill))
+                        .background(Femho.colors.ghostBg)
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    decorationBox = { innerTextField ->
+                        Box(modifier = Modifier.padding(vertical = 2.dp)) {
+                            if (ruleTemplate.isEmpty()) {
+                                Text(text = labels.mailTemplate, color = Femho.colors.inkFaint, fontSize = FemhoText.body)
+                            }
+                            innerTextField()
+                        }
+                    },
+                )
+                if (ruleTemplate.isNotBlank()) {
+                    Text(
+                        text = labels.mailTemplatePreview.replace("{preview}", ruleTemplate),
+                        color = Femho.colors.inkFaint,
+                        fontSize = FemhoText.meta,
+                    )
+                }
+                Text(
+                    text = labels.mailAddRule,
+                    color = Femho.colors.ink,
+                    fontSize = FemhoText.body,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier
+                        .clickable {
+                            val accountId = ruleAccount
+                            if (accountId != null && ruleFolder.isNotBlank()) {
+                                onCreateMailRule(accountId, ruleFolder.trim(), ruleScope, ruleTemplate.trim().ifEmpty { null })
+                                ruleFolder = ""
+                                ruleTemplate = ""
+                            }
+                        }
+                        .heightIn(min = FemhoSize.touch)
+                        .padding(vertical = 8.dp),
+                )
             }
         }
     }

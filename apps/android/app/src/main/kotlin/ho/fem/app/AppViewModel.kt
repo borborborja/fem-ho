@@ -93,6 +93,12 @@ class AppViewModel(private val container: Container) : ViewModel() {
     private val _calendars = MutableStateFlow<List<ho.fem.model.Calendar>>(emptyList())
     val calendars: StateFlow<List<ho.fem.model.Calendar>> = _calendars.asStateFlow()
 
+    private val _mailAccounts = MutableStateFlow<List<ho.fem.model.MailAccount>>(emptyList())
+    val mailAccounts: StateFlow<List<ho.fem.model.MailAccount>> = _mailAccounts.asStateFlow()
+
+    private val _mailRules = MutableStateFlow<List<ho.fem.model.MailRule>>(emptyList())
+    val mailRules: StateFlow<List<ho.fem.model.MailRule>> = _mailRules.asStateFlow()
+
     private val _createdToken = MutableStateFlow<String?>(null)
     val createdToken: StateFlow<String?> = _createdToken.asStateFlow()
 
@@ -703,6 +709,72 @@ class AppViewModel(private val container: Container) : ViewModel() {
         viewModelScope.launch {
             runCatching { container.api(base).deleteCalendar(id) }
                 .onSuccess { loadCalendars() }
+        }
+    }
+
+    /** Carrega comptes i regles de correu per a Ajustos ▸ Correu. */
+    fun loadMailData() {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).mailAccounts() }
+                .onSuccess { _mailAccounts.value = it }
+            runCatching { container.api(base).mailRules() }
+                .onSuccess { _mailRules.value = it }
+        }
+    }
+
+    /** Crea un compte IMAP. POST /api/v1/mail/accounts. */
+    fun createMailAccount(name: String, host: String, username: String, password: String, security: String) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).createMailAccount(name, host, username, password, security) }
+                .onSuccess { loadMailData() }
+        }
+    }
+
+    /** Actualitza un compte IMAP. PATCH /api/v1/mail/accounts/{id}. */
+    fun updateMailAccount(id: String, name: String? = null, host: String? = null, username: String? = null, password: String? = null, security: String? = null) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).updateMailAccount(id, name, host, username, password, security) }
+                .onSuccess { loadMailData() }
+        }
+    }
+
+    /** Esborra un compte IMAP. DELETE /api/v1/mail/accounts/{id}. */
+    fun deleteMailAccount(id: String) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).deleteMailAccount(id) }
+                .onSuccess { loadMailData() }
+        }
+    }
+
+    /** Prova la connexió d'un compte. POST /api/v1/mail/accounts/{id}/test — no desa res. */
+    fun testMailAccount(id: String, onResult: (ho.fem.model.MailTestResult) -> Unit) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).testMailAccount(id) }
+                .onSuccess { onResult(it) }
+                .onFailure { onResult(ho.fem.model.MailTestResult(ok = false, error = it.message)) }
+        }
+    }
+
+    /** Crea una regla (mapa de carpeta). POST /api/v1/mail/rules. */
+    fun createMailRule(accountId: String, folder: String, scopeId: String? = null, titleTemplate: String? = null) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).createMailRule(accountId, folder, scopeId = scopeId, titleTemplate = titleTemplate) }
+                .onSuccess { loadMailData() }
+        }
+    }
+
+    /** Esborra una regla. DELETE /api/v1/mail/rules/{id}. */
+    fun deleteMailRule(id: String) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).deleteMailRule(id) }
+                .onSuccess { loadMailData() }
         }
     }
 

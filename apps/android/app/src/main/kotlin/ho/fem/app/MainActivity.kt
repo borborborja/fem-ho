@@ -1140,10 +1140,13 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
     val taskTypes by model.taskTypes.collectAsStateWithLifecycle()
     val scopeSettings by model.scopeSettings.collectAsStateWithLifecycle()
     val calendars by model.calendars.collectAsStateWithLifecycle()
+    val mailAccounts by model.mailAccounts.collectAsStateWithLifecycle()
+    val mailRules by model.mailRules.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) {
         model.loadEntityData()
         model.loadCalendars()
+        model.loadMailData()
     }
 
     SettingsScreen(
@@ -1289,6 +1292,41 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
             sharedCalendars = stringResource(R.string.settings_sharedcalendars),
             calendarPrivate = stringResource(R.string.settings_calendarprivate),
             calendarCredWarning = stringResource(R.string.settings_calendarcredwarning),
+            mailIntro = stringResource(R.string.settings_mail_intro),
+            mailAccounts = stringResource(R.string.settings_mail_accounts),
+            mailAdd = stringResource(R.string.settings_mail_add),
+            mailName = stringResource(R.string.settings_mail_name),
+            mailHost = stringResource(R.string.settings_mail_host),
+            mailUsername = stringResource(R.string.settings_mail_username),
+            mailPassword = stringResource(R.string.settings_mail_password),
+            mailPasswordKept = stringResource(R.string.settings_mail_passwordkept),
+            mailSecurity = stringResource(R.string.settings_mail_security),
+            mailSecurityTls = stringResource(R.string.settings_mail_security_tls),
+            mailSecurityStarttls = stringResource(R.string.settings_mail_security_starttls),
+            mailTest = stringResource(R.string.settings_mail_test),
+            mailTestOk = stringResource(R.string.settings_mail_testok),
+            mailTestFail = stringResource(R.string.settings_mail_testfail),
+            mailAppPassword = stringResource(R.string.settings_mail_apppassword),
+            mailEmpty = stringResource(R.string.settings_mail_empty),
+            mailRules = stringResource(R.string.settings_mail_rules),
+            mailRulesEmpty = stringResource(R.string.settings_mail_rules_empty),
+            mailAddRule = stringResource(R.string.settings_mail_addrule),
+            mailFolder = stringResource(R.string.settings_mail_folder),
+            mailFolderPlaceholder = stringResource(R.string.settings_mail_folderplaceholder),
+            mailPickFolder = stringResource(R.string.settings_mail_pickfolder),
+            mailLoadingFolders = stringResource(R.string.settings_mail_loadingfolders),
+            mailFoldersFailed = stringResource(R.string.settings_mail_foldersfailed),
+            mailScope = stringResource(R.string.settings_mail_scope),
+            mailProject = stringResource(R.string.settings_mail_project),
+            mailProjectNone = stringResource(R.string.settings_mail_projectnone),
+            mailTemplate = stringResource(R.string.settings_mail_template),
+            mailTemplatePreset = stringResource(R.string.settings_mail_templatepreset),
+            mailTemplatePreview = stringResource(R.string.settings_mail_templatepreview),
+            mailTemplateUnknown = stringResource(R.string.settings_mail_templateunknown),
+            mailFirstRun = stringResource(R.string.settings_mail_firstrun),
+            mailNotTouched = stringResource(R.string.settings_mail_nottouched),
+            mailRemove = stringResource(R.string.settings_mail_remove),
+            mailSave = stringResource(R.string.settings_mail_save),
             scopeType = stringResource(R.string.settings_scopetype),
             scopeTypeIndividual = stringResource(R.string.settings_scopetype_individual),
             scopeTypeCollective = stringResource(R.string.settings_scopetype_collective),
@@ -1325,6 +1363,8 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
         taskTypes = taskTypes,
         scopeSettings = scopeSettings,
         calendars = calendars,
+        mailAccounts = mailAccounts,
+        mailRules = mailRules,
         theme = theme,
         accent = accent,
         serverUrl = serverUrl,
@@ -1363,5 +1403,11 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
         onCreateCalendar = model::createCalendar,
         onUpdateCalendar = model::updateCalendar,
         onDeleteCalendar = model::deleteCalendar,
+        onCreateMailAccount = model::createMailAccount,
+        onUpdateMailAccount = model::updateMailAccount,
+        onDeleteMailAccount = model::deleteMailAccount,
+        onTestMailAccount = model::testMailAccount,
+        onCreateMailRule = model::createMailRule,
+        onDeleteMailRule = model::deleteMailRule,
     )
 }
