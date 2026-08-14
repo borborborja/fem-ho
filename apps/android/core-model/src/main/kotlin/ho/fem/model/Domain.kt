@@ -304,6 +304,31 @@ data class TaskPage(
     @SerialName("has_more") val hasMore: Boolean = false,
 )
 
+/** Un àmbit amb el recompte de pendents i vençudes, per a la targeta del dashboard. */
+@Serializable
+data class DashboardScope(
+    @SerialName("scope_id") val scopeId: String,
+    val name: String,
+    val color: String = "",
+    val pending: Int = 0,
+    val overdue: Int = 0,
+)
+
+/**
+ * El dashboard global (`GET /api/v1/dashboard`). docs/02 §8.
+ *
+ * **Ignora la selecció d'àmbits i de projecte: ho ensenya tot.** És el que el distingeix
+ * del tauler, i el servidor no accepta cap filtre d'àmbit per la mateixa raó.
+ */
+@Serializable
+data class DashboardView(
+    val date: String = "",
+    val scopes: List<DashboardScope> = emptyList(),
+    val today: List<Task> = emptyList(),
+    val overdue: List<Task> = emptyList(),
+    val doing: List<Task> = emptyList(),
+)
+
 @Serializable
 data class Inbox(
     val date: String,

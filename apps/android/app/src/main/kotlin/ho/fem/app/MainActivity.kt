@@ -6,6 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -224,6 +225,12 @@ private fun Root(model: AppViewModel, pending: MutableState<Intent?>) {
                     onRegistre = { screen = Screen.REGISTRE },
                     onEstadistiques = { screen = Screen.ESTADISTIQUES },
                     onSearch = { screen = Screen.SEARCH },
+                    onDashboard = { screen = Screen.DASHBOARD },
+                )
+                Screen.DASHBOARD -> DashboardHost(
+                    model = model,
+                    onBoard = { screen = Screen.BOARD },
+                    onSettings = { screen = Screen.SETTINGS },
                 )
                 Screen.SEARCH -> SearchHost(
                     model = model,
@@ -233,6 +240,7 @@ private fun Root(model: AppViewModel, pending: MutableState<Intent?>) {
                     model = model,
                     onSettings = { screen = Screen.SETTINGS },
                     onBoard = { screen = Screen.BOARD },
+                    onDashboard = { screen = Screen.DASHBOARD },
                 )
                 Screen.SETTINGS -> SettingsHost(
                     model = model,
@@ -624,7 +632,7 @@ private fun LoginScreen(model: AppViewModel, instanceName: String, serverNewer: 
 }
 
 @Composable
-private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: () -> Unit, onRegistre: () -> Unit, onEstadistiques: () -> Unit, onSearch: () -> Unit) {
+private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: () -> Unit, onRegistre: () -> Unit, onEstadistiques: () -> Unit, onSearch: () -> Unit, onDashboard: () -> Unit) {
     val tasks by model.tasks.collectAsStateWithLifecycle()
     val scopes by model.scopes.collectAsStateWithLifecycle()
     val pending by model.pending.collectAsStateWithLifecycle()
@@ -743,6 +751,7 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: (
                 active = if (next.isEmpty()) emptySet() else next
             },
             onSettings = onSettings,
+            onDashboard = onDashboard,
             onView = {
                 when (it) {
                     Screen.CALENDAR -> onCalendar()
@@ -1131,7 +1140,7 @@ private fun TaskDetailSheet(model: AppViewModel) {
 }
 
 @Composable
-private fun CalendarHost(model: AppViewModel, onSettings: () -> Unit, onBoard: () -> Unit) {
+private fun CalendarHost(model: AppViewModel, onSettings: () -> Unit, onBoard: () -> Unit, onDashboard: () -> Unit) {
     val scopes by model.scopes.collectAsStateWithLifecycle()
     val pending by model.pending.collectAsStateWithLifecycle()
     val events by model.events.collectAsStateWithLifecycle()
@@ -1195,6 +1204,7 @@ private fun CalendarHost(model: AppViewModel, onSettings: () -> Unit, onBoard: (
                 active = if (next.isEmpty()) emptySet() else next
             },
             onSettings = onSettings,
+            onDashboard = onDashboard,
             onView = { if (it == Screen.BOARD) onBoard() },
         )
 
@@ -1314,6 +1324,8 @@ private fun TopBar(
     view: Screen,
     onToggle: (String) -> Unit,
     onSettings: () -> Unit,
+    /** El wordmark obre el dashboard global (docs/03 §3:50). */
+    onDashboard: () -> Unit,
     onView: (Screen) -> Unit,
     /** El Registre només surt si algun àmbit porta registre de dedicació. */
     showRegistre: Boolean = false,
@@ -1352,7 +1364,10 @@ private fun TopBar(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Wordmark()
+            Wordmark(
+                // El wordmark és el botó del dashboard global (docs/03 §3:50).
+                modifier = Modifier.androidClickable(onDashboard),
+            )
             Row(verticalAlignment = Alignment.CenterVertically) {
                 // El commutador Tasques / Calendari / Registre, igual que a la web (docs/02 §3).
                 val targets = buildList {
@@ -2557,6 +2572,168 @@ private fun RegistreHost(model: AppViewModel, onBoard: () -> Unit) {
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DashboardHost(model: AppViewModel, onBoard: () -> Unit, onSettings: () -> Unit) {
+    val dashboard by model.dashboard.collectAsStateWithLifecycle()
+    val scopes by model.scopes.collectAsStateWithLifecycle()
+    val showOverdueSection by model.showOverdueSection.collectAsStateWithLifecycle()
+    val showCalendarWidget by model.showCalendarWidget.collectAsStateWithLifecycle()
+
+    LaunchedEffect(Unit) { model.loadDashboard() }
+
+    val appLocale = androidx.compose.ui.platform.LocalConfiguration.current.locales[0]
+        ?.language ?: "ca"
+    val weekStart = Dates.weekStart(appLocale)
+    val calendarLabels = CalendarLabels(
+        weekdays = Dates.weekdayNames(appLocale, weekStart),
+        months = (1..12).map { Dates.monthName(appLocale, it) },
+        emptyDay = stringResource(R.string.calendar_empty_day),
+        emptyWeek = stringResource(R.string.calendar_empty_week),
+    )
+
+    // Els punts del calendari: fins a tres colors per dia, els dels àmbits de les
+    // tasques que el tenen (docs/02 §5). El dashboard ignora la selecció d'àmbits.
+    val palette = Femho.colors
+    val colors = scopes.associate { it.id to palette.scopeColor(it.color) }
+    val dots: Map<java.time.LocalDate, List<androidx.compose.ui.graphics.Color>> =
+        remember(dashboard, colors) {
+            val result = mutableMapOf<java.time.LocalDate, MutableList<androidx.compose.ui.graphics.Color>>()
+            (dashboard.today + dashboard.overdue + dashboard.doing).forEach { task ->
+                val day = task.dueDate ?: return@forEach
+                val color = colors[task.scopeId] ?: palette.inkFaint
+                val list = result.getOrPut(java.time.LocalDate.parse(day)) { mutableListOf() }
+                if (list.size < 3 && color !in list) list.add(color)
+            }
+            result
+        }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Femho.pageBackground)
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.dashboard_title),
+            color = Femho.colors.ink,
+            fontSize = FemhoText.columnTitle,
+            fontWeight = FontWeight.ExtraBold,
+            modifier = Modifier.testTag("dashboard-screen"),
+        )
+
+        // Les targetes per àmbit: pendents i vençudes, amb la vora del color (la web).
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            dashboard.scopes.forEach { scope ->
+                val pendingLabel = stringResource(R.string.dashboard_pending)
+                    .replace("{count}", scope.pending.toString())
+                val overdueLabel = stringResource(R.string.dashboard_overduecount)
+                    .replace("{count}", scope.overdue.toString())
+                Text(
+                    text = "${scope.name}\n$pendingLabel" +
+                        if (scope.overdue > 0) " · $overdueLabel" else "",
+                    color = Femho.colors.ink,
+                    fontSize = FemhoText.meta,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(FemhoShape.card))
+                        .background(Femho.colors.cardBg)
+                        .border(1.dp, Femho.colors.cardBorder, RoundedCornerShape(FemhoShape.card))
+                        .padding(12.dp)
+                        .testTag("dashboard-scope-${scope.scopeId}"),
+                )
+            }
+        }
+
+        Section(
+            title = stringResource(R.string.dashboard_today),
+            tasks = dashboard.today,
+            empty = stringResource(R.string.dashboard_empty_today),
+            scopes = scopes,
+            onOpen = { model.open(it) },
+            testTag = "dashboard-today",
+        )
+
+        if (showOverdueSection) {
+            Section(
+                title = stringResource(R.string.dashboard_overdue),
+                tasks = dashboard.overdue,
+                empty = stringResource(R.string.dashboard_empty_overdue),
+                scopes = scopes,
+                onOpen = { model.open(it) },
+                testTag = "dashboard-overdue",
+            )
+        }
+
+        if (showCalendarWidget) {
+            val avui = java.time.LocalDate.now()
+            MonthView(
+                year = avui.year,
+                month = avui.monthValue,
+                selected = avui,
+                today = avui,
+                dots = dots,
+                labels = calendarLabels,
+                onSelect = { },
+                weekStart = weekStart,
+                modifier = Modifier.testTag("dashboard-calendar"),
+            )
+        }
+
+        Section(
+            title = stringResource(R.string.dashboard_doing),
+            tasks = dashboard.doing,
+            empty = stringResource(R.string.dashboard_empty_doing),
+            scopes = scopes,
+            onOpen = { model.open(it) },
+            testTag = "dashboard-doing",
+        )
+    }
+}
+
+/** Una secció del dashboard: títol, i les tasques com a targetes amb l'àmbit. */
+@Composable
+private fun Section(
+    title: String,
+    tasks: List<ho.fem.model.Task>,
+    empty: String,
+    scopes: List<Scope>,
+    onOpen: (ho.fem.model.Task) -> Unit,
+    testTag: String,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            text = title,
+            color = Femho.colors.ink,
+            fontSize = FemhoText.columnTitle,
+            fontWeight = FontWeight.ExtraBold,
+        )
+        if (tasks.isEmpty()) {
+            Text(
+                text = empty,
+                color = Femho.colors.inkSoft,
+                fontSize = FemhoText.body,
+            )
+        } else {
+            tasks.forEach { task ->
+                TaskCard(
+                    title = task.title,
+                    project = scopes.firstOrNull { it.id == task.scopeId }?.name,
+                    time = task.dueTime,
+                    done = task.status == TaskStatus.DONE,
+                    onOpen = { onOpen(task) },
+                    modifier = Modifier.testTag("$testTag-task"),
+                )
             }
         }
     }

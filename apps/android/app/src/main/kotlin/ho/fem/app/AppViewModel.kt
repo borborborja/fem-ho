@@ -238,6 +238,29 @@ class AppViewModel(private val container: Container) : ViewModel() {
     private val _stats = MutableStateFlow<ho.fem.model.SessionStats>(ho.fem.model.SessionStats())
     val stats: StateFlow<ho.fem.model.SessionStats> = _stats.asStateFlow()
 
+    // ------------------------------------------------------------------ Dashboard
+
+    private val _dashboard = MutableStateFlow<ho.fem.model.DashboardView>(ho.fem.model.DashboardView())
+    val dashboard: StateFlow<ho.fem.model.DashboardView> = _dashboard.asStateFlow()
+
+    private val _showOverdueSection = MutableStateFlow(true)
+    val showOverdueSection: StateFlow<Boolean> = _showOverdueSection.asStateFlow()
+
+    private val _showCalendarWidget = MutableStateFlow(true)
+    val showCalendarWidget: StateFlow<Boolean> = _showCalendarWidget.asStateFlow()
+
+    /** Carrega el dashboard global. El wordmark l'obre (docs/03 §3:50). */
+    fun loadDashboard() {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            // Les seccions que s'amaguen a Ajustos no es pinten (docs/02 §8).
+            _showOverdueSection.value = container.settings.showOverdueSection.first()
+            _showCalendarWidget.value = container.settings.showCalendarWidget.first()
+            runCatching { container.api(base).dashboard() }
+                .onSuccess { _dashboard.value = it }
+        }
+    }
+
     /** Carrega les Estadístiques de dedicació. GET /api/v1/sessions/stats. */
     fun loadStats(from: String?, to: String?, userId: String?) {
         val base = serverUrl ?: return

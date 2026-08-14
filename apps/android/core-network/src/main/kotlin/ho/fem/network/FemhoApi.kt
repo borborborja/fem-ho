@@ -13,6 +13,7 @@ import ho.fem.model.Calendar
 import ho.fem.model.Checklist
 import ho.fem.model.Comment
 import ho.fem.model.CredentialEnvelope
+import ho.fem.model.DashboardView
 import ho.fem.model.EventOccurrence
 import ho.fem.model.Inbox
 import ho.fem.model.InboxMark
@@ -960,7 +961,7 @@ class FemhoApi(
 
     // ------------------------------------------------------------------ Dashboard
 
-    suspend fun dashboard(): Map<String, Any> = get("/api/v1/dashboard")
+    suspend fun dashboard(): DashboardView = get("/api/v1/dashboard")
 
     // ------------------------------------------------------------------ Admin
 
