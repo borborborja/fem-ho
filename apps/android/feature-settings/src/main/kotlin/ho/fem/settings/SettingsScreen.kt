@@ -217,6 +217,25 @@ data class SettingsLabels(
     val mailNotTouched: String,
     val mailRemove: String,
     val mailSave: String,
+    // Agents (Usuari IA)
+    val agents: String,
+    val newAgent: String,
+    val emptyAgents: String,
+    val agentEnabled: String,
+    val agentCanCreate: String,
+    val agentScopes: String,
+    val agentAllScopes: String,
+    val agentScopeTaken: String,
+    val agentCredentials: String,
+    val agentNewCredential: String,
+    val agentConnect: String,
+    val agentDownloadMcp: String,
+    val agentDownloadSkill: String,
+    val agentMcpNoToken: String,
+    val agentMcpHasToken: String,
+    val agentSkillNoToken: String,
+    /** El botó de crear (agent, àmbit, token...): "Crea". */
+    val create: String,
 )
 
 data class SettingsTabs(
@@ -301,6 +320,20 @@ fun SettingsScreen(
     onCreateMailRule: (String, String, String?, String?) -> Unit = { _, _, _, _ -> },
     onDeleteMailRule: (String) -> Unit = {},
     onCopyToClipboard: (String) -> Unit = {},
+    // Agents (Usuari IA)
+    agents: List<ho.fem.model.AgentDetail> = emptyList(),
+    agentScopeAvailability: Map<String, List<ho.fem.model.AgentScopeAvailability>> = emptyMap(),
+    agentCredentials: Map<String, List<ho.fem.model.ApiTokenSummary>> = emptyMap(),
+    createdAgentToken: String? = null,
+    agentSkill: String? = null,
+    onCreateAgent: (String) -> Unit = {},
+    onAgentEnabled: (ho.fem.model.AgentDetail, Boolean) -> Unit = { _, _ -> },
+    onAgentCanCreate: (ho.fem.model.AgentDetail, Boolean) -> Unit = { _, _ -> },
+    onAgentScopes: (ho.fem.model.AgentDetail, List<String>, Boolean) -> Unit = { _, _, _ -> },
+    onAgentNewCredential: (ho.fem.model.AgentDetail) -> Unit = {},
+    onRevokeAgentCredential: (String) -> Unit = {},
+    onDeleteAgent: (ho.fem.model.AgentDetail) -> Unit = {},
+    onAgentSkill: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     var selectedTab by remember { mutableStateOf("general") }
@@ -441,7 +474,24 @@ fun SettingsScreen(
                     onRevokeToken = onRevokeToken,
                     onCopyToClipboard = onCopyToClipboard,
                 )
-                "ai" -> EmptyState(labels.emptyStates.ai)
+                "ai" -> AiTab(
+                    labels = labels,
+                    scopes = scopes,
+                    agents = agents,
+                    agentScopeAvailability = agentScopeAvailability,
+                    agentCredentials = agentCredentials,
+                    createdAgentToken = createdAgentToken,
+                    agentSkill = agentSkill,
+                    serverUrl = serverUrl,
+                    onCreateAgent = onCreateAgent,
+                    onAgentEnabled = onAgentEnabled,
+                    onAgentCanCreate = onAgentCanCreate,
+                    onAgentScopes = onAgentScopes,
+                    onAgentNewCredential = onAgentNewCredential,
+                    onRevokeAgentCredential = onRevokeAgentCredential,
+                    onAgentSkill = onAgentSkill,
+                    onCopyToClipboard = onCopyToClipboard,
+                )
                 "shares" -> EmptyState(labels.emptyStates.shares)
                 "profile" -> ProfileTab(
                     labels = labels,
@@ -2486,6 +2536,310 @@ private fun ScopesTab(
                 }
             }
         }
+    }
+}
+
+/** La pestanya Usuari IA: agents, àmbits, credencials i el full d'instruccions. */
+@Composable
+private fun AiTab(
+    labels: SettingsLabels,
+    scopes: List<ho.fem.model.Scope>,
+    agents: List<ho.fem.model.AgentDetail>,
+    agentScopeAvailability: Map<String, List<ho.fem.model.AgentScopeAvailability>>,
+    agentCredentials: Map<String, List<ho.fem.model.ApiTokenSummary>>,
+    createdAgentToken: String?,
+    agentSkill: String?,
+    serverUrl: String,
+    onCreateAgent: (String) -> Unit,
+    onAgentEnabled: (ho.fem.model.AgentDetail, Boolean) -> Unit,
+    onAgentCanCreate: (ho.fem.model.AgentDetail, Boolean) -> Unit,
+    onAgentScopes: (ho.fem.model.AgentDetail, List<String>, Boolean) -> Unit,
+    onAgentNewCredential: (ho.fem.model.AgentDetail) -> Unit,
+    onRevokeAgentCredential: (String) -> Unit,
+    onAgentSkill: () -> Unit,
+    onCopyToClipboard: (String) -> Unit,
+) {
+    var newAgentName by remember { mutableStateOf("") }
+
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Group(labels.agents) {
+            if (agents.isEmpty()) {
+                EmptyState(labels.emptyAgents)
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    agents.forEach { agent ->
+                        AgentRow(
+                            labels = labels,
+                            agent = agent,
+                            scopes = scopes,
+                            availability = agentScopeAvailability[agent.id].orEmpty(),
+                            credencials = agentCredentials[agent.id].orEmpty(),
+                            createdAgentToken = createdAgentToken,
+                            agentSkill = agentSkill,
+                            serverUrl = serverUrl,
+                            onEnabled = { onAgentEnabled(agent, it) },
+                            onCanCreate = { onAgentCanCreate(agent, it) },
+                            onScopes = { ids, all -> onAgentScopes(agent, ids, all) },
+                            onNewCredential = { onAgentNewCredential(agent) },
+                            onRevokeCredential = onRevokeAgentCredential,
+                            onSkill = onAgentSkill,
+                            onCopyToClipboard = onCopyToClipboard,
+                        )
+                    }
+                }
+            }
+        }
+
+        // Nou agent
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            androidx.compose.foundation.text.BasicTextField(
+                value = newAgentName,
+                onValueChange = { newAgentName = it },
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(FemhoShape.pill))
+                    .background(Femho.colors.ghostBg)
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                decorationBox = { innerTextField ->
+                    Box(modifier = Modifier.padding(vertical = 4.dp)) {
+                        if (newAgentName.isEmpty()) {
+                            Text(
+                                text = labels.newAgent,
+                                color = Femho.colors.inkFaint,
+                                fontSize = FemhoText.body,
+                            )
+                        }
+                        innerTextField()
+                    }
+                },
+            )
+            Text(
+                text = labels.create,
+                color = if (newAgentName.trim().isEmpty()) Femho.colors.inkFaint else Femho.onBrand,
+                fontSize = FemhoText.body,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier
+                    .clickable(enabled = newAgentName.trim().isNotEmpty()) {
+                        onCreateAgent(newAgentName.trim())
+                        newAgentName = ""
+                    }
+                    .heightIn(min = FemhoSize.touch)
+                    .padding(vertical = 12.dp, horizontal = 16.dp),
+            )
+        }
+    }
+}
+
+/**
+ * Un agent: què pot fer, **d'on agafa feina**, i amb què s'hi connecta.
+ *
+ * Els tres blocs són el que cal per posar-lo a treballar, i van junts perquè és una sola
+ * decisió: qui és, què porta i com hi entra (el mateix criteri que la web).
+ */
+@Composable
+private fun AgentRow(
+    labels: SettingsLabels,
+    agent: ho.fem.model.AgentDetail,
+    scopes: List<ho.fem.model.Scope>,
+    availability: List<ho.fem.model.AgentScopeAvailability>,
+    credencials: List<ho.fem.model.ApiTokenSummary>,
+    createdAgentToken: String?,
+    agentSkill: String?,
+    serverUrl: String,
+    onEnabled: (Boolean) -> Unit,
+    onCanCreate: (Boolean) -> Unit,
+    onScopes: (List<String>, Boolean) -> Unit,
+    onNewCredential: () -> Unit,
+    onRevokeCredential: (String) -> Unit,
+    onSkill: () -> Unit,
+    onCopyToClipboard: (String) -> Unit,
+) {
+    val presa = { scopeId: String -> availability.find { it.scopeId == scopeId }?.takenBy?.name }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(FemhoShape.card))
+            .background(Femho.colors.cardBg)
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            text = agent.name,
+            color = Femho.colors.ink,
+            fontSize = FemhoText.body,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Toggle(label = labels.agentEnabled, checked = agent.enabled, onChange = onEnabled)
+        Toggle(label = labels.agentCanCreate, checked = agent.canCreateTasks, onChange = onCanCreate)
+
+        // D'on agafa feina. Un àmbit té un sol agent: els que ja té un altre surten
+        // desactivats amb el seu nom, perquè saber a qui anar és el següent pas.
+        Text(
+            text = labels.agentScopes,
+            color = Femho.colors.inkSoft,
+            fontSize = FemhoText.meta,
+            fontWeight = FontWeight.Bold,
+        )
+        Toggle(label = labels.agentAllScopes, checked = agent.allScopes, onChange = { value ->
+            onScopes(if (value) emptyList() else agent.scopeIds, value)
+        })
+        if (!agent.allScopes) {
+            scopes.forEach { scope ->
+                val altre = presa(scope.id)
+                val marcat = agent.scopeIds.contains(scope.id)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(enabled = altre == null) {
+                            onScopes(
+                                if (marcat) agent.scopeIds - scope.id else agent.scopeIds + scope.id,
+                                false,
+                            )
+                        }
+                        .heightIn(min = FemhoSize.touch)
+                        .padding(vertical = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(18.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(if (marcat) Femho.colors.plouBlue else Femho.colors.ghostBg)
+                            .padding(3.dp),
+                    ) {
+                        if (marcat) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(Femho.onBrand, RoundedCornerShape(2.dp)),
+                            )
+                        }
+                    }
+                    Text(
+                        text = if (altre == null) scope.name else "${scope.name} · $altre",
+                        color = if (altre == null) Femho.colors.ink else Femho.colors.inkFaint,
+                        fontSize = FemhoText.body,
+                    )
+                }
+            }
+        }
+
+        // Amb què s'hi connecta. El testimoni surt una sola vegada (del hash no se'n
+        // pot treure), i per això va amb l'avís al costat (P17).
+        Text(
+            text = labels.agentCredentials,
+            color = Femho.colors.inkSoft,
+            fontSize = FemhoText.meta,
+            fontWeight = FontWeight.Bold,
+        )
+        credencials.forEach { cred ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = cred.prefix,
+                    color = Femho.colors.ink,
+                    fontSize = FemhoText.body,
+                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                )
+                Text(
+                    text = cred.name,
+                    color = Femho.colors.inkFaint,
+                    fontSize = FemhoText.body,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    text = labels.tokensRevoke,
+                    color = Femho.colors.dangerText,
+                    fontSize = FemhoText.body,
+                    modifier = Modifier
+                        .clickable { onRevokeCredential(cred.id) }
+                        .heightIn(min = FemhoSize.touch)
+                        .padding(vertical = 10.dp, horizontal = 8.dp),
+                )
+            }
+        }
+        if (createdAgentToken != null) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = createdAgentToken,
+                    color = Femho.colors.ink,
+                    fontSize = FemhoText.meta,
+                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                )
+                Text(
+                    text = labels.tokensOnceWarning,
+                    color = Femho.colors.dangerText,
+                    fontSize = FemhoText.meta,
+                )
+            }
+        }
+        Text(
+            text = labels.agentNewCredential,
+            color = Femho.onBrand,
+            fontSize = FemhoText.body,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier
+                .clickable(onClick = onNewCredential)
+                .heightIn(min = FemhoSize.touch)
+                .padding(vertical = 10.dp),
+        )
+
+        // Com s'hi connecta: el .mcp.json porta la credencial i el full d'instruccions
+        // no en porta cap (això és el que fa que es pugui passar per un xat).
+        Text(
+            text = labels.agentConnect,
+            color = Femho.colors.inkSoft,
+            fontSize = FemhoText.meta,
+            fontWeight = FontWeight.Bold,
+        )
+        val mcpJson = buildString {
+            append("""{"mcpServers":{"fem-ho":{"type":"http","url":"${serverUrl.trimEnd('/')}/mcp","headers":{"Authorization":"Bearer ${createdAgentToken ?: "ENGANXA-HI-LA-CREDENCIAL"}"}}}}""")
+        }
+        Text(
+            text = labels.agentDownloadMcp,
+            color = Femho.colors.ink,
+            fontSize = FemhoText.body,
+            modifier = Modifier
+                .clickable { onCopyToClipboard(mcpJson) }
+                .heightIn(min = FemhoSize.touch)
+                .padding(vertical = 10.dp),
+        )
+        Text(
+            text = if (createdAgentToken != null) labels.agentMcpHasToken else labels.agentMcpNoToken,
+            color = if (createdAgentToken != null) Femho.colors.dangerText else Femho.colors.inkFaint,
+            fontSize = FemhoText.meta,
+        )
+        Text(
+            text = labels.agentDownloadSkill,
+            color = Femho.colors.ink,
+            fontSize = FemhoText.body,
+            modifier = Modifier
+                .clickable(onClick = onSkill)
+                .heightIn(min = FemhoSize.touch)
+                .padding(vertical = 10.dp),
+        )
+        if (agentSkill != null) {
+            Text(
+                text = agentSkill.take(200) + (if (agentSkill.length > 200) "…" else ""),
+                color = Femho.colors.inkFaint,
+                fontSize = FemhoText.meta,
+                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+            )
+        }
+        Text(
+            text = labels.agentSkillNoToken,
+            color = Femho.colors.inkFaint,
+            fontSize = FemhoText.meta,
+        )
     }
 }
 

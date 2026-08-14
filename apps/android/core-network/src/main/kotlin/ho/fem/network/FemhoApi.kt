@@ -2,6 +2,8 @@ package ho.fem.network
 
 import ho.fem.model.Agent
 import ho.fem.model.AgentDetail
+import ho.fem.model.AgentScopeAvailability
+import ho.fem.model.AgentScopeEnvelope
 import ho.fem.model.ActivityEnvelope
 import ho.fem.model.ApiTokenSummary
 import ho.fem.model.Attachment
@@ -10,6 +12,7 @@ import ho.fem.model.Board
 import ho.fem.model.Calendar
 import ho.fem.model.Checklist
 import ho.fem.model.Comment
+import ho.fem.model.CredentialEnvelope
 import ho.fem.model.EventOccurrence
 import ho.fem.model.Inbox
 import ho.fem.model.InboxMark
@@ -822,6 +825,33 @@ class FemhoApi(
     suspend fun agentSkill(): String = raw("GET", "/api/v1/ai/skill", null, authenticated = true)
 
     suspend fun aiAttention(): Map<String, Any> = get("/api/v1/ai/attention")
+
+    /** Els agents estesos (àmbits, permisos), per a Ajustos ▸ Usuari IA. */
+    suspend fun agentDetails(): List<AgentDetail> = get("/api/v1/ai/agents")
+
+    suspend fun createAgent(name: String): AgentDetail =
+        post("/api/v1/ai/agents", mapOf("name" to name))
+
+    suspend fun updateAgent(
+        agentId: String,
+        enabled: Boolean? = null,
+        canCreateTasks: Boolean? = null,
+    ): AgentDetail = patch("/api/v1/ai/agents/$agentId", buildMap {
+        if (enabled != null) put("enabled", enabled)
+        if (canCreateTasks != null) put("can_create_tasks", canCreateTasks)
+    })
+
+    suspend fun deleteAgent(agentId: String) {
+        raw("DELETE", "/api/v1/ai/agents/$agentId", null, authenticated = true)
+    }
+
+    /** Quins àmbits pot marcar, i quins ja té un altre agent (per desactivar-los). */
+    suspend fun agentScopeAvailability(agentId: String): List<AgentScopeAvailability> =
+        get<AgentScopeEnvelope>("/api/v1/ai/agents/$agentId/scope-availability").data
+
+    /** Les credencials d'un agent, per llistar-les i poder revocar-les. */
+    suspend fun agentCredentials(agentId: String): List<ApiTokenSummary> =
+        get<CredentialEnvelope>("/api/v1/ai/agents/$agentId/credentials").data
 
     suspend fun aiCoverage(): Map<String, Any> = get("/api/v1/ai/coverage")
 

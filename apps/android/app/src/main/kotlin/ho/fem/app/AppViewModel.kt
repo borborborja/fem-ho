@@ -4,7 +4,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import ho.fem.data.Container
 import ho.fem.model.Agent
+import ho.fem.model.AgentDetail
+import ho.fem.model.AgentScopeAvailability
 import ho.fem.model.AiMode
+import ho.fem.model.ApiTokenSummary
 import ho.fem.model.Checklist
 import ho.fem.model.EventOccurrence
 import ho.fem.model.Inbox
@@ -1267,6 +1270,130 @@ class AppViewModel(private val container: Container) : ViewModel() {
             _aiEnabled.value = agents.any { it.enabled }
             // Sense cap agent actiu no hi ha tauler de la IA on ser.
             if (!_aiEnabled.value) _aiBoard.value = false
+        }
+    }
+
+    // ------------------------------------------------ la gestió d'agents (Ajustos)
+
+    /** Els agents estesos, per a la pestanya Usuari IA. */
+    private val _agentsDetail = MutableStateFlow<List<AgentDetail>>(emptyList())
+    val agentsDetail: StateFlow<List<AgentDetail>> = _agentsDetail.asStateFlow()
+
+    /** Qui porta cada àmbit, per desactivar els que ja té un altre agent. */
+    private val _agentScopeAvailability = MutableStateFlow<Map<String, List<AgentScopeAvailability>>>(emptyMap())
+    val agentScopeAvailability: StateFlow<Map<String, List<AgentScopeAvailability>>> =
+        _agentScopeAvailability.asStateFlow()
+
+    /** Les credencials de cada agent, per llistar-les i revocar-les. */
+    private val _agentCredentials = MutableStateFlow<Map<String, List<ApiTokenSummary>>>(emptyMap())
+    val agentCredentials: StateFlow<Map<String, List<ApiTokenSummary>>> =
+        _agentCredentials.asStateFlow()
+
+    /** El token acabat de crear: es mostra una sola vegada, i després es descarta. */
+    private val _createdAgentToken = MutableStateFlow<String?>(null)
+    val createdAgentToken: StateFlow<String?> = _createdAgentToken.asStateFlow()
+
+    fun consumeCreatedAgentToken() {
+        _createdAgentToken.value = null
+    }
+
+    /** El full d'instruccions de l'agent, per baixar-lo. */
+    private val _agentSkill = MutableStateFlow<String?>(null)
+    val agentSkill: StateFlow<String?> = _agentSkill.asStateFlow()
+
+    fun loadAgentManagement() {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).agentDetails() }
+                .onSuccess { agents ->
+                    _agentsDetail.value = agents
+                    agents.forEach { agent ->
+                        runCatching { container.api(base).agentScopeAvailability(agent.id) }
+                            .onSuccess { _agentScopeAvailability.value = _agentScopeAvailability.value + (agent.id to it) }
+                        runCatching { container.api(base).agentCredentials(agent.id) }
+                            .onSuccess { _agentCredentials.value = _agentCredentials.value + (agent.id to it) }
+                    }
+                }
+        }
+    }
+
+    /** Crea un agent. POST /api/v1/ai/agents. El servidor genera l'id. */
+    fun createAgent(name: String) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).createAgent(name) }
+                .onSuccess { loadAgentManagement() }
+        }
+    }
+
+    fun setAgentEnabled(agent: AgentDetail, enabled: Boolean) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).updateAgent(agent.id, enabled = enabled) }
+                .onSuccess {
+                    loadAgentManagement()
+                    loadAgents()
+                }
+        }
+    }
+
+    fun setAgentCanCreate(agent: AgentDetail, canCreate: Boolean) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).updateAgent(agent.id, canCreateTasks = canCreate) }
+                .onSuccess { loadAgentManagement() }
+        }
+    }
+
+    /** Desa el conjunt sencer d'àmbits, com la web: les caselles tal com han quedat. */
+    fun setAgentScopes(agent: AgentDetail, scopeIds: List<String>, allScopes: Boolean) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).updateAgentScopes(agent.id, scopeIds, allScopes) }
+                .onSuccess {
+                    loadAgentManagement()
+                    loadAgents()
+                }
+        }
+    }
+
+    /** Crea una credencial: el token surt una sola vegada (del hash no se'n pot treure). */
+    fun createAgentCredential(agent: AgentDetail) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).createAgentCredential(agent.id) }
+                .onSuccess { result ->
+                    _createdAgentToken.value = result["token"] as? String
+                    loadAgentManagement()
+                }
+        }
+    }
+
+    fun revokeAgentCredential(tokenId: String) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).revokeApiToken(tokenId) }
+                .onSuccess { loadAgentManagement() }
+        }
+    }
+
+    fun deleteAgent(agent: AgentDetail) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).deleteAgent(agent.id) }
+                .onSuccess {
+                    loadAgentManagement()
+                    loadAgents()
+                }
+        }
+    }
+
+    /** El full d'instruccions, en el teu idioma. text/markdown. */
+    fun loadAgentSkill() {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).agentSkill() }
+                .onSuccess { _agentSkill.value = it }
         }
     }
 

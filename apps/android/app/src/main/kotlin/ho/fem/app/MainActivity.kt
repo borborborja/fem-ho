@@ -1292,11 +1292,17 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
     val calendars by model.calendars.collectAsStateWithLifecycle()
     val mailAccounts by model.mailAccounts.collectAsStateWithLifecycle()
     val mailRules by model.mailRules.collectAsStateWithLifecycle()
+    val agentsDetail by model.agentsDetail.collectAsStateWithLifecycle()
+    val agentScopeAvailability by model.agentScopeAvailability.collectAsStateWithLifecycle()
+    val agentCredentials by model.agentCredentials.collectAsStateWithLifecycle()
+    val createdAgentToken by model.createdAgentToken.collectAsStateWithLifecycle()
+    val agentSkill by model.agentSkill.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) {
         model.loadEntityData()
         model.loadCalendars()
         model.loadMailData()
+        model.loadAgentManagement()
     }
 
     SettingsScreen(
@@ -1395,6 +1401,24 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
             tokensNever = stringResource(R.string.tokens_never),
             tokensRevoke = stringResource(R.string.tokens_revoke),
             tokensCopy = stringResource(R.string.tokens_copy),
+            // Agents (Usuari IA)
+            agents = stringResource(R.string.settings_agents),
+            newAgent = stringResource(R.string.settings_newagent),
+            emptyAgents = stringResource(R.string.settings_empty_agents),
+            agentEnabled = stringResource(R.string.settings_agentenabled),
+            agentCanCreate = stringResource(R.string.settings_agentcancreate),
+            agentScopes = stringResource(R.string.settings_agentscopes),
+            agentAllScopes = stringResource(R.string.settings_agentallscopes),
+            agentScopeTaken = stringResource(R.string.settings_agentscopetaken),
+            agentCredentials = stringResource(R.string.settings_agentcredentials),
+            agentNewCredential = stringResource(R.string.settings_agentnewcredential),
+            agentConnect = stringResource(R.string.settings_agentconnect),
+            agentDownloadMcp = stringResource(R.string.settings_agentdownloadmcp),
+            agentDownloadSkill = stringResource(R.string.settings_agentdownloadskill),
+            agentMcpNoToken = stringResource(R.string.settings_agentmcpnotoken),
+            agentMcpHasToken = stringResource(R.string.settings_agentmcphastoken),
+            agentSkillNoToken = stringResource(R.string.settings_agentskillnotoken),
+            create = stringResource(R.string.nav_create),
             scopeSection = stringResource(R.string.settings_scopesection),
             entityProjects = stringResource(R.string.settings_entityprojects),
             entityLabels = stringResource(R.string.settings_entitylabels),
@@ -1521,6 +1545,11 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
         mcpUrl = "$serverUrl/mcp",
         tokens = tokens,
         createdToken = createdToken,
+        agents = agentsDetail,
+        agentScopeAvailability = agentScopeAvailability,
+        agentCredentials = agentCredentials,
+        createdAgentToken = createdAgentToken,
+        agentSkill = agentSkill,
         onTheme = model::setTheme,
         onAccent = model::setAccent,
         onLocale = model::setLocale,
@@ -1539,6 +1568,13 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
         onCreateToken = model::createToken,
         onRevokeToken = model::revokeToken,
         onCopyToClipboard = model::copyToClipboard,
+        onCreateAgent = model::createAgent,
+        onAgentEnabled = model::setAgentEnabled,
+        onAgentCanCreate = model::setAgentCanCreate,
+        onAgentScopes = model::setAgentScopes,
+        onAgentNewCredential = model::createAgentCredential,
+        onRevokeAgentCredential = model::revokeAgentCredential,
+        onAgentSkill = model::loadAgentSkill,
         onCreateScope = model::createScope,
         onUpdateScope = model::updateScope,
         onDeleteScope = model::deleteScope,

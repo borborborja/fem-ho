@@ -632,6 +632,7 @@ data class AdminUser(
 @Serializable
 data class ApiTokenSummary(
     val id: String,
+    val name: String = "",
     val prefix: String,
     @SerialName("created_at") val createdAt: String,
     @SerialName("last_used_at") val lastUsedAt: String? = null,
@@ -650,4 +651,34 @@ data class AgentDetail(
     @SerialName("scope_ids") val scopeIds: List<String> = emptyList(),
     @SerialName("all_scopes") val allScopes: Boolean = false,
     @SerialName("created_at") val createdAt: String? = null,
+)
+
+/**
+ * Un àmbit i qui el porta, per a la pestanya Usuari IA.
+ *
+ * `taken_by` només hi és quan un altre agent ja el té: la casella surt desactivada amb
+ * el seu nom, perquè saber a qui anar és el següent pas i deixar marcar per respondre
+ * amb un error després no ho és (el mateix criteri que la web).
+ */
+@Serializable
+data class AgentScopeAvailability(
+    @SerialName("scope_id") val scopeId: String,
+    @SerialName("taken_by") val takenBy: AgentTakenBy? = null,
+)
+
+@Serializable
+data class AgentTakenBy(
+    val name: String = "",
+)
+
+/** El servidor embolica les llistes de disponibilitat d'àmbits en `{data: [...]}`. */
+@Serializable
+data class AgentScopeEnvelope(
+    val data: List<AgentScopeAvailability> = emptyList(),
+)
+
+/** El servidor embolica les llistes de credencials en `{data: [...]}`. */
+@Serializable
+data class CredentialEnvelope(
+    val data: List<ApiTokenSummary> = emptyList(),
 )
