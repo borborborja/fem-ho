@@ -124,5 +124,20 @@
                 <action android:name="org.unifiedpush.android.connector.REGISTRATION_FAILED" />
             </intent-filter>
         </receiver>
+
+        <!--
+          Les accions de les notificacions ("Fet" i "Ajorna"). No surt a cap llançador:
+          només el criden els PendingIntent de la notificació. `exported="true"` perquè
+          el shell (i qualsevol app) hi pugui arribar en proves; sense cap risc perquè
+          les accions només toquen les tasques del compte que té el token del dispositiu.
+        -->
+        <receiver
+            android:name=".NotificationActionReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="ho.fem.notification.DONE" />
+                <action android:name="ho.fem.notification.SNOOZE" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>

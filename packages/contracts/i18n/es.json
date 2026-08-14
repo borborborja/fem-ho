@@ -742,5 +742,6 @@
   "settings.entityTypes": "Tipologías",
   "settings.entityDedication": "Dedicación",
   "settings.entityProjects": "Proyectos",
-  "settings.scopeSection": "Gestión del ámbito"
+  "settings.scopeSection": "Gestión del ámbito",
+  "notification.snooze": "Posponer"
 }

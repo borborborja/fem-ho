@@ -49,6 +49,20 @@ class PushReceiver : MessagingReceiver() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
 
+        // Les accions de la notificació: "Fet" i "Ajorna" (docs/03 §9). Van a un
+        // receiver, no a l'activitat: no cal obrir l'app per marcar una tasca.
+        fun actionPending(action: String, requestCode: Int): PendingIntent {
+            val intent = Intent(context, NotificationActionReceiver::class.java)
+                .setAction(action)
+                .putExtra(NotificationActionReceiver.EXTRA_TASK_ID, taskId)
+            return PendingIntent.getBroadcast(
+                context,
+                requestCode,
+                intent,
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+            )
+        }
+
         Notifications.ensureChannel(context)
         val notification = NotificationCompat.Builder(context, Notifications.CHANNEL_REMINDERS)
             .setSmallIcon(android.R.drawable.ic_popup_reminder)
@@ -56,6 +70,16 @@ class PushReceiver : MessagingReceiver() {
             .setContentText(body)
             .setAutoCancel(true)
             .setContentIntent(open)
+            .addAction(
+                0,
+                context.getString(R.string.board_column_done),
+                actionPending(NotificationActionReceiver.ACTION_DONE, 1),
+            )
+            .addAction(
+                0,
+                context.getString(R.string.notification_snooze),
+                actionPending(NotificationActionReceiver.ACTION_SNOOZE, 2),
+            )
             .build()
 
         // La clau és el títol: dos recordatoris de la mateixa tasca es col·lapsen en un.

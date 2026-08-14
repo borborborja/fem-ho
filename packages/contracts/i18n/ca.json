@@ -744,5 +744,6 @@
   "settings.entityTypes": "Tipologies",
   "settings.entityDedication": "Dedicació",
   "settings.entityProjects": "Projectes",
-  "settings.scopeSection": "Gestió de l'àmbit"
+  "settings.scopeSection": "Gestió de l'àmbit",
+  "notification.snooze": "Ajorna"
 }

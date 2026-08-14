@@ -263,6 +263,7 @@
     <string name="nav_settings">Ajustos</string>
     <string name="nav_tasks">Tasques</string>
     <string name="nav_view">Vista</string>
+    <string name="notification_snooze">Ajorna</string>
     <string name="notify_reminder">Recordatori</string>
     <string name="palette_empty">Res que coincideixi.</string>
     <string name="palette_go">Anar a</string>

@@ -263,6 +263,7 @@
     <string name="nav_settings">Ajustes</string>
     <string name="nav_tasks">Tareas</string>
     <string name="nav_view">Vista</string>
+    <string name="notification_snooze">Posponer</string>
     <string name="notify_reminder">Recordatorio</string>
     <string name="palette_empty">Nada que coincida.</string>
     <string name="palette_go">Ir a</string>

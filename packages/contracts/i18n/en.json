@@ -743,5 +743,6 @@
   "settings.entityTypes": "Task types",
   "settings.entityDedication": "Time tracking",
   "settings.entityProjects": "Projects",
-  "settings.scopeSection": "Scope management"
+  "settings.scopeSection": "Scope management",
+  "notification.snooze": "Snooze"
 }
