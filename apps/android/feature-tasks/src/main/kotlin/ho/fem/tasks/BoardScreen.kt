@@ -43,6 +43,12 @@ data class BoardLabels(
     /** "Moure a {columna}", per a la fletxa de la barra dreta. Ja resolt per columna. */
     val advance: Map<TaskStatus, String>,
     val toggle: String,
+    /** El pany de l'agent: "L'agent hi treballa". */
+    val lock: String,
+    /** La marca d'atenció: "Espera resposta". */
+    val attention: String,
+    /** Reclamar des del kanban de la IA: "Ho agafo jo". */
+    val claim: String,
 )
 
 /**
@@ -94,6 +100,10 @@ fun BoardScreen(
     footer: @Composable (TaskStatus) -> Unit = {},
     /** Subtasques, llistes i el formulari d'afegir. `null` vol dir una targeta pelada. */
     extras: (Task) -> CardExtras? = { null },
+    /** Reclamar des del kanban de la IA: torna la tasca al tauler humà. */
+    onClaim: (Task) -> Unit = {},
+    /** Un moviment sobre una targeta bloquejada: es mostra el motiu del pany. */
+    onLocked: (Task) -> Unit = {},
     /**
      * El tauler de la IA. **No és una altra pantalla**: són les mateixes columnes amb
      * altres targetes —les que tenen mode d'IA— i la bústia sencera, que és on tot
@@ -138,18 +148,30 @@ fun BoardScreen(
                 } else {
                     ofColumn.forEach { task ->
                         val extra = extras(task)
+                        // El pany de l'agent: locked_until al futur bloqueja la targeta
+                        val locked = task.lockedUntil?.let { until ->
+                            runCatching { java.time.Instant.parse(until) }
+                                .getOrNull()?.isAfter(java.time.Instant.now()) ?: false
+                        } ?: false
                         TaskCard(
                             title = task.title,
                             time = task.dueTime,
                             done = task.status == TaskStatus.DONE,
                             toggleLabel = labels.toggle,
-                            onToggle = { onToggle(task) },
+                            // Amb el pany, la casella no mou: mostra el motiu (el 409
+                            // que retornaria el servidor si ho intentéssim).
+                            onToggle = { if (locked) onLocked(task) else onToggle(task) },
                             onOpen = { onOpen(task) },
+                            lockLabel = if (locked) labels.lock else null,
+                            attentionLabel = if (task.needsAttention) labels.attention else null,
+                            claimLabel = if (aiBoard) labels.claim else null,
+                            onClaim = if (aiBoard) ({ onClaim(task) }) else null,
                             /**
                              * La fletxa **només fins a "Fent"**: a "Fent" i a "Fet" la
                              * barra és la casella d'estat, que és on acaba el recorregut.
+                             * Amb el pany de l'agent, el moviment queda desactivat.
                              */
-                            onAdvance = when (status) {
+                            onAdvance = if (locked) null else when (status) {
                                 TaskStatus.INBOX -> ({ onMove(task, TaskStatus.TODO) })
                                 TaskStatus.TODO -> ({ onMove(task, TaskStatus.DOING) })
                                 else -> null

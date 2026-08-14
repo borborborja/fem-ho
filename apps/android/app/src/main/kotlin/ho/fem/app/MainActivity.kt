@@ -479,7 +479,11 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: (
             aiBoardActive = aiBoard,
             onToggleAiBoard = model::toggleAiBoard,
             aiBoardLabel = aiBoardLabel,
+            attentionCount = visible.count { it.needsAttention },
         )
+
+        val lockNoticeContext = androidx.compose.ui.platform.LocalContext.current
+        val lockNoticeText = stringResource(R.string.ai_lock_card)
 
         BoardScreen(
             tasks = visible,
@@ -507,11 +511,22 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: (
                     ),
                 ),
                 toggle = stringResource(R.string.sync_complete),
+                lock = stringResource(R.string.ai_lock_card),
+                attention = stringResource(R.string.ai_attention_card),
+                claim = stringResource(R.string.ai_takeover_action),
             ),
             onOpen = model::open,
             onMove = { task, status -> model.move(task, status) },
             onToggle = { task ->
                 model.move(task, if (task.status == TaskStatus.DONE) TaskStatus.TODO else TaskStatus.DONE)
+            },
+            onClaim = { task -> model.claim(task) },
+            onLocked = { _ ->
+                android.widget.Toast.makeText(
+                    lockNoticeContext,
+                    lockNoticeText,
+                    android.widget.Toast.LENGTH_SHORT,
+                ).show()
             },
             modifier = Modifier.weight(1f),
             /**
@@ -935,6 +950,8 @@ private fun TopBar(
     aiBoardActive: Boolean = false,
     onToggleAiBoard: () -> Unit = {},
     aiBoardLabel: String = "",
+    /** Tasques que esperen resposta teva: punt amb recompte sobre el commutador. */
+    attentionCount: Int = 0,
     /**
      * Les llistes pinejades i com s'obren.
      *
@@ -984,32 +1001,51 @@ private fun TopBar(
                 }
 
                 if (aiEnabled && view == Screen.BOARD) {
-                    Text(
-                        // El robot del disseny validat, en text: Compose no porta el joc
-                        // d'icones de Plou i un SVG a mà aquí seria un dibuix repetit.
-                        text = "◍",
-                        color = if (aiBoardActive) Femho.onBrand else Femho.colors.inkSoft,
-                        fontSize = FemhoText.body,
-                        fontWeight = FontWeight.Bold,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier
-                            .padding(horizontal = 6.dp)
-                            .size(34.dp)
-                            .clip(CircleShape)
-                            // Un `if` amb una banda `Brush` i l'altra `Color` no resol cap
-                            // sobrecàrrega de `background`: es tria el modificador sencer.
-                            .then(
-                                if (aiBoardActive) {
-                                    Modifier.background(Femho.brandGradient2)
-                                } else {
-                                    Modifier.background(Femho.colors.tagBg)
-                                },
+                    Box {
+                        Text(
+                            // El robot del disseny validat, en text: Compose no porta el joc
+                            // d'icones de Plou i un SVG a mà aquí seria un dibuix repetit.
+                            text = "◍",
+                            color = if (aiBoardActive) Femho.onBrand else Femho.colors.inkSoft,
+                            fontSize = FemhoText.body,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier
+                                .padding(horizontal = 6.dp)
+                                .size(34.dp)
+                                .clip(CircleShape)
+                                // Un `if` amb una banda `Brush` i l'altra `Color` no resol cap
+                                // sobrecàrrega de `background`: es tria el modificador sencer.
+                                .then(
+                                    if (aiBoardActive) {
+                                        Modifier.background(Femho.brandGradient2)
+                                    } else {
+                                        Modifier.background(Femho.colors.tagBg)
+                                    },
+                                )
+                                .androidClickable { onToggleAiBoard() }
+                                .padding(top = 8.dp)
+                                .testTag("ai-board-toggle")
+                                .semantics { contentDescription = aiBoardLabel },
+                        )
+                        if (attentionCount > 0) {
+                            Text(
+                                // La marca d'atenció del disseny: un punt amb el recompte de
+                                // tasques que esperen resposta, sobre el commutador.
+                                text = attentionCount.toString(),
+                                color = Femho.onBrand,
+                                fontSize = FemhoText.meta,
+                                fontWeight = FontWeight.Bold,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .size(16.dp)
+                                    .clip(CircleShape)
+                                    .background(Femho.brandGradient2)
+                                    .testTag("ai-attention-count"),
                             )
-                            .androidClickable { onToggleAiBoard() }
-                            .padding(top = 8.dp)
-                            .testTag("ai-board-toggle")
-                            .semantics { contentDescription = aiBoardLabel },
-                    )
+                        }
+                    }
                 }
 
                 if (pending > 0) {

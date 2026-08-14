@@ -1212,6 +1212,22 @@ class AppViewModel(private val container: Container) : ViewModel() {
         }
     }
 
+    /**
+     * Reclamar des del kanban de la IA. **És el mateix gest que arrossegar la targeta de
+     * tornada a la web**: `ai-mode` a `manual`, no la reserva `claim` de l'agent, que la
+     * bloquejaria per a l'usuari en comptes de tornar-li-la.
+     */
+    fun claim(task: Task) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).setAiMode(task.id, "manual") }
+                .onSuccess {
+                    refresh()
+                    refreshTask(task)
+                }
+        }
+    }
+
     /** Esborra una tasca. DELETE /api/v1/tasks/{id}. */
     fun deleteTask(task: Task) {
         val base = serverUrl ?: return
