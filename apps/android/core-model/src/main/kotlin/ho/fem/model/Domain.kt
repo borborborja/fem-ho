@@ -476,17 +476,33 @@ data class SessionEntry(
     @SerialName("user_name") val userName: String? = null,
     @SerialName("task_type_id") val taskTypeId: String? = null,
     @SerialName("task_type_name") val taskTypeName: String? = null,
+    @SerialName("task_type_color") val taskTypeColor: String? = null,
     @SerialName("started_at") val startedAt: String,
     @SerialName("ended_at") val endedAt: String? = null,
+    val minutes: Long = 0,
+    @SerialName("overtime_minutes") val overtimeMinutes: Long = 0,
+    @SerialName("needs_review") val needsReview: Boolean = false,
+    val open: Boolean = false,
+    val source: String? = null,
     val note: String? = null,
 )
 
 @Serializable
+data class SessionBucket(
+    val key: String,
+    val label: String? = null,
+    val minutes: Long = 0,
+    @SerialName("overtime_minutes") val overtimeMinutes: Long = 0,
+)
+
+@Serializable
 data class SessionTotals(
-    @SerialName("total_minutes") val totalMinutes: Long = 0,
-    @SerialName("per_project") val perProject: Map<String, Long> = emptyMap(),
-    @SerialName("per_person") val perPerson: Map<String, Long> = emptyMap(),
-    @SerialName("per_day") val perDay: Map<String, Long> = emptyMap(),
+    val minutes: Long = 0,
+    @SerialName("overtime_minutes") val overtimeMinutes: Long = 0,
+    val tasks: Long = 0,
+    @SerialName("by_user") val byUser: List<SessionBucket> = emptyList(),
+    @SerialName("by_project") val byProject: List<SessionBucket> = emptyList(),
+    @SerialName("by_day") val byDay: List<SessionBucket> = emptyList(),
 )
 
 @Serializable
@@ -593,7 +609,8 @@ data class ScopeSettings(
     @SerialName("time_tracking") val timeTracking: Boolean = false,
     @SerialName("work_start") val workStart: String? = null,
     @SerialName("work_end") val workEnd: String? = null,
-    @SerialName("work_days") val workDays: List<Int> = emptyList(),
+    // El servidor el serialitza com a string de set dígits ("1111100" = dll..dg).
+    @SerialName("work_days") val workDays: String = "",
     @SerialName("overtime_visible") val overtimeVisible: Boolean = false,
     @SerialName("long_session_hours") val longSessionHours: Int = 8,
     @SerialName("project_noun") val projectNoun: String = "project",

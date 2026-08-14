@@ -13,10 +13,14 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
@@ -184,6 +188,7 @@ private fun Root(model: AppViewModel, pending: MutableState<Intent?>) {
                 model = model,
                 onSettings = { screen = Screen.SETTINGS },
                 onCalendar = { screen = Screen.CALENDAR },
+                onRegistre = { screen = Screen.REGISTRE },
             )
             Screen.CALENDAR -> CalendarHost(
                 model = model,
@@ -194,6 +199,10 @@ private fun Root(model: AppViewModel, pending: MutableState<Intent?>) {
                 model = model,
                 serverUrl = state.serverUrl,
                 onBack = { screen = Screen.BOARD },
+            )
+            Screen.REGISTRE -> RegistreHost(
+                model = model,
+                onBoard = { screen = Screen.BOARD },
             )
         }
     }
@@ -331,7 +340,7 @@ private fun LoginScreen(model: AppViewModel, instanceName: String) {
 }
 
 @Composable
-private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: () -> Unit) {
+private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: () -> Unit, onRegistre: () -> Unit) {
     val tasks by model.tasks.collectAsStateWithLifecycle()
     val scopes by model.scopes.collectAsStateWithLifecycle()
     val pending by model.pending.collectAsStateWithLifecycle()
@@ -339,6 +348,7 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: (
     val people by model.people.collectAsStateWithLifecycle()
     val taskTypes by model.taskTypes.collectAsStateWithLifecycle()
     val labels by model.labels.collectAsStateWithLifecycle()
+    val scopeSettings by model.scopeSettings.collectAsStateWithLifecycle()
 
     // El detall de tasca llegeix etiquetes i tipologies; si no es carreguen aquí, la
     // secció del detall surt buida fins que s'obren els Ajustos.
@@ -444,7 +454,14 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: (
                 active = if (next.isEmpty()) emptySet() else next
             },
             onSettings = onSettings,
-            onView = { if (it == Screen.CALENDAR) onCalendar() },
+            onView = {
+                when (it) {
+                    Screen.CALENDAR -> onCalendar()
+                    Screen.REGISTRE -> onRegistre()
+                    else -> Unit
+                }
+            },
+            showRegistre = scopeSettings.values.any { it.timeTracking },
             aiEnabled = aiEnabled,
             aiBoardActive = aiBoard,
             onToggleAiBoard = model::toggleAiBoard,
@@ -896,6 +913,8 @@ private fun TopBar(
     onToggle: (String) -> Unit,
     onSettings: () -> Unit,
     onView: (Screen) -> Unit,
+    /** El Registre només surt si algun àmbit porta registre de dedicació. */
+    showRegistre: Boolean = false,
     /** El commutador del tauler de la IA. Només surt si hi ha algun agent actiu. */
     aiEnabled: Boolean = false,
     aiBoardActive: Boolean = false,
@@ -929,11 +948,13 @@ private fun TopBar(
         ) {
             Wordmark()
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // El commutador Tasques / Calendari, igual que a la web (docs/02 §3).
-                listOf(
-                    Screen.BOARD to stringResource(R.string.nav_tasks),
-                    Screen.CALENDAR to stringResource(R.string.nav_calendar),
-                ).forEach { (target, label) ->
+                // El commutador Tasques / Calendari / Registre, igual que a la web (docs/02 §3).
+                val targets = buildList {
+                    add(Screen.BOARD to stringResource(R.string.nav_tasks))
+                    add(Screen.CALENDAR to stringResource(R.string.nav_calendar))
+                    if (showRegistre) add(Screen.REGISTRE to stringResource(R.string.nav_registre))
+                }
+                targets.forEach { (target, label) ->
                     Text(
                         text = label,
                         color = if (view == target) Femho.colors.ink else Femho.colors.inkFaint,
@@ -1484,7 +1505,319 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
         onUpdateMailAccount = model::updateMailAccount,
         onDeleteMailAccount = model::deleteMailAccount,
         onTestMailAccount = model::testMailAccount,
-        onCreateMailRule = model::createMailRule,
-        onDeleteMailRule = model::deleteMailRule,
-    )
+         onCreateMailRule = model::createMailRule,
+         onDeleteMailRule = model::deleteMailRule,
+     )
+ }
+
+/** Minuts a «1 h 30 min», com la web. */
+private fun fmtMinutes(minutes: Long): String {
+    val h = minutes / 60
+    val m = minutes % 60
+    return when {
+        h > 0 && m > 0 -> "${h} h ${m} min"
+        h > 0 -> "${h} h"
+        else -> "${m} min"
+    }
+}
+
+@Composable
+private fun RegistreHost(model: AppViewModel, onBoard: () -> Unit) {
+    val scopes by model.scopes.collectAsStateWithLifecycle()
+    val people by model.people.collectAsStateWithLifecycle()
+    val projects by model.projects.collectAsStateWithLifecycle()
+    val scopeSettings by model.scopeSettings.collectAsStateWithLifecycle()
+    val report by model.sessions.collectAsStateWithLifecycle()
+
+    var periode by remember { mutableStateOf("days30") }
+    var from by remember { mutableStateOf(java.time.LocalDate.now().minusDays(30).toString()) }
+    var to by remember { mutableStateOf(java.time.LocalDate.now().toString()) }
+    var projecte by remember { mutableStateOf<String?>(null) }
+    var persona by remember { mutableStateOf<String?>(null) }
+    var cerca by remember { mutableStateOf("") }
+    var searchDraft by remember { mutableStateOf("") }
+
+    // Els períodes predefinits de la web (docs/02): el rang es recalcula en canviar-ne.
+    val avui = java.time.LocalDate.now()
+    fun aplicarPeriode(key: String) {
+        periode = key
+        val (f, t) = when (key) {
+            "today" -> avui to avui
+            "week" -> avui.minusDays(((avui.dayOfWeek.value + 6) % 7).toLong()) to avui
+            "month" -> avui.withDayOfMonth(1) to avui
+            "days90" -> avui.minusDays(89) to avui
+            "all" -> null to null
+            else -> avui.minusDays(29) to avui
+        }
+        from = f?.toString() ?: ""
+        to = t?.toString() ?: ""
+    }
+
+    androidx.compose.runtime.LaunchedEffect(periode, projecte, persona, cerca) {
+        model.loadSessions(
+            from = from.ifEmpty { null },
+            to = to.ifEmpty { null },
+            projectId = projecte,
+            userId = persona,
+            search = cerca.ifBlank { null },
+        )
+    }
+
+    val nomPersona = { id: String -> people.firstOrNull { it.id == id }?.name ?: id }
+    val trackingActiu = scopeSettings.values.any { it.timeTracking }
+    val entries = report.data
+    val totals = report.totals
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Femho.pageBackground)
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.nav_backtoboard),
+            color = Femho.colors.inkSoft,
+            fontSize = FemhoText.body,
+            modifier = Modifier
+                .clickable(onClick = onBoard)
+                .heightIn(min = FemhoSize.touch)
+                .padding(vertical = 12.dp)
+                .testTag("registre-back"),
+        )
+        Text(
+            text = stringResource(R.string.registre_title),
+            color = Femho.colors.ink,
+            fontSize = FemhoText.columnTitle,
+            fontWeight = FontWeight.ExtraBold,
+        )
+        Text(
+            text = stringResource(R.string.registre_subtitle),
+            color = Femho.colors.inkSoft,
+            fontSize = FemhoText.body,
+        )
+
+        if (!trackingActiu) {
+            Text(
+                text = stringResource(R.string.registre_noscopes),
+                color = Femho.colors.inkFaint,
+                fontSize = FemhoText.meta,
+            )
+        } else {
+            // Filtres: període, projecte, persona, cerca
+            val periodes = listOf(
+                "today" to stringResource(R.string.registre_period_today),
+                "week" to stringResource(R.string.registre_period_week),
+                "month" to stringResource(R.string.registre_period_month),
+                "days30" to stringResource(R.string.registre_period_days30),
+                "days90" to stringResource(R.string.registre_period_days90),
+                "all" to stringResource(R.string.registre_period_all),
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                periodes.forEach { (key, label) ->
+                    Text(
+                        text = label,
+                        color = if (periode == key) Femho.onBrand else Femho.colors.inkSoft,
+                        fontSize = FemhoText.meta,
+                        fontWeight = if (periode == key) FontWeight.Bold else FontWeight.Medium,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(FemhoShape.pill))
+                            .background(if (periode == key) Femho.colors.plouBlue else Femho.colors.ghostBg)
+                            .clickable { aplicarPeriode(key) }
+                            .heightIn(min = FemhoSize.touch)
+                            .padding(horizontal = 10.dp, vertical = 10.dp)
+                            .testTag("registre-period-$key"),
+                    )
+                }
+            }
+
+            // Projecte: tots, intern, o els actius
+            val projectesActius = projects.filter { project -> scopes.any { it.id == project.scopeId } }
+            val projectOptions = listOf<String?>(null, "none") + projectesActius.map { it.id }
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                projectOptions.forEach { id ->
+                    val label = when (id) {
+                        null -> stringResource(R.string.registre_allprojects)
+                        "none" -> stringResource(R.string.registre_noproject)
+                        else -> projectesActius.first { it.id == id }.name
+                    }
+                    Text(
+                        text = label,
+                        color = if (projecte == id) Femho.onBrand else Femho.colors.inkSoft,
+                        fontSize = FemhoText.meta,
+                        fontWeight = if (projecte == id) FontWeight.Bold else FontWeight.Medium,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(FemhoShape.pill))
+                            .background(if (projecte == id) Femho.colors.plouBlue else Femho.colors.ghostBg)
+                            .clickable { projecte = id }
+                            .heightIn(min = FemhoSize.touch)
+                            .padding(horizontal = 10.dp, vertical = 10.dp)
+                            .testTag("registre-project-${id ?: "all"}"),
+                    )
+                }
+            }
+
+            // Persona: tothom o una
+            val personOptions = listOf<String?>(null) + people.map { it.id }
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                personOptions.forEach { id ->
+                    val label = id?.let { nomPersona(it) } ?: stringResource(R.string.registre_everyone)
+                    Text(
+                        text = label,
+                        color = if (persona == id) Femho.onBrand else Femho.colors.inkSoft,
+                        fontSize = FemhoText.meta,
+                        fontWeight = if (persona == id) FontWeight.Bold else FontWeight.Medium,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(FemhoShape.pill))
+                            .background(if (persona == id) Femho.colors.plouBlue else Femho.colors.ghostBg)
+                            .clickable { persona = id }
+                            .heightIn(min = FemhoSize.touch)
+                            .padding(horizontal = 10.dp, vertical = 10.dp)
+                            .testTag("registre-person-${id ?: "all"}"),
+                    )
+                }
+            }
+
+            androidx.compose.foundation.text.BasicTextField(
+                value = searchDraft,
+                onValueChange = { searchDraft = it },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(FemhoShape.pill))
+                    .background(Femho.colors.ghostBg)
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                    .testTag("registre-search"),
+                decorationBox = { innerTextField ->
+                    Box(modifier = Modifier.padding(vertical = 2.dp)) {
+                        if (searchDraft.isEmpty()) {
+                            Text(
+                                text = stringResource(R.string.registre_search),
+                                color = Femho.colors.inkFaint,
+                                fontSize = FemhoText.body,
+                            )
+                        }
+                        innerTextField()
+                    }
+                },
+            )
+            Text(
+                text = stringResource(R.string.nav_save),
+                color = Femho.colors.ink,
+                fontSize = FemhoText.meta,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier
+                    .clickable { cerca = searchDraft.trim() }
+                    .heightIn(min = FemhoSize.touch)
+                    .padding(vertical = 6.dp)
+                    .testTag("registre-search-apply"),
+            )
+
+            // Resum i pastilles de persones i projectes
+            Text(
+                text = stringResource(R.string.registre_summary)
+                    .replace("{tasks}", totals.tasks.toString())
+                    .replace("{time}", fmtMinutes(totals.minutes)),
+                color = Femho.colors.inkSoft,
+                fontSize = FemhoText.meta,
+            )
+            if (totals.overtimeMinutes > 0) {
+                Text(
+                    text = stringResource(R.string.registre_overtimetotal)
+                        .replace("{time}", fmtMinutes(totals.overtimeMinutes)),
+                    color = Femho.colors.inkFaint,
+                    fontSize = FemhoText.meta,
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                totals.byUser.forEach { bucket ->
+                    Text(
+                        text = "${nomPersona(bucket.key)}: ${fmtMinutes(bucket.minutes)}",
+                        color = Femho.colors.ink,
+                        fontSize = FemhoText.meta,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(FemhoShape.pill))
+                            .background(Femho.colors.ghostBg)
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                            .testTag("registre-pill-user-${bucket.key}"),
+                    )
+                }
+                totals.byProject.forEach { bucket ->
+                    Text(
+                        text = buildString {
+                            append(if (bucket.key == "none") stringResource(R.string.registre_noproject) else bucket.label.orEmpty())
+                            append(": ")
+                            append(fmtMinutes(bucket.minutes))
+                        },
+                        color = Femho.colors.inkSoft,
+                        fontSize = FemhoText.meta,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(FemhoShape.pill))
+                            .background(Femho.colors.ghostBg)
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                            .testTag("registre-pill-project-${bucket.key}"),
+                    )
+                }
+            }
+
+            // La taula: blocs agrupats per dia amb total diari
+            if (entries.isEmpty()) {
+                Text(
+                    text = stringResource(R.string.registre_empty),
+                    color = Femho.colors.inkFaint,
+                    fontSize = FemhoText.meta,
+                )
+            } else {
+                val totalDia = totals.byDay.associate { it.key to it.minutes }
+                var diaActual = ""
+                entries.forEach { entry ->
+                    val dia = entry.startedAt.take(10)
+                    if (dia != diaActual) {
+                        diaActual = dia
+                        Row(modifier = Modifier.fillMaxWidth().background(Femho.colors.ghostBg).padding(horizontal = 10.dp, vertical = 6.dp)) {
+                            Text(
+                                text = dia,
+                                color = Femho.colors.ink,
+                                fontSize = FemhoText.body,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.weight(1f).testTag("registre-day-$dia"),
+                            )
+                            Text(
+                                text = fmtMinutes(totalDia[dia] ?: 0),
+                                color = Femho.colors.ink,
+                                fontSize = FemhoText.body,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        }
+                    }
+                    Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp)) {
+                        Text(
+                            text = "${entry.startedAt.take(16).replace('T', ' ')}",
+                            color = Femho.colors.inkSoft,
+                            fontSize = FemhoText.meta,
+                            modifier = Modifier.width(110.dp),
+                        )
+                        Text(
+                            text = entry.projectName ?: stringResource(R.string.registre_noproject),
+                            color = Femho.colors.inkSoft,
+                            fontSize = FemhoText.meta,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Text(
+                            text = entry.taskTitle.orEmpty(),
+                            color = Femho.colors.ink,
+                            fontSize = FemhoText.body,
+                            modifier = Modifier.weight(2f).testTag("registre-row-${entry.id}"),
+                        )
+                        Text(
+                            text = "${fmtMinutes(entry.minutes)}${if (entry.open) " ▶" else ""}",
+                            color = if (entry.needsReview) Femho.colors.dangerText else Femho.colors.ink,
+                            fontSize = FemhoText.meta,
+                            fontWeight = if (entry.needsReview) FontWeight.Bold else FontWeight.Medium,
+                        )
+                    }
+                }
+            }
+        }
+    }
 }
