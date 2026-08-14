@@ -210,14 +210,20 @@ private fun Root(model: AppViewModel, pending: MutableState<Intent?>) {
 
         is AppViewModel.Session.NeedsServer -> ServerScreen(model, state.message)
 
-        is AppViewModel.Session.NeedsLogin -> LoginScreen(model, state.instanceName, false)
+        is AppViewModel.Session.NeedsLogin -> LoginScreen(model, state.instanceName, false, state.registration)
 
-        is AppViewModel.Session.NeedsLoginNewer -> LoginScreen(model, state.instanceName, true)
+        is AppViewModel.Session.NeedsLoginNewer -> LoginScreen(model, state.instanceName, true, state.registration)
 
         is AppViewModel.Session.NeedsCertConfirm -> CertConfirmScreen(model, state.fingerprint)
 
         is AppViewModel.Session.Ready -> {
-            when (screen) {
+            // El wizard de la primera entrada, si la persona no ha triat mai el mode
+            // d'àmbits i la instància deixa triar (docs/12 §3).
+            val needsWizard by model.needsScopeModeWizard.collectAsStateWithLifecycle()
+            if (needsWizard) {
+                WelcomeScreen(model)
+            } else {
+                when (screen) {
                 Screen.BOARD -> BoardHost(
                     model = model,
                     onSettings = { screen = Screen.SETTINGS },
@@ -273,6 +279,7 @@ private fun Root(model: AppViewModel, pending: MutableState<Intent?>) {
                     inviteToken = null
                 },
             )
+            }
             }
 
             // El full de detall, per sobre de qualsevol pantalla (cerca inclosa).
@@ -573,10 +580,17 @@ private fun CertConfirmScreen(model: AppViewModel, fingerprint: String) {
 }
 
 @Composable
-private fun LoginScreen(model: AppViewModel, instanceName: String, serverNewer: Boolean) {
+private fun LoginScreen(model: AppViewModel, instanceName: String, serverNewer: Boolean, registration: String = "disabled") {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
+    // Si la instància té registre obert, es pot passar a crear un compte (docs/12 §3).
+    var showRegister by remember { mutableStateOf(false) }
+
+    if (showRegister) {
+        RegisterScreen(model, instanceName) { showRegister = false }
+        return
+    }
 
     Column(
         modifier = Modifier.fillMaxSize().padding(24.dp).testTag("login-screen"),
@@ -628,6 +642,179 @@ private fun LoginScreen(model: AppViewModel, instanceName: String, serverNewer: 
         ) {
             Text(stringResource(R.string.login_submit))
         }
+
+        if (registration == "open") {
+            Text(
+                text = stringResource(R.string.login_register),
+                color = Femho.colors.inkSoft,
+                fontSize = FemhoText.body,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier
+                    .padding(top = 4.dp)
+                    .testTag("login-register")
+                    .androidClickable { showRegister = true },
+            )
+        }
+    }
+}
+
+@Composable
+private fun RegisterScreen(model: AppViewModel, instanceName: String, onBack: () -> Unit) {
+    var name by remember { mutableStateOf("") }
+    var email by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+    // El text es resol aquí i no dins del callback: `stringResource` és @Composable.
+    val tooShortError = stringResource(R.string.invite_tooshort)
+
+    Column(
+        modifier = Modifier.fillMaxSize().padding(24.dp).testTag("register-screen"),
+        verticalArrangement = Arrangement.spacedBy(14.dp, Alignment.CenterVertically),
+    ) {
+        Wordmark()
+        Text(
+            text = instanceName.ifEmpty { stringResource(R.string.login_subtitle) },
+            color = Femho.colors.inkSoft,
+            fontSize = FemhoText.body,
+        )
+        Text(
+            stringResource(R.string.register_title),
+            color = Femho.colors.ink,
+            fontSize = FemhoText.columnTitle,
+            fontWeight = FontWeight.Black,
+        )
+        Text(
+            stringResource(R.string.register_subtitle),
+            color = Femho.colors.inkSoft,
+            fontSize = FemhoText.meta,
+        )
+
+        androidx.compose.material3.OutlinedTextField(
+            value = name,
+            onValueChange = { name = it },
+            singleLine = true,
+            label = { Text(stringResource(R.string.register_name)) },
+            modifier = Modifier.fillMaxWidth().testTag("register-name"),
+        )
+        androidx.compose.material3.OutlinedTextField(
+            value = email,
+            onValueChange = { email = it },
+            singleLine = true,
+            label = { Text(stringResource(R.string.login_email)) },
+            modifier = Modifier.fillMaxWidth().testTag("register-email"),
+        )
+        androidx.compose.material3.OutlinedTextField(
+            value = password,
+            onValueChange = { password = it },
+            singleLine = true,
+            visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+            label = { Text(stringResource(R.string.login_password)) },
+            modifier = Modifier.fillMaxWidth().testTag("register-password"),
+        )
+
+        if (error != null) {
+            Text(
+                stringResource(R.string.register_error),
+                color = Femho.colors.dangerText,
+                fontSize = FemhoText.body,
+                modifier = Modifier.testTag("register-error"),
+            )
+        }
+
+        androidx.compose.material3.Button(
+            onClick = {
+                // El servidor demana contrasenyes de com a mínim 10 caràcters (invite.tooShort).
+                if (password.length < 10) {
+                    error = tooShortError
+                } else {
+                    model.register(name.trim(), email.trim(), password) { error = it }
+                }
+            },
+            modifier = Modifier.fillMaxWidth().testTag("register-submit"),
+        ) {
+            Text(stringResource(R.string.register_submit))
+        }
+
+        Text(
+            text = stringResource(R.string.register_haveaccount),
+            color = Femho.colors.inkSoft,
+            fontSize = FemhoText.body,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier
+                .padding(top = 4.dp)
+                .testTag("register-back")
+                .androidClickable(onBack),
+        )
+    }
+}
+
+@Composable
+private fun WelcomeScreen(model: AppViewModel) {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(24.dp).testTag("welcome-screen"),
+        verticalArrangement = Arrangement.spacedBy(14.dp, Alignment.CenterVertically),
+    ) {
+        Wordmark()
+        Text(
+            text = stringResource(R.string.welcome_title),
+            color = Femho.colors.ink,
+            fontSize = FemhoText.columnTitle,
+            fontWeight = FontWeight.Black,
+        )
+        Text(
+            text = stringResource(R.string.welcome_lead),
+            color = Femho.colors.inkSoft,
+            fontSize = FemhoText.body,
+        )
+
+        // Les dues targetes del wizard, igual que a la web (WelcomeScreen.tsx): triar
+        // una desa el mode d'àmbits i tanca el wizard.
+        WelcomeCard(
+            title = stringResource(R.string.welcome_multi),
+            body = stringResource(R.string.welcome_multi_body),
+            testTag = "welcome-multi",
+            onClick = { model.setScopeMode("multi") },
+        )
+        WelcomeCard(
+            title = stringResource(R.string.welcome_single),
+            body = stringResource(R.string.welcome_single_body),
+            testTag = "welcome-single",
+            onClick = { model.setScopeMode("single") },
+        )
+
+        Text(
+            text = stringResource(R.string.welcome_changeable),
+            color = Femho.colors.inkFaint,
+            fontSize = FemhoText.meta,
+            modifier = Modifier.padding(top = 4.dp),
+        )
+    }
+}
+
+@Composable
+private fun WelcomeCard(title: String, body: String, testTag: String, onClick: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(FemhoShape.card))
+            .background(Femho.colors.cardBg)
+            .border(1.dp, Femho.colors.cardBorder, RoundedCornerShape(FemhoShape.card))
+            .clickable(onClick = onClick)
+            .padding(16.dp)
+            .testTag(testTag),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text(
+            text = title,
+            color = Femho.colors.ink,
+            fontSize = FemhoText.body,
+            fontWeight = FontWeight.Bold,
+        )
+        Text(
+            text = body,
+            color = Femho.colors.inkSoft,
+            fontSize = FemhoText.meta,
+        )
     }
 }
 

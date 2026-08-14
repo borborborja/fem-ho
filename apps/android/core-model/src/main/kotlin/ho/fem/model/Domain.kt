@@ -350,6 +350,25 @@ data class AuthTokens(
     @SerialName("refresh_token") val refreshToken: String,
 )
 
+/**
+ * Les settings de l'usuari, el que el wizard de la primera entrada necessita.
+ *
+ * `scope_mode` és `null` fins que la persona tria — i és exactament quan el wizard es
+ * mostra (docs/12 §3, scope-mode.ts). El servidor el retorna dins de l'embolcall
+ * `{profile, settings}` de `GET /auth/settings`.
+ */
+@Serializable
+data class UserSettingsView(
+    @SerialName("scope_mode") val scopeMode: String? = null,
+)
+
+/** La resposta de `GET /auth/settings`: el perfil i les settings juntes. */
+@Serializable
+data class AuthSettingsEnvelope(
+    val profile: UserProfile? = null,
+    val settings: UserSettingsView = UserSettingsView(),
+)
+
 /* ---------------------------------------------------------------------------
  * Models de paritat amb la web (onades 2-10 del pla). El nom de camp és el wire
  * del servidor via @SerialName; els enums nous segueixen el patró de TaskStatus.

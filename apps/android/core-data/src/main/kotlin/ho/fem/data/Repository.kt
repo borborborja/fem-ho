@@ -575,7 +575,7 @@ class Repository(
         showOverdueSection: Boolean? = null,
         inboxPosition: String? = null,
         inboxShowOverdue: Boolean? = null,
-    ): Map<String, Any> =
+    ) =
         api.updateSettings(gravatar, weekStart, eventTaskDeleted, showCalendarWidget, showOverdueSection, inboxPosition, inboxShowOverdue)
 
     private fun quote(value: String): String =

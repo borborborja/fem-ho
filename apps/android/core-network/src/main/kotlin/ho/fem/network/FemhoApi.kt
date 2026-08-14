@@ -9,6 +9,7 @@ import ho.fem.model.AgentScopeEnvelope
 import ho.fem.model.ActivityEnvelope
 import ho.fem.model.ApiTokenSummary
 import ho.fem.model.Attachment
+import ho.fem.model.AuthSettingsEnvelope
 import ho.fem.model.AuthTokens
 import ho.fem.model.Board
 import ho.fem.model.Calendar
@@ -254,6 +255,22 @@ class FemhoApi(
         )
         return json.decodeFromString<AuthTokens>(text).also { tokens.save(it) }
     }
+
+    /** Registra un compte nou a una instància amb registre obert (docs/12 §3). */
+    suspend fun register(name: String, email: String, password: String): AuthTokens {
+        val text = raw(
+            "POST",
+            "/api/v1/auth/register",
+            encode(mapOf("name" to name, "email" to email, "password" to password)),
+            authenticated = false,
+        )
+        // Igual que el login: el registre ja deixa la sessió oberta, i sense desar el
+        // testimoni cap crida autenticada posterior (settings, updateSettings) funcionaria.
+        return json.decodeFromString<AuthTokens>(text).also { tokens.save(it) }
+    }
+
+    /** Les settings de l'usuari: `scope_mode` decideix si cal el wizard (docs/12 §3). */
+    suspend fun settings(): AuthSettingsEnvelope = get("/api/v1/auth/settings")
 
     suspend fun logout() {
         runCatching { raw("POST", "/api/v1/auth/logout", null, authenticated = true) }
@@ -1027,7 +1044,8 @@ class FemhoApi(
         showOverdueSection: Boolean? = null,
         inboxPosition: String? = null,
         inboxShowOverdue: Boolean? = null,
-    ): Map<String, Any> {
+        scopeMode: String? = null,
+    ) {
         val fields = buildMap<String, Any> {
             if (gravatar != null) put("gravatar", gravatar)
             if (weekStart != null) put("week_start", weekStart)
@@ -1036,7 +1054,11 @@ class FemhoApi(
             if (showOverdueSection != null) put("show_overdue_section", showOverdueSection)
             if (inboxPosition != null) put("inbox_position", inboxPosition)
             if (inboxShowOverdue != null) put("inbox_show_overdue", inboxShowOverdue)
+            if (scopeMode != null) put("scope_mode", scopeMode)
         }
-        return patch("/api/v1/auth/settings", fields)
+        // No es deserialitza la resposta: el servidor hi torna l'objecte settings sencer,
+        // amb camps null que `Map<String, Any>` no pot representar, i cap caller no en
+        // fa servir el valor. El que importa és que el PATCH arribi (o que llanci).
+        raw("PATCH", "/api/v1/auth/settings", encode(fields), authenticated = true)
     }
 }
