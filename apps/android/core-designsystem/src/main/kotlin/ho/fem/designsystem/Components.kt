@@ -141,6 +141,13 @@ fun TaskCard(
     toggleLabel: String = "",
     onToggle: () -> Unit = {},
     onOpen: () -> Unit = {},
+    /** El pany de l'agent: "L'agent hi treballa". Si hi és, la targeta es veu 🔒. */
+    lockLabel: String? = null,
+    /** La marca d'atenció: "Espera resposta". Punt amb recompte al commutador d'IA. */
+    attentionLabel: String? = null,
+    /** Reclamar des del kanban de la IA: torna la tasca al tauler humà. */
+    claimLabel: String? = null,
+    onClaim: (() -> Unit)? = null,
     /**
      * La fletxa de la barra dreta: mou la targeta una columna endavant.
      *
@@ -193,7 +200,14 @@ fun TaskCard(
                     overflow = TextOverflow.Ellipsis,
                 )
 
-                val metadata = listOfNotNull(project, time, aiModeLabel, checklistProgress)
+                val metadata = listOfNotNull(
+                    lockLabel?.let { "🔒 $it" },
+                    attentionLabel?.let { "◉ $it" },
+                    project,
+                    time,
+                    aiModeLabel,
+                    checklistProgress,
+                )
                 if (metadata.isNotEmpty()) {
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         metadata.forEach { Pill(it) }
@@ -212,6 +226,13 @@ fun TaskCard(
                 horizontalArrangement = Arrangement.spacedBy(3.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                if (onClaim != null) {
+                    CardActionIcon(
+                        label = claimLabel.orEmpty(),
+                        onClick = onClaim,
+                        testTag = "card-claim",
+                    ) { ReturnGlyph() }
+                }
                 if (onEdit != null) {
                     CardActionIcon(
                         label = editLabel,
@@ -551,6 +572,22 @@ private fun ListPlusGlyph() {
             }
             drawLine(color, Offset(size.width * 0.71f, size.height * 0.58f), Offset(size.width * 0.71f, size.height * 0.87f), stroke, StrokeCap.Round)
             drawLine(color, Offset(size.width * 0.56f, size.height * 0.73f), Offset(size.width * 0.87f, size.height * 0.73f), stroke, StrokeCap.Round)
+        }
+    }
+}
+
+/** Reclamar: la fletxa de tornar, per al botó de reclamar del kanban de la IA. */
+@Composable
+private fun ReturnGlyph() {
+    GlyphCanvas { scope, color, stroke ->
+        with(scope) {
+            drawLine(color, Offset(size.width * 0.85f, size.height * 0.5f), Offset(size.width * 0.22f, size.height * 0.5f), stroke, StrokeCap.Round)
+            val path = Path().apply {
+                moveTo(size.width * 0.4f, size.height * 0.25f)
+                lineTo(size.width * 0.18f, size.height * 0.5f)
+                lineTo(size.width * 0.4f, size.height * 0.75f)
+            }
+            drawPath(path, color, style = Stroke(width = stroke, cap = StrokeCap.Round, join = StrokeJoin.Round))
         }
     }
 }

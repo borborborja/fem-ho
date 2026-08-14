@@ -788,6 +788,35 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/activity/{id}/undo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Desfer un canvi autònom
+         * @description Desfà un canvi que va fer la IA per iniciativa pròpia i que va deixar constància
+         *     del valor anterior (docs/09 §7).
+         *
+         *     **No és `DELETE`.** No s'esborra res de l'historial: es crea un canvi invers que
+         *     també hi queda, perquè qui llegeixi el rastre vegi què va fer la IA *i* que algú
+         *     ho va desfer, i quan.
+         *
+         *     Un `422` vol dir que l'entrada no es pot desfer: o no és un canvi autònom d'un
+         *     agent, o no en va quedar registrat el valor previ. La resta d'errors són els
+         *     habituals: sense sessió, sense permís d'escriptura, o l'entrada no existeix.
+         */
+        post: operations["undoActivityEntry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/pinned-checklists": {
         parameters: {
             query?: never;
@@ -5777,6 +5806,38 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    undoActivityEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Desfet. La resposta és buida; el canvi invers es llegeix a l'historial. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description L'entrada no és desfectible. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     listPinnedChecklists: {

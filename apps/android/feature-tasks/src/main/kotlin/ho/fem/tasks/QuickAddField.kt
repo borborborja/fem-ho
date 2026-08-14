@@ -1,5 +1,6 @@
 package ho.fem.tasks
 
+import android.view.KeyEvent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -16,12 +17,18 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -31,8 +38,11 @@ import ho.fem.designsystem.FemhoShape
 import ho.fem.designsystem.FemhoSize
 import ho.fem.designsystem.FemhoText
 import ho.fem.model.QuickAddContext
+import ho.fem.model.QuickAddSuggestion
 import ho.fem.model.TokenKind
+import ho.fem.model.openSigil
 import ho.fem.model.parseQuickAdd
+import ho.fem.model.quickAddSuggestions
 import ho.fem.model.revertToken
 
 /**
@@ -53,12 +63,41 @@ fun QuickAddField(
     scopeRequiredLabel: (String) -> String,
     aiModeLabel: (String) -> String,
     onCreate: (title: String, scopeId: String, projectId: String?, assigneeIds: List<String>) -> Unit,
+    /** El text que arriba de fora (full de compartir, accessos directes), si n'hi ha. */
+    initialText: String = "",
     modifier: Modifier = Modifier,
 ) {
-    var text by remember { mutableStateOf("") }
+    var text by remember { mutableStateOf(initialText) }
     var submitted by remember { mutableStateOf(false) }
+    // Escape tanca el full sense tocar el text (QuickAdd.tsx:71); tornar a escriure el
+    // reobre, que és el que espera qui el va tancar per mirar el que ja havia escrit.
+    var dismissed by remember { mutableStateOf(false) }
+    var active by remember { mutableIntStateOf(0) }
+
+    // El text que arriba de fora (full de compartir) ho fa quan el camp ja és a
+    // pantalla: si només el llegís el `remember`, no es veuria mai.
+    LaunchedEffect(initialText) {
+        if (initialText.isNotBlank()) text = initialText
+    }
 
     val parsed = remember(text, context) { parseQuickAdd(text, context) }
+
+    // El full d'autocompletat: el mateix sigil i el mateix filtre que la web, amb les
+    // persones per @, àmbits i projectes per # i les tipologies per $.
+    val suggestions = remember(text, context, parsed.tokens, dismissed) {
+        if (dismissed) emptyList() else quickAddSuggestions(text, context, parsed.tokens)
+    }
+
+    LaunchedEffect(suggestions) {
+        if (active >= suggestions.size) active = 0
+    }
+
+    fun pick(suggestion: QuickAddSuggestion) {
+        val open = openSigil(text) ?: return
+        text = text.substring(0, open.start) + suggestion.insert
+        active = 0
+        dismissed = false
+    }
 
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         if (parsed.tokens.isNotEmpty()) {
@@ -72,29 +111,89 @@ fun QuickAddField(
             }
         }
 
+        // El full ancorat sobre el teclat (docs/03 §4:82): res de popups que el teclat
+        // taparia. Va just a sobre del camp, que és on el teclat comença.
+        if (suggestions.isNotEmpty()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(FemhoShape.column))
+                    .background(Femho.colors.panelBg)
+                    .testTag("quick-add-suggestions"),
+            ) {
+                suggestions.forEachIndexed { index, suggestion ->
+                    Text(
+                        text = suggestion.label,
+                        color = Femho.colors.ink,
+                        fontSize = FemhoText.body,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(if (index == active) Femho.colors.tagBg else Color.Transparent)
+                            .clickable { pick(suggestion) }
+                            .heightIn(min = FemhoSize.touch)
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                            .testTag("suggestion-$index"),
+                    )
+                }
+            }
+        }
+
         OutlinedTextField(
             value = text,
             onValueChange = {
                 text = it
                 // L'error desapareix en tornar a escriure: no s'ha de quedar clavat.
                 if (submitted) submitted = false
+                dismissed = false
             },
             singleLine = true,
             placeholder = { Text(placeholder) },
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(
                 onDone = {
-                    submitted = true
-                    // "Si hi ha més d'un àmbit actiu i no s'ha escrit #, NO ES CREA RES."
-                    val scopeId = parsed.scopeId
-                    if (parsed.error == null && scopeId != null) {
-                        onCreate(parsed.title, scopeId, parsed.projectId, parsed.assigneeIds)
-                        text = ""
-                        submitted = false
+                    // Amb el full obert, Enter tria la suggerència en comptes de crear.
+                    if (suggestions.isNotEmpty()) {
+                        suggestions.getOrNull(active)?.let { pick(it) }
+                    } else {
+                        submitted = true
+                        // "Si hi ha més d'un àmbit actiu i no s'ha escrit #, NO ES CREA RES."
+                        val scopeId = parsed.scopeId
+                        if (parsed.error == null && scopeId != null) {
+                            onCreate(parsed.title, scopeId, parsed.projectId, parsed.assigneeIds)
+                            text = ""
+                            submitted = false
+                        }
                     }
                 },
             ),
-            modifier = Modifier.fillMaxWidth().testTag("quick-add"),
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("quick-add")
+                .onPreviewKeyEvent { event ->
+                    if (event.type == KeyEventType.KeyDown && suggestions.isNotEmpty()) {
+                        when (event.nativeKeyEvent.keyCode) {
+                            KeyEvent.KEYCODE_DPAD_DOWN -> {
+                                active = (active + 1) % suggestions.size
+                                true
+                            }
+                            KeyEvent.KEYCODE_DPAD_UP -> {
+                                active = (active - 1 + suggestions.size) % suggestions.size
+                                true
+                            }
+                            KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_DPAD_CENTER -> {
+                                suggestions.getOrNull(active)?.let { pick(it) }
+                                true
+                            }
+                            KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_ESCAPE -> {
+                                dismissed = true
+                                true
+                            }
+                            else -> false
+                        }
+                    } else {
+                        false
+                    }
+                },
         )
 
         if (submitted && parsed.error?.wire == "scope-required") {

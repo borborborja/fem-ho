@@ -386,3 +386,77 @@ fun revertToken(text: String, token: QuickAddToken): String {
         .replace(Regex("\\s+"), " ")
         .trim()
 }
+
+/** Una opció de l'autocompletat de l'afegida ràpida. */
+data class QuickAddSuggestion(
+    val id: String,
+    /** El text que es mostra: el nom, o `Àmbit/Projecte` per als projectes. */
+    val label: String,
+    /** El text que s'insereix en triar-la: el sigil, el nom i un espai. */
+    val insert: String,
+)
+
+/** El sigil obert al final del text, amb el que s'ha escrit després d'ell. */
+data class OpenSigil(val sigil: Char, val query: String, val start: Int)
+
+private val SIGIL_TAIL = Regex("([#@$])([^#@$]*)$")
+
+/**
+ * El darrer sigil inacabat del text, si n'hi ha.
+ *
+ * La mateixa regla que la web (QuickAdd.tsx:54): el darrer `@`, `#` o `$` i el que el
+ * segueix fins al final. Un espai després del sigil vol dir que el nom ja s'ha acabat,
+ * però si el nom mateix en té —"Client Salt"— encara hi pot haver coincidència.
+ */
+fun openSigil(text: String): OpenSigil? {
+    val match = SIGIL_TAIL.find(text) ?: return null
+    return OpenSigil(
+        sigil = match.groupValues[1][0],
+        query = match.groupValues[2],
+        start = match.range.first,
+    )
+}
+
+/**
+ * Les suggerències de l'autocompletat, en el mateix ordre i amb el mateix filtre que la
+ * web: persones per `@`, àmbits i projectes per `#`, tipologies per `$`.
+ */
+fun quickAddSuggestions(
+    text: String,
+    context: QuickAddContext,
+    tokens: List<QuickAddToken>,
+): List<QuickAddSuggestion> {
+    val open = openSigil(text) ?: return emptyList()
+
+    // Si el sigil ja està resolt del tot —el text acaba amb un token— no cal suggerir.
+    // Sense això, escriure `#Feina Enviar proposta @Alba` i prémer Enter autocompletaria
+    // en comptes de crear la tasca (el mateix bug que va tenir la web, QuickAdd.tsx:87).
+    if (tokens.any { it.end == text.length }) return emptyList()
+
+    val query = fold(open.query.trim())
+    val matches = { label: String -> query.isEmpty() || fold(label).contains(query) }
+
+    return when (open.sigil) {
+        '#' -> {
+            val scopes = context.scopes.map { QuickAddSuggestion(it.id, it.name, "#${it.name} ") }
+            // Els projectes surten com a `#Àmbit/Projecte`, que és com s'escriuen.
+            val projects = context.scopes.flatMap { scope ->
+                scope.projects.map { project ->
+                    QuickAddSuggestion(
+                        id = project.id,
+                        label = "${scope.name}/${project.name}",
+                        insert = "#${scope.name}/${project.name} ",
+                    )
+                }
+            }
+            (scopes + projects).filter { matches(it.label) }
+        }
+        '@' -> context.people
+            .map { QuickAddSuggestion(it.id, it.name, "@${it.name} ") }
+            .filter { matches(it.label) }
+        '$' -> context.taskTypes
+            .map { QuickAddSuggestion(it.id, it.name, "\$${it.name} ") }
+            .filter { matches(it.label) }
+        else -> emptyList()
+    }
+}

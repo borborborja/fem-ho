@@ -1,6 +1,7 @@
 package ho.fem.tasks
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -51,6 +52,60 @@ import ho.fem.model.TaskStatus
 data class TaskDetailLabels(
     val title: String,
     val description: String,
+    val project: String,
+    val noProject: String,
+    val dueDate: String,
+    val dueTime: String,
+    val deadline: String,
+    val recurrence: String,
+    val recurrenceNone: String,
+    val recurrenceDaily: String,
+    val recurrenceWeekly: String,
+    val recurrenceMonthly: String,
+    val recurrenceYearly: String,
+    val recurrenceFromCompletion: String,
+    val assignees: String,
+    val taskType: String,
+    val noType: String,
+    val labels: String,
+    val newLabel: String,
+    val newLabelPlaceholder: String,
+    val emptyLabels: String,
+    val labelAdd: String,
+    val labelRemove: String,
+    val comments: String,
+    val commentPlaceholder: String,
+    val emptyComments: String,
+    val activity: String,
+    val undo: String,
+    val activityVerbs: Map<String, String>,
+    val delete: String,
+    val cancel: String,
+    val deleteConfirm: String,
+    val lockWorking: String,
+    val takeOverAction: String,
+    val takeOverWhere: String,
+    // Compartir (docs/10 §6): el diàleg del tot 24, com la web
+    val share: String,
+    val sharePermission: String,
+    val sharePermissionOptions: List<Pair<String, String>>,
+    val shareRequireName: String,
+    val sharePassword: String,
+    val sharePasswordPlaceholder: String,
+    val shareExpiresAt: String,
+    val shareMaxViews: String,
+    val shareCreate: String,
+    val shareCopy: String,
+    val shareRevoke: String,
+    val shareRevoked: String,
+    val shareOnceWarning: String,
+    val shareClose: String,
+    // Adjunts de la tasca
+    val attachments: String,
+    val addAttachment: String,
+    val emptyAttachments: String,
+    val removeAttachment: String,
+    val attachmentTooBig: String,
     val status: Map<TaskStatus, String>,
     val aiMode: Map<AiMode, String>,
     val checklists: String,
@@ -64,15 +119,72 @@ data class TaskDetailLabels(
 fun TaskDetail(
     task: Task,
     checklists: List<Checklist>,
+    projects: List<ho.fem.model.Project>,
+    people: List<ho.fem.model.Person>,
+    taskTypes: List<ho.fem.model.TaskType>,
+    labelsList: List<ho.fem.model.Label>,
+    isCollectiveScope: Boolean,
+    comments: List<ho.fem.model.Comment>,
+    activity: List<ho.fem.model.ActivityEntry>,
     labels: TaskDetailLabels,
     onSave: (title: String, aiMode: AiMode) -> Unit,
+    onUpdateDetails: (description: String?, projectId: String?, dueDate: String?, dueTime: String?, deadline: String?, rrule: String?, recurrenceMode: String?) -> Unit,
     onStatus: (TaskStatus) -> Unit,
     onToggleItem: (itemId: String, done: Boolean) -> Unit,
+    onAddAssignee: (String) -> Unit,
+    onRemoveAssignee: (String) -> Unit,
+    onSetTaskType: (String?) -> Unit,
+    onAddLabel: (String) -> Unit,
+    onRemoveLabel: (String) -> Unit,
+    onCreateLabel: (String) -> Unit,
+    onAddComment: (String) -> Unit,
+    onUndoActivity: (String) -> Unit,
+    onDelete: () -> Unit,
+    onTakeOver: (String) -> Unit,
     onClose: () -> Unit,
+    /** Els enllaços compartits d'aquesta tasca, per revocar-los. */
+    shares: List<ho.fem.model.ShareSummary> = emptyList(),
+    /** L'URL acabat de crear: surt una sola vegada (del token no se'n pot treure). */
+    createdShareUrl: String? = null,
+    /** Crea un enllaç. POST /shares. Els arguments buits es deixen al servidor. */
+    onCreateShare: (permission: String, requireName: Boolean, password: String?, expiresAt: String?, maxViews: String?) -> Unit = { _, _, _, _, _ -> },
+    onRevokeShare: (String) -> Unit = {},
+    onCopyToClipboard: (String) -> Unit = {},
+    // Adjunts de la tasca
+    attachments: List<ho.fem.model.Attachment> = emptyList(),
+    attachmentError: String? = null,
+    onPickAttachment: () -> Unit = {},
+    onDownloadAttachment: (ho.fem.model.Attachment) -> Unit = {},
+    onDeleteAttachment: (ho.fem.model.Attachment) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     var title by remember(task.id) { mutableStateOf(task.title) }
     var aiMode by remember(task.id) { mutableStateOf(task.aiMode) }
+    var description by remember(task.id) { mutableStateOf(task.description.orEmpty()) }
+    var projectId by remember(task.id) { mutableStateOf(task.projectId) }
+    var dueDate by remember(task.id) { mutableStateOf(task.dueDate.orEmpty()) }
+    var dueTime by remember(task.id) { mutableStateOf(task.dueTime.orEmpty()) }
+    var deadline by remember(task.id) { mutableStateOf(task.deadline.orEmpty()) }
+    var rrule by remember(task.id) { mutableStateOf(task.rrule.orEmpty()) }
+    var recurrenceMode by remember(task.id) { mutableStateOf(task.recurrenceMode?.name?.lowercase() ?: "schedule") }
+    var newLabelName by remember(task.id) { mutableStateOf<String?>(null) }
+    var commentDraft by remember(task.id) { mutableStateOf("") }
+    var confirmingDelete by remember(task.id) { mutableStateOf(false) }
+    // El diàleg de compartir: com el de la web, no es tanca en crear sinó que passa
+    // a mostrar l'URL (docs/10 §6: del token no se'n pot treure).
+    var sharing by remember(task.id) { mutableStateOf(false) }
+    var sharePermission by remember(task.id) { mutableStateOf("view") }
+    var shareRequireName by remember(task.id) { mutableStateOf(false) }
+    var sharePassword by remember(task.id) { mutableStateOf("") }
+    var shareExpiresAt by remember(task.id) { mutableStateOf("") }
+    var shareMaxViews by remember(task.id) { mutableStateOf("") }
+    var takingOver by remember(task.id) { mutableStateOf(false) }
+
+    // El pany de l'agent (todo 22): locked_until al futur vol dir que la tasca està
+    // bloquejada, els botons de moure queden desactivats i s'ofereix el take-over.
+    val locked = task.lockedUntil?.let { until ->
+        runCatching { java.time.Instant.parse(until) }.getOrNull()?.isAfter(java.time.Instant.now()) ?: false
+    } ?: false
 
     Column(
         modifier = modifier
@@ -105,6 +217,318 @@ fun TaskDetail(
             modifier = Modifier.fillMaxWidth().testTag("task-title"),
         )
 
+        OutlinedTextField(
+            value = description,
+            onValueChange = { description = it },
+            minLines = 2,
+            label = { Text(labels.description) },
+            modifier = Modifier.fillMaxWidth().testTag("task-description"),
+        )
+
+        Text(labels.project, color = Femho.colors.inkSoft, fontSize = FemhoText.meta)
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            val scopeProjects = projects.filter { it.scopeId == task.scopeId }
+            val options = listOf<Triple<String?, String, String>>(Triple(null, labels.noProject, "task-project-none")) +
+                scopeProjects.map { Triple(it.id, it.name, "task-project-${it.id}") }
+            options.forEach { (optionId, optionLabel, tag) ->
+                Text(
+                    text = optionLabel,
+                    color = if (projectId == optionId) Femho.onBrand else Femho.colors.inkSoft,
+                    fontSize = FemhoText.meta,
+                    fontWeight = if (projectId == optionId) FontWeight.Bold else FontWeight.Medium,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(FemhoShape.pill))
+                        .background(if (projectId == optionId) Femho.colors.plouBlue else Femho.colors.ghostBg)
+                        .clickable { projectId = optionId }
+                        .heightIn(min = FemhoSize.touch)
+                        .padding(horizontal = 12.dp, vertical = 12.dp)
+                        .testTag(tag),
+                )
+            }
+        }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            OutlinedTextField(
+                value = dueDate,
+                onValueChange = { dueDate = it },
+                singleLine = true,
+                label = { Text(labels.dueDate) },
+                modifier = Modifier.weight(1f).testTag("task-due-date"),
+            )
+            OutlinedTextField(
+                value = dueTime,
+                onValueChange = { dueTime = it },
+                singleLine = true,
+                label = { Text(labels.dueTime) },
+                modifier = Modifier.weight(1f).testTag("task-due-time"),
+            )
+        }
+
+        OutlinedTextField(
+            value = deadline,
+            onValueChange = { deadline = it },
+            singleLine = true,
+            label = { Text(labels.deadline) },
+            modifier = Modifier.fillMaxWidth().testTag("task-deadline"),
+        )
+
+        Text(labels.recurrence, color = Femho.colors.inkSoft, fontSize = FemhoText.meta)
+        val recurrences = listOf(
+            "" to labels.recurrenceNone,
+            "FREQ=DAILY" to labels.recurrenceDaily,
+            "FREQ=WEEKLY" to labels.recurrenceWeekly,
+            "FREQ=MONTHLY" to labels.recurrenceMonthly,
+            "FREQ=YEARLY" to labels.recurrenceYearly,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            recurrences.forEach { (rule, ruleLabel) ->
+                Text(
+                    text = ruleLabel,
+                    color = if (rrule == rule) Femho.onBrand else Femho.colors.inkSoft,
+                    fontSize = FemhoText.meta,
+                    fontWeight = if (rrule == rule) FontWeight.Bold else FontWeight.Medium,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(FemhoShape.pill))
+                        .background(if (rrule == rule) Femho.colors.plouBlue else Femho.colors.ghostBg)
+                        .clickable { rrule = rule }
+                        .heightIn(min = FemhoSize.touch)
+                        .padding(horizontal = 12.dp, vertical = 12.dp)
+                        .testTag("task-recurrence-${rule.ifEmpty { "none" }.substringAfter("FREQ=").lowercase()}"),
+                )
+            }
+        }
+        // Una regla que no és cap de les quatre (normalment vinguda per CalDAV) es conserva
+        // tal com és: sobreescriure-la seria perdre el que algú va escriure en una altra app.
+        if (rrule.isNotEmpty() && recurrences.none { it.first == rrule }) {
+            Text(
+                text = rrule,
+                color = Femho.colors.inkSoft,
+                fontSize = FemhoText.meta,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(FemhoShape.pill))
+                    .background(Femho.colors.ghostBg)
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                    .testTag("task-recurrence-custom"),
+            )
+        }
+        if (rrule.isNotEmpty()) {
+            Row(
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    text = labels.recurrenceFromCompletion,
+                    color = Femho.colors.ink,
+                    fontSize = FemhoText.body,
+                    modifier = Modifier.weight(1f),
+                )
+                androidx.compose.material3.Switch(
+                    checked = recurrenceMode == "completion",
+                    onCheckedChange = { on ->
+                        recurrenceMode = if (on) "completion" else "schedule"
+                    },
+                )
+            }
+        }
+
+        // Assignats (només àmbits col·lectius; la web no ofereix assignació en els individuals)
+        if (isCollectiveScope && people.isNotEmpty()) {
+            Text(labels.assignees, color = Femho.colors.inkSoft, fontSize = FemhoText.meta)
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                people.forEach { person ->
+                    val assigned = task.assigneeIds.contains(person.id)
+                    Text(
+                        text = person.name,
+                        color = if (assigned) Femho.onBrand else Femho.colors.inkSoft,
+                        fontSize = FemhoText.meta,
+                        fontWeight = if (assigned) FontWeight.Bold else FontWeight.Medium,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(FemhoShape.pill))
+                            .background(if (assigned) Femho.colors.plouBlue else Femho.colors.ghostBg)
+                            .clickable {
+                                if (assigned) onRemoveAssignee(person.id) else onAddAssignee(person.id)
+                            }
+                            .heightIn(min = FemhoSize.touch)
+                            .padding(horizontal = 12.dp, vertical = 12.dp)
+                            .testTag("task-assignee-${person.id}"),
+                    )
+                }
+            }
+        }
+
+        // Tipologia: una i tancada (per això xips d'una sola selecció i no etiquetes)
+        val scopeTypes = taskTypes.filter { it.scopeId == task.scopeId }
+        if (scopeTypes.isNotEmpty()) {
+            Text(labels.taskType, color = Femho.colors.inkSoft, fontSize = FemhoText.meta)
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                val options = listOf<Triple<String?, String, String>>(Triple(null, labels.noType, "task-type-none")) +
+                    scopeTypes.map { Triple(it.id, "$${it.name}", "task-type-${it.id}") }
+                options.forEach { (optionId, optionLabel, tag) ->
+                    val active = task.taskTypeId == optionId
+                    Text(
+                        text = optionLabel,
+                        color = if (active) Femho.onBrand else Femho.colors.inkSoft,
+                        fontSize = FemhoText.meta,
+                        fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(FemhoShape.pill))
+                            .background(if (active) Femho.colors.plouBlue else Femho.colors.ghostBg)
+                            .clickable { onSetTaskType(optionId) }
+                            .heightIn(min = FemhoSize.touch)
+                            .padding(horizontal = 12.dp, vertical = 12.dp)
+                            .testTag(tag),
+                    )
+                }
+            }
+        }
+
+        // Etiquetes: xips plens si hi són, fantasma amb vora discontínua si no
+        Text(labels.labels, color = Femho.colors.inkSoft, fontSize = FemhoText.meta)
+        val scopeLabels = labelsList.filter { it.scopeId == task.scopeId }
+        if (scopeLabels.isEmpty() && newLabelName == null) {
+            Text(labels.emptyLabels, color = Femho.colors.inkFaint, fontSize = FemhoText.meta)
+        } else {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                scopeLabels.forEach { entry ->
+                    val posada = task.labelIds.contains(entry.id)
+                    Text(
+                        text = entry.name,
+                        color = if (posada) Femho.colors.ink else Femho.colors.inkSoft,
+                        fontSize = FemhoText.meta,
+                        fontWeight = if (posada) FontWeight.Bold else FontWeight.Medium,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(FemhoShape.pill))
+                            .background(if (posada) Femho.colors.ghostBg else Femho.colors.dialogBg)
+                            .then(
+                                if (!posada) {
+                                    Modifier.border(
+                                        1.dp,
+                                        Femho.colors.inkFaint,
+                                        RoundedCornerShape(FemhoShape.pill),
+                                    )
+                                } else {
+                                    Modifier
+                                },
+                            )
+                            .clickable {
+                                if (posada) onRemoveLabel(entry.id) else onAddLabel(entry.id)
+                            }
+                            .heightIn(min = FemhoSize.touch)
+                            .padding(horizontal = 12.dp, vertical = 12.dp)
+                            .testTag("task-label-${entry.id}"),
+                    )
+                }
+            }
+        }
+        if (newLabelName == null) {
+            Text(
+                text = labels.newLabel,
+                color = Femho.colors.inkSoft,
+                fontSize = FemhoText.meta,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier
+                    .clickable { newLabelName = "" }
+                    .heightIn(min = FemhoSize.touch)
+                    .padding(vertical = 8.dp)
+                    .testTag("task-label-new"),
+            )
+        } else {
+            OutlinedTextField(
+                value = newLabelName.orEmpty(),
+                onValueChange = { newLabelName = it },
+                singleLine = true,
+                placeholder = { Text(labels.newLabelPlaceholder) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("task-label-name"),
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = labels.save,
+                    color = Femho.onBrand,
+                    fontSize = FemhoText.body,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(FemhoShape.pill))
+                        .background(Femho.brandGradient2)
+                        .clickable {
+                            val name = newLabelName?.trim()
+                            if (!name.isNullOrEmpty()) {
+                                onCreateLabel(name)
+                                newLabelName = null
+                            }
+                        }
+                        .heightIn(min = FemhoSize.touch)
+                        .padding(horizontal = 16.dp, vertical = 10.dp)
+                        .testTag("task-label-create"),
+                )
+                Text(
+                    text = labels.close,
+                    color = Femho.colors.inkSoft,
+                    fontSize = FemhoText.body,
+                    modifier = Modifier
+                        .clickable { newLabelName = null }
+                        .heightIn(min = FemhoSize.touch)
+                        .padding(vertical = 10.dp)
+                        .testTag("task-label-cancel"),
+                )
+            }
+        }
+
+        // El pany de l'agent: si la tasca està bloquejada, es veu i no es pot moure
+        if (locked) {
+            Text(
+                text = labels.lockWorking.replace("{time}", task.lockedUntil.orEmpty()),
+                color = Femho.colors.inkSoft,
+                fontSize = FemhoText.meta,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(FemhoShape.pill))
+                    .background(Femho.colors.ghostBg)
+                    .padding(horizontal = 12.dp, vertical = 10.dp)
+                    .testTag("task-locked-notice"),
+            )
+        } else if (task.aiMode != AiMode.MANUAL) {
+            if (!takingOver) {
+                Text(
+                    text = labels.takeOverAction,
+                    color = Femho.colors.ink,
+                    fontSize = FemhoText.body,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(FemhoShape.pill))
+                        .background(Femho.colors.ghostBg)
+                        .clickable { takingOver = true }
+                        .heightIn(min = FemhoSize.touch)
+                        .padding(horizontal = 16.dp, vertical = 10.dp)
+                        .testTag("task-take-over"),
+                )
+            } else {
+                Text(
+                    text = labels.takeOverWhere,
+                    color = Femho.colors.inkSoft,
+                    fontSize = FemhoText.meta,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("todo" to TaskStatus.TODO, "doing" to TaskStatus.DOING).forEach { (wire, status) ->
+                        Text(
+                            text = labels.status[status].orEmpty(),
+                            color = Femho.colors.ink,
+                            fontSize = FemhoText.meta,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(FemhoShape.pill))
+                                .background(Femho.colors.ghostBg)
+                                .clickable { onTakeOver(wire) }
+                                .heightIn(min = FemhoSize.touch)
+                                .padding(horizontal = 12.dp, vertical = 10.dp)
+                                .testTag("task-take-over-$wire"),
+                        )
+                    }
+                }
+            }
+        }
+
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             TaskStatus.entries.forEach { status ->
                 Text(
@@ -117,7 +541,7 @@ fun TaskDetail(
                         .background(
                             if (task.status == status) Femho.colors.plouBlue else Femho.colors.ghostBg,
                         )
-                        .clickable { onStatus(status) }
+                        .clickable(enabled = !locked) { onStatus(status) }
                         .heightIn(min = FemhoSize.touch)
                         .padding(horizontal = 12.dp, vertical = 12.dp)
                         .testTag("status-${status.name.lowercase()}"),
@@ -165,6 +589,379 @@ fun TaskDetail(
             }
         }
 
+        // Comentaris — la conversa amb la IA és la mateixa llista
+        Text(labels.comments, color = Femho.colors.ink, fontWeight = FontWeight.ExtraBold)
+        if (comments.isEmpty()) {
+            EmptyState(labels.emptyComments)
+        } else {
+            comments.forEach { comment ->
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = comment.authorName ?: comment.authorId.orEmpty(),
+                        color = Femho.colors.inkSoft,
+                        fontSize = FemhoText.meta,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        text = comment.body,
+                        color = Femho.colors.ink,
+                        fontSize = FemhoText.body,
+                    )
+                }
+            }
+        }
+        OutlinedTextField(
+            value = commentDraft,
+            onValueChange = { commentDraft = it },
+            singleLine = false,
+            placeholder = { Text(labels.commentPlaceholder) },
+            modifier = Modifier.fillMaxWidth().testTag("task-comment-input"),
+        )
+        Text(
+            text = labels.save,
+            color = Femho.onBrand,
+            fontSize = FemhoText.body,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier
+                .clip(RoundedCornerShape(FemhoShape.pill))
+                .background(Femho.brandGradient2)
+                .clickable {
+                    val body = commentDraft.trim()
+                    if (body.isNotEmpty()) {
+                        onAddComment(body)
+                        commentDraft = ""
+                    }
+                }
+                .heightIn(min = FemhoSize.touch)
+                .padding(horizontal = 16.dp, vertical = 10.dp)
+                .testTag("task-comment-send"),
+        )
+
+        // Historial d'activitat, amb desfer per als canvis autònoms de la IA
+        Text(labels.activity, color = Femho.colors.ink, fontWeight = FontWeight.ExtraBold)
+        if (activity.isEmpty()) {
+            EmptyState(labels.emptyChecklists)
+        } else {
+            activity.forEach { entry ->
+                Row(
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "${entry.actorLabel.orEmpty()} ${labels.activityVerbs[entry.verb].orEmpty()}",
+                            color = Femho.colors.inkSoft,
+                            fontSize = FemhoText.meta,
+                        )
+                        if (entry.undoable) {
+                            Text(
+                                text = labels.undo,
+                                color = Femho.colors.plouBlue,
+                                fontSize = FemhoText.meta,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier
+                                    .clickable { onUndoActivity(entry.id) }
+                                    .heightIn(min = FemhoSize.touch)
+                                    .padding(vertical = 4.dp)
+                                    .testTag("task-activity-undo-${entry.id}"),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // Esborrar la tasca, amb confirmació que diu què més se n'anirà (subtasques i
+        // llistes), com el diàleg de la web.
+        if (confirmingDelete) {
+            Text(
+                text = labels.deleteConfirm.replace("{title}", task.title),
+                color = Femho.colors.dangerText,
+                fontSize = FemhoText.body,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(FemhoShape.card))
+                    .background(Femho.colors.dangerBg)
+                    .padding(horizontal = 14.dp, vertical = 12.dp)
+                    .testTag("task-confirm-delete"),
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                Text(
+                    text = labels.delete,
+                    color = Femho.colors.dangerText,
+                    fontSize = FemhoText.body,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .clickable { onDelete() }
+                        .heightIn(min = FemhoSize.touch)
+                        .padding(vertical = 10.dp)
+                        .testTag("task-delete-confirm"),
+                )
+                Text(
+                    text = labels.cancel,
+                    color = Femho.colors.inkSoft,
+                    fontSize = FemhoText.body,
+                    modifier = Modifier
+                        .clickable { confirmingDelete = false }
+                        .heightIn(min = FemhoSize.touch)
+                        .padding(vertical = 10.dp)
+                        .testTag("task-delete-cancel"),
+                )
+            }
+        } else {
+            Text(
+                text = labels.delete,
+                color = Femho.colors.dangerText,
+                fontSize = FemhoText.body,
+                modifier = Modifier
+                    .clickable { confirmingDelete = true }
+                    .heightIn(min = FemhoSize.touch)
+                    .padding(vertical = 10.dp)
+                    .testTag("task-delete"),
+            )
+        }
+
+        // Compartir: el diàleg del tot 24, com la web (ShareTaskDialog).
+        if (!sharing) {
+            Text(
+                text = labels.share,
+                color = Femho.colors.ink,
+                fontSize = FemhoText.body,
+                modifier = Modifier
+                    .clickable { sharing = true }
+                    .heightIn(min = FemhoSize.touch)
+                    .padding(vertical = 10.dp)
+                    .testTag("task-share"),
+            )
+        } else {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(FemhoShape.card))
+                    .background(Femho.colors.cardBg)
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(labels.sharePermission, color = Femho.colors.inkSoft, fontSize = FemhoText.meta)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    labels.sharePermissionOptions.forEach { (value, optionLabel) ->
+                        Text(
+                            text = optionLabel,
+                            color = if (sharePermission == value) Femho.onBrand else Femho.colors.inkSoft,
+                            fontSize = FemhoText.meta,
+                            fontWeight = if (sharePermission == value) FontWeight.Bold else FontWeight.Medium,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(FemhoShape.pill))
+                                .background(if (sharePermission == value) Femho.colors.plouBlue else Femho.colors.ghostBg)
+                                .clickable { sharePermission = value }
+                                .padding(horizontal = 10.dp, vertical = 8.dp)
+                                .testTag("task-share-permission-$value"),
+                        )
+                    }
+                }
+
+                Text(
+                    text = labels.shareRequireName,
+                    color = if (shareRequireName) Femho.colors.ink else Femho.colors.inkSoft,
+                    fontSize = FemhoText.body,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { shareRequireName = !shareRequireName }
+                        .heightIn(min = FemhoSize.touch)
+                        .padding(vertical = 6.dp)
+                        .testTag("task-share-require-name"),
+                )
+
+                androidx.compose.material3.TextField(
+                    value = sharePassword,
+                    onValueChange = { sharePassword = it },
+                    label = { Text(labels.sharePassword) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().testTag("task-share-password"),
+                )
+                androidx.compose.material3.TextField(
+                    value = shareExpiresAt,
+                    onValueChange = { shareExpiresAt = it },
+                    label = { Text(labels.shareExpiresAt) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().testTag("task-share-expires"),
+                )
+                androidx.compose.material3.TextField(
+                    value = shareMaxViews,
+                    onValueChange = { shareMaxViews = it },
+                    label = { Text(labels.shareMaxViews) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().testTag("task-share-maxviews"),
+                )
+
+                Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                    Text(
+                        text = labels.shareCreate,
+                        color = Femho.onBrand,
+                        fontSize = FemhoText.body,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier
+                            .clickable {
+                                onCreateShare(
+                                    sharePermission,
+                                    shareRequireName,
+                                    sharePassword.ifBlank { null },
+                                    shareExpiresAt.ifBlank { null },
+                                    shareMaxViews.ifBlank { null },
+                                )
+                            }
+                            .heightIn(min = FemhoSize.touch)
+                            .padding(vertical = 10.dp)
+                            .testTag("task-share-create"),
+                    )
+                    Text(
+                        text = labels.shareClose,
+                        color = Femho.colors.inkSoft,
+                        fontSize = FemhoText.body,
+                        modifier = Modifier
+                            .clickable { sharing = false }
+                            .heightIn(min = FemhoSize.touch)
+                            .padding(vertical = 10.dp)
+                            .testTag("task-share-close"),
+                    )
+                }
+            }
+        }
+
+        // L'URL acabat de crear: es mostra una sola vegada (del token no se'n pot treure).
+        if (createdShareUrl != null) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(FemhoShape.card))
+                    .background(Femho.colors.cardBg)
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(
+                    text = createdShareUrl,
+                    color = Femho.colors.ink,
+                    fontSize = FemhoText.meta,
+                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                    modifier = Modifier.testTag("task-share-url"),
+                )
+                Text(
+                    text = labels.shareOnceWarning,
+                    color = Femho.colors.dangerText,
+                    fontSize = FemhoText.meta,
+                )
+                Text(
+                    text = labels.shareCopy,
+                    color = Femho.onBrand,
+                    fontSize = FemhoText.body,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier
+                        .clickable { onCopyToClipboard(createdShareUrl) }
+                        .heightIn(min = FemhoSize.touch)
+                        .padding(vertical = 8.dp)
+                        .testTag("task-share-copy"),
+                )
+            }
+        }
+
+        // Els enllaços existents, amb el botó de revocar (DELETE /shares/{id}).
+        if (shares.isNotEmpty()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(FemhoShape.card))
+                    .background(Femho.colors.cardBg)
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                shares.forEach { share ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = if (share.revokedAt != null) labels.shareRevoked else share.permission.name.lowercase(),
+                            color = if (share.revokedAt != null) Femho.colors.inkFaint else Femho.colors.ink,
+                            fontSize = FemhoText.meta,
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (share.revokedAt == null) {
+                            Text(
+                                text = labels.shareRevoke,
+                                color = Femho.colors.dangerText,
+                                fontSize = FemhoText.body,
+                                modifier = Modifier
+                                    .clickable { onRevokeShare(share.id) }
+                                    .heightIn(min = FemhoSize.touch)
+                                    .padding(vertical = 8.dp)
+                                    .testTag("task-share-revoke-${share.id}"),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // Els adjunts: llista, pujada amb selector, baixada i esborrat.
+        Text(labels.attachments, color = Femho.colors.inkSoft, fontSize = FemhoText.meta)
+        if (attachments.isEmpty()) {
+            Text(
+                text = labels.emptyAttachments,
+                color = Femho.colors.inkFaint,
+                fontSize = FemhoText.meta,
+            )
+        } else {
+            attachments.forEach { attachment ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = attachment.filename,
+                        color = Femho.colors.ink,
+                        fontSize = FemhoText.body,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable { onDownloadAttachment(attachment) }
+                            .heightIn(min = FemhoSize.touch)
+                            .padding(vertical = 6.dp)
+                            .testTag("attachment-${attachment.id}"),
+                    )
+                    Text(
+                        text = labels.removeAttachment,
+                        color = Femho.colors.dangerText,
+                        fontSize = FemhoText.body,
+                        modifier = Modifier
+                            .clickable { onDeleteAttachment(attachment) }
+                            .heightIn(min = FemhoSize.touch)
+                            .padding(vertical = 8.dp)
+                            .testTag("attachment-delete-${attachment.id}"),
+                    )
+                }
+            }
+        }
+        if (attachmentError != null) {
+            Text(
+                text = attachmentError,
+                color = Femho.colors.dangerText,
+                fontSize = FemhoText.meta,
+            )
+        }
+        Text(
+            text = labels.addAttachment,
+            color = Femho.onBrand,
+            fontSize = FemhoText.body,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier
+                .clickable(onClick = onPickAttachment)
+                .heightIn(min = FemhoSize.touch)
+                .padding(vertical = 10.dp)
+                .testTag("task-add-attachment"),
+        )
+
         Text(
             text = labels.save,
             color = Femho.onBrand,
@@ -174,7 +971,18 @@ fun TaskDetail(
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(FemhoShape.pill))
                 .background(Femho.brandGradient2)
-                .clickable { onSave(title, aiMode) }
+                .clickable {
+                    onSave(title, aiMode)
+                    onUpdateDetails(
+                        description.ifBlank { null },
+                        projectId,
+                        dueDate.ifBlank { null },
+                        dueTime.ifBlank { null },
+                        deadline.ifBlank { null },
+                        rrule.ifBlank { null },
+                        recurrenceMode,
+                    )
+                }
                 .heightIn(min = FemhoSize.touch)
                 .padding(vertical = 14.dp)
                 .testTag("task-save"),

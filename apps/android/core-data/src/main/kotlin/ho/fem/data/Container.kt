@@ -2,6 +2,7 @@ package ho.fem.data
 
 import android.content.Context
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -11,6 +12,7 @@ import androidx.security.crypto.MasterKey
 import ho.fem.model.AuthTokens
 import ho.fem.network.FemhoApi
 import ho.fem.network.TokenStore
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -35,13 +37,22 @@ class Container(context: Context) {
         .databaseBuilder(app, FemhoDatabase::class.java, "femho.db")
         // Sense migracions destructives: la base local és una memòria cau, però la cua
         // de sortida NO ho és, i esborrar-la perdria escriptures que ningú ha vist.
+        .addMigrations(FemhoDatabase.MIGRATION_1_2)
         .build()
 
     /**
      * El servidor pot canviar sense reinstal·lar res, i per això el client es construeix
-     * a cada ús amb la base actual en comptes de guardar-se'n una còpia.
+     * a cada ús amb la base actual en comptes de guardar-se'n una còpia. Si el host té
+     * un certificat confirmat per empremta, el client l'hi passa (docs/03 §2:38).
      */
-    fun api(baseUrl: String): FemhoApi = FemhoApi(baseUrl, tokens)
+    fun api(baseUrl: String): FemhoApi {
+        val der = runCatching {
+            val host = java.net.URI(baseUrl).host ?: return@runCatching null
+            val b64 = settings.trustedCertCache[host] ?: return@runCatching null
+            android.util.Base64.decode(b64, android.util.Base64.NO_WRAP)
+        }.getOrNull()
+        return FemhoApi(baseUrl, tokens, der)
+    }
 
     fun repository(baseUrl: String): Repository = Repository(database.dao(), api(baseUrl))
 
@@ -104,6 +115,14 @@ class Settings(private val context: Context) {
     private val projectsKey = stringPreferencesKey("active_projects")
     private val themeKey = stringPreferencesKey("theme")
     private val accentKey = stringPreferencesKey("accent")
+    // Preferències de la pestanya General (paritat amb la web)
+    private val localeKey = stringPreferencesKey("locale")
+    private val weekStartKey = stringPreferencesKey("week_start")
+    private val eventTaskDeletedKey = stringPreferencesKey("event_task_deleted")
+    private val showCalendarWidgetKey = booleanPreferencesKey("show_calendar_widget")
+    private val showOverdueSectionKey = booleanPreferencesKey("show_overdue_section")
+    private val inboxPositionKey = stringPreferencesKey("inbox_position")
+    private val inboxShowOverdueKey = booleanPreferencesKey("inbox_show_overdue")
 
     val serverUrl: Flow<String?> = read(serverKey)
     val activeScopes: Flow<List<String>> =
@@ -112,8 +131,18 @@ class Settings(private val context: Context) {
         read(projectsKey).map { it?.split(",")?.filter(String::isNotEmpty) ?: emptyList() }
     val theme: Flow<String> = read(themeKey).map { it ?: "system" }
     val accent: Flow<String> = read(accentKey).map { it ?: "default" }
+    val locale: Flow<String> = read(localeKey).map { it ?: "ca" }
+    val weekStart: Flow<String> = read(weekStartKey).map { it ?: "auto" }
+    val eventTaskDeleted: Flow<String> = read(eventTaskDeletedKey).map { it ?: "return_to_inbox" }
+    val showCalendarWidget: Flow<Boolean> = readBoolean(showCalendarWidgetKey).map { it ?: true }
+    val showOverdueSection: Flow<Boolean> = readBoolean(showOverdueSectionKey).map { it ?: true }
+    val inboxPosition: Flow<String> = read(inboxPositionKey).map { it ?: "right" }
+    val inboxShowOverdue: Flow<Boolean> = readBoolean(inboxShowOverdueKey).map { it ?: true }
 
     private fun read(key: Preferences.Key<String>): Flow<String?> =
+        context.dataStore.data.map { it[key] }
+
+    private fun readBoolean(key: Preferences.Key<Boolean>): Flow<Boolean?> =
         context.dataStore.data.map { it[key] }
 
     suspend fun setServerUrl(value: String) = write(serverKey, value)
@@ -121,8 +150,41 @@ class Settings(private val context: Context) {
     suspend fun setActiveProjects(value: List<String>) = write(projectsKey, value.joinToString(","))
     suspend fun setTheme(value: String) = write(themeKey, value)
     suspend fun setAccent(value: String) = write(accentKey, value)
+    // Preferències de la pestanya General
+    suspend fun setLocale(value: String) = write(localeKey, value)
+    suspend fun setWeekStart(value: String) = write(weekStartKey, value)
+    suspend fun setEventTaskDeleted(value: String) = write(eventTaskDeletedKey, value)
+    suspend fun setShowCalendarWidget(value: Boolean) = writeBoolean(showCalendarWidgetKey, value)
+    suspend fun setShowOverdueSection(value: Boolean) = writeBoolean(showOverdueSectionKey, value)
+    suspend fun setInboxPosition(value: String) = write(inboxPositionKey, value)
+    suspend fun setInboxShowOverdue(value: Boolean) = writeBoolean(inboxShowOverdueKey, value)
+
+    /** Certificat confiat per empremta, guardat per host (docs/03 §2:38). */
+    fun trustedCertKey(host: String): Preferences.Key<String> = stringPreferencesKey("trusted_cert_$host")
+
+    /**
+     * Caché en memòria dels certificats confirmats: `api()` és síncrona i no pot llegir
+     * DataStore, així que el que hi ha confirmat viu aquí i es persisteix en paral·lel.
+     */
+    internal val trustedCertCache = ConcurrentHashMap<String, String>()
+
+    suspend fun setTrustedCert(host: String, derB64: String) {
+        trustedCertCache[host] = derB64
+        write(trustedCertKey(host), derB64)
+    }
+
+    suspend fun trustedCert(host: String): String? {
+        trustedCertCache[host]?.let { return it }
+        val stored = read(trustedCertKey(host)).first()
+        if (stored != null) trustedCertCache[host] = stored
+        return stored
+    }
 
     private suspend fun write(key: Preferences.Key<String>, value: String) {
+        context.dataStore.edit { it[key] = value }
+    }
+
+    private suspend fun writeBoolean(key: Preferences.Key<Boolean>, value: Boolean) {
         context.dataStore.edit { it[key] = value }
     }
 }

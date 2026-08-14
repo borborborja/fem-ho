@@ -1479,6 +1479,43 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /activity/{id}/undo:
+    post:
+      tags: [tasks]
+      operationId: undoActivityEntry
+      summary: Desfer un canvi autònom
+      description: |
+        Desfà un canvi que va fer la IA per iniciativa pròpia i que va deixar constància
+        del valor anterior (docs/09 §7).
+
+        **No és `DELETE`.** No s'esborra res de l'historial: es crea un canvi invers que
+        també hi queda, perquè qui llegeixi el rastre vegi què va fer la IA *i* que algú
+        ho va desfer, i quan.
+
+        Un `422` vol dir que l'entrada no es pot desfer: o no és un canvi autònom d'un
+        agent, o no en va quedar registrat el valor previ. La resta d'errors són els
+        habituals: sense sessió, sense permís d'escriptura, o l'entrada no existeix.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '204':
+          description: Desfet. La resposta és buida; el canvi invers es llegeix a l'historial.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          description: L'entrada no és desfectible.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+
   /pinned-checklists:
     get:
       tags: [checklists]

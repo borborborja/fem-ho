@@ -28,7 +28,54 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!--
+              Els convits arriben com a deep links: femho://join/{token} per entrar a
+              l'àmbit d'algú altre i femho://invite/{token} per crear el compte de la
+              instància (docs/10 §7). El mateix intent respon als https del servidor.
+              Van en dos filters: un `data` per esquema i un altre per als https, que
+              són els que porten el path de la ruta.
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="femho" android:host="join" />
+                <data android:scheme="femho" android:host="invite" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="femho.app" android:pathPrefix="/join/" />
+                <data android:scheme="https" android:host="femho.app" android:pathPrefix="/invite/" />
+            </intent-filter>
+            <!--
+              El full de compartir: el text que hi arriba es converteix en una tasca a la
+              bústia (requestQuickAdd amb el draft). Res d'imatges ni URL: només text.
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
         </activity>
+
+        <!--
+          Per obrir l'exportació CSV del Registre amb ACTION_VIEW: una URI `file://`
+          és blocada des d'Android 7, i això és el que l'hi permet.
+        -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
         <!--
           El receptor d'UnifiedPush. Els tres primers filtres són els que la
           especificació defineix; el quart és el que el distribuïdor fa servir per
@@ -75,6 +122,21 @@
                 <action android:name="org.unifiedpush.android.connector.UNREGISTERED" />
                 <action android:name="org.unifiedpush.android.connector.NEW_ENDPOINT" />
                 <action android:name="org.unifiedpush.android.connector.REGISTRATION_FAILED" />
+            </intent-filter>
+        </receiver>
+
+        <!--
+          Les accions de les notificacions ("Fet" i "Ajorna"). No surt a cap llançador:
+          només el criden els PendingIntent de la notificació. `exported="true"` perquè
+          el shell (i qualsevol app) hi pugui arribar en proves; sense cap risc perquè
+          les accions només toquen les tasques del compte que té el token del dispositiu.
+        -->
+        <receiver
+            android:name=".NotificationActionReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="ho.fem.notification.DONE" />
+                <action android:name="ho.fem.notification.SNOOZE" />
             </intent-filter>
         </receiver>
     </application>

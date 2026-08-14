@@ -7,16 +7,25 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.input.pointer.pointerInput
+import kotlin.math.roundToInt
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
@@ -38,6 +47,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -55,14 +65,17 @@ import ho.fem.model.Checklist
 import ho.fem.model.Project
 import ho.fem.model.Scope
 import ho.fem.model.TaskStatus
+import ho.fem.model.UserProfile
 import ho.fem.calendar.CalendarLabels
 import ho.fem.calendar.DayList
 import ho.fem.calendar.InboxLabels
 import ho.fem.calendar.InboxRail
 import ho.fem.calendar.MonthView
 import ho.fem.calendar.WeekList
+import ho.fem.settings.SettingsEmptyStates
 import ho.fem.settings.SettingsLabels
 import ho.fem.settings.SettingsScreen
+import ho.fem.settings.SettingsTabs
 import ho.fem.tasks.BoardLabels
 import ho.fem.designsystem.CardAddForm
 import ho.fem.designsystem.CardList
@@ -153,6 +166,9 @@ class MainActivity : ComponentActivity() {
 private fun Root(model: AppViewModel, pending: MutableState<Intent?>) {
     val session by model.session.collectAsStateWithLifecycle()
     var screen by remember { mutableStateOf(Screen.BOARD) }
+    // El token d'un convit que arriba per deep link (femho://join|invite/{token}).
+    var joinToken by remember { mutableStateOf<String?>(null) }
+    var inviteToken by remember { mutableStateOf<String?>(null) }
 
     /**
      * L'intent s'atén i **es consumeix**.
@@ -166,6 +182,23 @@ private fun Root(model: AppViewModel, pending: MutableState<Intent?>) {
         screen = Route.screenOf(intent)
         Route.taskOf(intent)?.let { model.openById(it) }
         if (Route.quickAddOf(intent)) model.requestQuickAdd(Route.draftOf(intent) ?: "")
+        // El full de compartir: el text rebut es converteix en una tasca a la bústia.
+        if (intent?.action == android.content.Intent.ACTION_SEND) {
+            val text = intent.getStringExtra(android.content.Intent.EXTRA_TEXT).orEmpty()
+            if (text.isNotBlank()) model.requestQuickAdd(text)
+        }
+        // Els deep links de convit: el token el guarda la pantalla d'acceptar.
+        Route.joinTokenOf(intent)?.let { token ->
+            screen = Screen.JOIN
+            model.consumeJoin()
+            joinToken = token
+            model.loadJoinPreview(token)
+        }
+        Route.inviteTokenOf(intent)?.let { token ->
+            screen = Screen.INVITE
+            model.consumeJoin()
+            inviteToken = token
+        }
         pending.value = null
     }
 
@@ -174,13 +207,19 @@ private fun Root(model: AppViewModel, pending: MutableState<Intent?>) {
 
         is AppViewModel.Session.NeedsServer -> ServerScreen(model, state.message)
 
-        is AppViewModel.Session.NeedsLogin -> LoginScreen(model, state.instanceName)
+        is AppViewModel.Session.NeedsLogin -> LoginScreen(model, state.instanceName, false)
+
+        is AppViewModel.Session.NeedsLoginNewer -> LoginScreen(model, state.instanceName, true)
+
+        is AppViewModel.Session.NeedsCertConfirm -> CertConfirmScreen(model, state.fingerprint)
 
         is AppViewModel.Session.Ready -> when (screen) {
             Screen.BOARD -> BoardHost(
                 model = model,
                 onSettings = { screen = Screen.SETTINGS },
                 onCalendar = { screen = Screen.CALENDAR },
+                onRegistre = { screen = Screen.REGISTRE },
+                onEstadistiques = { screen = Screen.ESTADISTIQUES },
             )
             Screen.CALENDAR -> CalendarHost(
                 model = model,
@@ -192,6 +231,32 @@ private fun Root(model: AppViewModel, pending: MutableState<Intent?>) {
                 serverUrl = state.serverUrl,
                 onBack = { screen = Screen.BOARD },
             )
+            Screen.REGISTRE -> RegistreHost(
+                model = model,
+                onBoard = { screen = Screen.BOARD },
+            )
+            Screen.ESTADISTIQUES -> EstadistiquesHost(
+                model = model,
+                onBoard = { screen = Screen.BOARD },
+            )
+            Screen.JOIN -> JoinScreen(
+                model = model,
+                token = joinToken.orEmpty(),
+                onDone = {
+                    screen = Screen.BOARD
+                    model.consumeJoin()
+                    joinToken = null
+                },
+            )
+            Screen.INVITE -> InviteScreen(
+                model = model,
+                token = inviteToken.orEmpty(),
+                onDone = {
+                    screen = Screen.BOARD
+                    model.consumeJoin()
+                    inviteToken = null
+                },
+            )
         }
     }
 }
@@ -200,6 +265,179 @@ private fun Root(model: AppViewModel, pending: MutableState<Intent?>) {
 private fun Loading() {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Text(stringResource(R.string.state_loading), color = Femho.colors.inkFaint)
+    }
+}
+
+/**
+ * La pantalla d'acceptar un convit d'àmbit (deep link femho://join/{token}).
+ *
+ * Es mira abans d'acceptar —qui convida i a què— perquè acceptar a cegues una cosa que
+ * et dona accés a les dades d'una altra persona és exactament el gest que la gent es
+ * penedeix d'haver fet (el mateix criteri que JoinScopeScreen a la web).
+ */
+@Composable
+private fun JoinScreen(model: AppViewModel, token: String, onDone: () -> Unit) {
+    val preview by model.joinPreview.collectAsStateWithLifecycle()
+    val error by model.joinError.collectAsStateWithLifecycle()
+    val done by model.joinDone.collectAsStateWithLifecycle()
+
+    Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(FemhoShape.card))
+                .background(Femho.colors.cardBg)
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.join_title),
+                fontSize = FemhoText.columnTitle,
+                fontWeight = FontWeight.Black,
+                color = Femho.colors.ink,
+            )
+            when {
+                done -> Text(
+                    text = stringResource(R.string.join_done),
+                    color = Femho.colors.ink,
+                    fontSize = FemhoText.body,
+                )
+                error != null -> Text(
+                    text = stringResource(R.string.join_invalid),
+                    color = Femho.colors.dangerText,
+                    fontSize = FemhoText.body,
+                )
+                preview != null -> {
+                    Text(
+                        text = stringResource(R.string.join_subtitle)
+                            .replace("{who}", preview!!.invitedBy)
+                            .replace("{scope}", preview!!.scopeName),
+                        color = Femho.colors.inkSoft,
+                        fontSize = FemhoText.body,
+                    )
+                    Text(
+                        text = stringResource(R.string.join_accept),
+                        color = Femho.onBrand,
+                        fontSize = FemhoText.body,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(FemhoShape.pill))
+                            .background(Femho.brandGradient2)
+                            .clickable { model.acceptJoin(token) }
+                            .padding(vertical = 12.dp),
+                        textAlign = TextAlign.Center,
+                    )
+                }
+                else -> Loading()
+            }
+            Text(
+                text = stringResource(R.string.nav_close),
+                color = Femho.colors.inkSoft,
+                fontSize = FemhoText.body,
+                modifier = Modifier
+                    .clickable(onClick = onDone)
+                    .padding(vertical = 6.dp),
+            )
+        }
+    }
+}
+
+/**
+ * L'acceptació d'un convit a la instància (deep link femho://invite/{token}).
+ *
+ * Crea el compte amb una contrasenya de 10+ caràcters, com la web (GateScreens).
+ * L'enllaç serveix un sol cop.
+ */
+@Composable
+private fun InviteScreen(model: AppViewModel, token: String, onDone: () -> Unit) {
+    val error by model.joinError.collectAsStateWithLifecycle()
+    val done by model.joinDone.collectAsStateWithLifecycle()
+    var password by remember { mutableStateOf("") }
+    var repeat by remember { mutableStateOf("") }
+    var localError by remember { mutableStateOf<String?>(null) }
+
+    Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(FemhoShape.card))
+                .background(Femho.colors.cardBg)
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.invite_title),
+                fontSize = FemhoText.columnTitle,
+                fontWeight = FontWeight.Black,
+                color = Femho.colors.ink,
+            )
+            Text(
+                text = stringResource(R.string.invite_subtitle),
+                color = Femho.colors.inkSoft,
+                fontSize = FemhoText.body,
+            )
+            if (done) {
+                Text(
+                    text = stringResource(R.string.invite_done),
+                    color = Femho.colors.ink,
+                    fontSize = FemhoText.body,
+                )
+            } else {
+                androidx.compose.material3.TextField(
+                    value = password,
+                    onValueChange = { password = it },
+                    label = { Text(stringResource(R.string.invite_password)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().testTag("invite-password"),
+                )
+                androidx.compose.material3.TextField(
+                    value = repeat,
+                    onValueChange = { repeat = it },
+                    label = { Text(stringResource(R.string.invite_repeat)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().testTag("invite-repeat"),
+                )
+                val tooShortText = stringResource(R.string.invite_tooshort)
+                val mismatchText = stringResource(R.string.invite_mismatch)
+                val visibleError = localError ?: error
+                if (visibleError != null) {
+                    Text(
+                        text = visibleError,
+                        color = Femho.colors.dangerText,
+                        fontSize = FemhoText.meta,
+                    )
+                }
+                Text(
+                    text = stringResource(R.string.nav_save),
+                    color = Femho.onBrand,
+                    fontSize = FemhoText.body,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(FemhoShape.pill))
+                        .background(Femho.brandGradient2)
+                        .clickable {
+                            localError = when {
+                                password.length < 10 -> tooShortText
+                                password != repeat -> mismatchText
+                                else -> null
+                            }
+                            if (localError == null) model.acceptInvite(token, password)
+                        }
+                        .padding(vertical = 12.dp),
+                    textAlign = TextAlign.Center,
+                )
+            }
+            Text(
+                text = stringResource(R.string.nav_close),
+                color = Femho.colors.inkSoft,
+                fontSize = FemhoText.body,
+                modifier = Modifier
+                    .clickable(onClick = onDone)
+                    .padding(vertical = 6.dp),
+            )
+        }
     }
 }
 
@@ -276,7 +514,46 @@ private fun ServerScreen(model: AppViewModel, message: String?) {
 }
 
 @Composable
-private fun LoginScreen(model: AppViewModel, instanceName: String) {
+private fun CertConfirmScreen(model: AppViewModel, fingerprint: String) {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(24.dp).testTag("cert-screen"),
+        verticalArrangement = Arrangement.spacedBy(14.dp, Alignment.CenterVertically),
+    ) {
+        Wordmark()
+        Text(
+            stringResource(R.string.login_certtitle),
+            color = Femho.colors.ink,
+            fontSize = FemhoText.columnTitle,
+        )
+        Text(
+            stringResource(R.string.login_certbody),
+            color = Femho.colors.inkSoft,
+            fontSize = FemhoText.body,
+        )
+        Text(
+            text = fingerprint,
+            color = Femho.colors.ink,
+            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+            fontSize = FemhoText.meta,
+            modifier = Modifier.testTag("cert-fingerprint"),
+        )
+        androidx.compose.material3.Button(
+            onClick = { model.confirmTrustedCert() },
+            modifier = Modifier.fillMaxWidth().testTag("cert-confirm"),
+        ) {
+            Text(stringResource(R.string.login_certconfirm))
+        }
+        androidx.compose.material3.TextButton(
+            onClick = { model.rejectTrustedCert() },
+            modifier = Modifier.fillMaxWidth().testTag("cert-reject"),
+        ) {
+            Text(stringResource(R.string.login_certreject))
+        }
+    }
+}
+
+@Composable
+private fun LoginScreen(model: AppViewModel, instanceName: String, serverNewer: Boolean) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
@@ -291,6 +568,13 @@ private fun LoginScreen(model: AppViewModel, instanceName: String) {
             color = Femho.colors.inkSoft,
             fontSize = FemhoText.body,
         )
+        if (serverNewer) {
+            Text(
+                text = stringResource(R.string.login_servernewer),
+                color = Femho.colors.dangerText,
+                fontSize = FemhoText.meta,
+            )
+        }
 
         androidx.compose.material3.OutlinedTextField(
             value = email,
@@ -328,14 +612,28 @@ private fun LoginScreen(model: AppViewModel, instanceName: String) {
 }
 
 @Composable
-private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: () -> Unit) {
+private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: () -> Unit, onRegistre: () -> Unit, onEstadistiques: () -> Unit) {
     val tasks by model.tasks.collectAsStateWithLifecycle()
     val scopes by model.scopes.collectAsStateWithLifecycle()
     val pending by model.pending.collectAsStateWithLifecycle()
     val projects by model.projects.collectAsStateWithLifecycle()
     val people by model.people.collectAsStateWithLifecycle()
+    val taskTypes by model.taskTypes.collectAsStateWithLifecycle()
+    val labels by model.labels.collectAsStateWithLifecycle()
+    val scopeSettings by model.scopeSettings.collectAsStateWithLifecycle()
+
+    // El detall de tasca llegeix etiquetes i tipologies; si no es carreguen aquí, la
+    // secció del detall surt buida fins que s'obren els Ajustos.
+    LaunchedEffect(Unit) { model.loadEntityData() }
     val openTask by model.openTask.collectAsStateWithLifecycle()
     val openChecklists by model.openChecklists.collectAsStateWithLifecycle()
+    val openComments by model.openComments.collectAsStateWithLifecycle()
+    val openActivity by model.openActivity.collectAsStateWithLifecycle()
+    val openShares by model.openShares.collectAsStateWithLifecycle()
+    val createdShareUrl by model.createdShareUrl.collectAsStateWithLifecycle()
+    val openAttachments by model.openAttachments.collectAsStateWithLifecycle()
+    val attachmentError by model.attachmentError.collectAsStateWithLifecycle()
+    val quickAddDraft by model.quickAddDraft.collectAsStateWithLifecycle()
     val pinned by model.pinned.collectAsStateWithLifecycle()
     val activeProjects by model.activeProjects.collectAsStateWithLifecycle()
     val expandedCards by model.expandedCards.collectAsStateWithLifecycle()
@@ -433,12 +731,25 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: (
                 active = if (next.isEmpty()) emptySet() else next
             },
             onSettings = onSettings,
-            onView = { if (it == Screen.CALENDAR) onCalendar() },
+            onView = {
+                when (it) {
+                    Screen.CALENDAR -> onCalendar()
+                    Screen.REGISTRE -> onRegistre()
+                    Screen.ESTADISTIQUES -> onEstadistiques()
+                    else -> Unit
+                }
+            },
+            showRegistre = scopeSettings.values.any { it.timeTracking },
+            showEstadistiques = scopeSettings.values.any { it.timeTracking },
             aiEnabled = aiEnabled,
             aiBoardActive = aiBoard,
             onToggleAiBoard = model::toggleAiBoard,
             aiBoardLabel = aiBoardLabel,
+            attentionCount = visible.count { it.needsAttention },
         )
+
+        val lockNoticeContext = androidx.compose.ui.platform.LocalContext.current
+        val lockNoticeText = stringResource(R.string.ai_lock_card)
 
         BoardScreen(
             tasks = visible,
@@ -466,11 +777,22 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: (
                     ),
                 ),
                 toggle = stringResource(R.string.sync_complete),
+                lock = stringResource(R.string.ai_lock_card),
+                attention = stringResource(R.string.ai_attention_card),
+                claim = stringResource(R.string.ai_takeover_action),
             ),
             onOpen = model::open,
             onMove = { task, status -> model.move(task, status) },
             onToggle = { task ->
                 model.move(task, if (task.status == TaskStatus.DONE) TaskStatus.TODO else TaskStatus.DONE)
+            },
+            onClaim = { task -> model.claim(task) },
+            onLocked = { _ ->
+                android.widget.Toast.makeText(
+                    lockNoticeContext,
+                    lockNoticeText,
+                    android.widget.Toast.LENGTH_SHORT,
+                ).show()
             },
             modifier = Modifier.weight(1f),
             /**
@@ -507,6 +829,7 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: (
                             else -> manualLabel
                         }
                     },
+                    initialText = quickAddDraft.orEmpty(),
                     onCreate = { title, scopeId, _, _ -> model.create(scopeId, title, status) },
                     modifier = Modifier.padding(top = 8.dp).testTag("quick-add-${'$'}{status.name.lowercase()}"),
                 )
@@ -596,12 +919,122 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: (
 
     // El full de detall va per sobre de tot, com a la web.
     openTask?.let { task ->
+        val context = androidx.compose.ui.platform.LocalContext.current
+        val picker = androidx.activity.compose.rememberLauncherForActivityResult(
+            androidx.activity.result.contract.ActivityResultContracts.GetContent(),
+        ) { uri ->
+            if (uri != null) {
+                val name = runCatching {
+                    context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                        val idx = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                        if (idx >= 0) cursor.getString(idx) else null
+                    }
+                }.getOrNull() ?: "adjunt"
+                val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                if (bytes != null) model.uploadTaskAttachment(task, name, bytes)
+            }
+        }
+        val openAttachment = { attachment: ho.fem.model.Attachment, bytes: ByteArray ->
+            runCatching {
+                val dir = java.io.File(context.cacheDir, "adjunts").apply { mkdirs() }
+                val file = java.io.File(dir, attachment.filename)
+                file.writeBytes(bytes)
+                val uri = androidx.core.content.FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.fileprovider",
+                    file,
+                )
+                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW)
+                    .setDataAndType(uri, attachment.mimeType)
+                    .addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                context.startActivity(intent)
+            }
+        }
         TaskDetail(
             task = task,
             checklists = openChecklists,
+            projects = projects,
+            people = people,
+            taskTypes = taskTypes,
+            labelsList = labels,
+            isCollectiveScope = scopes.any { it.id == task.scopeId && it.kind == ho.fem.model.ScopeKind.COLLECTIVE },
+            comments = openComments,
+            activity = openActivity,
             labels = TaskDetailLabels(
                 title = stringResource(R.string.task_title),
                 description = stringResource(R.string.task_description),
+                project = stringResource(R.string.task_project),
+                noProject = stringResource(R.string.task_noproject),
+                dueDate = stringResource(R.string.task_duedate),
+                dueTime = stringResource(R.string.task_duetime),
+                deadline = stringResource(R.string.task_deadline),
+                recurrence = stringResource(R.string.task_recurrence),
+                recurrenceNone = stringResource(R.string.task_recurrence_none),
+                recurrenceDaily = stringResource(R.string.task_recurrence_daily),
+                recurrenceWeekly = stringResource(R.string.task_recurrence_weekly),
+                recurrenceMonthly = stringResource(R.string.task_recurrence_monthly),
+                recurrenceYearly = stringResource(R.string.task_recurrence_yearly),
+                recurrenceFromCompletion = stringResource(R.string.task_recurrence_fromcompletion),
+                assignees = stringResource(R.string.task_assignees),
+                taskType = stringResource(R.string.task_tasktype),
+                noType = stringResource(R.string.stats_notype),
+                labels = stringResource(R.string.task_labels),
+                newLabel = stringResource(R.string.task_newlabel),
+                newLabelPlaceholder = stringResource(R.string.task_newlabel_placeholder),
+                emptyLabels = stringResource(R.string.task_empty_labels),
+                labelAdd = stringResource(R.string.task_label_add),
+                labelRemove = stringResource(R.string.task_label_remove),
+                comments = stringResource(R.string.task_comments),
+                commentPlaceholder = stringResource(R.string.task_newcomment),
+                emptyComments = stringResource(R.string.task_empty_comments),
+                activity = stringResource(R.string.task_activity),
+                undo = stringResource(R.string.activity_undo),
+                delete = stringResource(R.string.nav_delete),
+                cancel = stringResource(R.string.nav_cancel),
+                deleteConfirm = stringResource(R.string.task_deleteconfirm),
+                lockWorking = stringResource(R.string.ai_lock_working),
+                takeOverAction = stringResource(R.string.ai_takeover_action),
+                takeOverWhere = stringResource(R.string.ai_takeover_where),
+                share = stringResource(R.string.share_title),
+                sharePermission = stringResource(R.string.share_permission),
+                sharePermissionOptions = listOf(
+                    "view" to stringResource(R.string.share_permission_view),
+                    "check" to stringResource(R.string.share_permission_check),
+                    "comment" to stringResource(R.string.share_permission_comment),
+                ),
+                shareRequireName = stringResource(R.string.share_requirename),
+                sharePassword = stringResource(R.string.share_password),
+                sharePasswordPlaceholder = stringResource(R.string.share_passwordplaceholder),
+                shareExpiresAt = stringResource(R.string.share_expiresat),
+                shareMaxViews = stringResource(R.string.share_maxviews),
+                shareCreate = stringResource(R.string.nav_create),
+                shareCopy = stringResource(R.string.tokens_copy),
+                shareRevoke = stringResource(R.string.share_revoke),
+                shareRevoked = stringResource(R.string.share_revoked),
+                shareOnceWarning = stringResource(R.string.tokens_oncewarning),
+                shareClose = stringResource(R.string.nav_close),
+                attachments = stringResource(R.string.task_attachments),
+                addAttachment = stringResource(R.string.task_addattachment),
+                emptyAttachments = stringResource(R.string.task_empty_attachments),
+                removeAttachment = stringResource(R.string.task_removeattachment),
+                attachmentTooBig = stringResource(R.string.task_attachmenttoobig),
+                activityVerbs = mapOf(
+                    "answered" to stringResource(R.string.activity_verb_answered),
+                    "asked" to stringResource(R.string.activity_verb_asked),
+                    "cascade_complete" to stringResource(R.string.activity_verb_cascade_complete),
+                    "claimed" to stringResource(R.string.activity_verb_claimed),
+                    "commented" to stringResource(R.string.activity_verb_commented),
+                    "completed" to stringResource(R.string.activity_verb_completed),
+                    "created" to stringResource(R.string.activity_verb_created),
+                    "deleted" to stringResource(R.string.activity_verb_deleted),
+                    "moved" to stringResource(R.string.activity_verb_moved),
+                    "refreshed" to stringResource(R.string.activity_verb_refreshed),
+                    "released" to stringResource(R.string.activity_verb_released),
+                    "reopened" to stringResource(R.string.activity_verb_reopened),
+                    "token_created" to stringResource(R.string.activity_verb_token_created),
+                    "token_revoked" to stringResource(R.string.activity_verb_token_revoked),
+                    "updated" to stringResource(R.string.activity_verb_updated),
+                ),
                 status = mapOf(
                     TaskStatus.INBOX to stringResource(R.string.board_column_inbox),
                     TaskStatus.TODO to stringResource(R.string.board_column_todo),
@@ -624,9 +1057,40 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: (
                 if (mode != task.aiMode) model.setAiMode(task, mode)
                 model.closeTask()
             },
+            onUpdateDetails = { description, projectId, dueDate, dueTime, deadline, rrule, recurrenceMode ->
+                model.updateTaskDetails(task, description, projectId, dueDate, dueTime, deadline, rrule, recurrenceMode)
+            },
             onStatus = { model.move(task, it) },
             onToggleItem = model::toggleItem,
+            onAddAssignee = { model.addAssignee(task, it) },
+            onRemoveAssignee = { model.removeAssignee(task, it) },
+            onSetTaskType = { model.setTaskType(task, it) },
+            onAddLabel = { model.addTaskLabel(task, it) },
+            onRemoveLabel = { model.removeTaskLabel(task, it) },
+            onCreateLabel = { model.createTaskLabel(task, it) },
+            onAddComment = { model.addComment(task.id, it) },
+            onUndoActivity = { model.undoActivity(it) },
+            onDelete = { model.deleteTask(task) },
+            onTakeOver = { model.takeOver(task, it) },
             onClose = model::closeTask,
+            shares = openShares,
+            createdShareUrl = createdShareUrl,
+            onCreateShare = { permission, requireName, password, expiresAt, maxViews ->
+                model.createTaskShare(task, permission, requireName, password, expiresAt, maxViews)
+            },
+            onRevokeShare = model::revokeTaskShare,
+            onCopyToClipboard = model::copyToClipboard,
+            attachments = openAttachments,
+            attachmentError = attachmentError,
+            onPickAttachment = { picker.launch("*/*") },
+            onDownloadAttachment = { attachment ->
+                model.downloadAttachment(attachment.id) { bytes ->
+                    openAttachment(attachment, bytes)
+                }
+            },
+            onDeleteAttachment = { attachment ->
+                model.deleteTaskAttachment(task, attachment.id)
+            },
         )
     }
 }
@@ -816,11 +1280,17 @@ private fun TopBar(
     onToggle: (String) -> Unit,
     onSettings: () -> Unit,
     onView: (Screen) -> Unit,
+    /** El Registre només surt si algun àmbit porta registre de dedicació. */
+    showRegistre: Boolean = false,
+    /** Les Estadístiques, igual que el Registre: només amb dedicació registrada. */
+    showEstadistiques: Boolean = false,
     /** El commutador del tauler de la IA. Només surt si hi ha algun agent actiu. */
     aiEnabled: Boolean = false,
     aiBoardActive: Boolean = false,
     onToggleAiBoard: () -> Unit = {},
     aiBoardLabel: String = "",
+    /** Tasques que esperen resposta teva: punt amb recompte sobre el commutador. */
+    attentionCount: Int = 0,
     /**
      * Les llistes pinejades i com s'obren.
      *
@@ -849,11 +1319,14 @@ private fun TopBar(
         ) {
             Wordmark()
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // El commutador Tasques / Calendari, igual que a la web (docs/02 §3).
-                listOf(
-                    Screen.BOARD to stringResource(R.string.nav_tasks),
-                    Screen.CALENDAR to stringResource(R.string.nav_calendar),
-                ).forEach { (target, label) ->
+                // El commutador Tasques / Calendari / Registre, igual que a la web (docs/02 §3).
+                val targets = buildList {
+                    add(Screen.BOARD to stringResource(R.string.nav_tasks))
+                    add(Screen.CALENDAR to stringResource(R.string.nav_calendar))
+                    if (showRegistre) add(Screen.REGISTRE to stringResource(R.string.nav_registre))
+                    if (showEstadistiques) add(Screen.ESTADISTIQUES to stringResource(R.string.nav_estadistiques))
+                }
+                targets.forEach { (target, label) ->
                     Text(
                         text = label,
                         color = if (view == target) Femho.colors.ink else Femho.colors.inkFaint,
@@ -867,32 +1340,51 @@ private fun TopBar(
                 }
 
                 if (aiEnabled && view == Screen.BOARD) {
-                    Text(
-                        // El robot del disseny validat, en text: Compose no porta el joc
-                        // d'icones de Plou i un SVG a mà aquí seria un dibuix repetit.
-                        text = "◍",
-                        color = if (aiBoardActive) Femho.onBrand else Femho.colors.inkSoft,
-                        fontSize = FemhoText.body,
-                        fontWeight = FontWeight.Bold,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier
-                            .padding(horizontal = 6.dp)
-                            .size(34.dp)
-                            .clip(CircleShape)
-                            // Un `if` amb una banda `Brush` i l'altra `Color` no resol cap
-                            // sobrecàrrega de `background`: es tria el modificador sencer.
-                            .then(
-                                if (aiBoardActive) {
-                                    Modifier.background(Femho.brandGradient2)
-                                } else {
-                                    Modifier.background(Femho.colors.tagBg)
-                                },
+                    Box {
+                        Text(
+                            // El robot del disseny validat, en text: Compose no porta el joc
+                            // d'icones de Plou i un SVG a mà aquí seria un dibuix repetit.
+                            text = "◍",
+                            color = if (aiBoardActive) Femho.onBrand else Femho.colors.inkSoft,
+                            fontSize = FemhoText.body,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier
+                                .padding(horizontal = 6.dp)
+                                .size(34.dp)
+                                .clip(CircleShape)
+                                // Un `if` amb una banda `Brush` i l'altra `Color` no resol cap
+                                // sobrecàrrega de `background`: es tria el modificador sencer.
+                                .then(
+                                    if (aiBoardActive) {
+                                        Modifier.background(Femho.brandGradient2)
+                                    } else {
+                                        Modifier.background(Femho.colors.tagBg)
+                                    },
+                                )
+                                .androidClickable { onToggleAiBoard() }
+                                .padding(top = 8.dp)
+                                .testTag("ai-board-toggle")
+                                .semantics { contentDescription = aiBoardLabel },
+                        )
+                        if (attentionCount > 0) {
+                            Text(
+                                // La marca d'atenció del disseny: un punt amb el recompte de
+                                // tasques que esperen resposta, sobre el commutador.
+                                text = attentionCount.toString(),
+                                color = Femho.onBrand,
+                                fontSize = FemhoText.meta,
+                                fontWeight = FontWeight.Bold,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .size(16.dp)
+                                    .clip(CircleShape)
+                                    .background(Femho.brandGradient2)
+                                    .testTag("ai-attention-count"),
                             )
-                            .androidClickable { onToggleAiBoard() }
-                            .padding(top = 8.dp)
-                            .testTag("ai-board-toggle")
-                            .semantics { contentDescription = aiBoardLabel },
-                    )
+                        }
+                    }
                 }
 
                 if (pending > 0) {
@@ -1110,12 +1602,12 @@ private fun PinnedRow(pinned: List<Checklist>, onOpenList: (String) -> Unit) {
                                 color = Femho.colors.inkFaint,
                                 fontSize = FemhoText.meta,
                             )
-                        }
                     }
                 }
             }
         }
     }
+}
 }
 
 // `scopeColor` viu ara a `:core-designsystem` (`Palette.kt`), com a funció pura: els
@@ -1127,6 +1619,33 @@ private fun Modifier.androidClickable(onClick: () -> Unit): Modifier = this.clic
 private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> Unit) {
     val theme by model.theme.collectAsStateWithLifecycle()
     val accent by model.accent.collectAsStateWithLifecycle()
+    val profile by model.profile.collectAsStateWithLifecycle()
+    val gravatarEnabled by model.gravatarEnabled.collectAsStateWithLifecycle()
+    val scopes by model.scopes.collectAsStateWithLifecycle()
+    val tokens by model.tokens.collectAsStateWithLifecycle()
+    val createdToken by model.createdToken.collectAsStateWithLifecycle()
+    val projects by model.projects.collectAsStateWithLifecycle()
+    val labels by model.labels.collectAsStateWithLifecycle()
+    val taskTypes by model.taskTypes.collectAsStateWithLifecycle()
+    val scopeSettings by model.scopeSettings.collectAsStateWithLifecycle()
+    val calendars by model.calendars.collectAsStateWithLifecycle()
+    val mailAccounts by model.mailAccounts.collectAsStateWithLifecycle()
+    val mailRules by model.mailRules.collectAsStateWithLifecycle()
+    val agentsDetail by model.agentsDetail.collectAsStateWithLifecycle()
+    val agentScopeAvailability by model.agentScopeAvailability.collectAsStateWithLifecycle()
+    val agentCredentials by model.agentCredentials.collectAsStateWithLifecycle()
+    val createdAgentToken by model.createdAgentToken.collectAsStateWithLifecycle()
+    val agentSkill by model.agentSkill.collectAsStateWithLifecycle()
+    val allShares by model.allShares.collectAsStateWithLifecycle()
+    val allShareAccesses by model.shareAccesses.collectAsStateWithLifecycle()
+
+    LaunchedEffect(Unit) {
+        model.loadEntityData()
+        model.loadCalendars()
+        model.loadMailData()
+        model.loadAgentManagement()
+        model.loadAllShares()
+    }
 
     SettingsScreen(
         labels = SettingsLabels(
@@ -1147,13 +1666,1133 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
             ),
             server = stringResource(R.string.login_server),
             logout = stringResource(R.string.nav_logout),
+            tabs = SettingsTabs(
+                general = stringResource(R.string.settings_tab_general),
+                scopes = stringResource(R.string.settings_tab_scopes),
+                calendars = stringResource(R.string.settings_tab_calendars),
+                mail = stringResource(R.string.settings_tab_mail),
+                mcp = stringResource(R.string.settings_tab_mcp),
+                ai = stringResource(R.string.settings_tab_ai),
+                shares = stringResource(R.string.settings_tab_shares),
+                profile = stringResource(R.string.settings_tab_profile),
+                admin = stringResource(R.string.settings_tab_admin),
+            ),
+            emptyStates = SettingsEmptyStates(
+                scopes = stringResource(R.string.settings_empty_scopes),
+                calendars = stringResource(R.string.settings_empty_calendars),
+                mail = stringResource(R.string.settings_empty_mail),
+                mcp = stringResource(R.string.settings_empty_mcp),
+                ai = stringResource(R.string.settings_empty_ai),
+                shares = stringResource(R.string.settings_empty_shares),
+                profile = stringResource(R.string.settings_empty_profile),
+                admin = stringResource(R.string.settings_empty_admin),
+            ),
+            // General tab
+            language = stringResource(R.string.settings_language),
+            languageOptions = listOf(
+                "ca" to "Català",
+                "en" to "English",
+                "es" to "Español",
+            ),
+            scopeMode = stringResource(R.string.settings_scopemode),
+            scopeModeMulti = stringResource(R.string.settings_scopemode_multi),
+            scopeModeMultiHint = stringResource(R.string.settings_scopemode_multi_hint),
+            scopeModeSingle = stringResource(R.string.settings_scopemode_single),
+            scopeModeSingleHint = stringResource(R.string.settings_scopemode_single_hint),
+            scopeModeHelp = stringResource(R.string.settings_scopemode_help),
+            weekStart = stringResource(R.string.settings_weekstart),
+            weekStartAuto = stringResource(R.string.settings_weekstart_auto, stringResource(R.string.settings_day_mon)),
+            weekStartMonday = stringResource(R.string.settings_day_mon),
+            weekStartSunday = stringResource(R.string.settings_day_sun),
+            eventTaskDeleted = stringResource(R.string.settings_events_ondelete),
+            eventTaskDeletedReturn = stringResource(R.string.settings_events_ondelete_return),
+            eventTaskDeletedReturnHint = stringResource(R.string.settings_events_ondelete_returnhint),
+            eventTaskDeletedHide = stringResource(R.string.settings_events_ondelete_hide),
+            eventTaskDeletedHideHint = stringResource(R.string.settings_events_ondelete_hidehint),
+            dashboardItems = stringResource(R.string.settings_dashboarditems),
+            showCalendarWidget = stringResource(R.string.settings_showcalendarwidget),
+            showOverdueSection = stringResource(R.string.settings_showoverduesection),
+            inboxPosition = stringResource(R.string.settings_inboxposition),
+            inboxLeft = stringResource(R.string.settings_inbox_left),
+            inboxRight = stringResource(R.string.settings_inbox_right),
+            inboxBelow = stringResource(R.string.settings_inbox_below),
+            inboxShowOverdue = stringResource(R.string.settings_inboxshowoverdue),
+            about = stringResource(R.string.settings_about),
+            aboutSource = stringResource(R.string.settings_source).format("0.13.0", "AGPL-3.0-or-later"),
+            aboutCredits = stringResource(R.string.settings_credits),
+            // Perfil
+            profileName = stringResource(R.string.settings_profilename),
+            profileEmail = stringResource(R.string.settings_profileemail),
+            timezone = stringResource(R.string.settings_timezone),
+            gravatar = stringResource(R.string.settings_gravatar),
+            gravatarHelp = stringResource(R.string.settings_gravatarhelp),
+            changePassword = stringResource(R.string.settings_changepassword),
+            currentPassword = stringResource(R.string.settings_currentpassword),
+            newPassword = stringResource(R.string.settings_newpassword),
+            passwordChanged = stringResource(R.string.settings_passwordchanged),
+            navSave = stringResource(R.string.nav_save),
+            // MCP i API
+            mcpInstructions = stringResource(R.string.settings_mcpinstructions),
+            mcpUrl = stringResource(R.string.settings_mcpurl),
+            tokensTitle = stringResource(R.string.tokens_title),
+            tokensName = stringResource(R.string.tokens_name),
+            tokensCreate = stringResource(R.string.tokens_create),
+            tokensOnceWarning = stringResource(R.string.tokens_oncewarning),
+            tokensPrefix = stringResource(R.string.tokens_prefix),
+            tokensLastUsed = stringResource(R.string.tokens_lastused),
+            tokensNever = stringResource(R.string.tokens_never),
+            tokensRevoke = stringResource(R.string.tokens_revoke),
+            tokensCopy = stringResource(R.string.tokens_copy),
+            // Agents (Usuari IA)
+            agents = stringResource(R.string.settings_agents),
+            newAgent = stringResource(R.string.settings_newagent),
+            emptyAgents = stringResource(R.string.settings_empty_agents),
+            agentEnabled = stringResource(R.string.settings_agentenabled),
+            agentCanCreate = stringResource(R.string.settings_agentcancreate),
+            agentScopes = stringResource(R.string.settings_agentscopes),
+            agentAllScopes = stringResource(R.string.settings_agentallscopes),
+            agentScopeTaken = stringResource(R.string.settings_agentscopetaken),
+            agentCredentials = stringResource(R.string.settings_agentcredentials),
+            agentNewCredential = stringResource(R.string.settings_agentnewcredential),
+            agentConnect = stringResource(R.string.settings_agentconnect),
+            agentDownloadMcp = stringResource(R.string.settings_agentdownloadmcp),
+            agentDownloadSkill = stringResource(R.string.settings_agentdownloadskill),
+            agentMcpNoToken = stringResource(R.string.settings_agentmcpnotoken),
+            agentMcpHasToken = stringResource(R.string.settings_agentmcphastoken),
+            agentSkillNoToken = stringResource(R.string.settings_agentskillnotoken),
+            create = stringResource(R.string.nav_create),
+            shareAccesses = stringResource(R.string.share_accesses),
+            shareLastAccess = stringResource(R.string.share_lastaccess),
+            shareRevoke = stringResource(R.string.share_revoke),
+            shareRevoked = stringResource(R.string.share_revoked),
+            scopeSection = stringResource(R.string.settings_scopesection),
+            entityProjects = stringResource(R.string.settings_entityprojects),
+            entityLabels = stringResource(R.string.settings_entitylabels),
+            entityTypes = stringResource(R.string.settings_entitytypes),
+            entityDedication = stringResource(R.string.settings_entitydedication),
+            projectName = stringResource(R.string.settings_projectname),
+            projectDelete = stringResource(R.string.settings_projectdelete),
+            labelNew = stringResource(R.string.settings_labelnew),
+            labelDelete = stringResource(R.string.settings_labeldelete),
+            typeNew = stringResource(R.string.settings_typenew),
+            typeDelete = stringResource(R.string.settings_typedelete),
+            typesOn = stringResource(R.string.settings_typeson),
+            typesRequired = stringResource(R.string.settings_typesrequired),
+            tracking = stringResource(R.string.settings_tracking),
+            trackingOn = stringResource(R.string.settings_trackingon),
+            trackingHelp = stringResource(R.string.settings_trackinghelp),
+            overtimeVisible = stringResource(R.string.settings_overtimevisible),
+            workStart = stringResource(R.string.settings_workstart),
+            workEnd = stringResource(R.string.settings_workend),
+            workDays = stringResource(R.string.settings_workdays),
+            longSessionHours = stringResource(R.string.settings_longsessionhours),
+            nounProject = stringResource(R.string.settings_noun_project),
+            nounClient = stringResource(R.string.settings_noun_client),
+            caldavUrls = stringResource(R.string.settings_caldavurls),
+            caldavEvents = stringResource(R.string.settings_caldavevents),
+            caldavTodos = stringResource(R.string.settings_caldavtodos),
+            sourcesTitle = stringResource(R.string.settings_sources),
+            sourcesAdd = stringResource(R.string.settings_sources_add),
+            sourcesEmpty = stringResource(R.string.settings_sources_empty),
+            sourcesFailed = stringResource(R.string.settings_sources_failed),
+            sourcesInbox = stringResource(R.string.settings_sources_inbox),
+            sourcesKindCaldav = stringResource(R.string.settings_sources_kind_caldav),
+            sourcesKindIcal = stringResource(R.string.settings_sources_kind_ical),
+            sourcesKindRss = stringResource(R.string.settings_sources_kind_rss),
+            sourcesName = stringResource(R.string.settings_sources_name),
+            sourcesNever = stringResource(R.string.settings_sources_never),
+            sourcesPassword = stringResource(R.string.settings_sources_password),
+            sourcesReadOnly = stringResource(R.string.settings_sources_readonly),
+            sourcesRefreshed = stringResource(R.string.settings_sources_refreshed),
+            sourcesRemove = stringResource(R.string.settings_sources_remove),
+            sourcesUrl = stringResource(R.string.settings_sources_url),
+            sourcesUrlRequired = stringResource(R.string.settings_sources_urlrequired),
+            sourcesUsername = stringResource(R.string.settings_sources_username),
+            calendarShared = stringResource(R.string.settings_calendarshared),
+            sharedCalendars = stringResource(R.string.settings_sharedcalendars),
+            calendarPrivate = stringResource(R.string.settings_calendarprivate),
+            calendarCredWarning = stringResource(R.string.settings_calendarcredwarning),
+            mailIntro = stringResource(R.string.settings_mail_intro),
+            mailAccounts = stringResource(R.string.settings_mail_accounts),
+            mailAdd = stringResource(R.string.settings_mail_add),
+            mailName = stringResource(R.string.settings_mail_name),
+            mailHost = stringResource(R.string.settings_mail_host),
+            mailUsername = stringResource(R.string.settings_mail_username),
+            mailPassword = stringResource(R.string.settings_mail_password),
+            mailPasswordKept = stringResource(R.string.settings_mail_passwordkept),
+            mailSecurity = stringResource(R.string.settings_mail_security),
+            mailSecurityTls = stringResource(R.string.settings_mail_security_tls),
+            mailSecurityStarttls = stringResource(R.string.settings_mail_security_starttls),
+            mailTest = stringResource(R.string.settings_mail_test),
+            mailTestOk = stringResource(R.string.settings_mail_testok),
+            mailTestFail = stringResource(R.string.settings_mail_testfail),
+            mailAppPassword = stringResource(R.string.settings_mail_apppassword),
+            mailEmpty = stringResource(R.string.settings_mail_empty),
+            mailRules = stringResource(R.string.settings_mail_rules),
+            mailRulesEmpty = stringResource(R.string.settings_mail_rules_empty),
+            mailAddRule = stringResource(R.string.settings_mail_addrule),
+            mailFolder = stringResource(R.string.settings_mail_folder),
+            mailFolderPlaceholder = stringResource(R.string.settings_mail_folderplaceholder),
+            mailPickFolder = stringResource(R.string.settings_mail_pickfolder),
+            mailLoadingFolders = stringResource(R.string.settings_mail_loadingfolders),
+            mailFoldersFailed = stringResource(R.string.settings_mail_foldersfailed),
+            mailScope = stringResource(R.string.settings_mail_scope),
+            mailProject = stringResource(R.string.settings_mail_project),
+            mailProjectNone = stringResource(R.string.settings_mail_projectnone),
+            mailTemplate = stringResource(R.string.settings_mail_template),
+            mailTemplatePreset = stringResource(R.string.settings_mail_templatepreset),
+            mailTemplatePreview = stringResource(R.string.settings_mail_templatepreview),
+            mailTemplateUnknown = stringResource(R.string.settings_mail_templateunknown),
+            mailFirstRun = stringResource(R.string.settings_mail_firstrun),
+            mailNotTouched = stringResource(R.string.settings_mail_nottouched),
+            mailRemove = stringResource(R.string.settings_mail_remove),
+            mailSave = stringResource(R.string.settings_mail_save),
+            scopeType = stringResource(R.string.settings_scopetype),
+            scopeTypeIndividual = stringResource(R.string.settings_scopetype_individual),
+            scopeTypeCollective = stringResource(R.string.settings_scopetype_collective),
+            scopeColor = stringResource(R.string.settings_scopecolor),
+            members = stringResource(R.string.settings_members),
+            memberRemove = stringResource(R.string.settings_memberremove),
+            roleAdmin = stringResource(R.string.settings_role_admin),
+            roleCollaborator = stringResource(R.string.settings_role_collaborator),
+            roleViewer = stringResource(R.string.settings_role_viewer),
+            roleOwner = stringResource(R.string.settings_role_owner),
+            inviteCreate = stringResource(R.string.settings_invitecreate),
+            inviteRevoke = stringResource(R.string.settings_inviterevoke),
+            inviteOnce = stringResource(R.string.settings_inviteonce),
+            inviteUrl = stringResource(R.string.settings_inviteurl),
+            invites = stringResource(R.string.settings_invites),
+            noInvites = stringResource(R.string.settings_invitenone),
+            noMembers = stringResource(R.string.settings_nomembers),
+            scopeEdit = stringResource(R.string.settings_scopeedit),
+            scopeSave = stringResource(R.string.settings_scopesave),
+            scopeCancel = stringResource(R.string.settings_scopecancel),
+            scopeDelete = stringResource(R.string.settings_scopedelete),
+            scopeDeleteConfirm = stringResource(R.string.settings_scopedeleteconfirm),
+            scopeName = stringResource(R.string.settings_scopename),
+            navCreate = stringResource(R.string.nav_create),
+            newScope = stringResource(R.string.settings_newscope),
         ),
+        profileName = profile?.name.orEmpty(),
+        profileEmail = profile?.email.orEmpty(),
+        profileTimezone = profile?.timezone.orEmpty(),
+        gravatarEnabled = gravatarEnabled,
+        scopes = scopes,
+        projects = projects,
+        labelsList = labels,
+        taskTypes = taskTypes,
+        scopeSettings = scopeSettings,
+        calendars = calendars,
+        mailAccounts = mailAccounts,
+        mailRules = mailRules,
         theme = theme,
         accent = accent,
         serverUrl = serverUrl,
+        mcpUrl = "$serverUrl/mcp",
+        tokens = tokens,
+        createdToken = createdToken,
+        agents = agentsDetail,
+        agentScopeAvailability = agentScopeAvailability,
+        agentCredentials = agentCredentials,
+        createdAgentToken = createdAgentToken,
+        agentSkill = agentSkill,
         onTheme = model::setTheme,
         onAccent = model::setAccent,
+        onLocale = model::setLocale,
+        onScopeMode = { /* TODO: persistir al perfil */ },
+        onWeekStart = model::setWeekStart,
+        onEventTaskDeleted = model::setEventTaskDeleted,
+        onShowCalendarWidget = model::setShowCalendarWidget,
+        onShowOverdueSection = model::setShowOverdueSection,
+        onInboxPosition = model::setInboxPosition,
+        onInboxShowOverdue = model::setInboxShowOverdue,
         onBack = onBack,
         onLogout = model::logout,
-    )
+        onSetName = model::setName,
+        onSetGravatar = model::setGravatar,
+        onChangePassword = model::changePassword,
+        onCreateToken = model::createToken,
+        onRevokeToken = model::revokeToken,
+        onCopyToClipboard = model::copyToClipboard,
+        onCreateAgent = model::createAgent,
+        onAgentEnabled = model::setAgentEnabled,
+        onAgentCanCreate = model::setAgentCanCreate,
+        onAgentScopes = model::setAgentScopes,
+        onAgentNewCredential = model::createAgentCredential,
+        onRevokeAgentCredential = model::revokeAgentCredential,
+        onAgentSkill = model::loadAgentSkill,
+        shares = allShares,
+        shareAccesses = allShareAccesses,
+        onRevokeShare = model::revokeShare,
+        onCreateScope = model::createScope,
+        onUpdateScope = model::updateScope,
+        onDeleteScope = model::deleteScope,
+        onCreateProject = model::createProject,
+        onDeleteProject = model::deleteProject,
+        onCreateLabel = model::createLabel,
+        onDeleteLabel = model::deleteLabel,
+        onCreateTaskType = model::createTaskType,
+        onUpdateTaskType = model::updateTaskType,
+        onDeleteTaskType = model::deleteTaskType,
+        onUpdateScopeSettings = model::updateScopeSettings,
+        onCreateCalendar = model::createCalendar,
+        onUpdateCalendar = model::updateCalendar,
+        onDeleteCalendar = model::deleteCalendar,
+        onCreateMailAccount = model::createMailAccount,
+        onUpdateMailAccount = model::updateMailAccount,
+        onDeleteMailAccount = model::deleteMailAccount,
+        onTestMailAccount = model::testMailAccount,
+         onCreateMailRule = model::createMailRule,
+         onDeleteMailRule = model::deleteMailRule,
+     )
+ }
+
+/** Minuts a «1 h 30 min», com la web. */
+private fun fmtMinutes(minutes: Long): String {
+    val h = minutes / 60
+    val m = minutes % 60
+    return when {
+        h > 0 && m > 0 -> "${h} h ${m} min"
+        h > 0 -> "${h} h"
+        else -> "${m} min"
+    }
+}
+
+@Composable
+private fun RegistreHost(model: AppViewModel, onBoard: () -> Unit) {
+    val scopes by model.scopes.collectAsStateWithLifecycle()
+    val people by model.people.collectAsStateWithLifecycle()
+    val projects by model.projects.collectAsStateWithLifecycle()
+    val scopeSettings by model.scopeSettings.collectAsStateWithLifecycle()
+    val report by model.sessions.collectAsStateWithLifecycle()
+
+    var periode by remember { mutableStateOf("days30") }
+    var from by remember { mutableStateOf(java.time.LocalDate.now().minusDays(30).toString()) }
+    var to by remember { mutableStateOf(java.time.LocalDate.now().toString()) }
+    var projecte by remember { mutableStateOf<String?>(null) }
+    var persona by remember { mutableStateOf<String?>(null) }
+    var cerca by remember { mutableStateOf("") }
+    var searchDraft by remember { mutableStateOf("") }
+    var vista by remember { mutableStateOf("table") }
+    var dia by remember { mutableStateOf(java.time.LocalDate.now().toString()) }
+    var zoom by remember { mutableStateOf(1f) }
+    val extraLanes = remember { mutableStateOf<List<String>>(emptyList()) }
+
+    // Els períodes predefinits de la web (docs/02): el rang es recalcula en canviar-ne.
+    val avui = java.time.LocalDate.now()
+    fun aplicarPeriode(key: String) {
+        periode = key
+        val (f, t) = when (key) {
+            "today" -> avui to avui
+            "week" -> avui.minusDays(((avui.dayOfWeek.value + 6) % 7).toLong()) to avui
+            "month" -> avui.withDayOfMonth(1) to avui
+            "days90" -> avui.minusDays(89) to avui
+            "all" -> null to null
+            else -> avui.minusDays(29) to avui
+        }
+        from = f?.toString() ?: ""
+        to = t?.toString() ?: ""
+    }
+
+    androidx.compose.runtime.LaunchedEffect(periode, projecte, persona, cerca) {
+        model.loadSessions(
+            from = from.ifEmpty { null },
+            to = to.ifEmpty { null },
+            projectId = projecte,
+            userId = persona,
+            search = cerca.ifBlank { null },
+        )
+    }
+
+    val nomPersona = { id: String -> people.firstOrNull { it.id == id }?.name ?: id }
+    val trackingActiu = scopeSettings.values.any { it.timeTracking }
+    val entries = report.data
+    val totals = report.totals
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Femho.pageBackground)
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.nav_backtoboard),
+            color = Femho.colors.inkSoft,
+            fontSize = FemhoText.body,
+            modifier = Modifier
+                .clickable(onClick = onBoard)
+                .heightIn(min = FemhoSize.touch)
+                .padding(vertical = 12.dp)
+                .testTag("registre-back"),
+        )
+        Text(
+            text = stringResource(R.string.registre_title),
+            color = Femho.colors.ink,
+            fontSize = FemhoText.columnTitle,
+            fontWeight = FontWeight.ExtraBold,
+        )
+        Text(
+            text = stringResource(R.string.registre_subtitle),
+            color = Femho.colors.inkSoft,
+            fontSize = FemhoText.body,
+        )
+
+        if (!trackingActiu) {
+            Text(
+                text = stringResource(R.string.registre_noscopes),
+                color = Femho.colors.inkFaint,
+                fontSize = FemhoText.meta,
+            )
+        } else {
+            // Commutador de vista: taula o cronograma (el cronograma és d'un sol dia)
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf(
+                    "table" to stringResource(R.string.registre_view_table),
+                    "chrono" to stringResource(R.string.registre_view_chrono),
+                ).forEach { (key, label) ->
+                    Text(
+                        text = label,
+                        color = if (vista == key) Femho.onBrand else Femho.colors.inkSoft,
+                        fontSize = FemhoText.meta,
+                        fontWeight = if (vista == key) FontWeight.Bold else FontWeight.Medium,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(FemhoShape.pill))
+                            .background(if (vista == key) Femho.colors.plouBlue else Femho.colors.ghostBg)
+                            .clickable { vista = key }
+                            .heightIn(min = FemhoSize.touch)
+                            .padding(horizontal = 12.dp, vertical = 10.dp)
+                            .testTag("registre-view-$key"),
+                    )
+                }
+            }
+
+            if (vista == "chrono") {
+                // El dia que es mira i els controls de zoom
+                Row(
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        text = stringResource(R.string.registre_day),
+                        color = Femho.colors.inkSoft,
+                        fontSize = FemhoText.meta,
+                    )
+                    androidx.compose.foundation.text.BasicTextField(
+                        value = dia,
+                        onValueChange = { dia = it },
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(FemhoShape.pill))
+                            .background(Femho.colors.ghostBg)
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                            .testTag("registre-day"),
+                    )
+                    Text(
+                        text = stringResource(R.string.registre_chrono_zoom),
+                        color = Femho.colors.inkSoft,
+                        fontSize = FemhoText.meta,
+                    )
+                    Text(
+                        text = "−",
+                        color = Femho.colors.ink,
+                        fontSize = FemhoText.body,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(FemhoShape.pill))
+                            .background(Femho.colors.ghostBg)
+                            .clickable { zoom = (zoom / 1.4f).coerceAtLeast(1f) }
+                            .heightIn(min = FemhoSize.touch)
+                            .padding(horizontal = 12.dp, vertical = 8.dp)
+                            .testTag("chrono-zoom-out"),
+                    )
+                    Text(
+                        text = stringResource(R.string.registre_chrono_fit),
+                        color = Femho.colors.ink,
+                        fontSize = FemhoText.meta,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(FemhoShape.pill))
+                            .background(Femho.colors.ghostBg)
+                            .clickable { zoom = 1f }
+                            .heightIn(min = FemhoSize.touch)
+                            .padding(horizontal = 12.dp, vertical = 8.dp)
+                            .testTag("chrono-zoom-fit"),
+                    )
+                    Text(
+                        text = "+",
+                        color = Femho.colors.ink,
+                        fontSize = FemhoText.body,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(FemhoShape.pill))
+                            .background(Femho.colors.ghostBg)
+                            .clickable { zoom = (zoom * 1.4f).coerceAtMost(6f) }
+                            .heightIn(min = FemhoSize.touch)
+                            .padding(horizontal = 12.dp, vertical = 8.dp)
+                            .testTag("chrono-zoom-in"),
+                    )
+                }
+
+                // El cronograma: una fila per projecte, blocs a l'hora, arrossegables amb
+                // snap de 5 min (PATCH /sessions/{id} en deixar anar, com la web).
+                val delDia = entries.filter { it.startedAt.take(10) == dia }
+                val obre = 8 * 60
+                val tanca = 18 * 60
+                var inici = obre
+                var fi = tanca
+                fun minutsDe(instant: String): Int {
+                    val h = instant.substring(11, 13).toIntOrNull() ?: 0
+                    val m = instant.substring(14, 16).toIntOrNull() ?: 0
+                    return h * 60 + m
+                }
+                fun snap(minuts: Int): Int = ((minuts + 2.5) / 5).toInt() * 5
+                fun instantDe(day: String, minuts: Int): String {
+                    val h = (minuts / 60).toString().padStart(2, '0')
+                    val m = (minuts % 60).toString().padStart(2, '0')
+                    return "$day" + "T$h:$m:00.000Z"
+                }
+                delDia.forEach { entry ->
+                    inici = minOf(inici, minutsDe(entry.startedAt))
+                    val acaba = entry.endedAt?.let { minutsDe(it) }
+                        ?: (java.time.LocalTime.now().hour * 60 + java.time.LocalTime.now().minute)
+                    fi = maxOf(fi, acaba)
+                }
+                val span = maxOf(60, fi - inici)
+                val px = (280f * zoom) / span.toFloat()
+                val claus = (delDia.map { it.projectId ?: "none" }.distinct() + extraLanes.value).distinct()
+                val nomIntern = stringResource(R.string.registre_noproject)
+                val nomProjecte: (String) -> String = { key ->
+                    if (key == "none") nomIntern
+                    else projects.firstOrNull { it.id == key }?.name ?: key
+                }
+
+                Text(
+                    text = stringResource(R.string.registre_chrono_hint),
+                    color = Femho.colors.inkFaint,
+                    fontSize = FemhoText.meta,
+                )
+                claus.sorted().forEach { key ->
+                    Row(
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp)
+                            .testTag("chrono-lane-$key"),
+                    ) {
+                        Text(
+                            text = nomProjecte(key),
+                            color = Femho.colors.inkSoft,
+                            fontSize = FemhoText.meta,
+                            modifier = Modifier.width(110.dp),
+                        )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(40.dp)
+                                .background(Femho.colors.ghostBg)
+                                .padding(horizontal = 2.dp, vertical = 2.dp),
+                        ) {
+                            delDia
+                                .filter { (it.projectId ?: "none") == key }
+                                .forEach { entry ->
+                                    val startMin = minutsDe(entry.startedAt)
+                                    val endMin = entry.endedAt?.let { minutsDe(it) }
+                                        ?: (java.time.LocalTime.now().hour * 60 + java.time.LocalTime.now().minute)
+                                    var offsetX by remember(entry.id) { mutableStateOf(0f) }
+                                    Box(
+                                        modifier = Modifier
+                                            .offset { androidx.compose.ui.unit.IntOffset(offsetX.roundToInt(), 0) }
+                                            .padding(horizontal = 1.dp)
+                                            .width(((endMin - startMin) * px).dp.coerceAtLeast(12.dp))
+                                            .offset(x = ((startMin - inici) * px).dp)
+                                            .height(36.dp)
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(Femho.colors.plouBlue)
+                                            .pointerInput(entry.id) {
+                                                detectDragGestures(
+                                                    onDrag = { change, dragAmount ->
+                                                        change.consume()
+                                                        offsetX += dragAmount.x
+                                                    },
+                                                    onDragEnd = {
+                                                        val deltaMin = snap((offsetX / px).roundToInt())
+                                                        if (deltaMin != 0) {
+                                                            model.updateSession(
+                                                                entry.id,
+                                                                startedAt = instantDe(dia, startMin + deltaMin),
+                                                                endedAt = entry.endedAt?.let { instantDe(dia, endMin + deltaMin) },
+                                                            )
+                                                            model.loadSessions(from.ifEmpty { null }, to.ifEmpty { null }, projecte, persona, cerca.ifBlank { null })
+                                                        }
+                                                        offsetX = 0f
+                                                    },
+                                                )
+                                            }
+                                            .testTag("chrono-block-${entry.id}"),
+                                    ) {
+                                        Text(
+                                            text = entry.taskTitle.orEmpty(),
+                                            color = Femho.onBrand,
+                                            fontSize = FemhoText.meta,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 8.dp),
+                                        )
+                                    }
+                                }
+                        }
+                    }
+                }
+
+                // Afegir una fila buida per a un projecte que aquell dia no en té
+                val disponibles = (listOf<String?>(null) + projects.map { it.id })
+                    .map { it ?: "none" }
+                    .filter { it !in claus }
+                if (disponibles.isNotEmpty()) {
+                    Text(
+                        text = stringResource(R.string.registre_chrono_addlane),
+                        color = Femho.colors.inkSoft,
+                        fontSize = FemhoText.meta,
+                        modifier = Modifier
+                            .clickable { extraLanes.value = extraLanes.value + disponibles.first() }
+                            .heightIn(min = FemhoSize.touch)
+                            .padding(vertical = 8.dp)
+                            .testTag("chrono-add-lane"),
+                    )
+                }
+            }
+
+            // Filtres: període, projecte, persona, cerca
+            val periodes = listOf(
+                "today" to stringResource(R.string.registre_period_today),
+                "week" to stringResource(R.string.registre_period_week),
+                "month" to stringResource(R.string.registre_period_month),
+                "days30" to stringResource(R.string.registre_period_days30),
+                "days90" to stringResource(R.string.registre_period_days90),
+                "all" to stringResource(R.string.registre_period_all),
+            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
+            ) {
+                periodes.forEach { (key, label) ->
+                    Text(
+                        text = label,
+                        color = if (periode == key) Femho.onBrand else Femho.colors.inkSoft,
+                        fontSize = FemhoText.meta,
+                        fontWeight = if (periode == key) FontWeight.Bold else FontWeight.Medium,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(FemhoShape.pill))
+                            .background(if (periode == key) Femho.colors.plouBlue else Femho.colors.ghostBg)
+                            .clickable { aplicarPeriode(key) }
+                            .heightIn(min = FemhoSize.touch)
+                            .padding(horizontal = 10.dp, vertical = 10.dp)
+                            .testTag("registre-period-$key"),
+                    )
+                }
+            }
+
+            // Projecte: tots, intern, o els actius
+            val projectesActius = projects.filter { project -> scopes.any { it.id == project.scopeId } }
+            val projectOptions = listOf<String?>(null, "none") + projectesActius.map { it.id }
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                projectOptions.forEach { id ->
+                    val label = when (id) {
+                        null -> stringResource(R.string.registre_allprojects)
+                        "none" -> stringResource(R.string.registre_noproject)
+                        else -> projectesActius.first { it.id == id }.name
+                    }
+                    Text(
+                        text = label,
+                        color = if (projecte == id) Femho.onBrand else Femho.colors.inkSoft,
+                        fontSize = FemhoText.meta,
+                        fontWeight = if (projecte == id) FontWeight.Bold else FontWeight.Medium,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(FemhoShape.pill))
+                            .background(if (projecte == id) Femho.colors.plouBlue else Femho.colors.ghostBg)
+                            .clickable { projecte = id }
+                            .heightIn(min = FemhoSize.touch)
+                            .padding(horizontal = 10.dp, vertical = 10.dp)
+                            .testTag("registre-project-${id ?: "all"}"),
+                    )
+                }
+            }
+
+            // Persona: tothom o una
+            val personOptions = listOf<String?>(null) + people.map { it.id }
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                personOptions.forEach { id ->
+                    val label = id?.let { nomPersona(it) } ?: stringResource(R.string.registre_everyone)
+                    Text(
+                        text = label,
+                        color = if (persona == id) Femho.onBrand else Femho.colors.inkSoft,
+                        fontSize = FemhoText.meta,
+                        fontWeight = if (persona == id) FontWeight.Bold else FontWeight.Medium,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(FemhoShape.pill))
+                            .background(if (persona == id) Femho.colors.plouBlue else Femho.colors.ghostBg)
+                            .clickable { persona = id }
+                            .heightIn(min = FemhoSize.touch)
+                            .padding(horizontal = 10.dp, vertical = 10.dp)
+                            .testTag("registre-person-${id ?: "all"}"),
+                    )
+                }
+            }
+
+            androidx.compose.foundation.text.BasicTextField(
+                value = searchDraft,
+                onValueChange = { searchDraft = it },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(FemhoShape.pill))
+                    .background(Femho.colors.ghostBg)
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                    .testTag("registre-search"),
+                decorationBox = { innerTextField ->
+                    Box(modifier = Modifier.padding(vertical = 2.dp)) {
+                        if (searchDraft.isEmpty()) {
+                            Text(
+                                text = stringResource(R.string.registre_search),
+                                color = Femho.colors.inkFaint,
+                                fontSize = FemhoText.body,
+                            )
+                        }
+                        innerTextField()
+                    }
+                },
+            )
+            Text(
+                text = stringResource(R.string.nav_save),
+                color = Femho.colors.ink,
+                fontSize = FemhoText.meta,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier
+                    .clickable { cerca = searchDraft.trim() }
+                    .heightIn(min = FemhoSize.touch)
+                    .padding(vertical = 6.dp)
+                    .testTag("registre-search-apply"),
+            )
+
+            // Resum i pastilles de persones i projectes
+            val exportContext = androidx.compose.ui.platform.LocalContext.current
+            Text(
+                text = stringResource(R.string.registre_export),
+                color = Femho.colors.ink,
+                fontSize = FemhoText.meta,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier
+                    .clickable {
+                        model.exportSessionsCsv(
+                            from = from.ifEmpty { null },
+                            to = to.ifEmpty { null },
+                            projectId = projecte,
+                            userId = persona,
+                            search = cerca.ifBlank { null },
+                        ) { csv ->
+                            runCatching {
+                                val dir = java.io.File(exportContext.cacheDir, "csv").apply { mkdirs() }
+                                val file = java.io.File(dir, "registre.csv")
+                                file.writeText(csv)
+                                val uri = androidx.core.content.FileProvider.getUriForFile(
+                                    exportContext,
+                                    "${exportContext.packageName}.fileprovider",
+                                    file,
+                                )
+                                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW)
+                                    .setDataAndType(uri, "text/csv")
+                                    .addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                exportContext.startActivity(intent)
+                            }
+                        }
+                    }
+                    .heightIn(min = FemhoSize.touch)
+                    .padding(vertical = 8.dp)
+                    .testTag("registre-export"),
+            )
+
+            Text(
+                text = stringResource(R.string.registre_summary)
+                    .replace("{tasks}", totals.tasks.toString())
+                    .replace("{time}", fmtMinutes(totals.minutes)),
+                color = Femho.colors.inkSoft,
+                fontSize = FemhoText.meta,
+            )
+            if (totals.overtimeMinutes > 0) {
+                Text(
+                    text = stringResource(R.string.registre_overtimetotal)
+                        .replace("{time}", fmtMinutes(totals.overtimeMinutes)),
+                    color = Femho.colors.inkFaint,
+                    fontSize = FemhoText.meta,
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                totals.byUser.forEach { bucket ->
+                    Text(
+                        text = "${nomPersona(bucket.key)}: ${fmtMinutes(bucket.minutes)}",
+                        color = Femho.colors.ink,
+                        fontSize = FemhoText.meta,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(FemhoShape.pill))
+                            .background(Femho.colors.ghostBg)
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                            .testTag("registre-pill-user-${bucket.key}"),
+                    )
+                }
+                totals.byProject.forEach { bucket ->
+                    Text(
+                        text = buildString {
+                            append(if (bucket.key == "none") stringResource(R.string.registre_noproject) else bucket.label.orEmpty())
+                            append(": ")
+                            append(fmtMinutes(bucket.minutes))
+                        },
+                        color = Femho.colors.inkSoft,
+                        fontSize = FemhoText.meta,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(FemhoShape.pill))
+                            .background(Femho.colors.ghostBg)
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                            .testTag("registre-pill-project-${bucket.key}"),
+                    )
+                }
+            }
+
+            // La taula: blocs agrupats per dia amb total diari
+            if (entries.isEmpty()) {
+                Text(
+                    text = stringResource(R.string.registre_empty),
+                    color = Femho.colors.inkFaint,
+                    fontSize = FemhoText.meta,
+                )
+            } else {
+                val totalDia = totals.byDay.associate { it.key to it.minutes }
+                var diaActual = ""
+                entries.forEach { entry ->
+                    val dia = entry.startedAt.take(10)
+                    if (dia != diaActual) {
+                        diaActual = dia
+                        Row(modifier = Modifier.fillMaxWidth().background(Femho.colors.ghostBg).padding(horizontal = 10.dp, vertical = 6.dp)) {
+                            Text(
+                                text = dia,
+                                color = Femho.colors.ink,
+                                fontSize = FemhoText.body,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.weight(1f).testTag("registre-day-$dia"),
+                            )
+                            Text(
+                                text = fmtMinutes(totalDia[dia] ?: 0),
+                                color = Femho.colors.ink,
+                                fontSize = FemhoText.body,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        }
+                    }
+                    Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp)) {
+                        Text(
+                            text = "${entry.startedAt.take(16).replace('T', ' ')}",
+                            color = Femho.colors.inkSoft,
+                            fontSize = FemhoText.meta,
+                            modifier = Modifier.width(110.dp),
+                        )
+                        Text(
+                            text = entry.projectName ?: stringResource(R.string.registre_noproject),
+                            color = Femho.colors.inkSoft,
+                            fontSize = FemhoText.meta,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Text(
+                            text = entry.taskTitle.orEmpty(),
+                            color = Femho.colors.ink,
+                            fontSize = FemhoText.body,
+                            modifier = Modifier.weight(2f).testTag("registre-row-${entry.id}"),
+                        )
+                        Text(
+                            text = "${fmtMinutes(entry.minutes)}${if (entry.open) " ▶" else ""}",
+                            color = if (entry.needsReview) Femho.colors.dangerText else Femho.colors.ink,
+                            fontSize = FemhoText.meta,
+                            fontWeight = if (entry.needsReview) FontWeight.Bold else FontWeight.Medium,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EstadistiquesHost(model: AppViewModel, onBoard: () -> Unit) {
+    val people by model.people.collectAsStateWithLifecycle()
+    val stats by model.stats.collectAsStateWithLifecycle()
+
+    var periode by remember { mutableStateOf("days30") }
+    var from by remember { mutableStateOf(java.time.LocalDate.now().minusDays(29).toString()) }
+    var to by remember { mutableStateOf(java.time.LocalDate.now().toString()) }
+    var persona by remember { mutableStateOf<String?>(null) }
+
+    val avui = java.time.LocalDate.now()
+    fun aplicarPeriode(key: String) {
+        periode = key
+        val (f, t) = when (key) {
+            "days7" -> avui.minusDays(6) to avui
+            "days30" -> avui.minusDays(29) to avui
+            "days90" -> avui.minusDays(89) to avui
+            "days365" -> avui.minusDays(364) to avui
+            else -> null to null
+        }
+        from = f?.toString() ?: ""
+        to = t?.toString() ?: ""
+    }
+
+    androidx.compose.runtime.LaunchedEffect(periode, persona) {
+        model.loadStats(
+            from = from.ifEmpty { null },
+            to = to.ifEmpty { null },
+            userId = persona,
+        )
+    }
+
+    val nomPersona = { id: String -> people.firstOrNull { it.id == id }?.name ?: id }
+    val buit = stats.minutes == 0L
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Femho.pageBackground)
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.nav_backtoboard),
+            color = Femho.colors.inkSoft,
+            fontSize = FemhoText.body,
+            modifier = Modifier
+                .clickable(onClick = onBoard)
+                .heightIn(min = FemhoSize.touch)
+                .padding(vertical = 12.dp)
+                .testTag("estadistiques-back"),
+        )
+        Text(
+            text = stringResource(R.string.stats_title),
+            color = Femho.colors.ink,
+            fontSize = FemhoText.columnTitle,
+            fontWeight = FontWeight.ExtraBold,
+        )
+        Text(
+            text = stringResource(R.string.stats_subtitle),
+            color = Femho.colors.inkSoft,
+            fontSize = FemhoText.body,
+        )
+
+        // Període i persona
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+        ) {
+            listOf(
+                "days7" to stringResource(R.string.stats_period_days7),
+                "days30" to stringResource(R.string.stats_period_days30),
+                "days90" to stringResource(R.string.stats_period_days90),
+                "days365" to stringResource(R.string.stats_period_days365),
+                "all" to stringResource(R.string.stats_period_all),
+            ).forEach { (key, label) ->
+                Text(
+                    text = label,
+                    color = if (periode == key) Femho.onBrand else Femho.colors.inkSoft,
+                    fontSize = FemhoText.meta,
+                    fontWeight = if (periode == key) FontWeight.Bold else FontWeight.Medium,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(FemhoShape.pill))
+                        .background(if (periode == key) Femho.colors.plouBlue else Femho.colors.ghostBg)
+                        .clickable { aplicarPeriode(key) }
+                        .heightIn(min = FemhoSize.touch)
+                        .padding(horizontal = 10.dp, vertical = 10.dp)
+                        .testTag("stats-period-$key"),
+                )
+            }
+        }
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+        ) {
+            (listOf<String?>(null) + people.map { it.id }).forEach { id ->
+                val label = id?.let { nomPersona(it) } ?: stringResource(R.string.registre_everyone)
+                Text(
+                    text = label,
+                    color = if (persona == id) Femho.onBrand else Femho.colors.inkSoft,
+                    fontSize = FemhoText.meta,
+                    fontWeight = if (persona == id) FontWeight.Bold else FontWeight.Medium,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(FemhoShape.pill))
+                        .background(if (persona == id) Femho.colors.plouBlue else Femho.colors.ghostBg)
+                        .clickable { persona = id }
+                        .heightIn(min = FemhoSize.touch)
+                        .padding(horizontal = 10.dp, vertical = 10.dp)
+                        .testTag("stats-person-${id ?: "all"}"),
+                )
+            }
+        }
+
+        if (buit) {
+            Text(
+                text = stringResource(R.string.registre_empty),
+                color = Femho.colors.inkFaint,
+                fontSize = FemhoText.meta,
+            )
+        } else {
+            // Quatre targetes: tasques, total, projectes, mitjana
+            val totalHores = String.format("%.1f h", stats.minutes / 60.0)
+            val mitjana = if (stats.tasks == 0L) "—" else fmtMinutes(stats.averageMinutes.toLong())
+            listOf(
+                stats.tasks.toString() to stringResource(R.string.stats_tasks),
+                totalHores to stringResource(R.string.stats_total),
+                stats.projects.toString() to stringResource(R.string.stats_projects),
+                mitjana to stringResource(R.string.stats_average),
+            ).forEach { (value, label) ->
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(FemhoShape.card))
+                        .background(Femho.colors.cardBg)
+                        .padding(16.dp),
+                ) {
+                    Text(
+                        text = value,
+                        color = Femho.colors.ink,
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                    )
+                    Text(
+                        text = label,
+                        color = Femho.colors.inkSoft,
+                        fontSize = FemhoText.meta,
+                    )
+                }
+            }
+
+            // Gràfic d'evolució amb Canvas de Compose
+            Text(
+                text = stringResource(if (stats.weekly) R.string.stats_evolutionweekly else R.string.stats_evolution),
+                color = Femho.colors.ink,
+                fontWeight = FontWeight.Bold,
+                fontSize = FemhoText.body,
+            )
+            if (stats.evolution.isEmpty()) {
+                Text(
+                    text = stringResource(R.string.registre_empty),
+                    color = Femho.colors.inkFaint,
+                    fontSize = FemhoText.meta,
+                )
+            } else {
+                val max = maxOf(1L, stats.evolution.maxOf { it.minutes })
+                // Femho.colors és composable; el Canvas no ho és, així que es capturen els
+                // colors en variables abans d'entrar-hi.
+                val ghostBg = Femho.colors.ghostBg
+                val plouBlue = Femho.colors.plouBlue
+                androidx.compose.foundation.Canvas(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(190.dp)
+                        .testTag("stats-evolution"),
+                ) {
+                    val w = size.width
+                    val h = size.height
+                    val n = stats.evolution.size
+                    val pts = stats.evolution.mapIndexed { i, punt ->
+                        val x = if (n == 1) w / 2 else (i / (n - 1).toFloat()) * w
+                        val y = h - (punt.minutes / max.toFloat()) * (h - 24.dp.toPx()) - 8.dp.toPx()
+                        androidx.compose.ui.geometry.Offset(x, y)
+                    }
+                    // L'àrea per sota de la línia
+                    val area = androidx.compose.ui.graphics.Path().apply {
+                        moveTo(pts.first().x, h)
+                        pts.forEach { lineTo(it.x, it.y) }
+                        lineTo(pts.last().x, h)
+                        close()
+                    }
+                    drawPath(area, color = ghostBg)
+                    // La línia
+                    val linia = androidx.compose.ui.graphics.Path().apply {
+                        moveTo(pts.first().x, pts.first().y)
+                        pts.drop(1).forEach { lineTo(it.x, it.y) }
+                    }
+                    drawPath(linia, color = plouBlue, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 3.dp.toPx()))
+                    // Els punts
+                    pts.forEach { drawCircle(color = plouBlue, radius = 4.dp.toPx(), center = it) }
+                }
+                Text(
+                    text = fmtMinutes(max),
+                    color = Femho.colors.inkFaint,
+                    fontSize = FemhoText.meta,
+                )
+            }
+
+            // Desglossaments: per tipologia, projecte i persona
+            val byTypeTitle = stringResource(R.string.stats_bytype)
+            val byProjectTitle = stringResource(R.string.stats_byproject)
+            val byPersonTitle = stringResource(R.string.stats_byperson)
+            listOf(
+                byTypeTitle to stats.byType,
+                byProjectTitle to stats.byProject,
+                byPersonTitle to stats.byUser,
+            ).forEach { (title, buckets) ->
+                if (buckets.isNotEmpty()) {
+                    Text(
+                        text = title,
+                        color = Femho.colors.ink,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = FemhoText.body,
+                    )
+                    buckets.forEach { bucket ->
+                        val label = when {
+                            bucket.key == "none" -> stringResource(R.string.stats_notype)
+                            title == byPersonTitle -> nomPersona(bucket.key)
+                            else -> bucket.label?.ifEmpty { bucket.key } ?: bucket.key
+                        }
+                        Row(
+                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(
+                                text = label,
+                                color = Femho.colors.inkSoft,
+                                fontSize = FemhoText.meta,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Text(
+                                text = fmtMinutes(bucket.minutes),
+                                color = Femho.colors.ink,
+                                fontSize = FemhoText.meta,
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Hores extres per projecte, només si n'hi ha
+            if (stats.overtimeByProject.isNotEmpty()) {
+                Text(
+                    text = stringResource(R.string.stats_overtime),
+                    color = Femho.colors.ink,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = FemhoText.body,
+                )
+                stats.overtimeByProject.forEach { bucket ->
+                    val label = if (bucket.key == "none") stringResource(R.string.registre_noproject) else bucket.label?.ifEmpty { bucket.key } ?: bucket.key
+                    Row(
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(
+                            text = label,
+                            color = Femho.colors.inkSoft,
+                            fontSize = FemhoText.meta,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Text(
+                            text = fmtMinutes(bucket.overtimeMinutes),
+                            color = Femho.colors.dangerText,
+                            fontSize = FemhoText.meta,
+                        )
+                    }
+                }
+            }
+        }
+    }
 }
