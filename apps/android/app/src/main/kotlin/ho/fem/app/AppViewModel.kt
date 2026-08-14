@@ -425,6 +425,41 @@ class AppViewModel(private val container: Container) : ViewModel() {
     }
 
     /**
+     * Desa els camps bàsics del detall (descripció, projecte, venciment, hora i deadline).
+     *
+     * PATCH /api/v1/tasks/{id}. Patró web: es desa amb «Desa», no a cada tecla.
+     * Els camps que arriben com a null no s'envien; per esborrar-ne un (projecte o
+     * venciment) cal passar-hi el valor buit que el servidor interpreta com a nul.
+     */
+    fun updateTaskDetails(
+        task: Task,
+        description: String?,
+        projectId: String?,
+        dueDate: String?,
+        dueTime: String?,
+        deadline: String?,
+    ) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching {
+                container.api(base).updateTask(
+                    task.id,
+                    buildMap {
+                        if (description != null) put("description", description)
+                        if (projectId != null) put("project_id", projectId)
+                        if (dueDate != null) put("due_date", dueDate)
+                        if (dueTime != null) put("due_time", dueTime)
+                        if (deadline != null) put("deadline", deadline)
+                    },
+                )
+            }.onSuccess { updated ->
+                _openTask.value = updated
+                refresh()
+            }
+        }
+    }
+
+    /**
      * L'idioma del perfil mana per damunt del dispositiu.
      *
      * Android ja tria `values-en` o `values-es` sol segons la configuració del telèfon, i

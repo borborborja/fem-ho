@@ -51,6 +51,11 @@ import ho.fem.model.TaskStatus
 data class TaskDetailLabels(
     val title: String,
     val description: String,
+    val project: String,
+    val noProject: String,
+    val dueDate: String,
+    val dueTime: String,
+    val deadline: String,
     val status: Map<TaskStatus, String>,
     val aiMode: Map<AiMode, String>,
     val checklists: String,
@@ -64,8 +69,10 @@ data class TaskDetailLabels(
 fun TaskDetail(
     task: Task,
     checklists: List<Checklist>,
+    projects: List<ho.fem.model.Project>,
     labels: TaskDetailLabels,
     onSave: (title: String, aiMode: AiMode) -> Unit,
+    onUpdateDetails: (description: String?, projectId: String?, dueDate: String?, dueTime: String?, deadline: String?) -> Unit,
     onStatus: (TaskStatus) -> Unit,
     onToggleItem: (itemId: String, done: Boolean) -> Unit,
     onClose: () -> Unit,
@@ -73,6 +80,11 @@ fun TaskDetail(
 ) {
     var title by remember(task.id) { mutableStateOf(task.title) }
     var aiMode by remember(task.id) { mutableStateOf(task.aiMode) }
+    var description by remember(task.id) { mutableStateOf(task.description.orEmpty()) }
+    var projectId by remember(task.id) { mutableStateOf(task.projectId) }
+    var dueDate by remember(task.id) { mutableStateOf(task.dueDate.orEmpty()) }
+    var dueTime by remember(task.id) { mutableStateOf(task.dueTime.orEmpty()) }
+    var deadline by remember(task.id) { mutableStateOf(task.deadline.orEmpty()) }
 
     Column(
         modifier = modifier
@@ -103,6 +115,61 @@ fun TaskDetail(
             singleLine = false,
             label = { Text(labels.title) },
             modifier = Modifier.fillMaxWidth().testTag("task-title"),
+        )
+
+        OutlinedTextField(
+            value = description,
+            onValueChange = { description = it },
+            minLines = 2,
+            label = { Text(labels.description) },
+            modifier = Modifier.fillMaxWidth().testTag("task-description"),
+        )
+
+        Text(labels.project, color = Femho.colors.inkSoft, fontSize = FemhoText.meta)
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            val scopeProjects = projects.filter { it.scopeId == task.scopeId }
+            val options = listOf<Triple<String?, String, String>>(Triple(null, labels.noProject, "task-project-none")) +
+                scopeProjects.map { Triple(it.id, it.name, "task-project-${it.id}") }
+            options.forEach { (optionId, optionLabel, tag) ->
+                Text(
+                    text = optionLabel,
+                    color = if (projectId == optionId) Femho.onBrand else Femho.colors.inkSoft,
+                    fontSize = FemhoText.meta,
+                    fontWeight = if (projectId == optionId) FontWeight.Bold else FontWeight.Medium,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(FemhoShape.pill))
+                        .background(if (projectId == optionId) Femho.colors.plouBlue else Femho.colors.ghostBg)
+                        .clickable { projectId = optionId }
+                        .heightIn(min = FemhoSize.touch)
+                        .padding(horizontal = 12.dp, vertical = 12.dp)
+                        .testTag(tag),
+                )
+            }
+        }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            OutlinedTextField(
+                value = dueDate,
+                onValueChange = { dueDate = it },
+                singleLine = true,
+                label = { Text(labels.dueDate) },
+                modifier = Modifier.weight(1f).testTag("task-due-date"),
+            )
+            OutlinedTextField(
+                value = dueTime,
+                onValueChange = { dueTime = it },
+                singleLine = true,
+                label = { Text(labels.dueTime) },
+                modifier = Modifier.weight(1f).testTag("task-due-time"),
+            )
+        }
+
+        OutlinedTextField(
+            value = deadline,
+            onValueChange = { deadline = it },
+            singleLine = true,
+            label = { Text(labels.deadline) },
+            modifier = Modifier.fillMaxWidth().testTag("task-deadline"),
         )
 
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -174,7 +241,16 @@ fun TaskDetail(
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(FemhoShape.pill))
                 .background(Femho.brandGradient2)
-                .clickable { onSave(title, aiMode) }
+                .clickable {
+                    onSave(title, aiMode)
+                    onUpdateDetails(
+                        description.ifBlank { null },
+                        projectId,
+                        dueDate.ifBlank { null },
+                        dueTime.ifBlank { null },
+                        deadline.ifBlank { null },
+                    )
+                }
                 .heightIn(min = FemhoSize.touch)
                 .padding(vertical = 14.dp)
                 .testTag("task-save"),

@@ -602,9 +602,15 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: (
         TaskDetail(
             task = task,
             checklists = openChecklists,
+            projects = projects,
             labels = TaskDetailLabels(
                 title = stringResource(R.string.task_title),
                 description = stringResource(R.string.task_description),
+                project = stringResource(R.string.task_project),
+                noProject = stringResource(R.string.task_noproject),
+                dueDate = stringResource(R.string.task_duedate),
+                dueTime = stringResource(R.string.task_duetime),
+                deadline = stringResource(R.string.task_deadline),
                 status = mapOf(
                     TaskStatus.INBOX to stringResource(R.string.board_column_inbox),
                     TaskStatus.TODO to stringResource(R.string.board_column_todo),
@@ -626,6 +632,9 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: (
                 model.rename(task, title)
                 if (mode != task.aiMode) model.setAiMode(task, mode)
                 model.closeTask()
+            },
+            onUpdateDetails = { description, projectId, dueDate, dueTime, deadline ->
+                model.updateTaskDetails(task, description, projectId, dueDate, dueTime, deadline)
             },
             onStatus = { model.move(task, it) },
             onToggleItem = model::toggleItem,
