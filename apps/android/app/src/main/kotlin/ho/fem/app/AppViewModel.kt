@@ -112,6 +112,18 @@ class AppViewModel(private val container: Container) : ViewModel() {
     private val _openShares = MutableStateFlow<List<ho.fem.model.ShareSummary>>(emptyList())
     val openShares: StateFlow<List<ho.fem.model.ShareSummary>> = _openShares.asStateFlow()
 
+    /** Els adjunts de la tasca oberta. */
+    private val _openAttachments = MutableStateFlow<List<ho.fem.model.Attachment>>(emptyList())
+    val openAttachments: StateFlow<List<ho.fem.model.Attachment>> = _openAttachments.asStateFlow()
+
+    /** L'error d'una pujada (per exemple, el 413 de fitxer massa gran). */
+    private val _attachmentError = MutableStateFlow<String?>(null)
+    val attachmentError: StateFlow<String?> = _attachmentError.asStateFlow()
+
+    fun consumeAttachmentError() {
+        _attachmentError.value = null
+    }
+
     /** Totes les shares, per a la pestanya Compartits. */
     private val _allShares = MutableStateFlow<List<ho.fem.model.ShareSummary>>(emptyList())
     val allShares: StateFlow<List<ho.fem.model.ShareSummary>> = _allShares.asStateFlow()
@@ -538,6 +550,47 @@ class AppViewModel(private val container: Container) : ViewModel() {
                 .onSuccess { _openActivity.value = it }
             runCatching { container.api(base).shares() }
                 .onSuccess { all -> _openShares.value = all.filter { it.taskId == task.id } }
+            runCatching { container.api(base).listTaskAttachments(task.id) }
+                .onSuccess { _openAttachments.value = it }
+        }
+    }
+
+    /** Puja un adjunt a la tasca oberta. POST /tasks/{id}/attachments (octet-stream). */
+    fun uploadTaskAttachment(task: Task, filename: String, bytes: ByteArray) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching {
+                container.api(base).uploadTaskAttachment(task.id, filename, bytes)
+            }
+                .onSuccess {
+                    _attachmentError.value = null
+                    open(task)
+                }
+                .onFailure { e ->
+                    val detail = (e as? ho.fem.network.FemhoApi.ApiException)?.detail
+                    _attachmentError.value = detail ?: e.message
+                }
+        }
+    }
+
+    /** El contingut d'un adjunt, per desar-lo i obrir-lo. GET /attachments/{id}/content. */
+    fun downloadAttachment(attachmentId: String, onBytes: (ByteArray) -> Unit) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).attachmentContent(attachmentId) }
+                .onSuccess(onBytes)
+                .onFailure { e ->
+                    _attachmentError.value = (e as? ho.fem.network.FemhoApi.ApiException)?.detail ?: e.message
+                }
+        }
+    }
+
+    /** Esborra un adjunt. DELETE /attachments/{id}. */
+    fun deleteTaskAttachment(task: Task, attachmentId: String) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).deleteAttachment(attachmentId) }
+                .onSuccess { open(task) }
         }
     }
 

@@ -100,6 +100,12 @@ data class TaskDetailLabels(
     val shareRevoked: String,
     val shareOnceWarning: String,
     val shareClose: String,
+    // Adjunts de la tasca
+    val attachments: String,
+    val addAttachment: String,
+    val emptyAttachments: String,
+    val removeAttachment: String,
+    val attachmentTooBig: String,
     val status: Map<TaskStatus, String>,
     val aiMode: Map<AiMode, String>,
     val checklists: String,
@@ -144,6 +150,12 @@ fun TaskDetail(
     onCreateShare: (permission: String, requireName: Boolean, password: String?, expiresAt: String?, maxViews: String?) -> Unit = { _, _, _, _, _ -> },
     onRevokeShare: (String) -> Unit = {},
     onCopyToClipboard: (String) -> Unit = {},
+    // Adjunts de la tasca
+    attachments: List<ho.fem.model.Attachment> = emptyList(),
+    attachmentError: String? = null,
+    onPickAttachment: () -> Unit = {},
+    onDownloadAttachment: (ho.fem.model.Attachment) -> Unit = {},
+    onDeleteAttachment: (ho.fem.model.Attachment) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     var title by remember(task.id) { mutableStateOf(task.title) }
@@ -890,6 +902,65 @@ fun TaskDetail(
                 }
             }
         }
+
+        // Els adjunts: llista, pujada amb selector, baixada i esborrat.
+        Text(labels.attachments, color = Femho.colors.inkSoft, fontSize = FemhoText.meta)
+        if (attachments.isEmpty()) {
+            Text(
+                text = labels.emptyAttachments,
+                color = Femho.colors.inkFaint,
+                fontSize = FemhoText.meta,
+            )
+        } else {
+            attachments.forEach { attachment ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = attachment.filename,
+                        color = Femho.colors.ink,
+                        fontSize = FemhoText.body,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable { onDownloadAttachment(attachment) }
+                            .heightIn(min = FemhoSize.touch)
+                            .padding(vertical = 6.dp)
+                            .testTag("attachment-${attachment.id}"),
+                    )
+                    Text(
+                        text = labels.removeAttachment,
+                        color = Femho.colors.dangerText,
+                        fontSize = FemhoText.body,
+                        modifier = Modifier
+                            .clickable { onDeleteAttachment(attachment) }
+                            .heightIn(min = FemhoSize.touch)
+                            .padding(vertical = 8.dp)
+                            .testTag("attachment-delete-${attachment.id}"),
+                    )
+                }
+            }
+        }
+        if (attachmentError != null) {
+            Text(
+                text = attachmentError,
+                color = Femho.colors.dangerText,
+                fontSize = FemhoText.meta,
+            )
+        }
+        Text(
+            text = labels.addAttachment,
+            color = Femho.onBrand,
+            fontSize = FemhoText.body,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier
+                .clickable(onClick = onPickAttachment)
+                .heightIn(min = FemhoSize.touch)
+                .padding(vertical = 10.dp)
+                .testTag("task-add-attachment"),
+        )
 
         Text(
             text = labels.save,

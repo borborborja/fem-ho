@@ -446,7 +446,7 @@ data class Attachment(
     val filename: String,
     @SerialName("mime_type") val mimeType: String,
     @SerialName("size_bytes") val sizeBytes: Long,
-    @SerialName("is_ai_context") val isAiContext: Boolean = false,
+    @Serializable(with = BooleanCoerce::class) @SerialName("is_ai_context") val isAiContext: Boolean = false,
     @SerialName("created_at") val createdAt: String,
 )
 

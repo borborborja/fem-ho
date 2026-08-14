@@ -576,6 +576,8 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: (
     val openActivity by model.openActivity.collectAsStateWithLifecycle()
     val openShares by model.openShares.collectAsStateWithLifecycle()
     val createdShareUrl by model.createdShareUrl.collectAsStateWithLifecycle()
+    val openAttachments by model.openAttachments.collectAsStateWithLifecycle()
+    val attachmentError by model.attachmentError.collectAsStateWithLifecycle()
     val pinned by model.pinned.collectAsStateWithLifecycle()
     val activeProjects by model.activeProjects.collectAsStateWithLifecycle()
     val expandedCards by model.expandedCards.collectAsStateWithLifecycle()
@@ -860,6 +862,37 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: (
 
     // El full de detall va per sobre de tot, com a la web.
     openTask?.let { task ->
+        val context = androidx.compose.ui.platform.LocalContext.current
+        val picker = androidx.activity.compose.rememberLauncherForActivityResult(
+            androidx.activity.result.contract.ActivityResultContracts.GetContent(),
+        ) { uri ->
+            if (uri != null) {
+                val name = runCatching {
+                    context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                        val idx = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                        if (idx >= 0) cursor.getString(idx) else null
+                    }
+                }.getOrNull() ?: "adjunt"
+                val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                if (bytes != null) model.uploadTaskAttachment(task, name, bytes)
+            }
+        }
+        val openAttachment = { attachment: ho.fem.model.Attachment, bytes: ByteArray ->
+            runCatching {
+                val dir = java.io.File(context.cacheDir, "adjunts").apply { mkdirs() }
+                val file = java.io.File(dir, attachment.filename)
+                file.writeBytes(bytes)
+                val uri = androidx.core.content.FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.fileprovider",
+                    file,
+                )
+                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW)
+                    .setDataAndType(uri, attachment.mimeType)
+                    .addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                context.startActivity(intent)
+            }
+        }
         TaskDetail(
             task = task,
             checklists = openChecklists,
@@ -923,6 +956,11 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: (
                 shareRevoked = stringResource(R.string.share_revoked),
                 shareOnceWarning = stringResource(R.string.tokens_oncewarning),
                 shareClose = stringResource(R.string.nav_close),
+                attachments = stringResource(R.string.task_attachments),
+                addAttachment = stringResource(R.string.task_addattachment),
+                emptyAttachments = stringResource(R.string.task_empty_attachments),
+                removeAttachment = stringResource(R.string.task_removeattachment),
+                attachmentTooBig = stringResource(R.string.task_attachmenttoobig),
                 activityVerbs = mapOf(
                     "answered" to stringResource(R.string.activity_verb_answered),
                     "asked" to stringResource(R.string.activity_verb_asked),
@@ -985,6 +1023,17 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: (
             },
             onRevokeShare = model::revokeTaskShare,
             onCopyToClipboard = model::copyToClipboard,
+            attachments = openAttachments,
+            attachmentError = attachmentError,
+            onPickAttachment = { picker.launch("*/*") },
+            onDownloadAttachment = { attachment ->
+                model.downloadAttachment(attachment.id) { bytes ->
+                    openAttachment(attachment, bytes)
+                }
+            },
+            onDeleteAttachment = { attachment ->
+                model.deleteTaskAttachment(task, attachment.id)
+            },
         )
     }
 }
