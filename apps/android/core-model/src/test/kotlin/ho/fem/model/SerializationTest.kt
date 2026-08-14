@@ -162,28 +162,29 @@ class SerializationTest {
         val reportJson = """
             {"data":[
                 {"id":"ses-1","task_id":"t1","task_title":"Tasca 1","project_id":"p1","project_name":"Projecte A","scope_id":"s1","user_id":"u1","user_name":"Borja","task_type_id":"tt-1","task_type_name":"Incidència","started_at":"2026-08-11T09:00:00.000Z","ended_at":"2026-08-11T10:30:00.000Z","note":"Sessió 1"}
-            ],"totals":{"total_minutes":90,"per_project":{"p1":90},"per_person":{"u1":90},"per_day":{"2026-08-11":90}}}
+            ],"totals":{"minutes":90,"overtime_minutes":0,"tasks":1,"by_user":[{"key":"u1","label":"Borja","minutes":90}],"by_project":[{"key":"p1","label":"Projecte A","minutes":90}],"by_day":[{"key":"2026-08-11","minutes":90}]}}
         """.trimIndent()
         val report = json.decodeFromString<SessionReport>(reportJson)
         assertEquals(1, report.data.size)
-        assertEquals(90L, report.totals.totalMinutes)
-        assertEquals(90L, report.totals.perProject["p1"])
-        assertEquals(90L, report.totals.perPerson["u1"])
+        assertEquals(90L, report.totals.minutes)
+        assertEquals(90L, report.totals.byProject.first { it.key == "p1" }.minutes)
+        assertEquals(90L, report.totals.byUser.first { it.key == "u1" }.minutes)
     }
 
     /* ----------------------------------------- SessionStats ----------------------------------------- */
     @Test
     fun `SessionStats es deserialitza d'un JSON real del servidor`() {
         val statsJson = """
-            {"total_minutes":450,"task_count":5,"project_count":2,"average_minutes":90.0,"weekly":[{"week":"2026-W32","minutes":450}],"per_task_type":{"tt-1":200,"tt-2":250},"per_project":{"p1":250,"p2":200},"per_person":{"u1":300,"u2":150},"overtime_per_project":{"p1":30}}
+            {"tasks":5,"minutes":450,"overtime_minutes":0,"projects":2,"average_minutes":90.0,"evolution":[{"key":"2026-W32","minutes":450}],"weekly":true,"by_type":[{"key":"tt-1","minutes":200},{"key":"tt-2","minutes":250}],"by_project":[{"key":"p1","minutes":250},{"key":"p2","minutes":200}],"by_user":[{"key":"u1","minutes":300},{"key":"u2","minutes":150}],"overtime_by_project":[{"key":"p1","minutes":30}]}
         """.trimIndent()
         val stats = json.decodeFromString<SessionStats>(statsJson)
-        assertEquals(450L, stats.totalMinutes)
-        assertEquals(5, stats.taskCount)
-        assertEquals(2, stats.projectCount)
+        assertEquals(450L, stats.minutes)
+        assertEquals(5, stats.tasks)
+        assertEquals(2, stats.projects)
         assertEquals(90.0, stats.averageMinutes, 0.01)
-        assertEquals(1, stats.weekly.size)
-        assertEquals("2026-W32", stats.weekly[0].week)
+        assertEquals(1, stats.evolution.size)
+        assertEquals("2026-W32", stats.evolution[0].key)
+        assertEquals(true, stats.weekly)
     }
 
     /* ----------------------------------------- MailAccount ----------------------------------------- */
@@ -360,13 +361,13 @@ class SerializationTest {
     @Test
     fun `ScopeSettings es deserialitza d'un JSON real del servidor`() {
         val settingsJson = """
-            {"time_tracking":true,"work_start":"09:00","work_end":"18:00","work_days":[1,1,1,1,1,0,0],"overtime_visible":true,"long_session_hours":8,"project_noun":"project","task_types_enabled":true}
+            {"time_tracking":true,"work_start":"09:00","work_end":"18:00","work_days":"1111100","overtime_visible":true,"long_session_hours":8,"project_noun":"project","task_types_enabled":true}
         """.trimIndent()
         val settings = json.decodeFromString<ScopeSettings>(settingsJson)
         assertTrue(settings.timeTracking)
         assertEquals("09:00", settings.workStart)
         assertEquals("18:00", settings.workEnd)
-        assertEquals(listOf(1, 1, 1, 1, 1, 0, 0), settings.workDays)
+        assertEquals("1111100", settings.workDays)
         assertTrue(settings.overtimeVisible)
         assertEquals(8, settings.longSessionHours)
         assertEquals("project", settings.projectNoun)
@@ -376,7 +377,7 @@ class SerializationTest {
     @Test
     fun `ScopeSettings amb project_noun client es deserialitza correctament`() {
         val settingsJson = """
-            {"time_tracking":false,"work_start":"08:00","work_end":"17:00","work_days":[1,1,1,1,1,0,0],"overtime_visible":false,"long_session_hours":6,"project_noun":"client","task_types_enabled":false}
+            {"time_tracking":false,"work_start":"08:00","work_end":"17:00","work_days":"1111100","overtime_visible":false,"long_session_hours":6,"project_noun":"client","task_types_enabled":false}
         """.trimIndent()
         val settings = json.decodeFromString<ScopeSettings>(settingsJson)
         assertEquals("client", settings.projectNoun)
@@ -386,10 +387,10 @@ class SerializationTest {
     @Test
     fun `ScopeSettings amb work_days buit (servidor vell) es deserialitza`() {
         val settingsJson = """
-            {"time_tracking":false,"work_start":null,"work_end":null,"work_days":[],"overtime_visible":false,"long_session_hours":8,"project_noun":"project","task_types_enabled":false}
+            {"time_tracking":false,"work_start":null,"work_end":null,"work_days":"","overtime_visible":false,"long_session_hours":8,"project_noun":"project","task_types_enabled":false}
         """.trimIndent()
         val settings = json.decodeFromString<ScopeSettings>(settingsJson)
-        assertEquals(emptyList<Int>(), settings.workDays)
+        assertEquals("", settings.workDays)
     }
 
     /* ----------------------------------------- AdminUser ----------------------------------------- */
