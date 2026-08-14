@@ -513,20 +513,22 @@ data class SessionReport(
 
 @Serializable
 data class SessionStats(
-    @SerialName("total_minutes") val totalMinutes: Long = 0,
-    @SerialName("task_count") val taskCount: Int = 0,
-    @SerialName("project_count") val projectCount: Int = 0,
+    val tasks: Long = 0,
+    val minutes: Long = 0,
+    @SerialName("overtime_minutes") val overtimeMinutes: Long = 0,
+    val projects: Long = 0,
     @SerialName("average_minutes") val averageMinutes: Double = 0.0,
-    @SerialName("weekly") val weekly: List<WeekBucket> = emptyList(),
-    @SerialName("per_task_type") val perTaskType: Map<String, Long> = emptyMap(),
-    @SerialName("per_project") val perProject: Map<String, Long> = emptyMap(),
-    @SerialName("per_person") val perPerson: Map<String, Long> = emptyMap(),
-    @SerialName("overtime_per_project") val overtimePerProject: Map<String, Long> = emptyMap(),
+    val evolution: List<SessionEvolutionPoint> = emptyList(),
+    val weekly: Boolean = false,
+    @SerialName("by_type") val byType: List<SessionBucket> = emptyList(),
+    @SerialName("by_project") val byProject: List<SessionBucket> = emptyList(),
+    @SerialName("by_user") val byUser: List<SessionBucket> = emptyList(),
+    @SerialName("overtime_by_project") val overtimeByProject: List<SessionBucket> = emptyList(),
 )
 
 @Serializable
-data class WeekBucket(
-    val week: String,
+data class SessionEvolutionPoint(
+    val key: String,
     val minutes: Long = 0,
 )
 

@@ -47,6 +47,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -194,6 +195,7 @@ private fun Root(model: AppViewModel, pending: MutableState<Intent?>) {
                 onSettings = { screen = Screen.SETTINGS },
                 onCalendar = { screen = Screen.CALENDAR },
                 onRegistre = { screen = Screen.REGISTRE },
+                onEstadistiques = { screen = Screen.ESTADISTIQUES },
             )
             Screen.CALENDAR -> CalendarHost(
                 model = model,
@@ -206,6 +208,10 @@ private fun Root(model: AppViewModel, pending: MutableState<Intent?>) {
                 onBack = { screen = Screen.BOARD },
             )
             Screen.REGISTRE -> RegistreHost(
+                model = model,
+                onBoard = { screen = Screen.BOARD },
+            )
+            Screen.ESTADISTIQUES -> EstadistiquesHost(
                 model = model,
                 onBoard = { screen = Screen.BOARD },
             )
@@ -345,7 +351,7 @@ private fun LoginScreen(model: AppViewModel, instanceName: String) {
 }
 
 @Composable
-private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: () -> Unit, onRegistre: () -> Unit) {
+private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: () -> Unit, onRegistre: () -> Unit, onEstadistiques: () -> Unit) {
     val tasks by model.tasks.collectAsStateWithLifecycle()
     val scopes by model.scopes.collectAsStateWithLifecycle()
     val pending by model.pending.collectAsStateWithLifecycle()
@@ -463,10 +469,12 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: (
                 when (it) {
                     Screen.CALENDAR -> onCalendar()
                     Screen.REGISTRE -> onRegistre()
+                    Screen.ESTADISTIQUES -> onEstadistiques()
                     else -> Unit
                 }
             },
             showRegistre = scopeSettings.values.any { it.timeTracking },
+            showEstadistiques = scopeSettings.values.any { it.timeTracking },
             aiEnabled = aiEnabled,
             aiBoardActive = aiBoard,
             onToggleAiBoard = model::toggleAiBoard,
@@ -920,6 +928,8 @@ private fun TopBar(
     onView: (Screen) -> Unit,
     /** El Registre només surt si algun àmbit porta registre de dedicació. */
     showRegistre: Boolean = false,
+    /** Les Estadístiques, igual que el Registre: només amb dedicació registrada. */
+    showEstadistiques: Boolean = false,
     /** El commutador del tauler de la IA. Només surt si hi ha algun agent actiu. */
     aiEnabled: Boolean = false,
     aiBoardActive: Boolean = false,
@@ -958,6 +968,7 @@ private fun TopBar(
                     add(Screen.BOARD to stringResource(R.string.nav_tasks))
                     add(Screen.CALENDAR to stringResource(R.string.nav_calendar))
                     if (showRegistre) add(Screen.REGISTRE to stringResource(R.string.nav_registre))
+                    if (showEstadistiques) add(Screen.ESTADISTIQUES to stringResource(R.string.nav_estadistiques))
                 }
                 targets.forEach { (target, label) ->
                     Text(
@@ -1216,12 +1227,12 @@ private fun PinnedRow(pinned: List<Checklist>, onOpenList: (String) -> Unit) {
                                 color = Femho.colors.inkFaint,
                                 fontSize = FemhoText.meta,
                             )
-                        }
                     }
                 }
             }
         }
     }
+}
 }
 
 // `scopeColor` viu ara a `:core-designsystem` (`Palette.kt`), com a funció pura: els
@@ -2075,6 +2086,288 @@ private fun RegistreHost(model: AppViewModel, onBoard: () -> Unit) {
                             color = if (entry.needsReview) Femho.colors.dangerText else Femho.colors.ink,
                             fontSize = FemhoText.meta,
                             fontWeight = if (entry.needsReview) FontWeight.Bold else FontWeight.Medium,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EstadistiquesHost(model: AppViewModel, onBoard: () -> Unit) {
+    val people by model.people.collectAsStateWithLifecycle()
+    val stats by model.stats.collectAsStateWithLifecycle()
+
+    var periode by remember { mutableStateOf("days30") }
+    var from by remember { mutableStateOf(java.time.LocalDate.now().minusDays(29).toString()) }
+    var to by remember { mutableStateOf(java.time.LocalDate.now().toString()) }
+    var persona by remember { mutableStateOf<String?>(null) }
+
+    val avui = java.time.LocalDate.now()
+    fun aplicarPeriode(key: String) {
+        periode = key
+        val (f, t) = when (key) {
+            "days7" -> avui.minusDays(6) to avui
+            "days30" -> avui.minusDays(29) to avui
+            "days90" -> avui.minusDays(89) to avui
+            "days365" -> avui.minusDays(364) to avui
+            else -> null to null
+        }
+        from = f?.toString() ?: ""
+        to = t?.toString() ?: ""
+    }
+
+    androidx.compose.runtime.LaunchedEffect(periode, persona) {
+        model.loadStats(
+            from = from.ifEmpty { null },
+            to = to.ifEmpty { null },
+            userId = persona,
+        )
+    }
+
+    val nomPersona = { id: String -> people.firstOrNull { it.id == id }?.name ?: id }
+    val buit = stats.minutes == 0L
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Femho.pageBackground)
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.nav_backtoboard),
+            color = Femho.colors.inkSoft,
+            fontSize = FemhoText.body,
+            modifier = Modifier
+                .clickable(onClick = onBoard)
+                .heightIn(min = FemhoSize.touch)
+                .padding(vertical = 12.dp)
+                .testTag("estadistiques-back"),
+        )
+        Text(
+            text = stringResource(R.string.stats_title),
+            color = Femho.colors.ink,
+            fontSize = FemhoText.columnTitle,
+            fontWeight = FontWeight.ExtraBold,
+        )
+        Text(
+            text = stringResource(R.string.stats_subtitle),
+            color = Femho.colors.inkSoft,
+            fontSize = FemhoText.body,
+        )
+
+        // Període i persona
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+        ) {
+            listOf(
+                "days7" to stringResource(R.string.stats_period_days7),
+                "days30" to stringResource(R.string.stats_period_days30),
+                "days90" to stringResource(R.string.stats_period_days90),
+                "days365" to stringResource(R.string.stats_period_days365),
+                "all" to stringResource(R.string.stats_period_all),
+            ).forEach { (key, label) ->
+                Text(
+                    text = label,
+                    color = if (periode == key) Femho.onBrand else Femho.colors.inkSoft,
+                    fontSize = FemhoText.meta,
+                    fontWeight = if (periode == key) FontWeight.Bold else FontWeight.Medium,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(FemhoShape.pill))
+                        .background(if (periode == key) Femho.colors.plouBlue else Femho.colors.ghostBg)
+                        .clickable { aplicarPeriode(key) }
+                        .heightIn(min = FemhoSize.touch)
+                        .padding(horizontal = 10.dp, vertical = 10.dp)
+                        .testTag("stats-period-$key"),
+                )
+            }
+        }
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+        ) {
+            (listOf<String?>(null) + people.map { it.id }).forEach { id ->
+                val label = id?.let { nomPersona(it) } ?: stringResource(R.string.registre_everyone)
+                Text(
+                    text = label,
+                    color = if (persona == id) Femho.onBrand else Femho.colors.inkSoft,
+                    fontSize = FemhoText.meta,
+                    fontWeight = if (persona == id) FontWeight.Bold else FontWeight.Medium,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(FemhoShape.pill))
+                        .background(if (persona == id) Femho.colors.plouBlue else Femho.colors.ghostBg)
+                        .clickable { persona = id }
+                        .heightIn(min = FemhoSize.touch)
+                        .padding(horizontal = 10.dp, vertical = 10.dp)
+                        .testTag("stats-person-${id ?: "all"}"),
+                )
+            }
+        }
+
+        if (buit) {
+            Text(
+                text = stringResource(R.string.registre_empty),
+                color = Femho.colors.inkFaint,
+                fontSize = FemhoText.meta,
+            )
+        } else {
+            // Quatre targetes: tasques, total, projectes, mitjana
+            val totalHores = String.format("%.1f h", stats.minutes / 60.0)
+            val mitjana = if (stats.tasks == 0L) "—" else fmtMinutes(stats.averageMinutes.toLong())
+            listOf(
+                stats.tasks.toString() to stringResource(R.string.stats_tasks),
+                totalHores to stringResource(R.string.stats_total),
+                stats.projects.toString() to stringResource(R.string.stats_projects),
+                mitjana to stringResource(R.string.stats_average),
+            ).forEach { (value, label) ->
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(FemhoShape.card))
+                        .background(Femho.colors.cardBg)
+                        .padding(16.dp),
+                ) {
+                    Text(
+                        text = value,
+                        color = Femho.colors.ink,
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                    )
+                    Text(
+                        text = label,
+                        color = Femho.colors.inkSoft,
+                        fontSize = FemhoText.meta,
+                    )
+                }
+            }
+
+            // Gràfic d'evolució amb Canvas de Compose
+            Text(
+                text = stringResource(if (stats.weekly) R.string.stats_evolutionweekly else R.string.stats_evolution),
+                color = Femho.colors.ink,
+                fontWeight = FontWeight.Bold,
+                fontSize = FemhoText.body,
+            )
+            if (stats.evolution.isEmpty()) {
+                Text(
+                    text = stringResource(R.string.registre_empty),
+                    color = Femho.colors.inkFaint,
+                    fontSize = FemhoText.meta,
+                )
+            } else {
+                val max = maxOf(1L, stats.evolution.maxOf { it.minutes })
+                // Femho.colors és composable; el Canvas no ho és, així que es capturen els
+                // colors en variables abans d'entrar-hi.
+                val ghostBg = Femho.colors.ghostBg
+                val plouBlue = Femho.colors.plouBlue
+                androidx.compose.foundation.Canvas(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(190.dp)
+                        .testTag("stats-evolution"),
+                ) {
+                    val w = size.width
+                    val h = size.height
+                    val n = stats.evolution.size
+                    val pts = stats.evolution.mapIndexed { i, punt ->
+                        val x = if (n == 1) w / 2 else (i / (n - 1).toFloat()) * w
+                        val y = h - (punt.minutes / max.toFloat()) * (h - 24.dp.toPx()) - 8.dp.toPx()
+                        androidx.compose.ui.geometry.Offset(x, y)
+                    }
+                    // L'àrea per sota de la línia
+                    val area = androidx.compose.ui.graphics.Path().apply {
+                        moveTo(pts.first().x, h)
+                        pts.forEach { lineTo(it.x, it.y) }
+                        lineTo(pts.last().x, h)
+                        close()
+                    }
+                    drawPath(area, color = ghostBg)
+                    // La línia
+                    val linia = androidx.compose.ui.graphics.Path().apply {
+                        moveTo(pts.first().x, pts.first().y)
+                        pts.drop(1).forEach { lineTo(it.x, it.y) }
+                    }
+                    drawPath(linia, color = plouBlue, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 3.dp.toPx()))
+                    // Els punts
+                    pts.forEach { drawCircle(color = plouBlue, radius = 4.dp.toPx(), center = it) }
+                }
+                Text(
+                    text = fmtMinutes(max),
+                    color = Femho.colors.inkFaint,
+                    fontSize = FemhoText.meta,
+                )
+            }
+
+            // Desglossaments: per tipologia, projecte i persona
+            val byTypeTitle = stringResource(R.string.stats_bytype)
+            val byProjectTitle = stringResource(R.string.stats_byproject)
+            val byPersonTitle = stringResource(R.string.stats_byperson)
+            listOf(
+                byTypeTitle to stats.byType,
+                byProjectTitle to stats.byProject,
+                byPersonTitle to stats.byUser,
+            ).forEach { (title, buckets) ->
+                if (buckets.isNotEmpty()) {
+                    Text(
+                        text = title,
+                        color = Femho.colors.ink,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = FemhoText.body,
+                    )
+                    buckets.forEach { bucket ->
+                        val label = when {
+                            bucket.key == "none" -> stringResource(R.string.stats_notype)
+                            title == byPersonTitle -> nomPersona(bucket.key)
+                            else -> bucket.label?.ifEmpty { bucket.key } ?: bucket.key
+                        }
+                        Row(
+                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(
+                                text = label,
+                                color = Femho.colors.inkSoft,
+                                fontSize = FemhoText.meta,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Text(
+                                text = fmtMinutes(bucket.minutes),
+                                color = Femho.colors.ink,
+                                fontSize = FemhoText.meta,
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Hores extres per projecte, només si n'hi ha
+            if (stats.overtimeByProject.isNotEmpty()) {
+                Text(
+                    text = stringResource(R.string.stats_overtime),
+                    color = Femho.colors.ink,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = FemhoText.body,
+                )
+                stats.overtimeByProject.forEach { bucket ->
+                    val label = if (bucket.key == "none") stringResource(R.string.registre_noproject) else bucket.label?.ifEmpty { bucket.key } ?: bucket.key
+                    Row(
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(
+                            text = label,
+                            color = Femho.colors.inkSoft,
+                            fontSize = FemhoText.meta,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Text(
+                            text = fmtMinutes(bucket.overtimeMinutes),
+                            color = Femho.colors.dangerText,
+                            fontSize = FemhoText.meta,
                         )
                     }
                 }

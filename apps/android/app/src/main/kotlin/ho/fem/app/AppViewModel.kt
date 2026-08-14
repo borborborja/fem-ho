@@ -108,6 +108,25 @@ class AppViewModel(private val container: Container) : ViewModel() {
     private val _sessions = MutableStateFlow<ho.fem.model.SessionReport>(ho.fem.model.SessionReport())
     val sessions: StateFlow<ho.fem.model.SessionReport> = _sessions.asStateFlow()
 
+    private val _stats = MutableStateFlow<ho.fem.model.SessionStats>(ho.fem.model.SessionStats())
+    val stats: StateFlow<ho.fem.model.SessionStats> = _stats.asStateFlow()
+
+    /** Carrega les Estadístiques de dedicació. GET /api/v1/sessions/stats. */
+    fun loadStats(from: String?, to: String?, userId: String?) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            val active = container.settings.activeScopes.first()
+            runCatching {
+                container.api(base).sessionStats(
+                    from = from,
+                    to = to,
+                    scopeIds = active,
+                    userId = userId,
+                )
+            }.onSuccess { _stats.value = it }
+        }
+    }
+
     /** Carrega el Registre de dedicació. GET /api/v1/sessions amb els filtres. */
     fun loadSessions(from: String?, to: String?, projectId: String?, userId: String?, search: String?) {
         val base = serverUrl ?: return
