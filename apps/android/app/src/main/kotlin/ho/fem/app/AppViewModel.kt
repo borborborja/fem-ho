@@ -126,6 +126,39 @@ class AppViewModel(private val container: Container) : ViewModel() {
         }
     }
 
+    /** Mou o allarga un bloc del cronograma. PATCH /api/v1/sessions/{id}. */
+    fun updateSession(id: String, startedAt: String?, endedAt: String?) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).updateSession(id, startedAt = startedAt, endedAt = endedAt) }
+        }
+    }
+
+    /** Exporta el Registre en CSV. GET /api/v1/sessions/export.csv amb els filtres. */
+    fun exportSessionsCsv(
+        from: String?,
+        to: String?,
+        projectId: String?,
+        userId: String?,
+        search: String?,
+        onResult: (String) -> Unit,
+    ) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            val active = container.settings.activeScopes.first()
+            runCatching {
+                container.api(base).exportSessionsCsv(
+                    from = from,
+                    to = to,
+                    scopeIds = active,
+                    projectId = projectId,
+                    userId = userId,
+                    search = search,
+                )
+            }.onSuccess { onResult(it) }
+        }
+    }
+
     private val _createdToken = MutableStateFlow<String?>(null)
     val createdToken: StateFlow<String?> = _createdToken.asStateFlow()
 

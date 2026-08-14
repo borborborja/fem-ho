@@ -29,6 +29,20 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!--
+          Per obrir l'exportació CSV del Registre amb ACTION_VIEW: una URI `file://`
+          és blocada des d'Android 7, i això és el que l'hi permet.
+        -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
         <!--
           El receptor d'UnifiedPush. Els tres primers filtres són els que la
           especificació defineix; el quart és el que el distribuïdor fa servir per

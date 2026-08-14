@@ -7,13 +7,16 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
@@ -21,6 +24,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.input.pointer.pointerInput
+import kotlin.math.roundToInt
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
@@ -1536,6 +1541,10 @@ private fun RegistreHost(model: AppViewModel, onBoard: () -> Unit) {
     var persona by remember { mutableStateOf<String?>(null) }
     var cerca by remember { mutableStateOf("") }
     var searchDraft by remember { mutableStateOf("") }
+    var vista by remember { mutableStateOf("table") }
+    var dia by remember { mutableStateOf(java.time.LocalDate.now().toString()) }
+    var zoom by remember { mutableStateOf(1f) }
+    val extraLanes = remember { mutableStateOf<List<String>>(emptyList()) }
 
     // Els períodes predefinits de la web (docs/02): el rang es recalcula en canviar-ne.
     val avui = java.time.LocalDate.now()
@@ -1605,6 +1614,219 @@ private fun RegistreHost(model: AppViewModel, onBoard: () -> Unit) {
                 fontSize = FemhoText.meta,
             )
         } else {
+            // Commutador de vista: taula o cronograma (el cronograma és d'un sol dia)
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf(
+                    "table" to stringResource(R.string.registre_view_table),
+                    "chrono" to stringResource(R.string.registre_view_chrono),
+                ).forEach { (key, label) ->
+                    Text(
+                        text = label,
+                        color = if (vista == key) Femho.onBrand else Femho.colors.inkSoft,
+                        fontSize = FemhoText.meta,
+                        fontWeight = if (vista == key) FontWeight.Bold else FontWeight.Medium,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(FemhoShape.pill))
+                            .background(if (vista == key) Femho.colors.plouBlue else Femho.colors.ghostBg)
+                            .clickable { vista = key }
+                            .heightIn(min = FemhoSize.touch)
+                            .padding(horizontal = 12.dp, vertical = 10.dp)
+                            .testTag("registre-view-$key"),
+                    )
+                }
+            }
+
+            if (vista == "chrono") {
+                // El dia que es mira i els controls de zoom
+                Row(
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        text = stringResource(R.string.registre_day),
+                        color = Femho.colors.inkSoft,
+                        fontSize = FemhoText.meta,
+                    )
+                    androidx.compose.foundation.text.BasicTextField(
+                        value = dia,
+                        onValueChange = { dia = it },
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(FemhoShape.pill))
+                            .background(Femho.colors.ghostBg)
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                            .testTag("registre-day"),
+                    )
+                    Text(
+                        text = stringResource(R.string.registre_chrono_zoom),
+                        color = Femho.colors.inkSoft,
+                        fontSize = FemhoText.meta,
+                    )
+                    Text(
+                        text = "−",
+                        color = Femho.colors.ink,
+                        fontSize = FemhoText.body,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(FemhoShape.pill))
+                            .background(Femho.colors.ghostBg)
+                            .clickable { zoom = (zoom / 1.4f).coerceAtLeast(1f) }
+                            .heightIn(min = FemhoSize.touch)
+                            .padding(horizontal = 12.dp, vertical = 8.dp)
+                            .testTag("chrono-zoom-out"),
+                    )
+                    Text(
+                        text = stringResource(R.string.registre_chrono_fit),
+                        color = Femho.colors.ink,
+                        fontSize = FemhoText.meta,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(FemhoShape.pill))
+                            .background(Femho.colors.ghostBg)
+                            .clickable { zoom = 1f }
+                            .heightIn(min = FemhoSize.touch)
+                            .padding(horizontal = 12.dp, vertical = 8.dp)
+                            .testTag("chrono-zoom-fit"),
+                    )
+                    Text(
+                        text = "+",
+                        color = Femho.colors.ink,
+                        fontSize = FemhoText.body,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(FemhoShape.pill))
+                            .background(Femho.colors.ghostBg)
+                            .clickable { zoom = (zoom * 1.4f).coerceAtMost(6f) }
+                            .heightIn(min = FemhoSize.touch)
+                            .padding(horizontal = 12.dp, vertical = 8.dp)
+                            .testTag("chrono-zoom-in"),
+                    )
+                }
+
+                // El cronograma: una fila per projecte, blocs a l'hora, arrossegables amb
+                // snap de 5 min (PATCH /sessions/{id} en deixar anar, com la web).
+                val delDia = entries.filter { it.startedAt.take(10) == dia }
+                val obre = 8 * 60
+                val tanca = 18 * 60
+                var inici = obre
+                var fi = tanca
+                fun minutsDe(instant: String): Int {
+                    val h = instant.substring(11, 13).toIntOrNull() ?: 0
+                    val m = instant.substring(14, 16).toIntOrNull() ?: 0
+                    return h * 60 + m
+                }
+                fun snap(minuts: Int): Int = ((minuts + 2.5) / 5).toInt() * 5
+                fun instantDe(day: String, minuts: Int): String {
+                    val h = (minuts / 60).toString().padStart(2, '0')
+                    val m = (minuts % 60).toString().padStart(2, '0')
+                    return "$day" + "T$h:$m:00.000Z"
+                }
+                delDia.forEach { entry ->
+                    inici = minOf(inici, minutsDe(entry.startedAt))
+                    val acaba = entry.endedAt?.let { minutsDe(it) }
+                        ?: (java.time.LocalTime.now().hour * 60 + java.time.LocalTime.now().minute)
+                    fi = maxOf(fi, acaba)
+                }
+                val span = maxOf(60, fi - inici)
+                val px = (280f * zoom) / span.toFloat()
+                val claus = (delDia.map { it.projectId ?: "none" }.distinct() + extraLanes.value).distinct()
+                val nomIntern = stringResource(R.string.registre_noproject)
+                val nomProjecte: (String) -> String = { key ->
+                    if (key == "none") nomIntern
+                    else projects.firstOrNull { it.id == key }?.name ?: key
+                }
+
+                Text(
+                    text = stringResource(R.string.registre_chrono_hint),
+                    color = Femho.colors.inkFaint,
+                    fontSize = FemhoText.meta,
+                )
+                claus.sorted().forEach { key ->
+                    Row(
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp)
+                            .testTag("chrono-lane-$key"),
+                    ) {
+                        Text(
+                            text = nomProjecte(key),
+                            color = Femho.colors.inkSoft,
+                            fontSize = FemhoText.meta,
+                            modifier = Modifier.width(110.dp),
+                        )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(40.dp)
+                                .background(Femho.colors.ghostBg)
+                                .padding(horizontal = 2.dp, vertical = 2.dp),
+                        ) {
+                            delDia
+                                .filter { (it.projectId ?: "none") == key }
+                                .forEach { entry ->
+                                    val startMin = minutsDe(entry.startedAt)
+                                    val endMin = entry.endedAt?.let { minutsDe(it) }
+                                        ?: (java.time.LocalTime.now().hour * 60 + java.time.LocalTime.now().minute)
+                                    var offsetX by remember(entry.id) { mutableStateOf(0f) }
+                                    Box(
+                                        modifier = Modifier
+                                            .offset { androidx.compose.ui.unit.IntOffset(offsetX.roundToInt(), 0) }
+                                            .padding(horizontal = 1.dp)
+                                            .width(((endMin - startMin) * px).dp.coerceAtLeast(12.dp))
+                                            .offset(x = ((startMin - inici) * px).dp)
+                                            .height(36.dp)
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(Femho.colors.plouBlue)
+                                            .pointerInput(entry.id) {
+                                                detectDragGestures(
+                                                    onDrag = { change, dragAmount ->
+                                                        change.consume()
+                                                        offsetX += dragAmount.x
+                                                    },
+                                                    onDragEnd = {
+                                                        val deltaMin = snap((offsetX / px).roundToInt())
+                                                        if (deltaMin != 0) {
+                                                            model.updateSession(
+                                                                entry.id,
+                                                                startedAt = instantDe(dia, startMin + deltaMin),
+                                                                endedAt = entry.endedAt?.let { instantDe(dia, endMin + deltaMin) },
+                                                            )
+                                                            model.loadSessions(from.ifEmpty { null }, to.ifEmpty { null }, projecte, persona, cerca.ifBlank { null })
+                                                        }
+                                                        offsetX = 0f
+                                                    },
+                                                )
+                                            }
+                                            .testTag("chrono-block-${entry.id}"),
+                                    ) {
+                                        Text(
+                                            text = entry.taskTitle.orEmpty(),
+                                            color = Femho.onBrand,
+                                            fontSize = FemhoText.meta,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 8.dp),
+                                        )
+                                    }
+                                }
+                        }
+                    }
+                }
+
+                // Afegir una fila buida per a un projecte que aquell dia no en té
+                val disponibles = (listOf<String?>(null) + projects.map { it.id })
+                    .map { it ?: "none" }
+                    .filter { it !in claus }
+                if (disponibles.isNotEmpty()) {
+                    Text(
+                        text = stringResource(R.string.registre_chrono_addlane),
+                        color = Femho.colors.inkSoft,
+                        fontSize = FemhoText.meta,
+                        modifier = Modifier
+                            .clickable { extraLanes.value = extraLanes.value + disponibles.first() }
+                            .heightIn(min = FemhoSize.touch)
+                            .padding(vertical = 8.dp)
+                            .testTag("chrono-add-lane"),
+                    )
+                }
+            }
+
             // Filtres: període, projecte, persona, cerca
             val periodes = listOf(
                 "today" to stringResource(R.string.registre_period_today),
@@ -1614,7 +1836,10 @@ private fun RegistreHost(model: AppViewModel, onBoard: () -> Unit) {
                 "days90" to stringResource(R.string.registre_period_days90),
                 "all" to stringResource(R.string.registre_period_all),
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
+            ) {
                 periodes.forEach { (key, label) ->
                     Text(
                         text = label,
@@ -1714,6 +1939,42 @@ private fun RegistreHost(model: AppViewModel, onBoard: () -> Unit) {
             )
 
             // Resum i pastilles de persones i projectes
+            val exportContext = androidx.compose.ui.platform.LocalContext.current
+            Text(
+                text = stringResource(R.string.registre_export),
+                color = Femho.colors.ink,
+                fontSize = FemhoText.meta,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier
+                    .clickable {
+                        model.exportSessionsCsv(
+                            from = from.ifEmpty { null },
+                            to = to.ifEmpty { null },
+                            projectId = projecte,
+                            userId = persona,
+                            search = cerca.ifBlank { null },
+                        ) { csv ->
+                            runCatching {
+                                val dir = java.io.File(exportContext.cacheDir, "csv").apply { mkdirs() }
+                                val file = java.io.File(dir, "registre.csv")
+                                file.writeText(csv)
+                                val uri = androidx.core.content.FileProvider.getUriForFile(
+                                    exportContext,
+                                    "${exportContext.packageName}.fileprovider",
+                                    file,
+                                )
+                                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW)
+                                    .setDataAndType(uri, "text/csv")
+                                    .addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                exportContext.startActivity(intent)
+                            }
+                        }
+                    }
+                    .heightIn(min = FemhoSize.touch)
+                    .padding(vertical = 8.dp)
+                    .testTag("registre-export"),
+            )
+
             Text(
                 text = stringResource(R.string.registre_summary)
                     .replace("{tasks}", totals.tasks.toString())
