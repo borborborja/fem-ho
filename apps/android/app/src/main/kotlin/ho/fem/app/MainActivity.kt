@@ -207,7 +207,11 @@ private fun Root(model: AppViewModel, pending: MutableState<Intent?>) {
 
         is AppViewModel.Session.NeedsServer -> ServerScreen(model, state.message)
 
-        is AppViewModel.Session.NeedsLogin -> LoginScreen(model, state.instanceName)
+        is AppViewModel.Session.NeedsLogin -> LoginScreen(model, state.instanceName, false)
+
+        is AppViewModel.Session.NeedsLoginNewer -> LoginScreen(model, state.instanceName, true)
+
+        is AppViewModel.Session.NeedsCertConfirm -> CertConfirmScreen(model, state.fingerprint)
 
         is AppViewModel.Session.Ready -> when (screen) {
             Screen.BOARD -> BoardHost(
@@ -510,7 +514,46 @@ private fun ServerScreen(model: AppViewModel, message: String?) {
 }
 
 @Composable
-private fun LoginScreen(model: AppViewModel, instanceName: String) {
+private fun CertConfirmScreen(model: AppViewModel, fingerprint: String) {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(24.dp).testTag("cert-screen"),
+        verticalArrangement = Arrangement.spacedBy(14.dp, Alignment.CenterVertically),
+    ) {
+        Wordmark()
+        Text(
+            stringResource(R.string.login_certtitle),
+            color = Femho.colors.ink,
+            fontSize = FemhoText.columnTitle,
+        )
+        Text(
+            stringResource(R.string.login_certbody),
+            color = Femho.colors.inkSoft,
+            fontSize = FemhoText.body,
+        )
+        Text(
+            text = fingerprint,
+            color = Femho.colors.ink,
+            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+            fontSize = FemhoText.meta,
+            modifier = Modifier.testTag("cert-fingerprint"),
+        )
+        androidx.compose.material3.Button(
+            onClick = { model.confirmTrustedCert() },
+            modifier = Modifier.fillMaxWidth().testTag("cert-confirm"),
+        ) {
+            Text(stringResource(R.string.login_certconfirm))
+        }
+        androidx.compose.material3.TextButton(
+            onClick = { model.rejectTrustedCert() },
+            modifier = Modifier.fillMaxWidth().testTag("cert-reject"),
+        ) {
+            Text(stringResource(R.string.login_certreject))
+        }
+    }
+}
+
+@Composable
+private fun LoginScreen(model: AppViewModel, instanceName: String, serverNewer: Boolean) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
@@ -525,6 +568,13 @@ private fun LoginScreen(model: AppViewModel, instanceName: String) {
             color = Femho.colors.inkSoft,
             fontSize = FemhoText.body,
         )
+        if (serverNewer) {
+            Text(
+                text = stringResource(R.string.login_servernewer),
+                color = Femho.colors.dangerText,
+                fontSize = FemhoText.meta,
+            )
+        }
 
         androidx.compose.material3.OutlinedTextField(
             value = email,

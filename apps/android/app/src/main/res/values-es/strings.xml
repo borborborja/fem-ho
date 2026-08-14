@@ -216,6 +216,11 @@
     <string name="join_invalid">Esta invitación no es válida: puede que ya se haya usado o que haya caducado.</string>
     <string name="join_subtitle">{who} te invita a «{scope}»</string>
     <string name="join_title">Una invitación</string>
+    <string name="login_certbody">El servidor presenta un certificado autofirmado o de una CA propia. Compara la huella con la que esperas y, si coincide, confírmala para conectar.</string>
+    <string name="login_certconfirm">Confiar en este certificado</string>
+    <string name="login_certfingerprint">Huella</string>
+    <string name="login_certreject">Cancelar</string>
+    <string name="login_certtitle">Certificado no reconocido</string>
     <string name="login_checkserver">Comprobar</string>
     <string name="login_email">Correo</string>
     <string name="login_error">Correo o contraseña incorrectos.</string>

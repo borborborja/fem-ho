@@ -743,5 +743,10 @@
   "settings.entityDedication": "Dedicación",
   "settings.entityProjects": "Proyectos",
   "settings.scopeSection": "Gestión del ámbito",
-  "notification.snooze": "Posponer"
+  "notification.snooze": "Posponer",
+  "login.certTitle": "Certificado no reconocido",
+  "login.certBody": "El servidor presenta un certificado autofirmado o de una CA propia. Compara la huella con la que esperas y, si coincide, confírmala para conectar.",
+  "login.certFingerprint": "Huella",
+  "login.certConfirm": "Confiar en este certificado",
+  "login.certReject": "Cancelar"
 }

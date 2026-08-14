@@ -35,7 +35,12 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    buildFeatures { compose = true }
+    buildFeatures {
+        compose = true
+        // L'avís de versió (tasca 29) llegeix VERSION_NAME per comparar-lo amb el
+        // del servidor: sense BuildConfig, l'app no sabria si s'ha d'actualitzar.
+        buildConfig = true
+    }
 
     /**
      * La clau de signatura ve de l'entorn, mai del repositori.

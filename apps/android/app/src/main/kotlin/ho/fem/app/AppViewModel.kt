@@ -17,6 +17,7 @@ import ho.fem.model.Person
 import ho.fem.model.Project
 import ho.fem.model.Scope
 import ho.fem.model.ScopeSettings
+import ho.fem.model.serverIsNewer
 import ho.fem.model.Subtask
 import ho.fem.model.Task
 import ho.fem.model.TaskStatus
@@ -24,12 +25,16 @@ import ho.fem.model.TaskType
 import ho.fem.model.UserProfile
 import ho.fem.model.serverCandidates
 import ho.fem.network.FemhoApi
+import ho.fem.network.certificateFingerprint
+import ho.fem.network.probeServerCertificate
 import java.util.UUID
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * L'estat de l'aplicació.
@@ -48,11 +53,19 @@ class AppViewModel(private val container: Container) : ViewModel() {
         data object Checking : Session
         data class NeedsServer(val message: String? = null) : Session
         data class NeedsLogin(val serverUrl: String, val instanceName: String) : Session
+        /** El servidor és més nou que l'app: convé actualitzar-la (docs/03 §11). */
+        data class NeedsLoginNewer(val serverUrl: String, val instanceName: String) : Session
+        /** Certificat autofirmat o de CA pròpia: cal confirmar l'empremta (docs/03 §2:38). */
+        data class NeedsCertConfirm(val serverUrl: String, val fingerprint: String) : Session
         data class Ready(val serverUrl: String) : Session
     }
 
     private val _session = MutableStateFlow<Session>(Session.Checking)
     val session: StateFlow<Session> = _session.asStateFlow()
+
+    /** Host i DER (base64) del certificat pendent de confirmar per empremta. */
+    private var _pendingCertHost: String? = null
+    private var _pendingCertDer: String? = null
 
     private val _tasks = MutableStateFlow<List<Task>>(emptyList())
     val tasks: StateFlow<List<Task>> = _tasks.asStateFlow()
@@ -385,17 +398,75 @@ class AppViewModel(private val container: Container) : ViewModel() {
              * de passar mai.
              */
             for (candidate in resolved.candidates) {
-                val info = runCatching { container.api(candidate).info() }.getOrNull() ?: continue
+                val attempt = runCatching { container.api(candidate).info() }
+                val info = attempt.getOrNull()
+                if (info == null) {
+                    // Si és https i el servidor presenta un certificat que no es
+                    // reconeix, s'ofereix confirmar-lo per empremta abans de seguir.
+                    val exc = attempt.exceptionOrNull()
+                    if (candidate.startsWith("https://") && exc is javax.net.ssl.SSLException) {
+                        val uri = java.net.URI(candidate)
+                        val host = uri.host ?: continue
+                        val port = if (uri.port > 0) uri.port else 443
+                        // La sonda fa xarxa bloquejant: fora del fil principal.
+                        val cert = withContext(Dispatchers.IO) { probeServerCertificate(host, port) }
+                        if (cert != null) {
+                            _pendingCertHost = host
+                            _pendingCertDer = android.util.Base64.encodeToString(
+                                cert.encoded, android.util.Base64.NO_WRAP
+                            )
+                            _session.value = Session.NeedsCertConfirm(candidate, certificateFingerprint(cert))
+                            return@launch
+                        }
+                    }
+                    continue
+                }
 
                 if (candidate.startsWith("http://")) onInsecure(candidate)
                 container.settings.setServerUrl(candidate)
                 serverUrl = candidate
-                _session.value = Session.NeedsLogin(candidate, info.name)
+                // La versió de l'app (BuildConfig.VERSION_NAME) es compara amb la del
+                // servidor: si aquest és més nou, s'avisa a la pantalla d'entrada.
+                val appVersion = ho.fem.app.BuildConfig.VERSION_NAME
+                _session.value = if (serverIsNewer(appVersion, info.version)) {
+                    Session.NeedsLoginNewer(candidate, info.name)
+                } else {
+                    Session.NeedsLogin(candidate, info.name)
+                }
                 return@launch
             }
 
             _session.value = Session.NeedsServer("unreachable")
         }
+    }
+
+    /** L'usuari ha confirmat l'empremta: es desa el certificat i es torna a provar. */
+    fun confirmTrustedCert() {
+        val host = _pendingCertHost ?: return
+        val der = _pendingCertDer ?: return
+        viewModelScope.launch {
+            container.settings.setTrustedCert(host, der)
+            val current = _session.value as? Session.NeedsCertConfirm ?: return@launch
+            val info = runCatching { container.api(current.serverUrl).info() }.getOrNull()
+            _session.value = if (info != null) {
+                container.settings.setServerUrl(current.serverUrl)
+                serverUrl = current.serverUrl
+                val appVersion = ho.fem.app.BuildConfig.VERSION_NAME
+                if (serverIsNewer(appVersion, info.version)) {
+                    Session.NeedsLoginNewer(current.serverUrl, info.name)
+                } else {
+                    Session.NeedsLogin(current.serverUrl, info.name)
+                }
+            } else {
+                Session.NeedsServer("unreachable")
+            }
+        }
+    }
+
+    fun rejectTrustedCert() {
+        _pendingCertHost = null
+        _pendingCertDer = null
+        _session.value = Session.NeedsServer()
     }
 
     fun login(email: String, password: String, onError: (String) -> Unit) {

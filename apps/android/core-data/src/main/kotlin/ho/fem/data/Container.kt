@@ -12,6 +12,7 @@ import androidx.security.crypto.MasterKey
 import ho.fem.model.AuthTokens
 import ho.fem.network.FemhoApi
 import ho.fem.network.TokenStore
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -41,9 +42,17 @@ class Container(context: Context) {
 
     /**
      * El servidor pot canviar sense reinstal·lar res, i per això el client es construeix
-     * a cada ús amb la base actual en comptes de guardar-se'n una còpia.
+     * a cada ús amb la base actual en comptes de guardar-se'n una còpia. Si el host té
+     * un certificat confirmat per empremta, el client l'hi passa (docs/03 §2:38).
      */
-    fun api(baseUrl: String): FemhoApi = FemhoApi(baseUrl, tokens)
+    fun api(baseUrl: String): FemhoApi {
+        val der = runCatching {
+            val host = java.net.URI(baseUrl).host ?: return@runCatching null
+            val b64 = settings.trustedCertCache[host] ?: return@runCatching null
+            android.util.Base64.decode(b64, android.util.Base64.NO_WRAP)
+        }.getOrNull()
+        return FemhoApi(baseUrl, tokens, der)
+    }
 
     fun repository(baseUrl: String): Repository = Repository(database.dao(), api(baseUrl))
 
@@ -149,6 +158,27 @@ class Settings(private val context: Context) {
     suspend fun setShowOverdueSection(value: Boolean) = writeBoolean(showOverdueSectionKey, value)
     suspend fun setInboxPosition(value: String) = write(inboxPositionKey, value)
     suspend fun setInboxShowOverdue(value: Boolean) = writeBoolean(inboxShowOverdueKey, value)
+
+    /** Certificat confiat per empremta, guardat per host (docs/03 §2:38). */
+    fun trustedCertKey(host: String): Preferences.Key<String> = stringPreferencesKey("trusted_cert_$host")
+
+    /**
+     * Caché en memòria dels certificats confirmats: `api()` és síncrona i no pot llegir
+     * DataStore, així que el que hi ha confirmat viu aquí i es persisteix en paral·lel.
+     */
+    internal val trustedCertCache = ConcurrentHashMap<String, String>()
+
+    suspend fun setTrustedCert(host: String, derB64: String) {
+        trustedCertCache[host] = derB64
+        write(trustedCertKey(host), derB64)
+    }
+
+    suspend fun trustedCert(host: String): String? {
+        trustedCertCache[host]?.let { return it }
+        val stored = read(trustedCertKey(host)).first()
+        if (stored != null) trustedCertCache[host] = stored
+        return stored
+    }
 
     private suspend fun write(key: Preferences.Key<String>, value: String) {
         context.dataStore.edit { it[key] = value }

@@ -744,5 +744,10 @@
   "settings.entityDedication": "Time tracking",
   "settings.entityProjects": "Projects",
   "settings.scopeSection": "Scope management",
-  "notification.snooze": "Snooze"
+  "notification.snooze": "Snooze",
+  "login.certTitle": "Unrecognized certificate",
+  "login.certBody": "The server presents a self-signed certificate or one from its own CA. Compare the fingerprint with the one you expect and, if it matches, confirm it to connect.",
+  "login.certFingerprint": "Fingerprint",
+  "login.certConfirm": "Trust this certificate",
+  "login.certReject": "Cancel"
 }

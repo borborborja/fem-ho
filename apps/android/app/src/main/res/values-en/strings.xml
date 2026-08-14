@@ -216,6 +216,11 @@
     <string name="join_invalid">This invitation is not valid: it may have been used, or expired.</string>
     <string name="join_subtitle">{who} invites you to “{scope}”</string>
     <string name="join_title">An invitation</string>
+    <string name="login_certbody">The server presents a self-signed certificate or one from its own CA. Compare the fingerprint with the one you expect and, if it matches, confirm it to connect.</string>
+    <string name="login_certconfirm">Trust this certificate</string>
+    <string name="login_certfingerprint">Fingerprint</string>
+    <string name="login_certreject">Cancel</string>
+    <string name="login_certtitle">Unrecognized certificate</string>
     <string name="login_checkserver">Check</string>
     <string name="login_email">Email</string>
     <string name="login_error">Wrong email or password.</string>

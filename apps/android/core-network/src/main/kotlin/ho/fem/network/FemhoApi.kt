@@ -68,6 +68,10 @@ class FemhoApi(
     private val tokens: TokenStore,
     private val client: OkHttpClient = defaultClient(),
 ) {
+    /** Client que a més confia en el certificat que l'usuari ha confirmat per empremta. */
+    constructor(baseUrl: String, tokens: TokenStore, trustedCertDer: ByteArray?) :
+        this(baseUrl, tokens, defaultClient(trustedCertDer))
+
     private val json = Json {
         ignoreUnknownKeys = true
         explicitNulls = false
@@ -85,6 +89,35 @@ class FemhoApi(
             // dos mecanismes de reintent es multipliquen (docs/06 §4).
             .retryOnConnectionFailure(false)
             .build()
+
+        /**
+         * Client que a més confia en el certificat que l'usuari ha confirmat per
+         * empremta (docs/03 §2:38). **No és un TrustManager permissiu**: el KeyStore
+         * només conté aquest certificat exacte, i tot el que no sigui ell, falla.
+         */
+        fun defaultClient(trustedCertDer: ByteArray?): OkHttpClient {
+            if (trustedCertDer == null) return defaultClient()
+            val cert = runCatching {
+                val cf = java.security.cert.CertificateFactory.getInstance("X.509")
+                cf.generateCertificate(java.io.ByteArrayInputStream(trustedCertDer))
+                    as java.security.cert.X509Certificate
+            }.getOrNull() ?: return defaultClient()
+            val keyStore = java.security.KeyStore.getInstance(java.security.KeyStore.getDefaultType())
+                .apply { load(null); setCertificateEntry("pinned", cert) }
+            val tmf = javax.net.ssl.TrustManagerFactory.getInstance(
+                javax.net.ssl.TrustManagerFactory.getDefaultAlgorithm()
+            ).apply { init(keyStore) }
+            val sslContext = javax.net.ssl.SSLContext.getInstance("TLS").apply {
+                init(null, tmf.trustManagers, java.security.SecureRandom())
+            }
+            val trustManager = tmf.trustManagers[0] as javax.net.ssl.X509TrustManager
+            return OkHttpClient.Builder()
+                .connectTimeout(15, TimeUnit.SECONDS)
+                .readTimeout(30, TimeUnit.SECONDS)
+                .retryOnConnectionFailure(false)
+                .sslSocketFactory(sslContext.socketFactory, trustManager)
+                .build()
+        }
     }
 
     /** Un error de l'API amb el `detail` que el servidor dona en català (RFC 9457). */

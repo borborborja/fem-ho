@@ -216,6 +216,11 @@
     <string name="join_invalid">Aquest convit no és vàlid: pot ser que ja s\'hagi fet servir, o que hagi caducat.</string>
     <string name="join_subtitle">{who} et convida a «{scope}»</string>
     <string name="join_title">Un convit</string>
+    <string name="login_certbody">El servidor presenta un certificat autofirmat o d\'una CA pròpia. Compara l\'empremta amb la que esperes i, si hi coincideix, confirma-la per connectar-hi.</string>
+    <string name="login_certconfirm">Confia en aquest certificat</string>
+    <string name="login_certfingerprint">Empremta</string>
+    <string name="login_certreject">Cancel·la</string>
+    <string name="login_certtitle">Certificat no reconegut</string>
     <string name="login_checkserver">Comprovar</string>
     <string name="login_email">Correu</string>
     <string name="login_error">Correu o contrasenya incorrectes.</string>
