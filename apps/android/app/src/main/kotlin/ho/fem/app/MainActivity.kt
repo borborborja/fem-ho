@@ -611,6 +611,13 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: (
                 dueDate = stringResource(R.string.task_duedate),
                 dueTime = stringResource(R.string.task_duetime),
                 deadline = stringResource(R.string.task_deadline),
+                recurrence = stringResource(R.string.task_recurrence),
+                recurrenceNone = stringResource(R.string.task_recurrence_none),
+                recurrenceDaily = stringResource(R.string.task_recurrence_daily),
+                recurrenceWeekly = stringResource(R.string.task_recurrence_weekly),
+                recurrenceMonthly = stringResource(R.string.task_recurrence_monthly),
+                recurrenceYearly = stringResource(R.string.task_recurrence_yearly),
+                recurrenceFromCompletion = stringResource(R.string.task_recurrence_fromcompletion),
                 status = mapOf(
                     TaskStatus.INBOX to stringResource(R.string.board_column_inbox),
                     TaskStatus.TODO to stringResource(R.string.board_column_todo),
@@ -633,8 +640,8 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: (
                 if (mode != task.aiMode) model.setAiMode(task, mode)
                 model.closeTask()
             },
-            onUpdateDetails = { description, projectId, dueDate, dueTime, deadline ->
-                model.updateTaskDetails(task, description, projectId, dueDate, dueTime, deadline)
+            onUpdateDetails = { description, projectId, dueDate, dueTime, deadline, rrule, recurrenceMode ->
+                model.updateTaskDetails(task, description, projectId, dueDate, dueTime, deadline, rrule, recurrenceMode)
             },
             onStatus = { model.move(task, it) },
             onToggleItem = model::toggleItem,

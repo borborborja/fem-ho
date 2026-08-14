@@ -56,6 +56,13 @@ data class TaskDetailLabels(
     val dueDate: String,
     val dueTime: String,
     val deadline: String,
+    val recurrence: String,
+    val recurrenceNone: String,
+    val recurrenceDaily: String,
+    val recurrenceWeekly: String,
+    val recurrenceMonthly: String,
+    val recurrenceYearly: String,
+    val recurrenceFromCompletion: String,
     val status: Map<TaskStatus, String>,
     val aiMode: Map<AiMode, String>,
     val checklists: String,
@@ -72,7 +79,7 @@ fun TaskDetail(
     projects: List<ho.fem.model.Project>,
     labels: TaskDetailLabels,
     onSave: (title: String, aiMode: AiMode) -> Unit,
-    onUpdateDetails: (description: String?, projectId: String?, dueDate: String?, dueTime: String?, deadline: String?) -> Unit,
+    onUpdateDetails: (description: String?, projectId: String?, dueDate: String?, dueTime: String?, deadline: String?, rrule: String?, recurrenceMode: String?) -> Unit,
     onStatus: (TaskStatus) -> Unit,
     onToggleItem: (itemId: String, done: Boolean) -> Unit,
     onClose: () -> Unit,
@@ -85,6 +92,8 @@ fun TaskDetail(
     var dueDate by remember(task.id) { mutableStateOf(task.dueDate.orEmpty()) }
     var dueTime by remember(task.id) { mutableStateOf(task.dueTime.orEmpty()) }
     var deadline by remember(task.id) { mutableStateOf(task.deadline.orEmpty()) }
+    var rrule by remember(task.id) { mutableStateOf(task.rrule.orEmpty()) }
+    var recurrenceMode by remember(task.id) { mutableStateOf(task.recurrenceMode?.name?.lowercase() ?: "schedule") }
 
     Column(
         modifier = modifier
@@ -172,6 +181,66 @@ fun TaskDetail(
             modifier = Modifier.fillMaxWidth().testTag("task-deadline"),
         )
 
+        Text(labels.recurrence, color = Femho.colors.inkSoft, fontSize = FemhoText.meta)
+        val recurrences = listOf(
+            "" to labels.recurrenceNone,
+            "FREQ=DAILY" to labels.recurrenceDaily,
+            "FREQ=WEEKLY" to labels.recurrenceWeekly,
+            "FREQ=MONTHLY" to labels.recurrenceMonthly,
+            "FREQ=YEARLY" to labels.recurrenceYearly,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            recurrences.forEach { (rule, ruleLabel) ->
+                Text(
+                    text = ruleLabel,
+                    color = if (rrule == rule) Femho.onBrand else Femho.colors.inkSoft,
+                    fontSize = FemhoText.meta,
+                    fontWeight = if (rrule == rule) FontWeight.Bold else FontWeight.Medium,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(FemhoShape.pill))
+                        .background(if (rrule == rule) Femho.colors.plouBlue else Femho.colors.ghostBg)
+                        .clickable { rrule = rule }
+                        .heightIn(min = FemhoSize.touch)
+                        .padding(horizontal = 12.dp, vertical = 12.dp)
+                        .testTag("task-recurrence-${rule.ifEmpty { "none" }.substringAfter("FREQ=").lowercase()}"),
+                )
+            }
+        }
+        // Una regla que no és cap de les quatre (normalment vinguda per CalDAV) es conserva
+        // tal com és: sobreescriure-la seria perdre el que algú va escriure en una altra app.
+        if (rrule.isNotEmpty() && recurrences.none { it.first == rrule }) {
+            Text(
+                text = rrule,
+                color = Femho.colors.inkSoft,
+                fontSize = FemhoText.meta,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(FemhoShape.pill))
+                    .background(Femho.colors.ghostBg)
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                    .testTag("task-recurrence-custom"),
+            )
+        }
+        if (rrule.isNotEmpty()) {
+            Row(
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    text = labels.recurrenceFromCompletion,
+                    color = Femho.colors.ink,
+                    fontSize = FemhoText.body,
+                    modifier = Modifier.weight(1f),
+                )
+                androidx.compose.material3.Switch(
+                    checked = recurrenceMode == "completion",
+                    onCheckedChange = { on ->
+                        recurrenceMode = if (on) "completion" else "schedule"
+                    },
+                )
+            }
+        }
+
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             TaskStatus.entries.forEach { status ->
                 Text(
@@ -249,6 +318,8 @@ fun TaskDetail(
                         dueDate.ifBlank { null },
                         dueTime.ifBlank { null },
                         deadline.ifBlank { null },
+                        rrule.ifBlank { null },
+                        recurrenceMode,
                     )
                 }
                 .heightIn(min = FemhoSize.touch)

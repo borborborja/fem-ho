@@ -438,6 +438,8 @@ class AppViewModel(private val container: Container) : ViewModel() {
         dueDate: String?,
         dueTime: String?,
         deadline: String?,
+        rrule: String?,
+        recurrenceMode: String?,
     ) {
         val base = serverUrl ?: return
         viewModelScope.launch {
@@ -450,6 +452,8 @@ class AppViewModel(private val container: Container) : ViewModel() {
                         if (dueDate != null) put("due_date", dueDate)
                         if (dueTime != null) put("due_time", dueTime)
                         if (deadline != null) put("deadline", deadline)
+                        if (rrule != null) put("rrule", rrule)
+                        if (recurrenceMode != null) put("recurrence_mode", recurrenceMode)
                     },
                 )
             }.onSuccess { updated ->
