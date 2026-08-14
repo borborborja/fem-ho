@@ -53,10 +53,18 @@ fun QuickAddField(
     scopeRequiredLabel: (String) -> String,
     aiModeLabel: (String) -> String,
     onCreate: (title: String, scopeId: String, projectId: String?, assigneeIds: List<String>) -> Unit,
+    /** El text que arriba de fora (full de compartir, accessos directes), si n'hi ha. */
+    initialText: String = "",
     modifier: Modifier = Modifier,
 ) {
-    var text by remember { mutableStateOf("") }
+    var text by remember { mutableStateOf(initialText) }
     var submitted by remember { mutableStateOf(false) }
+
+    // El text que arriba de fora (full de compartir) ho fa quan el camp ja és a
+    // pantalla: si només el llegís el `remember`, no es veuria mai.
+    androidx.compose.runtime.LaunchedEffect(initialText) {
+        if (initialText.isNotBlank()) text = initialText
+    }
 
     val parsed = remember(text, context) { parseQuickAdd(text, context) }
 

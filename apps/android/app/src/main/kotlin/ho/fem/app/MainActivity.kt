@@ -182,6 +182,11 @@ private fun Root(model: AppViewModel, pending: MutableState<Intent?>) {
         screen = Route.screenOf(intent)
         Route.taskOf(intent)?.let { model.openById(it) }
         if (Route.quickAddOf(intent)) model.requestQuickAdd(Route.draftOf(intent) ?: "")
+        // El full de compartir: el text rebut es converteix en una tasca a la bústia.
+        if (intent?.action == android.content.Intent.ACTION_SEND) {
+            val text = intent.getStringExtra(android.content.Intent.EXTRA_TEXT).orEmpty()
+            if (text.isNotBlank()) model.requestQuickAdd(text)
+        }
         // Els deep links de convit: el token el guarda la pantalla d'acceptar.
         Route.joinTokenOf(intent)?.let { token ->
             screen = Screen.JOIN
@@ -578,6 +583,7 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: (
     val createdShareUrl by model.createdShareUrl.collectAsStateWithLifecycle()
     val openAttachments by model.openAttachments.collectAsStateWithLifecycle()
     val attachmentError by model.attachmentError.collectAsStateWithLifecycle()
+    val quickAddDraft by model.quickAddDraft.collectAsStateWithLifecycle()
     val pinned by model.pinned.collectAsStateWithLifecycle()
     val activeProjects by model.activeProjects.collectAsStateWithLifecycle()
     val expandedCards by model.expandedCards.collectAsStateWithLifecycle()
@@ -773,6 +779,7 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: (
                             else -> manualLabel
                         }
                     },
+                    initialText = quickAddDraft.orEmpty(),
                     onCreate = { title, scopeId, _, _ -> model.create(scopeId, title, status) },
                     modifier = Modifier.padding(top = 8.dp).testTag("quick-add-${'$'}{status.name.lowercase()}"),
                 )

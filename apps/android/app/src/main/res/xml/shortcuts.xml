@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Els accessos directes de la pantalla d'inici (docs/03 §9): "Nova tasca" obre
+  l'afegida ràpida amb el camp enfocat, i "Avui" obre el tauler (que ja és la
+  pantalla per defecte, però l'accés directe el posa allà sense dependre de per
+  on es va deixar l'app).
+-->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="nova-tasca"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/task_new"
+        android:shortcutLongLabel="@string/task_new">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="ho.fem"
+            android:targetClass="ho.fem.app.MainActivity">
+            <extra android:name="ho.fem.quick_add" android:value="true" />
+        </intent>
+    </shortcut>
+    <shortcut
+        android:shortcutId="avui"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/inbox_day_today"
+        android:shortcutLongLabel="@string/inbox_day_today">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="ho.fem"
+            android:targetClass="ho.fem.app.MainActivity" />
+    </shortcut>
+</shortcuts>

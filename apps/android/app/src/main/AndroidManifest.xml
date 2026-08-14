@@ -49,6 +49,18 @@
                 <data android:scheme="https" android:host="femho.app" android:pathPrefix="/join/" />
                 <data android:scheme="https" android:host="femho.app" android:pathPrefix="/invite/" />
             </intent-filter>
+            <!--
+              El full de compartir: el text que hi arriba es converteix en una tasca a la
+              bústia (requestQuickAdd amb el draft). Res d'imatges ni URL: només text.
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
         </activity>
 
         <!--
