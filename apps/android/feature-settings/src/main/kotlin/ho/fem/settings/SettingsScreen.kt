@@ -131,6 +131,30 @@ data class SettingsLabels(
     val tokensNever: String,
     val tokensRevoke: String,
     val tokensCopy: String,
+    // Gestió de l'àmbit: projectes, etiquetes, tipologies i dedicació
+    val scopeSection: String,
+    val entityProjects: String,
+    val entityLabels: String,
+    val entityTypes: String,
+    val entityDedication: String,
+    val projectName: String,
+    val projectDelete: String,
+    val labelNew: String,
+    val labelDelete: String,
+    val typeNew: String,
+    val typeDelete: String,
+    val typesOn: String,
+    val typesRequired: String,
+    val tracking: String,
+    val trackingOn: String,
+    val trackingHelp: String,
+    val overtimeVisible: String,
+    val workStart: String,
+    val workEnd: String,
+    val workDays: String,
+    val longSessionHours: String,
+    val nounProject: String,
+    val nounClient: String,
 )
 
 data class SettingsTabs(
@@ -167,6 +191,10 @@ fun SettingsScreen(
     profileTimezone: String = "",
     gravatarEnabled: Boolean = true,
     scopes: List<ho.fem.model.Scope> = emptyList(),
+    projects: List<ho.fem.model.Project> = emptyList(),
+    labelsList: List<ho.fem.model.Label> = emptyList(),
+    taskTypes: List<ho.fem.model.TaskType> = emptyList(),
+    scopeSettings: Map<String, ho.fem.model.ScopeSettings> = emptyMap(),
     mcpUrl: String = "",
     tokens: List<ho.fem.model.ApiTokenSummary> = emptyList(),
     createdToken: String? = null,
@@ -190,6 +218,14 @@ fun SettingsScreen(
     onChangePassword: (String, String, (String) -> Unit, () -> Unit) -> Unit = { _, _, _, _ -> },
     onCreateToken: (String, List<String>) -> Unit = { _, _ -> },
     onRevokeToken: (String) -> Unit = {},
+    onCreateProject: (String, String) -> Unit = { _, _ -> },
+    onDeleteProject: (String) -> Unit = {},
+    onCreateLabel: (String, String) -> Unit = { _, _ -> },
+    onDeleteLabel: (String) -> Unit = {},
+    onCreateTaskType: (String, String) -> Unit = { _, _ -> },
+    onUpdateTaskType: (String, String?, Boolean?) -> Unit = { _, _, _ -> },
+    onDeleteTaskType: (String) -> Unit = {},
+    onUpdateScopeSettings: (String, Boolean?, String?, String?, Boolean?, Int?, String?, Boolean?) -> Unit = { _, _, _, _, _, _, _, _ -> },
     onCopyToClipboard: (String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
@@ -283,9 +319,21 @@ fun SettingsScreen(
                 "scopes" -> ScopesTab(
                     labels = labels,
                     scopes = scopes,
+                    projects = projects,
+                    labelsList = labelsList,
+                    taskTypes = taskTypes,
+                    scopeSettings = scopeSettings,
                     onCreateScope = onCreateScope,
                     onUpdateScope = onUpdateScope,
                     onDeleteScope = onDeleteScope,
+                    onCreateProject = onCreateProject,
+                    onDeleteProject = onDeleteProject,
+                    onCreateLabel = onCreateLabel,
+                    onDeleteLabel = onDeleteLabel,
+                    onCreateTaskType = onCreateTaskType,
+                    onUpdateTaskType = onUpdateTaskType,
+                    onDeleteTaskType = onDeleteTaskType,
+                    onUpdateScopeSettings = onUpdateScopeSettings,
                     onCopyToClipboard = onCopyToClipboard,
                 )
                 "calendars" -> EmptyState(labels.emptyStates.calendars)
@@ -1010,9 +1058,30 @@ private fun McpTab(
 private fun ScopesTab(
     labels: SettingsLabels,
     scopes: List<ho.fem.model.Scope>,
+    projects: List<ho.fem.model.Project>,
+    labelsList: List<ho.fem.model.Label>,
+    taskTypes: List<ho.fem.model.TaskType>,
+    scopeSettings: Map<String, ho.fem.model.ScopeSettings>,
     onCreateScope: (String, String, String) -> Unit,
     onUpdateScope: (String, String, String, String) -> Unit,
     onDeleteScope: (String) -> Unit,
+    onCreateProject: (String, String) -> Unit,
+    onDeleteProject: (String) -> Unit,
+    onCreateLabel: (String, String) -> Unit,
+    onDeleteLabel: (String) -> Unit,
+    onCreateTaskType: (String, String) -> Unit,
+    onUpdateTaskType: (String, String?, Boolean?) -> Unit,
+    onDeleteTaskType: (String) -> Unit,
+    onUpdateScopeSettings: (
+        String,
+        Boolean?,
+        String?,
+        String?,
+        Boolean?,
+        Int?,
+        String?,
+        Boolean?,
+    ) -> Unit,
     onCopyToClipboard: (String) -> Unit,
 ) {
     // Estat per crear àmbit nou
@@ -1243,24 +1312,360 @@ private fun ScopesTab(
                         }
                     }
 
-                    // Membres i convits (només per àmbits col·lectius)
-                    if (scope.kind == ho.fem.model.ScopeKind.COLLECTIVE) {
-                        Text(
-                            text = if (isExpanded) "Amagar membres" else labels.members,
-                            color = Femho.colors.inkSoft,
-                            fontSize = FemhoText.body,
-                            fontWeight = FontWeight.Medium,
-                            modifier = Modifier
-                                .clickable {
-                                    expandedScopeId = if (isExpanded) null else scope.id
-                                }
-                                .heightIn(min = FemhoSize.touch)
-                                .padding(vertical = 8.dp),
-                        )
+                    // Gestió de l'àmbit: projectes, etiquetes, tipologies, dedicació i membres
+                    Text(
+                        text = if (isExpanded) "Amagar gestió" else labels.scopeSection,
+                        color = Femho.colors.inkSoft,
+                        fontSize = FemhoText.body,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier
+                            .clickable {
+                                expandedScopeId = if (isExpanded) null else scope.id
+                            }
+                            .heightIn(min = FemhoSize.touch)
+                            .padding(vertical = 8.dp),
+                    )
 
-                        if (isExpanded) {
-                            // Aquí es mostrarien els membres i convits
-                            // En una implementació completa, es cridaria a MembersList(scope.id)
+                    if (isExpanded) {
+                        val scopeProjects = projects.filter { it.scopeId == scope.id }
+                        val scopeLabels = labelsList.filter { it.scopeId == scope.id }
+                        val scopeTypes = taskTypes.filter { it.scopeId == scope.id }
+                        val settings = scopeSettings[scope.id]
+                        val noun = if (settings?.projectNoun == "client") labels.nounClient else labels.nounProject
+
+                        // Projectes
+                        Group(noun) {
+                            scopeProjects.forEach { project ->
+                                Row(
+                                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Text(
+                                        text = project.name,
+                                        color = Femho.colors.ink,
+                                        fontSize = FemhoText.body,
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    Text(
+                                        text = labels.projectDelete,
+                                        color = Femho.colors.dangerText,
+                                        fontSize = FemhoText.meta,
+                                        modifier = Modifier
+                                            .clickable { onDeleteProject(project.id) }
+                                            .heightIn(min = FemhoSize.touch)
+                                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                                    )
+                                }
+                            }
+                            var newProjectName by remember(scope.id) { mutableStateOf("") }
+                            Row(
+                                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                androidx.compose.foundation.text.BasicTextField(
+                                    value = newProjectName,
+                                    onValueChange = { newProjectName = it },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(FemhoShape.pill))
+                                        .background(Femho.colors.ghostBg)
+                                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                                    decorationBox = { innerTextField ->
+                                        Box(modifier = Modifier.padding(vertical = 2.dp)) {
+                                            if (newProjectName.isEmpty()) {
+                                                Text(
+                                                    text = labels.projectName,
+                                                    color = Femho.colors.inkFaint,
+                                                    fontSize = FemhoText.body,
+                                                )
+                                            }
+                                            innerTextField()
+                                        }
+                                    },
+                                )
+                                Text(
+                                    text = "+",
+                                    color = Femho.colors.ink,
+                                    fontSize = FemhoText.body,
+                                    modifier = Modifier
+                                        .clickable {
+                                            if (newProjectName.isNotBlank()) {
+                                                onCreateProject(scope.id, newProjectName.trim())
+                                                newProjectName = ""
+                                            }
+                                        }
+                                        .heightIn(min = FemhoSize.touch)
+                                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                                )
+                            }
+                        }
+
+                        // Etiquetes
+                        Group(labels.entityLabels) {
+                            scopeLabels.forEach { label ->
+                                Row(
+                                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Text(
+                                        text = label.name,
+                                        color = Femho.colors.ink,
+                                        fontSize = FemhoText.body,
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    Text(
+                                        text = labels.labelDelete,
+                                        color = Femho.colors.dangerText,
+                                        fontSize = FemhoText.meta,
+                                        modifier = Modifier
+                                            .clickable { onDeleteLabel(label.id) }
+                                            .heightIn(min = FemhoSize.touch)
+                                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                                    )
+                                }
+                            }
+                            var newLabelName by remember(scope.id) { mutableStateOf("") }
+                            Row(
+                                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                androidx.compose.foundation.text.BasicTextField(
+                                    value = newLabelName,
+                                    onValueChange = { newLabelName = it },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(FemhoShape.pill))
+                                        .background(Femho.colors.ghostBg)
+                                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                                    decorationBox = { innerTextField ->
+                                        Box(modifier = Modifier.padding(vertical = 2.dp)) {
+                                            if (newLabelName.isEmpty()) {
+                                                Text(
+                                                    text = labels.entityLabels,
+                                                    color = Femho.colors.inkFaint,
+                                                    fontSize = FemhoText.body,
+                                                )
+                                            }
+                                            innerTextField()
+                                        }
+                                    },
+                                )
+                                Text(
+                                    text = "+",
+                                    color = Femho.colors.ink,
+                                    fontSize = FemhoText.body,
+                                    modifier = Modifier
+                                        .clickable {
+                                            if (newLabelName.isNotBlank()) {
+                                                onCreateLabel(scope.id, newLabelName.trim())
+                                                newLabelName = ""
+                                            }
+                                        }
+                                        .heightIn(min = FemhoSize.touch)
+                                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                                )
+                            }
+                        }
+
+                        // Tipologies
+                        Group(labels.entityTypes) {
+                            scopeTypes.forEach { type ->
+                                Row(
+                                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = type.name,
+                                            color = Femho.colors.ink,
+                                            fontSize = FemhoText.body,
+                                        )
+                                        if (type.required) {
+                                            Text(
+                                                text = labels.typesRequired,
+                                                color = Femho.colors.inkFaint,
+                                                fontSize = FemhoText.meta,
+                                            )
+                                        }
+                                    }
+                                    Text(
+                                        text = labels.typeDelete,
+                                        color = Femho.colors.dangerText,
+                                        fontSize = FemhoText.meta,
+                                        modifier = Modifier
+                                            .clickable { onDeleteTaskType(type.id) }
+                                            .heightIn(min = FemhoSize.touch)
+                                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                                    )
+                                }
+                            }
+                            var newTypeName by remember(scope.id) { mutableStateOf("") }
+                            Row(
+                                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                androidx.compose.foundation.text.BasicTextField(
+                                    value = newTypeName,
+                                    onValueChange = { newTypeName = it },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(FemhoShape.pill))
+                                        .background(Femho.colors.ghostBg)
+                                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                                    decorationBox = { innerTextField ->
+                                        Box(modifier = Modifier.padding(vertical = 2.dp)) {
+                                            if (newTypeName.isEmpty()) {
+                                                Text(
+                                                    text = labels.typeNew,
+                                                    color = Femho.colors.inkFaint,
+                                                    fontSize = FemhoText.body,
+                                                )
+                                            }
+                                            innerTextField()
+                                        }
+                                    },
+                                )
+                                Text(
+                                    text = "+",
+                                    color = Femho.colors.ink,
+                                    fontSize = FemhoText.body,
+                                    modifier = Modifier
+                                        .clickable {
+                                            if (newTypeName.isNotBlank()) {
+                                                onCreateTaskType(scope.id, newTypeName.trim())
+                                                newTypeName = ""
+                                            }
+                                        }
+                                        .heightIn(min = FemhoSize.touch)
+                                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                                )
+                            }
+                        }
+
+                        // Dedicació
+                        Group(labels.entityDedication) {
+                            Row(
+                                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Text(
+                                    text = labels.trackingOn,
+                                    color = Femho.colors.ink,
+                                    fontSize = FemhoText.body,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                androidx.compose.material3.Switch(
+                                    checked = settings?.timeTracking ?: false,
+                                    onCheckedChange = { on ->
+                                        onUpdateScopeSettings(scope.id, on, null, null, null, null, null, null)
+                                    },
+                                )
+                            }
+                            Text(
+                                text = labels.trackingHelp,
+                                color = Femho.colors.inkFaint,
+                                fontSize = FemhoText.meta,
+                            )
+                            Row(
+                                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Text(
+                                    text = labels.overtimeVisible,
+                                    color = Femho.colors.ink,
+                                    fontSize = FemhoText.body,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                androidx.compose.material3.Switch(
+                                    checked = settings?.overtimeVisible ?: false,
+                                    onCheckedChange = { on ->
+                                        onUpdateScopeSettings(scope.id, null, null, null, on, null, null, null)
+                                    },
+                                )
+                            }
+                            Text(
+                                text = labels.workStart,
+                                color = Femho.colors.inkSoft,
+                                fontSize = FemhoText.meta,
+                            )
+                            androidx.compose.foundation.text.BasicTextField(
+                                value = settings?.workStart.orEmpty(),
+                                onValueChange = { onUpdateScopeSettings(scope.id, null, it, null, null, null, null, null) },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(FemhoShape.pill))
+                                    .background(Femho.colors.ghostBg)
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                decorationBox = { innerTextField ->
+                                    Box(modifier = Modifier.padding(vertical = 2.dp)) {
+                                        if (settings?.workStart.isNullOrEmpty()) {
+                                            Text(
+                                                text = "09:00",
+                                                color = Femho.colors.inkFaint,
+                                                fontSize = FemhoText.body,
+                                            )
+                                        }
+                                        innerTextField()
+                                    }
+                                },
+                            )
+                            Text(
+                                text = labels.workEnd,
+                                color = Femho.colors.inkSoft,
+                                fontSize = FemhoText.meta,
+                            )
+                            androidx.compose.foundation.text.BasicTextField(
+                                value = settings?.workEnd.orEmpty(),
+                                onValueChange = { onUpdateScopeSettings(scope.id, null, null, it, null, null, null, null) },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(FemhoShape.pill))
+                                    .background(Femho.colors.ghostBg)
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                decorationBox = { innerTextField ->
+                                    Box(modifier = Modifier.padding(vertical = 2.dp)) {
+                                        if (settings?.workEnd.isNullOrEmpty()) {
+                                            Text(
+                                                text = "18:00",
+                                                color = Femho.colors.inkFaint,
+                                                fontSize = FemhoText.body,
+                                            )
+                                        }
+                                        innerTextField()
+                                    }
+                                },
+                            )
+                            Text(
+                                text = labels.longSessionHours,
+                                color = Femho.colors.inkSoft,
+                                fontSize = FemhoText.meta,
+                            )
+                            androidx.compose.foundation.text.BasicTextField(
+                                value = (settings?.longSessionHours ?: 8).toString(),
+                                onValueChange = { value ->
+                                    value.toIntOrNull()?.let { hours ->
+                                        onUpdateScopeSettings(scope.id, null, null, null, null, hours, null, null)
+                                    }
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(FemhoShape.pill))
+                                    .background(Femho.colors.ghostBg)
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                decorationBox = { innerTextField ->
+                                    Box(modifier = Modifier.padding(vertical = 2.dp)) { innerTextField() }
+                                },
+                            )
+                        }
+
+                        // Membres i convits (només per àmbits col·lectius)
+                        if (scope.kind == ho.fem.model.ScopeKind.COLLECTIVE) {
+                            Text(
+                                text = labels.members,
+                                color = Femho.colors.inkSoft,
+                                fontSize = FemhoText.body,
+                                fontWeight = FontWeight.Medium,
+                            )
                             Text(
                                 text = labels.noMembers,
                                 color = Femho.colors.inkFaint,

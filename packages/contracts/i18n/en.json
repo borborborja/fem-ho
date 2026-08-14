@@ -731,5 +731,17 @@
   "settings.scopeType.collective": "Collective",
   "settings.inviteUrl": "Invitation link",
   "settings.invites": "Invitations",
-  "settings.noInvites": "No open invitations."
+  "settings.noInvites": "No open invitations.",
+  "settings.workStart": "Start time",
+  "settings.workEnd": "End time",
+  "settings.workDays": "Work days",
+  "settings.longSessionHours": "Long session hours",
+  "settings.labelNew": "+ New label",
+  "settings.labelDelete": "Delete label",
+  "settings.typeDelete": "Delete task type",
+  "settings.entityLabels": "Labels",
+  "settings.entityTypes": "Task types",
+  "settings.entityDedication": "Time tracking",
+  "settings.entityProjects": "Projects",
+  "settings.scopeSection": "Scope management"
 }

@@ -732,5 +732,17 @@
   "widget.quickAdd.name": "Fem-ho · Afegir",
   "widget.signedOut": "Connecta't per veure les teves tasques.",
   "widget.today.description": "El que venç avui, amb afegida ràpida.",
-  "widget.today.name": "Fem-ho · Avui"
+  "widget.today.name": "Fem-ho · Avui",
+  "settings.workStart": "Hora d'inici",
+  "settings.workEnd": "Hora de final",
+  "settings.workDays": "Dies laborables",
+  "settings.longSessionHours": "Hores de sessió llarga",
+  "settings.labelNew": "+ Nova etiqueta",
+  "settings.labelDelete": "Esborrar l'etiqueta",
+  "settings.typeDelete": "Esborrar la tipologia",
+  "settings.entityLabels": "Etiquetes",
+  "settings.entityTypes": "Tipologies",
+  "settings.entityDedication": "Dedicació",
+  "settings.entityProjects": "Projectes",
+  "settings.scopeSection": "Gestió de l'àmbit"
 }

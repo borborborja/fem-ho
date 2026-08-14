@@ -1135,6 +1135,12 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
     val scopes by model.scopes.collectAsStateWithLifecycle()
     val tokens by model.tokens.collectAsStateWithLifecycle()
     val createdToken by model.createdToken.collectAsStateWithLifecycle()
+    val projects by model.projects.collectAsStateWithLifecycle()
+    val labels by model.labels.collectAsStateWithLifecycle()
+    val taskTypes by model.taskTypes.collectAsStateWithLifecycle()
+    val scopeSettings by model.scopeSettings.collectAsStateWithLifecycle()
+
+    LaunchedEffect(Unit) { model.loadEntityData() }
 
     SettingsScreen(
         labels = SettingsLabels(
@@ -1232,6 +1238,29 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
             tokensNever = stringResource(R.string.tokens_never),
             tokensRevoke = stringResource(R.string.tokens_revoke),
             tokensCopy = stringResource(R.string.tokens_copy),
+            scopeSection = stringResource(R.string.settings_scopesection),
+            entityProjects = stringResource(R.string.settings_entityprojects),
+            entityLabels = stringResource(R.string.settings_entitylabels),
+            entityTypes = stringResource(R.string.settings_entitytypes),
+            entityDedication = stringResource(R.string.settings_entitydedication),
+            projectName = stringResource(R.string.settings_projectname),
+            projectDelete = stringResource(R.string.settings_projectdelete),
+            labelNew = stringResource(R.string.settings_labelnew),
+            labelDelete = stringResource(R.string.settings_labeldelete),
+            typeNew = stringResource(R.string.settings_typenew),
+            typeDelete = stringResource(R.string.settings_typedelete),
+            typesOn = stringResource(R.string.settings_typeson),
+            typesRequired = stringResource(R.string.settings_typesrequired),
+            tracking = stringResource(R.string.settings_tracking),
+            trackingOn = stringResource(R.string.settings_trackingon),
+            trackingHelp = stringResource(R.string.settings_trackinghelp),
+            overtimeVisible = stringResource(R.string.settings_overtimevisible),
+            workStart = stringResource(R.string.settings_workstart),
+            workEnd = stringResource(R.string.settings_workend),
+            workDays = stringResource(R.string.settings_workdays),
+            longSessionHours = stringResource(R.string.settings_longsessionhours),
+            nounProject = stringResource(R.string.settings_noun_project),
+            nounClient = stringResource(R.string.settings_noun_client),
             scopeType = stringResource(R.string.settings_scopetype),
             scopeTypeIndividual = stringResource(R.string.settings_scopetype_individual),
             scopeTypeCollective = stringResource(R.string.settings_scopetype_collective),
@@ -1263,6 +1292,10 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
         profileTimezone = profile?.timezone.orEmpty(),
         gravatarEnabled = gravatarEnabled,
         scopes = scopes,
+        projects = projects,
+        labelsList = labels,
+        taskTypes = taskTypes,
+        scopeSettings = scopeSettings,
         theme = theme,
         accent = accent,
         serverUrl = serverUrl,
@@ -1290,5 +1323,13 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
         onCreateScope = model::createScope,
         onUpdateScope = model::updateScope,
         onDeleteScope = model::deleteScope,
+        onCreateProject = model::createProject,
+        onDeleteProject = model::deleteProject,
+        onCreateLabel = model::createLabel,
+        onDeleteLabel = model::deleteLabel,
+        onCreateTaskType = model::createTaskType,
+        onUpdateTaskType = model::updateTaskType,
+        onDeleteTaskType = model::deleteTaskType,
+        onUpdateScopeSettings = model::updateScopeSettings,
     )
 }

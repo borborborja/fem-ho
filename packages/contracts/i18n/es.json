@@ -730,5 +730,17 @@
   "settings.scopeType.collective": "Colectivo",
   "settings.inviteUrl": "Enlace de invitación",
   "settings.invites": "Invitaciones",
-  "settings.noInvites": "No hay invitaciones abiertas."
+  "settings.noInvites": "No hay invitaciones abiertas.",
+  "settings.workStart": "Hora de inicio",
+  "settings.workEnd": "Hora de finalización",
+  "settings.workDays": "Días laborables",
+  "settings.longSessionHours": "Horas de sesión larga",
+  "settings.labelNew": "+ Nueva etiqueta",
+  "settings.labelDelete": "Borrar la etiqueta",
+  "settings.typeDelete": "Borrar la tipología",
+  "settings.entityLabels": "Etiquetas",
+  "settings.entityTypes": "Tipologías",
+  "settings.entityDedication": "Dedicación",
+  "settings.entityProjects": "Proyectos",
+  "settings.scopeSection": "Gestión del ámbito"
 }

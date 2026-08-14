@@ -366,6 +366,10 @@
     <string name="settings_empty_scopes">Aún no hay contenido para Ámbitos.</string>
     <string name="settings_empty_shares">Aún no hay contenido para Compartidos.</string>
     <string name="settings_enableai">Activar el usuario IA</string>
+    <string name="settings_entitydedication">Dedicación</string>
+    <string name="settings_entitylabels">Etiquetas</string>
+    <string name="settings_entityprojects">Proyectos</string>
+    <string name="settings_entitytypes">Tipologías</string>
     <string name="settings_events_ondelete">Al borrar una tarea hecha desde una cita</string>
     <string name="settings_events_ondelete_hide">La cita se queda fuera</string>
     <string name="settings_events_ondelete_hidehint">Sigue en el calendario, pero deja de reclamarte el día.</string>
@@ -393,8 +397,11 @@
     <string name="settings_inviterole">Qué podrá hacer</string>
     <string name="settings_invites">Invitaciones</string>
     <string name="settings_inviteurl">Enlace de invitación</string>
+    <string name="settings_labeldelete">Borrar la etiqueta</string>
+    <string name="settings_labelnew">+ Nueva etiqueta</string>
     <string name="settings_language">Idioma</string>
     <string name="settings_longsession">Marca para revisar a partir de (horas)</string>
+    <string name="settings_longsessionhours">Horas de sesión larga</string>
     <string name="settings_mail_accounts">Cuentas</string>
     <string name="settings_mail_add">Añadir la cuenta</string>
     <string name="settings_mail_addrule">Mapear la carpeta</string>
@@ -488,6 +495,7 @@
     <string name="settings_scopename">Nombre</string>
     <string name="settings_scopeowner">Propietario</string>
     <string name="settings_scopesave">Guardar</string>
+    <string name="settings_scopesection">Gestión del ámbito</string>
     <string name="settings_scopeserverurl">Dirección del servidor (https://…)</string>
     <string name="settings_scopesource_here">De este servidor</string>
     <string name="settings_scopesource_new">Nuevo</string>
@@ -538,6 +546,7 @@
     <string name="settings_trackingbackfilled">Se han recuperado {count} bloques de dedicación del historial.</string>
     <string name="settings_trackinghelp">Cuando una tarea pasa por «Haciendo», el tiempo que está ahí queda registrado. Al activarlo se recupera lo que ya hay en el historial.</string>
     <string name="settings_trackingon">Anotar la dedicación de este ámbito</string>
+    <string name="settings_typedelete">Borrar la tipología</string>
     <string name="settings_typenew">Nueva tipología</string>
     <string name="settings_typeson">Usar tipologías de tarea</string>
     <string name="settings_typesrequired">Obligatoria para crear una tarea</string>
@@ -550,7 +559,10 @@
     <string name="settings_wipe">Vaciar instancia</string>
     <string name="settings_wipeconfirm">Escribe «{name}» para confirmar</string>
     <string name="settings_wipewarning">Esto borra todas las tareas, eventos, listas y el historial. Las cuentas se quedan.</string>
+    <string name="settings_workdays">Días laborables</string>
+    <string name="settings_workend">Hora de finalización</string>
     <string name="settings_workhours">Horario laboral</string>
+    <string name="settings_workstart">Hora de inicio</string>
     <string name="setup_name">Tu nombre</string>
     <string name="setup_scope_family">Familia</string>
     <string name="setup_scope_personal">Personal</string>

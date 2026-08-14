@@ -366,6 +366,10 @@
     <string name="settings_empty_scopes">No content for Scopes yet.</string>
     <string name="settings_empty_shares">No content for Shared yet.</string>
     <string name="settings_enableai">Turn on the AI user</string>
+    <string name="settings_entitydedication">Time tracking</string>
+    <string name="settings_entitylabels">Labels</string>
+    <string name="settings_entityprojects">Projects</string>
+    <string name="settings_entitytypes">Task types</string>
     <string name="settings_events_ondelete">When you delete a task made from an event</string>
     <string name="settings_events_ondelete_hide">The event stays out</string>
     <string name="settings_events_ondelete_hidehint">It remains on the calendar, but stops claiming your day.</string>
@@ -393,8 +397,11 @@
     <string name="settings_inviterole">What they can do</string>
     <string name="settings_invites">Invitations</string>
     <string name="settings_inviteurl">Invitation link</string>
+    <string name="settings_labeldelete">Delete label</string>
+    <string name="settings_labelnew">+ New label</string>
     <string name="settings_language">Language</string>
     <string name="settings_longsession">Flag for review from (hours)</string>
+    <string name="settings_longsessionhours">Long session hours</string>
     <string name="settings_mail_accounts">Accounts</string>
     <string name="settings_mail_add">Add the account</string>
     <string name="settings_mail_addrule">Map the folder</string>
@@ -488,6 +495,7 @@
     <string name="settings_scopename">Name</string>
     <string name="settings_scopeowner">Owner</string>
     <string name="settings_scopesave">Save</string>
+    <string name="settings_scopesection">Scope management</string>
     <string name="settings_scopeserverurl">Server address (https://…)</string>
     <string name="settings_scopesource_here">From this server</string>
     <string name="settings_scopesource_new">New</string>
@@ -538,6 +546,7 @@
     <string name="settings_trackingbackfilled">{count} time blocks recovered from the history.</string>
     <string name="settings_trackinghelp">When a task goes through “Doing”, the time it spends there is logged. Turning this on recovers what is already in the history.</string>
     <string name="settings_trackingon">Log time in this scope</string>
+    <string name="settings_typedelete">Delete task type</string>
     <string name="settings_typenew">New type</string>
     <string name="settings_typeson">Use task types</string>
     <string name="settings_typesrequired">Required to create a task</string>
@@ -550,7 +559,10 @@
     <string name="settings_wipe">Wipe the instance</string>
     <string name="settings_wipeconfirm">Type “{name}” to confirm</string>
     <string name="settings_wipewarning">This deletes every task, event, list and the history. The accounts stay.</string>
+    <string name="settings_workdays">Work days</string>
+    <string name="settings_workend">End time</string>
     <string name="settings_workhours">Working hours</string>
+    <string name="settings_workstart">Start time</string>
     <string name="setup_name">Your name</string>
     <string name="setup_scope_family">Family</string>
     <string name="setup_scope_personal">Personal</string>

@@ -9,12 +9,15 @@ import ho.fem.model.Checklist
 import ho.fem.model.EventOccurrence
 import ho.fem.model.Inbox
 import ho.fem.model.InboxEvent
+import ho.fem.model.Label
 import ho.fem.model.Person
 import ho.fem.model.Project
 import ho.fem.model.Scope
+import ho.fem.model.ScopeSettings
 import ho.fem.model.Subtask
 import ho.fem.model.Task
 import ho.fem.model.TaskStatus
+import ho.fem.model.TaskType
 import ho.fem.model.UserProfile
 import ho.fem.model.serverCandidates
 import ho.fem.network.FemhoApi
@@ -59,6 +62,15 @@ class AppViewModel(private val container: Container) : ViewModel() {
 
     private val _people = MutableStateFlow<List<Person>>(emptyList())
     val people: StateFlow<List<Person>> = _people.asStateFlow()
+
+    private val _labels = MutableStateFlow<List<Label>>(emptyList())
+    val labels: StateFlow<List<Label>> = _labels.asStateFlow()
+
+    private val _taskTypes = MutableStateFlow<List<TaskType>>(emptyList())
+    val taskTypes: StateFlow<List<TaskType>> = _taskTypes.asStateFlow()
+
+    private val _scopeSettings = MutableStateFlow<Map<String, ScopeSettings>>(emptyMap())
+    val scopeSettings: StateFlow<Map<String, ScopeSettings>> = _scopeSettings.asStateFlow()
 
     private val _pending = MutableStateFlow(0)
     val pending: StateFlow<Int> = _pending.asStateFlow()
@@ -669,6 +681,121 @@ class AppViewModel(private val container: Container) : ViewModel() {
         viewModelScope.launch {
             runCatching { container.api(base).deleteScope(id) }
                 .onSuccess { refresh() }
+        }
+    }
+
+    /**
+     * Carrega etiquetes, tipologies i configuracions d'àmbit per a Ajustos ▸ Àmbits.
+     *
+     * GET /api/v1/labels, /api/v1/task-types i /api/v1/scopes/{id}/settings per àmbit.
+     * Es crida en obrir la pestanya Àmbits.
+     */
+    fun loadEntityData() {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).labels() }
+                .onSuccess { _labels.value = it }
+            runCatching { container.api(base).taskTypes() }
+                .onSuccess { _taskTypes.value = it }
+            scopes.value.forEach { scope ->
+                runCatching { container.api(base).scopeSettings(scope.id) }
+                    .onSuccess { settings ->
+                        _scopeSettings.value = _scopeSettings.value + (scope.id to settings)
+                    }
+            }
+        }
+    }
+
+    /** Crea un projecte dins d'un àmbit. POST /api/v1/projects. */
+    fun createProject(scopeId: String, name: String) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).createProject(scopeId, name) }
+                .onSuccess { loadEntityData() }
+        }
+    }
+
+    /** Esborra un projecte. DELETE /api/v1/projects/{id}. */
+    fun deleteProject(id: String) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).deleteProject(id) }
+                .onSuccess { loadEntityData() }
+        }
+    }
+
+    /** Crea una etiqueta dins d'un àmbit. POST /api/v1/labels. */
+    fun createLabel(scopeId: String, name: String) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).createLabel(scopeId, name) }
+                .onSuccess { loadEntityData() }
+        }
+    }
+
+    /** Esborra una etiqueta. DELETE /api/v1/labels/{id}. */
+    fun deleteLabel(id: String) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).deleteLabel(id) }
+                .onSuccess { loadEntityData() }
+        }
+    }
+
+    /** Crea una tipologia dins d'un àmbit. POST /api/v1/task-types. */
+    fun createTaskType(scopeId: String, name: String) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).createTaskType(scopeId, name) }
+                .onSuccess { loadEntityData() }
+        }
+    }
+
+    /** Actualitza una tipologia. PATCH /api/v1/task-types/{id}. */
+    fun updateTaskType(id: String, name: String? = null, required: Boolean? = null) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).updateTaskType(id, name = name, required = required) }
+                .onSuccess { loadEntityData() }
+        }
+    }
+
+    /** Esborra una tipologia. DELETE /api/v1/task-types/{id}. */
+    fun deleteTaskType(id: String) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).deleteTaskType(id) }
+                .onSuccess { loadEntityData() }
+        }
+    }
+
+    /** Desa la configuració de dedicació d'un àmbit. PATCH /api/v1/scopes/{id}/settings. */
+    fun updateScopeSettings(
+        scopeId: String,
+        timeTracking: Boolean? = null,
+        workStart: String? = null,
+        workEnd: String? = null,
+        overtimeVisible: Boolean? = null,
+        longSessionHours: Int? = null,
+        projectNoun: String? = null,
+        taskTypesEnabled: Boolean? = null,
+    ) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching {
+                container.api(base).updateScopeSettings(
+                    scopeId,
+                    timeTracking = timeTracking,
+                    workStart = workStart,
+                    workEnd = workEnd,
+                    overtimeVisible = overtimeVisible,
+                    longSessionHours = longSessionHours,
+                    projectNoun = projectNoun,
+                    taskTypesEnabled = taskTypesEnabled,
+                )
+            }.onSuccess { settings ->
+                _scopeSettings.value = _scopeSettings.value + (scopeId to settings)
+            }
         }
     }
 
