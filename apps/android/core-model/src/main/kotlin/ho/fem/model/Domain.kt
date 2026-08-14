@@ -688,6 +688,14 @@ data class AdminUser(
     @SerialName("invite_pending") val invitePending: Boolean = false,
 )
 
+/** El resultat de convidar algú: l'usuari creat i l'enllaç, que només es veu un cop. */
+@Serializable
+data class InviteResult(
+    val user: AdminUser = AdminUser("", "", ""),
+    @SerialName("invite_url") val inviteUrl: String = "",
+    @SerialName("expires_at") val expiresAt: String = "",
+)
+
 @Serializable
 data class ApiTokenSummary(
     val id: String,

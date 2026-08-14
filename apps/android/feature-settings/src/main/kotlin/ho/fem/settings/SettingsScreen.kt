@@ -105,6 +105,7 @@ data class SettingsLabels(
     val roleCollaborator: String,
     val roleViewer: String,
     val roleOwner: String,
+    val roleMember: String,
     val inviteCreate: String,
     val inviteRevoke: String,
     val inviteOnce: String,
@@ -112,6 +113,16 @@ data class SettingsLabels(
     val invites: String,
     val noInvites: String,
     val noMembers: String,
+    // Admin
+    val users: String,
+    val inviteEmail: String,
+    val inviteName: String,
+    val invitePending: String,
+    val wipe: String,
+    val wipeWarning: String,
+    val wipeConfirm: String,
+    val errorLastAdmin: String,
+    val delete: String,
     val scopeEdit: String,
     val scopeSave: String,
     val scopeCancel: String,
@@ -343,6 +354,18 @@ fun SettingsScreen(
     shares: List<ho.fem.model.ShareSummary> = emptyList(),
     shareAccesses: Map<String, List<ho.fem.model.ShareAccess>> = emptyMap(),
     onRevokeShare: (String) -> Unit = {},
+    // Admin (només rol admin)
+    isAdmin: Boolean = false,
+    adminUsers: List<ho.fem.model.AdminUser> = emptyList(),
+    adminInviteUrl: String? = null,
+    adminError: String? = null,
+    instanceName: String = "",
+    onLoadAdminUsers: () -> Unit = {},
+    onInviteAdminUser: (String, String, String, () -> Unit) -> Unit = { _, _, _, _ -> },
+    onConsumeAdminInviteUrl: () -> Unit = {},
+    onSetAdminRole: (String, String) -> Unit = { _, _ -> },
+    onDeleteAdminUser: (String) -> Unit = {},
+    onWipeInstance: (String, () -> Unit) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
 ) {
     var selectedTab by remember { mutableStateOf("general") }
@@ -517,7 +540,21 @@ fun SettingsScreen(
                     onSetGravatar = onSetGravatar,
                     onChangePassword = onChangePassword,
                 )
-                "admin" -> EmptyState(labels.emptyStates.admin)
+                "admin" -> AdminTab(
+                    labels = labels,
+                    isAdmin = isAdmin,
+                    users = adminUsers,
+                    inviteUrl = adminInviteUrl,
+                    error = adminError,
+                    instanceName = instanceName,
+                    onLoad = onLoadAdminUsers,
+                    onInvite = onInviteAdminUser,
+                    onConsumeInviteUrl = onConsumeAdminInviteUrl,
+                    onSetRole = onSetAdminRole,
+                    onDelete = onDeleteAdminUser,
+                    onWipe = onWipeInstance,
+                    onCopy = onCopyToClipboard,
+                )
             }
         }
     }
@@ -2943,4 +2980,178 @@ private fun EmptyState(text: String) {
         fontSize = FemhoText.body,
         modifier = Modifier.padding(vertical = 10.dp, horizontal = 4.dp),
     )
+}
+
+/**
+ * La pestanya Admin: usuaris, convits i la neteja de la instància.
+ *
+ * Només es mostra amb rol admin. El logo de la instància és decoració d'instància i es
+ * queda a la web (branding/logo): a Android no es gestiona en aquesta passada.
+ */
+@Composable
+private fun AdminTab(
+    labels: SettingsLabels,
+    isAdmin: Boolean,
+    users: List<ho.fem.model.AdminUser>,
+    inviteUrl: String?,
+    error: String?,
+    instanceName: String,
+    onLoad: () -> Unit,
+    onInvite: (String, String, String, () -> Unit) -> Unit,
+    onConsumeInviteUrl: () -> Unit,
+    onSetRole: (String, String) -> Unit,
+    onDelete: (String) -> Unit,
+    onWipe: (String, () -> Unit) -> Unit,
+    onCopy: (String) -> Unit,
+) {
+    var email by remember { mutableStateOf("") }
+    var name by remember { mutableStateOf("") }
+    var role by remember { mutableStateOf("member") }
+
+    androidx.compose.runtime.LaunchedEffect(Unit) { onLoad() }
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        if (!isAdmin) {
+            EmptyState(labels.emptyStates.admin)
+            return@Column
+        }
+
+        Text(
+            text = labels.users,
+            color = Femho.colors.ink,
+            fontSize = FemhoText.columnTitle,
+            fontWeight = FontWeight.ExtraBold,
+            modifier = Modifier.testTag("admin-users"),
+        )
+
+        // Convidar: correu, nom i rol, i l'enllaç d'un sol ús quan torna.
+        androidx.compose.material3.OutlinedTextField(
+            value = email,
+            onValueChange = { email = it },
+            singleLine = true,
+            label = { Text(labels.inviteEmail) },
+            modifier = Modifier.fillMaxWidth().testTag("admin-invite-email"),
+        )
+        androidx.compose.material3.OutlinedTextField(
+            value = name,
+            onValueChange = { name = it },
+            singleLine = true,
+            label = { Text(labels.inviteName) },
+            modifier = Modifier.fillMaxWidth().testTag("admin-invite-name"),
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            androidx.compose.material3.Button(
+                onClick = {
+                    onInvite(email.trim(), name.trim(), role) {
+                        email = ""
+                        name = ""
+                    }
+                },
+                modifier = Modifier.weight(1f).testTag("admin-invite"),
+            ) {
+                Text(labels.inviteCreate)
+            }
+        }
+
+        inviteUrl?.let { url ->
+            Text(
+                text = labels.inviteOnce,
+                color = Femho.colors.inkSoft,
+                fontSize = FemhoText.meta,
+            )
+            androidx.compose.material3.OutlinedButton(
+                onClick = { onCopy(url) },
+                modifier = Modifier.fillMaxWidth().testTag("admin-invite-copy"),
+            ) {
+                Text(labels.inviteUrl)
+            }
+        }
+
+        error?.let {
+            Text(
+                text = it,
+                color = Femho.colors.dangerText,
+                fontSize = FemhoText.meta,
+                modifier = Modifier.testTag("admin-error"),
+            )
+        }
+
+        // La llista d'usuaris amb el rol i l'estat del convit.
+        users.forEach { user ->
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = user.name,
+                        color = Femho.colors.ink,
+                        fontSize = FemhoText.body,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        text = user.email + if (user.invitePending) " · ${labels.invitePending}" else "",
+                        color = Femho.colors.inkSoft,
+                        fontSize = FemhoText.meta,
+                    )
+                }
+                Text(
+                    text = when (user.role) {
+                        "admin" -> labels.roleAdmin
+                        "collaborator" -> labels.roleCollaborator
+                        "owner" -> labels.roleOwner
+                        "viewer" -> labels.roleViewer
+                        else -> labels.roleMember
+                    },
+                    color = Femho.colors.inkFaint,
+                    fontSize = FemhoText.meta,
+                )
+                androidx.compose.material3.TextButton(
+                    onClick = { onDelete(user.id) },
+                    enabled = user.role != "admin",
+                    modifier = Modifier.testTag("admin-delete-${'$'}{user.id}"),
+                ) {
+                    Text(labels.delete)
+                }
+            }
+        }
+
+        // La neteja exigeix el nom exacte de la instància (també el servidor).
+        var confirm by remember { mutableStateOf("") }
+        var showWipe by remember { mutableStateOf(false) }
+        androidx.compose.material3.OutlinedButton(
+            onClick = { showWipe = true },
+            modifier = Modifier.fillMaxWidth().testTag("admin-wipe"),
+        ) {
+            Text(labels.wipe)
+        }
+        if (showWipe) {
+            Text(
+                text = labels.wipeWarning,
+                color = Femho.colors.dangerText,
+                fontSize = FemhoText.meta,
+            )
+            androidx.compose.material3.OutlinedTextField(
+                value = confirm,
+                onValueChange = { confirm = it },
+                singleLine = true,
+                label = { Text(labels.wipeConfirm.replace("{name}", instanceName)) },
+                modifier = Modifier.fillMaxWidth().testTag("admin-wipe-confirm"),
+            )
+            androidx.compose.material3.Button(
+                onClick = {
+                    onWipe(confirm.trim()) { showWipe = false; confirm = "" }
+                },
+                enabled = confirm.trim() == instanceName,
+                modifier = Modifier.fillMaxWidth().testTag("admin-wipe-do"),
+            ) {
+                Text(labels.wipe)
+            }
+        }
+    }
 }

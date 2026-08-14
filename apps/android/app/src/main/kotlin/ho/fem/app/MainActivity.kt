@@ -1700,6 +1700,10 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
     val agentSkill by model.agentSkill.collectAsStateWithLifecycle()
     val allShares by model.allShares.collectAsStateWithLifecycle()
     val allShareAccesses by model.shareAccesses.collectAsStateWithLifecycle()
+    val adminUsers by model.adminUsers.collectAsStateWithLifecycle()
+    val adminInviteUrl by model.adminInviteUrl.collectAsStateWithLifecycle()
+    val adminError by model.adminError.collectAsStateWithLifecycle()
+    val instanceName by model.instanceName.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) {
         model.loadEntityData()
@@ -1919,6 +1923,7 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
             roleCollaborator = stringResource(R.string.settings_role_collaborator),
             roleViewer = stringResource(R.string.settings_role_viewer),
             roleOwner = stringResource(R.string.settings_role_owner),
+            roleMember = stringResource(R.string.settings_role_member),
             inviteCreate = stringResource(R.string.settings_invitecreate),
             inviteRevoke = stringResource(R.string.settings_inviterevoke),
             inviteOnce = stringResource(R.string.settings_inviteonce),
@@ -1926,6 +1931,15 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
             invites = stringResource(R.string.settings_invites),
             noInvites = stringResource(R.string.settings_invitenone),
             noMembers = stringResource(R.string.settings_nomembers),
+            users = stringResource(R.string.settings_users),
+            inviteEmail = stringResource(R.string.settings_inviteemail),
+            inviteName = stringResource(R.string.settings_invitename),
+            invitePending = stringResource(R.string.settings_invitepending),
+            wipe = stringResource(R.string.settings_wipe),
+            wipeWarning = stringResource(R.string.settings_wipewarning),
+            wipeConfirm = stringResource(R.string.settings_wipeconfirm),
+            errorLastAdmin = stringResource(R.string.error_last_admin),
+            delete = stringResource(R.string.nav_delete),
             scopeEdit = stringResource(R.string.settings_scopeedit),
             scopeSave = stringResource(R.string.settings_scopesave),
             scopeCancel = stringResource(R.string.settings_scopecancel),
@@ -2006,6 +2020,17 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
         onTestMailAccount = model::testMailAccount,
          onCreateMailRule = model::createMailRule,
          onDeleteMailRule = model::deleteMailRule,
+        isAdmin = profile?.role == "admin",
+        adminUsers = adminUsers,
+        adminInviteUrl = adminInviteUrl,
+        adminError = adminError,
+        instanceName = instanceName,
+        onLoadAdminUsers = model::loadAdminUsers,
+        onInviteAdminUser = model::inviteAdminUser,
+        onConsumeAdminInviteUrl = model::consumeAdminInviteUrl,
+        onSetAdminRole = model::setAdminRole,
+        onDeleteAdminUser = model::deleteAdminUser,
+        onWipeInstance = model::wipeInstance,
      )
  }
 

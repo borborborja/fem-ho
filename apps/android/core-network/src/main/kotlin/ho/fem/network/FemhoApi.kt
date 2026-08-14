@@ -2,6 +2,8 @@ package ho.fem.network
 
 import ho.fem.model.Agent
 import ho.fem.model.AgentDetail
+import ho.fem.model.AdminUser
+import ho.fem.model.InviteResult
 import ho.fem.model.AgentScopeAvailability
 import ho.fem.model.AgentScopeEnvelope
 import ho.fem.model.ActivityEnvelope
@@ -949,6 +951,29 @@ class FemhoApi(
         get<ActivityEnvelope>("/api/v1/tasks/$taskId/activity").data
 
     suspend fun undoActivity(id: String): Map<String, Any> = post("/api/v1/activity/$id/undo", emptyMap<String, Any>())
+
+    // ------------------------------------------------------------------ Admin
+
+    /** La llista d'usuaris, amb el rol i si el convit encara és pendent. */
+    suspend fun adminUsers(): List<AdminUser> = get("/api/v1/admin/users")
+
+    /** Convida un membre i torna l'enllaç d'un sol ús (AdminUser + invite_url). */
+    suspend fun adminInvite(email: String, name: String, role: String): InviteResult =
+        post(
+            "/api/v1/admin/users/invite",
+            mapOf("email" to email, "name" to name, "role" to role),
+        )
+
+    suspend fun adminUpdateRole(id: String, role: String): AdminUser =
+        patch("/api/v1/admin/users/$id", mapOf("role" to role))
+
+    suspend fun adminDeleteUser(id: String) {
+        raw("DELETE", "/api/v1/admin/users/$id", null, authenticated = true)
+    }
+
+    /** Neteja la instància; el servidor també comprova el nom de confirmació. */
+    suspend fun adminWipe(confirmation: String): Map<String, Any> =
+        post("/api/v1/admin/wipe", mapOf("confirmation" to confirmation))
 
     // ------------------------------------------------------------------ Cerca
 

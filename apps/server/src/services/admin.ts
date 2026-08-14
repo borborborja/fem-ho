@@ -315,30 +315,63 @@ export async function wipeInstance(
 
   const deleted: Record<string, number> = {};
   // L'ordre és el de les dependències, a l'inrevés: els fills abans que els pares, o les
-  // claus foranes de Postgres ho aturen a mig camí.
+  // claus foranes de Postgres ho aturen a mig camí. `users`, `user_settings` i
+  // `instance_settings` es queden: netejar la instància no esborra els comptes.
   const taules = [
+    // Registres que apunten a tot arreu: es buiden primer per no bloquejar els pares.
+    'activity_log',
+    'change_log',
+    // Agents i els seus àmbits (fill de scopes).
+    'agent_scopes',
+    // Llistes i subtasques (fill de tasks).
     'checklist_items',
     'checklists',
     'subtasks',
+    // Etiquetes i assignacions de tasques.
     'task_labels',
     'task_assignees',
     'task_leases',
+    // Registre de dedicació (fill de tasks, scopes i task_types).
+    'task_sessions',
+    'sessions',
+    // Comentaris, adjunts i recordatoris.
     'comments',
     'attachments',
     'reminders',
+    // Esdeveniments i els seus fills.
+    'event_inbox_marks',
     'event_attendees',
     'event_occurrences',
     'events',
+    // Correu (fills de mail_accounts, que depèn de users — que es queda).
+    'mail_messages',
+    'mail_threads',
+    'mail_rules',
+    'mail_accounts',
+    // Compartits.
     'share_accesses',
     'shares',
+    // Subscripcions i tokens d'usuari.
+    'push_subscriptions',
+    'sync_op_ids',
+    // Accés i settings per àmbit.
+    'scope_access_revocations',
+    'scope_settings',
+    // El nucli.
     'tasks',
+    'task_types',
     'labels',
     'calendars',
     'projects',
     'scope_members',
+    // Agents i credencials (fill de users, que es queda).
+    'ai_agents',
+    'api_tokens',
+    'grants',
+    'instance_links',
+    'user_invites',
+    'webhooks',
     'scopes',
-    'activity_log',
-    'change_log',
   ];
 
   for (const taula of taules) {

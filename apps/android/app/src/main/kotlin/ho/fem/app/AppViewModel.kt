@@ -100,6 +100,10 @@ class AppViewModel(private val container: Container) : ViewModel() {
     private val _profile = MutableStateFlow<UserProfile?>(null)
     val profile: StateFlow<UserProfile?> = _profile.asStateFlow()
 
+    /** El nom de la instància, per a la confirmació del wipe (s'hi ha d'escriure). */
+    private val _instanceName = MutableStateFlow("")
+    val instanceName: StateFlow<String> = _instanceName.asStateFlow()
+
     private val _gravatarEnabled = MutableStateFlow(true)
     val gravatarEnabled: StateFlow<Boolean> = _gravatarEnabled.asStateFlow()
 
@@ -369,6 +373,76 @@ class AppViewModel(private val container: Container) : ViewModel() {
         _searchResults.value = emptyList()
     }
 
+    // ------------------------------------------------------------------ Admin
+
+    private val _adminUsers = MutableStateFlow<List<ho.fem.model.AdminUser>>(emptyList())
+    val adminUsers: StateFlow<List<ho.fem.model.AdminUser>> = _adminUsers.asStateFlow()
+
+    private val _adminInviteUrl = MutableStateFlow<String?>(null)
+    val adminInviteUrl: StateFlow<String?> = _adminInviteUrl.asStateFlow()
+
+    private val _adminError = MutableStateFlow<String?>(null)
+    val adminError: StateFlow<String?> = _adminError.asStateFlow()
+
+    /** Carrega la llista d'usuaris de la pestanya Admin. */
+    fun loadAdminUsers() {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).adminUsers() }
+                .onSuccess { _adminUsers.value = it }
+                .onFailure { _adminError.value = it.message }
+        }
+    }
+
+    /** Convida un membre. L'enllaç només es veu un cop (server: InviteResult). */
+    fun inviteAdminUser(email: String, name: String, role: String, onDone: () -> Unit) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).adminInvite(email, name, role) }
+                .onSuccess {
+                    _adminInviteUrl.value = it.inviteUrl
+                    loadAdminUsers()
+                    onDone()
+                }
+                .onFailure { _adminError.value = it.message }
+        }
+    }
+
+    fun consumeAdminInviteUrl() {
+        _adminInviteUrl.value = null
+    }
+
+    fun setAdminRole(id: String, role: String) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).adminUpdateRole(id, role) }
+                .onSuccess { loadAdminUsers() }
+                .onFailure { _adminError.value = it.message }
+        }
+    }
+
+    fun deleteAdminUser(id: String) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).adminDeleteUser(id) }
+                .onSuccess { loadAdminUsers() }
+                .onFailure { _adminError.value = it.message }
+        }
+    }
+
+    /** Neteja la instància; el servidor també exigeix el nom exacte de confirmació. */
+    fun wipeInstance(confirmation: String, onDone: () -> Unit) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).adminWipe(confirmation) }
+                .onSuccess {
+                    _adminError.value = null
+                    onDone()
+                }
+                .onFailure { _adminError.value = it.message }
+        }
+    }
+
     private val _openChecklists = MutableStateFlow<List<Checklist>>(emptyList())
     val openChecklists: StateFlow<List<Checklist>> = _openChecklists.asStateFlow()
 
@@ -410,6 +484,12 @@ class AppViewModel(private val container: Container) : ViewModel() {
                     else Session.NeedsLogin(saved, "")
                 if (container.tokens.refresh() != null) {
                     observe(saved)
+                    // El nom de la instància, per a la confirmació del wipe: també quan
+                    // la sessió ja era desada i no s'ha passat per la pantalla de login.
+                    viewModelScope.launch {
+                        runCatching { container.api(saved).info() }
+                            .onSuccess { _instanceName.value = it.name }
+                    }
                     /**
                      * **I es demana al servidor.**
                      *
@@ -527,6 +607,7 @@ class AppViewModel(private val container: Container) : ViewModel() {
             runCatching { container.api(base).login(email, password) }
                 .onSuccess {
                     _session.value = Session.Ready(base)
+                    _instanceName.value = (container.api(base).runCatching { info() }.getOrNull()?.name).orEmpty()
                     observe(base)
                     refresh()
                 }
