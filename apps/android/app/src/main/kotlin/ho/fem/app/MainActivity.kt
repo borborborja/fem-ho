@@ -339,8 +339,14 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: (
     val people by model.people.collectAsStateWithLifecycle()
     val taskTypes by model.taskTypes.collectAsStateWithLifecycle()
     val labels by model.labels.collectAsStateWithLifecycle()
+
+    // El detall de tasca llegeix etiquetes i tipologies; si no es carreguen aquí, la
+    // secció del detall surt buida fins que s'obren els Ajustos.
+    LaunchedEffect(Unit) { model.loadEntityData() }
     val openTask by model.openTask.collectAsStateWithLifecycle()
     val openChecklists by model.openChecklists.collectAsStateWithLifecycle()
+    val openComments by model.openComments.collectAsStateWithLifecycle()
+    val openActivity by model.openActivity.collectAsStateWithLifecycle()
     val pinned by model.pinned.collectAsStateWithLifecycle()
     val activeProjects by model.activeProjects.collectAsStateWithLifecycle()
     val expandedCards by model.expandedCards.collectAsStateWithLifecycle()
@@ -609,6 +615,8 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: (
             taskTypes = taskTypes,
             labelsList = labels,
             isCollectiveScope = scopes.any { it.id == task.scopeId && it.kind == ho.fem.model.ScopeKind.COLLECTIVE },
+            comments = openComments,
+            activity = openActivity,
             labels = TaskDetailLabels(
                 title = stringResource(R.string.task_title),
                 description = stringResource(R.string.task_description),
@@ -633,6 +641,28 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: (
                 emptyLabels = stringResource(R.string.task_empty_labels),
                 labelAdd = stringResource(R.string.task_label_add),
                 labelRemove = stringResource(R.string.task_label_remove),
+                comments = stringResource(R.string.task_comments),
+                commentPlaceholder = stringResource(R.string.task_newcomment),
+                emptyComments = stringResource(R.string.task_empty_comments),
+                activity = stringResource(R.string.task_activity),
+                undo = stringResource(R.string.activity_undo),
+                activityVerbs = mapOf(
+                    "answered" to stringResource(R.string.activity_verb_answered),
+                    "asked" to stringResource(R.string.activity_verb_asked),
+                    "cascade_complete" to stringResource(R.string.activity_verb_cascade_complete),
+                    "claimed" to stringResource(R.string.activity_verb_claimed),
+                    "commented" to stringResource(R.string.activity_verb_commented),
+                    "completed" to stringResource(R.string.activity_verb_completed),
+                    "created" to stringResource(R.string.activity_verb_created),
+                    "deleted" to stringResource(R.string.activity_verb_deleted),
+                    "moved" to stringResource(R.string.activity_verb_moved),
+                    "refreshed" to stringResource(R.string.activity_verb_refreshed),
+                    "released" to stringResource(R.string.activity_verb_released),
+                    "reopened" to stringResource(R.string.activity_verb_reopened),
+                    "token_created" to stringResource(R.string.activity_verb_token_created),
+                    "token_revoked" to stringResource(R.string.activity_verb_token_revoked),
+                    "updated" to stringResource(R.string.activity_verb_updated),
+                ),
                 status = mapOf(
                     TaskStatus.INBOX to stringResource(R.string.board_column_inbox),
                     TaskStatus.TODO to stringResource(R.string.board_column_todo),
@@ -666,6 +696,8 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: (
             onAddLabel = { model.addTaskLabel(task, it) },
             onRemoveLabel = { model.removeTaskLabel(task, it) },
             onCreateLabel = { model.createTaskLabel(task, it) },
+            onAddComment = { model.addComment(task.id, it) },
+            onUndoActivity = { model.undoActivity(it) },
             onClose = model::closeTask,
         )
     }

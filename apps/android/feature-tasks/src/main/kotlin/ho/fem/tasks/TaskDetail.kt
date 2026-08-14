@@ -73,6 +73,12 @@ data class TaskDetailLabels(
     val emptyLabels: String,
     val labelAdd: String,
     val labelRemove: String,
+    val comments: String,
+    val commentPlaceholder: String,
+    val emptyComments: String,
+    val activity: String,
+    val undo: String,
+    val activityVerbs: Map<String, String>,
     val status: Map<TaskStatus, String>,
     val aiMode: Map<AiMode, String>,
     val checklists: String,
@@ -91,6 +97,8 @@ fun TaskDetail(
     taskTypes: List<ho.fem.model.TaskType>,
     labelsList: List<ho.fem.model.Label>,
     isCollectiveScope: Boolean,
+    comments: List<ho.fem.model.Comment>,
+    activity: List<ho.fem.model.ActivityEntry>,
     labels: TaskDetailLabels,
     onSave: (title: String, aiMode: AiMode) -> Unit,
     onUpdateDetails: (description: String?, projectId: String?, dueDate: String?, dueTime: String?, deadline: String?, rrule: String?, recurrenceMode: String?) -> Unit,
@@ -102,6 +110,8 @@ fun TaskDetail(
     onAddLabel: (String) -> Unit,
     onRemoveLabel: (String) -> Unit,
     onCreateLabel: (String) -> Unit,
+    onAddComment: (String) -> Unit,
+    onUndoActivity: (String) -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -115,6 +125,7 @@ fun TaskDetail(
     var rrule by remember(task.id) { mutableStateOf(task.rrule.orEmpty()) }
     var recurrenceMode by remember(task.id) { mutableStateOf(task.recurrenceMode?.name?.lowercase() ?: "schedule") }
     var newLabelName by remember(task.id) { mutableStateOf<String?>(null) }
+    var commentDraft by remember(task.id) { mutableStateOf("") }
 
     Column(
         modifier = modifier
@@ -462,6 +473,88 @@ fun TaskDetail(
                         toggleLabel = labels.toggle,
                         onToggle = { onToggleItem(item.id, !item.done) },
                     )
+                }
+            }
+        }
+
+        // Comentaris — la conversa amb la IA és la mateixa llista
+        Text(labels.comments, color = Femho.colors.ink, fontWeight = FontWeight.ExtraBold)
+        if (comments.isEmpty()) {
+            EmptyState(labels.emptyComments)
+        } else {
+            comments.forEach { comment ->
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = comment.authorName ?: comment.authorId.orEmpty(),
+                        color = Femho.colors.inkSoft,
+                        fontSize = FemhoText.meta,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        text = comment.body,
+                        color = Femho.colors.ink,
+                        fontSize = FemhoText.body,
+                    )
+                }
+            }
+        }
+        OutlinedTextField(
+            value = commentDraft,
+            onValueChange = { commentDraft = it },
+            singleLine = false,
+            placeholder = { Text(labels.commentPlaceholder) },
+            modifier = Modifier.fillMaxWidth().testTag("task-comment-input"),
+        )
+        Text(
+            text = labels.save,
+            color = Femho.onBrand,
+            fontSize = FemhoText.body,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier
+                .clip(RoundedCornerShape(FemhoShape.pill))
+                .background(Femho.brandGradient2)
+                .clickable {
+                    val body = commentDraft.trim()
+                    if (body.isNotEmpty()) {
+                        onAddComment(body)
+                        commentDraft = ""
+                    }
+                }
+                .heightIn(min = FemhoSize.touch)
+                .padding(horizontal = 16.dp, vertical = 10.dp)
+                .testTag("task-comment-send"),
+        )
+
+        // Historial d'activitat, amb desfer per als canvis autònoms de la IA
+        Text(labels.activity, color = Femho.colors.ink, fontWeight = FontWeight.ExtraBold)
+        if (activity.isEmpty()) {
+            EmptyState(labels.emptyChecklists)
+        } else {
+            activity.forEach { entry ->
+                Row(
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "${entry.actorLabel.orEmpty()} ${labels.activityVerbs[entry.verb].orEmpty()}",
+                            color = Femho.colors.inkSoft,
+                            fontSize = FemhoText.meta,
+                        )
+                        if (entry.undoable) {
+                            Text(
+                                text = labels.undo,
+                                color = Femho.colors.plouBlue,
+                                fontSize = FemhoText.meta,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier
+                                    .clickable { onUndoActivity(entry.id) }
+                                    .heightIn(min = FemhoSize.touch)
+                                    .padding(vertical = 4.dp)
+                                    .testTag("task-activity-undo-${entry.id}"),
+                            )
+                        }
+                    }
                 }
             }
         }

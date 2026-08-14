@@ -2,6 +2,7 @@ package ho.fem.network
 
 import ho.fem.model.Agent
 import ho.fem.model.AgentDetail
+import ho.fem.model.ActivityEnvelope
 import ho.fem.model.ApiTokenSummary
 import ho.fem.model.Attachment
 import ho.fem.model.AuthTokens
@@ -864,7 +865,8 @@ class FemhoApi(
     suspend fun addComment(taskId: String, body: String): Comment =
         post("/api/v1/tasks/$taskId/comments", mapOf("body" to body))
 
-    suspend fun taskActivity(taskId: String): List<Map<String, Any>> = get("/api/v1/tasks/$taskId/activity")
+    suspend fun taskActivity(taskId: String): List<ho.fem.model.ActivityEntry> =
+        get<ActivityEnvelope>("/api/v1/tasks/$taskId/activity").data
 
     suspend fun undoActivity(id: String): Map<String, Any> = post("/api/v1/activity/$id/undo", emptyMap<String, Any>())
 

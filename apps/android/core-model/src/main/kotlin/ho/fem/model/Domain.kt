@@ -388,6 +388,56 @@ data class Comment(
 )
 
 @Serializable
+data class ActivityEntry(
+    val id: String,
+    @SerialName("entity_type") val entityType: String,
+    @SerialName("entity_id") val entityId: String,
+    val verb: String,
+    @SerialName("actor_type") val actorType: String,
+    @SerialName("actor_user_id") val actorUserId: String? = null,
+    @SerialName("actor_agent_id") val actorAgentId: String? = null,
+    @SerialName("actor_label") val actorLabel: String? = null,
+    val source: String = "",
+    val changes: Map<String, ActivityChange>? = null,
+    @SerialName("created_at") val createdAt: String,
+    val undoable: Boolean = false,
+)
+
+@Serializable
+data class ActivityChange(
+    @Serializable(with = ChangeValueCoerce::class) val from: String? = null,
+    @Serializable(with = ChangeValueCoerce::class) val to: String? = null,
+)
+
+/**
+ * Els valors de `changes` no són sempre text: `{labels: {from: false, to: true}}`
+ * porta booleans quan la columna canvia d'estat. Un camp String estricte trencaria la
+ * deserialització de tot l'historial dins d'un runCatching i la llista semblaria buida.
+ */
+object ChangeValueCoerce : KSerializer<String?> {
+    override val descriptor = PrimitiveSerialDescriptor("ChangeValueCoerce", PrimitiveKind.STRING)
+
+    override fun serialize(encoder: Encoder, value: String?) {
+        if (value == null) encoder.encodeNull() else encoder.encodeString(value)
+    }
+
+    override fun deserialize(decoder: Decoder): String? {
+        val element = (decoder as? JsonDecoder)?.decodeJsonElement()
+        return when (element) {
+            is JsonPrimitive -> element.booleanOrNull?.toString() ?: element.intOrNull?.toString() ?: element.content
+            null -> null
+            else -> null
+        }
+    }
+}
+
+/** La resposta de GET /tasks/{id}/activity ve embolicada en {data: [...]}. */
+@Serializable
+data class ActivityEnvelope(
+    val data: List<ActivityEntry> = emptyList(),
+)
+
+@Serializable
 data class Attachment(
     val id: String,
     @SerialName("task_id") val taskId: String? = null,

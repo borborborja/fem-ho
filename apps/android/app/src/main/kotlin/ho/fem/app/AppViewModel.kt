@@ -99,6 +99,12 @@ class AppViewModel(private val container: Container) : ViewModel() {
     private val _mailRules = MutableStateFlow<List<ho.fem.model.MailRule>>(emptyList())
     val mailRules: StateFlow<List<ho.fem.model.MailRule>> = _mailRules.asStateFlow()
 
+    private val _openComments = MutableStateFlow<List<ho.fem.model.Comment>>(emptyList())
+    val openComments: StateFlow<List<ho.fem.model.Comment>> = _openComments.asStateFlow()
+
+    private val _openActivity = MutableStateFlow<List<ho.fem.model.ActivityEntry>>(emptyList())
+    val openActivity: StateFlow<List<ho.fem.model.ActivityEntry>> = _openActivity.asStateFlow()
+
     private val _createdToken = MutableStateFlow<String?>(null)
     val createdToken: StateFlow<String?> = _createdToken.asStateFlow()
 
@@ -344,11 +350,17 @@ class AppViewModel(private val container: Container) : ViewModel() {
     fun open(task: Task) {
         _openTask.value = task
         _openChecklists.value = emptyList()
+        _openComments.value = emptyList()
+        _openActivity.value = emptyList()
 
         val base = serverUrl ?: return
         viewModelScope.launch {
             runCatching { container.api(base).checklists(task.id) }
                 .onSuccess { _openChecklists.value = it }
+            runCatching { container.api(base).taskComments(task.id) }
+                .onSuccess { _openComments.value = it }
+            runCatching { container.api(base).taskActivity(task.id) }
+                .onSuccess { _openActivity.value = it }
         }
     }
 
@@ -1004,7 +1016,47 @@ class AppViewModel(private val container: Container) : ViewModel() {
         }
     }
 
-    /** Crea una tipologia dins d'un àmbit. POST /api/v1/task-types. */
+    /** Carrega els comentaris (i la conversa amb la IA) de la tasca oberta. */
+    fun loadComments(taskId: String) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).taskComments(taskId) }
+                .onSuccess { _openComments.value = it }
+        }
+    }
+
+    /** Afegeix un comentari a la tasca oberta. POST /api/v1/tasks/{id}/comments. */
+    fun addComment(taskId: String, body: String) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).addComment(taskId, body) }
+                .onSuccess { loadComments(taskId) }
+        }
+    }
+
+    /** Carrega l'historial d'activitat de la tasca oberta. */
+    fun loadActivity(taskId: String) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).taskActivity(taskId) }
+                .onSuccess { _openActivity.value = it }
+        }
+    }
+
+    /** Desfà un canvi autònom de la IA. POST /api/v1/activity/{id}/undo. */
+    fun undoActivity(entryId: String) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).undoActivity(entryId) }
+                .onSuccess {
+                    _openTask.value?.let { task ->
+                        loadActivity(task.id)
+                        refreshTask(task)
+                    }
+                }
+        }
+    }
+
     fun createTaskType(scopeId: String, name: String) {
         val base = serverUrl ?: return
         viewModelScope.launch {
