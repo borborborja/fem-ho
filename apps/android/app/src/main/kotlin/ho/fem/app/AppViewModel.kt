@@ -15,6 +15,7 @@ import ho.fem.model.Scope
 import ho.fem.model.Subtask
 import ho.fem.model.Task
 import ho.fem.model.TaskStatus
+import ho.fem.model.UserProfile
 import ho.fem.model.serverCandidates
 import ho.fem.network.FemhoApi
 import java.util.UUID
@@ -67,6 +68,12 @@ class AppViewModel(private val container: Container) : ViewModel() {
 
     private val _accent = MutableStateFlow("default")
     val accent: StateFlow<String> = _accent.asStateFlow()
+
+    private val _profile = MutableStateFlow<UserProfile?>(null)
+    val profile: StateFlow<UserProfile?> = _profile.asStateFlow()
+
+    private val _gravatarEnabled = MutableStateFlow(true)
+    val gravatarEnabled: StateFlow<Boolean> = _gravatarEnabled.asStateFlow()
 
     private val _events = MutableStateFlow<List<EventOccurrence>>(emptyList())
     val events: StateFlow<List<EventOccurrence>> = _events.asStateFlow()
@@ -492,6 +499,69 @@ class AppViewModel(private val container: Container) : ViewModel() {
         }
     }
 
+    /**
+     * Carrega el perfil de l'usuari.
+     *
+     * Es crida en iniciar sessió per tenir el nom, correu i timezone a mà.
+     */
+    fun loadProfile() {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).profile() }
+                .onSuccess { _profile.value = it }
+        }
+    }
+
+    /**
+     * Actualitza el nom de l'usuari.
+     *
+     * **Es desa en perdre el focus** (onBlur), no a cada tecla: el mateix criteri que
+     * la web, que fa el PATCH quan surt del camp.
+     */
+    fun setName(name: String) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).updateProfile(name = name) }
+                .onSuccess { _profile.value = it }
+        }
+    }
+
+    /**
+     * Activa o desactiva Gravatar per a la foto de perfil.
+     *
+     * PATCH /api/v1/auth/settings {gravatar}. El valor es guarda localment i es
+     * sincronitza amb el servidor.
+     */
+    fun setGravatar(enabled: Boolean) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).updateSettings(gravatar = enabled) }
+                .onSuccess { _gravatarEnabled.value = enabled }
+        }
+    }
+
+    /**
+     * Canvia la contrasenya de l'usuari.
+     *
+     * POST /api/v1/auth/password {current_password, new_password}. La validació
+     * de longitud mínima (10 caràcters) la fa la UI abans de cridar aquest mètode.
+     *
+     * @param current la contrasenya actual
+     * @param new la contrasenya nova
+     * @param onError callback amb el missatge d'error si falla
+     * @param onSuccess callback si ha anat bé
+     */
+    fun changePassword(current: String, new: String, onError: (String) -> Unit, onSuccess: () -> Unit) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).changePassword(current, new) }
+                .onSuccess { onSuccess() }
+                .onFailure { error ->
+                    onError((error as? FemhoApi.ApiException)?.detail.orEmpty())
+                }
+        }
+    }
+
     fun move(task: Task, status: TaskStatus) {
         val base = serverUrl ?: return
         viewModelScope.launch {
@@ -693,5 +763,7 @@ class AppViewModel(private val container: Container) : ViewModel() {
         viewModelScope.launch { repository.projects.collect { _projects.value = it } }
         viewModelScope.launch { repository.people.collect { _people.value = it } }
         viewModelScope.launch { repository.pending.collect { _pending.value = it } }
+        // Carrega el perfil per a la pestanya Perfil d'Ajustos
+        loadProfile()
     }
 }

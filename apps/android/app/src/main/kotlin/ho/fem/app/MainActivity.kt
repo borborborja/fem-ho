@@ -55,6 +55,7 @@ import ho.fem.model.Checklist
 import ho.fem.model.Project
 import ho.fem.model.Scope
 import ho.fem.model.TaskStatus
+import ho.fem.model.UserProfile
 import ho.fem.calendar.CalendarLabels
 import ho.fem.calendar.DayList
 import ho.fem.calendar.InboxLabels
@@ -1129,6 +1130,8 @@ private fun Modifier.androidClickable(onClick: () -> Unit): Modifier = this.clic
 private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> Unit) {
     val theme by model.theme.collectAsStateWithLifecycle()
     val accent by model.accent.collectAsStateWithLifecycle()
+    val profile by model.profile.collectAsStateWithLifecycle()
+    val gravatarEnabled by model.gravatarEnabled.collectAsStateWithLifecycle()
 
     SettingsScreen(
         labels = SettingsLabels(
@@ -1203,7 +1206,22 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
             about = stringResource(R.string.settings_about),
             aboutSource = stringResource(R.string.settings_source).format("0.13.0", "AGPL-3.0-or-later"),
             aboutCredits = stringResource(R.string.settings_credits),
+            // Perfil
+            profileName = stringResource(R.string.settings_profilename),
+            profileEmail = stringResource(R.string.settings_profileemail),
+            timezone = stringResource(R.string.settings_timezone),
+            gravatar = stringResource(R.string.settings_gravatar),
+            gravatarHelp = stringResource(R.string.settings_gravatarhelp),
+            changePassword = stringResource(R.string.settings_changepassword),
+            currentPassword = stringResource(R.string.settings_currentpassword),
+            newPassword = stringResource(R.string.settings_newpassword),
+            passwordChanged = stringResource(R.string.settings_passwordchanged),
+            navSave = stringResource(R.string.nav_save),
         ),
+        profileName = profile?.name.orEmpty(),
+        profileEmail = profile?.email.orEmpty(),
+        profileTimezone = profile?.timezone.orEmpty(),
+        gravatarEnabled = gravatarEnabled,
         theme = theme,
         accent = accent,
         serverUrl = serverUrl,
@@ -1219,5 +1237,8 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
         onInboxShowOverdue = model::setInboxShowOverdue,
         onBack = onBack,
         onLogout = model::logout,
+        onSetName = model::setName,
+        onSetGravatar = model::setGravatar,
+        onChangePassword = model::changePassword,
     )
 }

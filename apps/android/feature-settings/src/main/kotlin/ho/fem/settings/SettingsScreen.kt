@@ -81,6 +81,17 @@ data class SettingsLabels(
     val about: String,
     val aboutSource: String,
     val aboutCredits: String,
+    // Perfil
+    val profileName: String,
+    val profileEmail: String,
+    val timezone: String,
+    val gravatar: String,
+    val gravatarHelp: String,
+    val changePassword: String,
+    val currentPassword: String,
+    val newPassword: String,
+    val passwordChanged: String,
+    val navSave: String,
 )
 
 data class SettingsTabs(
@@ -112,6 +123,10 @@ fun SettingsScreen(
     theme: String,
     accent: String,
     serverUrl: String,
+    profileName: String = "",
+    profileEmail: String = "",
+    profileTimezone: String = "",
+    gravatarEnabled: Boolean = true,
     onTheme: (String) -> Unit,
     onAccent: (String) -> Unit,
     onLocale: (String) -> Unit,
@@ -124,6 +139,9 @@ fun SettingsScreen(
     onInboxShowOverdue: (Boolean) -> Unit,
     onBack: () -> Unit,
     onLogout: () -> Unit,
+    onSetName: (String) -> Unit = {},
+    onSetGravatar: (Boolean) -> Unit = {},
+    onChangePassword: (String, String, (String) -> Unit, () -> Unit) -> Unit = { _, _, _, _ -> },
     modifier: Modifier = Modifier,
 ) {
     var selectedTab by remember { mutableStateOf("general") }
@@ -219,7 +237,16 @@ fun SettingsScreen(
                 "mcp" -> EmptyState(labels.emptyStates.mcp)
                 "ai" -> EmptyState(labels.emptyStates.ai)
                 "shares" -> EmptyState(labels.emptyStates.shares)
-                "profile" -> EmptyState(labels.emptyStates.profile)
+                "profile" -> ProfileTab(
+                    labels = labels,
+                    name = profileName,
+                    email = profileEmail,
+                    timezone = profileTimezone,
+                    gravatarEnabled = gravatarEnabled,
+                    onSetName = onSetName,
+                    onSetGravatar = onSetGravatar,
+                    onChangePassword = onChangePassword,
+                )
                 "admin" -> EmptyState(labels.emptyStates.admin)
             }
         }
@@ -441,6 +468,247 @@ private fun Toggle(
                     .size(16.dp)
                     .align(if (checked) Alignment.CenterEnd else Alignment.CenterStart)
                     .background(Femho.onBrand, RoundedCornerShape(8.dp)),
+            )
+        }
+    }
+}
+
+/**
+ * La pestanya Perfil d'Ajustos.
+ *
+ * Segueix el mateix disseny que la web (SettingsScreen.tsx:2236-2371):
+ * - Nom (editable, desa en perdre el focus → PATCH /auth/me)
+ * - Correu (només lectura)
+ * - Zona horària (només lectura)
+ * - Gravatar (commutador → PATCH /auth/settings)
+ * - Canviar contrasenya (dos camps + botó → POST /auth/password)
+ */
+@Composable
+private fun ProfileTab(
+    labels: SettingsLabels,
+    name: String,
+    email: String,
+    timezone: String,
+    gravatarEnabled: Boolean,
+    onSetName: (String) -> Unit,
+    onSetGravatar: (Boolean) -> Unit,
+    onChangePassword: (String, String, (String) -> Unit, () -> Unit) -> Unit,
+) {
+    var nameDraft by mutableStateOf(name)
+    var currentPassword by remember { mutableStateOf("") }
+    var newPassword by remember { mutableStateOf("") }
+    var passwordError by remember { mutableStateOf<String?>(null) }
+    var passwordSuccess by remember { mutableStateOf(false) }
+
+    // El grup del nom
+    Group(labels.tabs.profile) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            // Nom editable
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = labels.profileName,
+                    color = Femho.colors.inkSoft,
+                    fontSize = FemhoText.meta,
+                )
+                androidx.compose.foundation.text.BasicTextField(
+                    value = nameDraft,
+                    onValueChange = { nameDraft = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(FemhoShape.pill))
+                        .background(Femho.colors.ghostBg)
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    decorationBox = { innerTextField ->
+                        Box(modifier = Modifier.padding(vertical = 4.dp)) {
+                            if (nameDraft.isEmpty()) {
+                                Text(
+                                    text = "El teu nom",
+                                    color = Femho.colors.inkFaint,
+                                    fontSize = FemhoText.body,
+                                )
+                            } else {
+                                Text(
+                                    text = nameDraft,
+                                    color = Femho.colors.ink,
+                                    fontSize = FemhoText.body,
+                                )
+                            }
+                            innerTextField()
+                        }
+                    },
+                )
+            }
+
+            // Correu només lectura
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = labels.profileEmail,
+                    color = Femho.colors.inkSoft,
+                    fontSize = FemhoText.meta,
+                )
+                Text(
+                    text = email.ifEmpty { "—" },
+                    color = Femho.colors.ink,
+                    fontSize = FemhoText.body,
+                )
+            }
+
+            // Zona horària només lectura
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = labels.timezone,
+                    color = Femho.colors.inkSoft,
+                    fontSize = FemhoText.meta,
+                )
+                Text(
+                    text = timezone.ifEmpty { "—" },
+                    color = Femho.colors.ink,
+                    fontSize = FemhoText.body,
+                )
+            }
+        }
+    }
+
+    // Gravatar
+    Group("Gravatar") {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Toggle(
+                label = labels.gravatar,
+                checked = gravatarEnabled,
+                onChange = onSetGravatar,
+            )
+            Text(
+                text = labels.gravatarHelp,
+                color = Femho.colors.inkFaint,
+                fontSize = FemhoText.meta,
+            )
+        }
+    }
+
+    // Canviar contrasenya
+    Group(labels.changePassword) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            // Contrasenya actual
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = labels.currentPassword,
+                    color = Femho.colors.inkSoft,
+                    fontSize = FemhoText.meta,
+                )
+                androidx.compose.foundation.text.BasicTextField(
+                    value = currentPassword,
+                    onValueChange = {
+                        currentPassword = it
+                        passwordError = null
+                        passwordSuccess = false
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(FemhoShape.pill))
+                        .background(Femho.colors.ghostBg)
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    decorationBox = { innerTextField ->
+                        Box(modifier = Modifier.padding(vertical = 4.dp)) {
+                            if (currentPassword.isEmpty()) {
+                                Text(
+                                    text = labels.currentPassword,
+                                    color = Femho.colors.inkFaint,
+                                    fontSize = FemhoText.body,
+                                )
+                            } else {
+                                Text(
+                                    text = currentPassword,
+                                    color = Femho.colors.ink,
+                                    fontSize = FemhoText.body,
+                                )
+                            }
+                            innerTextField()
+                        }
+                    },
+                )
+            }
+
+            // Contrasenya nova
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = labels.newPassword,
+                    color = Femho.colors.inkSoft,
+                    fontSize = FemhoText.meta,
+                )
+                androidx.compose.foundation.text.BasicTextField(
+                    value = newPassword,
+                    onValueChange = {
+                        newPassword = it
+                        passwordError = null
+                        passwordSuccess = false
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(FemhoShape.pill))
+                        .background(Femho.colors.ghostBg)
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    decorationBox = { innerTextField ->
+                        Box(modifier = Modifier.padding(vertical = 4.dp)) {
+                            if (newPassword.isEmpty()) {
+                                Text(
+                                    text = labels.newPassword,
+                                    color = Femho.colors.inkFaint,
+                                    fontSize = FemhoText.body,
+                                )
+                            } else {
+                                Text(
+                                    text = newPassword,
+                                    color = Femho.colors.ink,
+                                    fontSize = FemhoText.body,
+                                )
+                            }
+                            innerTextField()
+                        }
+                    },
+                )
+            }
+
+            // Error o èxit
+            passwordError?.let { error ->
+                Text(
+                    text = error,
+                    color = Femho.colors.dangerText,
+                    fontSize = FemhoText.meta,
+                )
+            }
+            if (passwordSuccess) {
+                Text(
+                    text = labels.passwordChanged,
+                    color = Femho.colors.inkSoft,
+                    fontSize = FemhoText.meta,
+                )
+            }
+
+            // Botó de canviar
+            Text(
+                text = labels.navSave,
+                color = if (newPassword.length < 10) Femho.colors.inkFaint else Femho.onBrand,
+                fontSize = FemhoText.body,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier
+                    .clickable(enabled = newPassword.length >= 10) {
+                        if (newPassword.length < 10) return@clickable
+                        onChangePassword(
+                            currentPassword,
+                            newPassword,
+                            { error ->
+                                passwordError = error
+                                passwordSuccess = false
+                            },
+                            {
+                                passwordSuccess = true
+                                currentPassword = ""
+                                newPassword = ""
+                            },
+                        )
+                    }
+                    .heightIn(min = FemhoSize.touch)
+                    .padding(vertical = 12.dp),
             )
         }
     }
