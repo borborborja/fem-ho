@@ -646,6 +646,12 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: (
                 emptyComments = stringResource(R.string.task_empty_comments),
                 activity = stringResource(R.string.task_activity),
                 undo = stringResource(R.string.activity_undo),
+                delete = stringResource(R.string.nav_delete),
+                cancel = stringResource(R.string.nav_cancel),
+                deleteConfirm = stringResource(R.string.task_deleteconfirm),
+                lockWorking = stringResource(R.string.ai_lock_working),
+                takeOverAction = stringResource(R.string.ai_takeover_action),
+                takeOverWhere = stringResource(R.string.ai_takeover_where),
                 activityVerbs = mapOf(
                     "answered" to stringResource(R.string.activity_verb_answered),
                     "asked" to stringResource(R.string.activity_verb_asked),
@@ -698,6 +704,8 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: (
             onCreateLabel = { model.createTaskLabel(task, it) },
             onAddComment = { model.addComment(task.id, it) },
             onUndoActivity = { model.undoActivity(it) },
+            onDelete = { model.deleteTask(task) },
+            onTakeOver = { model.takeOver(task, it) },
             onClose = model::closeTask,
         )
     }

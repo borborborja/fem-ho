@@ -489,8 +489,8 @@ class Repository(
         refresh(emptyList(), null)
     }
 
-    suspend fun takeOverTask(taskId: String): Task {
-        val task = api.takeOverTask(taskId)
+    suspend fun takeOverTask(taskId: String, status: String): Task {
+        val task = api.takeOverTask(taskId, status)
         dao.putTasks(listOf(task.toEntity()))
         return task
     }

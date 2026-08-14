@@ -1126,6 +1126,31 @@ class AppViewModel(private val container: Container) : ViewModel() {
         }
     }
 
+    /** El pany d'agent: l'usuari se l'emporta al seu tauler. POST /tasks/{id}/take-over. */
+    fun takeOver(task: Task, status: String) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).takeOverTask(task.id, status) }
+                .onSuccess { updated ->
+                    _openTask.value = updated
+                    refresh()
+                    refreshTask(task)
+                }
+        }
+    }
+
+    /** Esborra una tasca. DELETE /api/v1/tasks/{id}. */
+    fun deleteTask(task: Task) {
+        val base = serverUrl ?: return
+        viewModelScope.launch {
+            runCatching { container.api(base).deleteTask(task.id) }
+                .onSuccess {
+                    _openTask.value = null
+                    refresh()
+                }
+        }
+    }
+
     // -------------------------------------------------------- el tauler de la IA
 
     private val _aiEnabled = MutableStateFlow(false)

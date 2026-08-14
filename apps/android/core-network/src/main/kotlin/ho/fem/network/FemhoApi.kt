@@ -827,7 +827,8 @@ class FemhoApi(
 
     suspend fun aiStatus(): Map<String, Any> = get("/api/v1/ai/status")
 
-    suspend fun takeOverTask(taskId: String): Task = post("/api/v1/tasks/$taskId/take-over", emptyMap<String, Any>())
+    suspend fun takeOverTask(taskId: String, status: String): Task =
+        post("/api/v1/tasks/$taskId/take-over", mapOf("status" to status))
 
     suspend fun claimTask(taskId: String): Task = post("/api/v1/tasks/$taskId/claim", emptyMap<String, Any>())
 

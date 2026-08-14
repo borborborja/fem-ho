@@ -79,6 +79,12 @@ data class TaskDetailLabels(
     val activity: String,
     val undo: String,
     val activityVerbs: Map<String, String>,
+    val delete: String,
+    val cancel: String,
+    val deleteConfirm: String,
+    val lockWorking: String,
+    val takeOverAction: String,
+    val takeOverWhere: String,
     val status: Map<TaskStatus, String>,
     val aiMode: Map<AiMode, String>,
     val checklists: String,
@@ -112,6 +118,8 @@ fun TaskDetail(
     onCreateLabel: (String) -> Unit,
     onAddComment: (String) -> Unit,
     onUndoActivity: (String) -> Unit,
+    onDelete: () -> Unit,
+    onTakeOver: (String) -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -126,6 +134,14 @@ fun TaskDetail(
     var recurrenceMode by remember(task.id) { mutableStateOf(task.recurrenceMode?.name?.lowercase() ?: "schedule") }
     var newLabelName by remember(task.id) { mutableStateOf<String?>(null) }
     var commentDraft by remember(task.id) { mutableStateOf("") }
+    var confirmingDelete by remember(task.id) { mutableStateOf(false) }
+    var takingOver by remember(task.id) { mutableStateOf(false) }
+
+    // El pany de l'agent (todo 22): locked_until al futur vol dir que la tasca està
+    // bloquejada, els botons de moure queden desactivats i s'ofereix el take-over.
+    val locked = task.lockedUntil?.let { until ->
+        runCatching { java.time.Instant.parse(until) }.getOrNull()?.isAfter(java.time.Instant.now()) ?: false
+    } ?: false
 
     Column(
         modifier = modifier
@@ -417,6 +433,59 @@ fun TaskDetail(
             }
         }
 
+        // El pany de l'agent: si la tasca està bloquejada, es veu i no es pot moure
+        if (locked) {
+            Text(
+                text = labels.lockWorking.replace("{time}", task.lockedUntil.orEmpty()),
+                color = Femho.colors.inkSoft,
+                fontSize = FemhoText.meta,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(FemhoShape.pill))
+                    .background(Femho.colors.ghostBg)
+                    .padding(horizontal = 12.dp, vertical = 10.dp)
+                    .testTag("task-locked-notice"),
+            )
+        } else if (task.aiMode != AiMode.MANUAL) {
+            if (!takingOver) {
+                Text(
+                    text = labels.takeOverAction,
+                    color = Femho.colors.ink,
+                    fontSize = FemhoText.body,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(FemhoShape.pill))
+                        .background(Femho.colors.ghostBg)
+                        .clickable { takingOver = true }
+                        .heightIn(min = FemhoSize.touch)
+                        .padding(horizontal = 16.dp, vertical = 10.dp)
+                        .testTag("task-take-over"),
+                )
+            } else {
+                Text(
+                    text = labels.takeOverWhere,
+                    color = Femho.colors.inkSoft,
+                    fontSize = FemhoText.meta,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("todo" to TaskStatus.TODO, "doing" to TaskStatus.DOING).forEach { (wire, status) ->
+                        Text(
+                            text = labels.status[status].orEmpty(),
+                            color = Femho.colors.ink,
+                            fontSize = FemhoText.meta,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(FemhoShape.pill))
+                                .background(Femho.colors.ghostBg)
+                                .clickable { onTakeOver(wire) }
+                                .heightIn(min = FemhoSize.touch)
+                                .padding(horizontal = 12.dp, vertical = 10.dp)
+                                .testTag("task-take-over-$wire"),
+                        )
+                    }
+                }
+            }
+        }
+
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             TaskStatus.entries.forEach { status ->
                 Text(
@@ -429,7 +498,7 @@ fun TaskDetail(
                         .background(
                             if (task.status == status) Femho.colors.plouBlue else Femho.colors.ghostBg,
                         )
-                        .clickable { onStatus(status) }
+                        .clickable(enabled = !locked) { onStatus(status) }
                         .heightIn(min = FemhoSize.touch)
                         .padding(horizontal = 12.dp, vertical = 12.dp)
                         .testTag("status-${status.name.lowercase()}"),
@@ -557,6 +626,56 @@ fun TaskDetail(
                     }
                 }
             }
+        }
+
+        // Esborrar la tasca, amb confirmació que diu què més se n'anirà (subtasques i
+        // llistes), com el diàleg de la web.
+        if (confirmingDelete) {
+            Text(
+                text = labels.deleteConfirm.replace("{title}", task.title),
+                color = Femho.colors.dangerText,
+                fontSize = FemhoText.body,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(FemhoShape.card))
+                    .background(Femho.colors.dangerBg)
+                    .padding(horizontal = 14.dp, vertical = 12.dp)
+                    .testTag("task-confirm-delete"),
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                Text(
+                    text = labels.delete,
+                    color = Femho.colors.dangerText,
+                    fontSize = FemhoText.body,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .clickable { onDelete() }
+                        .heightIn(min = FemhoSize.touch)
+                        .padding(vertical = 10.dp)
+                        .testTag("task-delete-confirm"),
+                )
+                Text(
+                    text = labels.cancel,
+                    color = Femho.colors.inkSoft,
+                    fontSize = FemhoText.body,
+                    modifier = Modifier
+                        .clickable { confirmingDelete = false }
+                        .heightIn(min = FemhoSize.touch)
+                        .padding(vertical = 10.dp)
+                        .testTag("task-delete-cancel"),
+                )
+            }
+        } else {
+            Text(
+                text = labels.delete,
+                color = Femho.colors.dangerText,
+                fontSize = FemhoText.body,
+                modifier = Modifier
+                    .clickable { confirmingDelete = true }
+                    .heightIn(min = FemhoSize.touch)
+                    .padding(vertical = 10.dp)
+                    .testTag("task-delete"),
+            )
         }
 
         Text(
