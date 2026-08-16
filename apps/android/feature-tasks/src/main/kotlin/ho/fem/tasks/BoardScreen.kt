@@ -1,28 +1,39 @@
 package ho.fem.tasks
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PageSize
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import ho.fem.designsystem.CardAddForm
 import ho.fem.designsystem.CardList
 import ho.fem.designsystem.EmptyState
+import ho.fem.designsystem.Femho
 import ho.fem.designsystem.FemhoSize
 import ho.fem.designsystem.KanbanColumn
 import ho.fem.designsystem.TaskCard
 import ho.fem.model.AiMode
 import ho.fem.model.Task
 import ho.fem.model.TaskStatus
+import kotlinx.coroutines.launch
 
 /**
  * El tauler a Android. docs/03 §4.
@@ -112,85 +123,120 @@ fun BoardScreen(
     aiBoard: Boolean = false,
 ) {
     val pager = rememberPagerState(pageCount = { ORDER.size })
+    val scope = rememberCoroutineScope()
 
-    HorizontalPager(
-        state = pager,
-        modifier = modifier.fillMaxSize().testTag("board-pager"),
-        // 80% d'amplada: la columna següent s'endevina i convida a lliscar-hi.
-        pageSize = FractionPageSize(0.8f),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp),
-        pageSpacing = FemhoSize.columnGap,
-    ) { page ->
-        val status = ORDER[page]
-        val ofColumn = tasks
-            .filter { it.status == status }
-            .filter {
-                if (status == TaskStatus.INBOX) {
-                    true
-                } else {
-                    val delegada = it.aiMode != AiMode.MANUAL
-                    if (aiBoard) delegada else !delegada
-                }
-            }
-
-        KanbanColumn(
-            label = labels.columns[status].orEmpty(),
-            count = ofColumn.size,
-            inbox = status == TaskStatus.INBOX,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(FemhoSize.cardGap),
-            ) {
-                if (ofColumn.isEmpty()) {
-                    EmptyState(labels.empty[status].orEmpty())
-                } else {
-                    ofColumn.forEach { task ->
-                        val extra = extras(task)
-                        // El pany de l'agent: locked_until al futur bloqueja la targeta
-                        val locked = task.lockedUntil?.let { until ->
-                            runCatching { java.time.Instant.parse(until) }
-                                .getOrNull()?.isAfter(java.time.Instant.now()) ?: false
-                        } ?: false
-                        TaskCard(
-                            title = task.title,
-                            time = task.dueTime,
-                            done = task.status == TaskStatus.DONE,
-                            toggleLabel = labels.toggle,
-                            // Amb el pany, la casella no mou: mostra el motiu (el 409
-                            // que retornaria el servidor si ho intentéssim).
-                            onToggle = { if (locked) onLocked(task) else onToggle(task) },
-                            onOpen = { onOpen(task) },
-                            lockLabel = if (locked) labels.lock else null,
-                            attentionLabel = if (task.needsAttention) labels.attention else null,
-                            claimLabel = if (aiBoard) labels.claim else null,
-                            onClaim = if (aiBoard) ({ onClaim(task) }) else null,
-                            /**
-                             * La fletxa **només fins a "Fent"**: a "Fent" i a "Fet" la
-                             * barra és la casella d'estat, que és on acaba el recorregut.
-                             * Amb el pany de l'agent, el moviment queda desactivat.
-                             */
-                            onAdvance = if (locked) null else when (status) {
-                                TaskStatus.INBOX -> ({ onMove(task, TaskStatus.TODO) })
-                                TaskStatus.TODO -> ({ onMove(task, TaskStatus.DOING) })
-                                else -> null
-                            },
-                            advanceLabel = labels.advance[status].orEmpty(),
-                            onEdit = extra?.onEdit,
-                            editLabel = extra?.editLabel.orEmpty(),
-                            lists = extra?.lists.orEmpty(),
-                            listsExpanded = extra?.expanded == true,
-                            listsToggleLabel = extra?.toggleLabel,
-                            onToggleLists = { extra?.onToggleLists?.invoke() },
-                            addForm = extra?.addForm,
-                            modifier = Modifier.padding(bottom = 0.dp),
-                        )
+    Column(
+        modifier = modifier.fillMaxSize(),
+    ) {
+        HorizontalPager(
+            state = pager,
+            modifier = Modifier.weight(1f).fillMaxWidth().testTag("board-pager"),
+            // 80% d'amplada: la columna següent s'endevina i convida a lliscar-hi.
+            pageSize = FractionPageSize(0.8f),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp),
+            pageSpacing = FemhoSize.columnGap,
+        ) { page ->
+            val status = ORDER[page]
+            val ofColumn = tasks
+                .filter { it.status == status }
+                .filter {
+                    if (status == TaskStatus.INBOX) {
+                        true
+                    } else {
+                        val delegada = it.aiMode != AiMode.MANUAL
+                        if (aiBoard) delegada else !delegada
                     }
                 }
-            }
 
-            footer(status)
+            KanbanColumn(
+                label = labels.columns[status].orEmpty(),
+                count = ofColumn.size,
+                inbox = status == TaskStatus.INBOX,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(FemhoSize.cardGap),
+                ) {
+                    if (ofColumn.isEmpty()) {
+                        EmptyState(labels.empty[status].orEmpty())
+                    } else {
+                        ofColumn.forEach { task ->
+                            val extra = extras(task)
+                            // El pany de l'agent: locked_until al futur bloqueja la targeta
+                            val locked = task.lockedUntil?.let { until ->
+                                runCatching { java.time.Instant.parse(until) }
+                                    .getOrNull()?.isAfter(java.time.Instant.now()) ?: false
+                            } ?: false
+                            TaskCard(
+                                title = task.title,
+                                time = task.dueTime,
+                                done = task.status == TaskStatus.DONE,
+                                toggleLabel = labels.toggle,
+                                // Amb el pany, la casella no mou: mostra el motiu (el 409
+                                // que retornaria el servidor si ho intentéssim).
+                                onToggle = { if (locked) onLocked(task) else onToggle(task) },
+                                onOpen = { onOpen(task) },
+                                lockLabel = if (locked) labels.lock else null,
+                                attentionLabel = if (task.needsAttention) labels.attention else null,
+                                claimLabel = if (aiBoard) labels.claim else null,
+                                onClaim = if (aiBoard) ({ onClaim(task) }) else null,
+                                /**
+                                 * La fletxa **només fins a "Fent"**: a "Fent" i a "Fet" la
+                                 * barra és la casella d'estat, que és on acaba el recorregut.
+                                 * Amb el pany de l'agent, el moviment queda desactivat.
+                                 */
+                                onAdvance = if (locked) null else when (status) {
+                                    TaskStatus.INBOX -> ({ onMove(task, TaskStatus.TODO) })
+                                    TaskStatus.TODO -> ({ onMove(task, TaskStatus.DOING) })
+                                    else -> null
+                                },
+                                advanceLabel = labels.advance[status].orEmpty(),
+                                onEdit = extra?.onEdit,
+                                editLabel = extra?.editLabel.orEmpty(),
+                                lists = extra?.lists.orEmpty(),
+                                listsExpanded = extra?.expanded == true,
+                                listsToggleLabel = extra?.toggleLabel,
+                                onToggleLists = { extra?.onToggleLists?.invoke() },
+                                addForm = extra?.addForm,
+                                modifier = Modifier.padding(bottom = 0.dp),
+                            )
+                        }
+                    }
+                }
+
+                footer(status)
+            }
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 16.dp)
+                .testTag("pager-dots"),
+            // `spacedBy` amb `CenterHorizontally`: separa els punts 8dp i centra el grup
+            // sencer. Abans el `padding(end = 8.dp)` anava darrere de `size(8.dp)`, que el
+            // feia no-op — els punts es tocaven.
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ORDER.forEachIndexed { index, _ ->
+                val isActive = pager.currentPage == index
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .then(
+                            if (isActive) Modifier.background(Femho.brandGradient2, CircleShape)
+                            else Modifier.background(Femho.colors.inkFaint)
+                        )
+                        .clickable {
+                            scope.launch {
+                                pager.animateScrollToPage(index)
+                            }
+                        },
+                )
+            }
         }
     }
 }

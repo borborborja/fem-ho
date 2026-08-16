@@ -52,7 +52,7 @@ La capçalera és una columna, no una fila, perquè hi cap menys:
 3. Chips d'àmbit, que emboliquen.
 4. **Les llistes pinejades**, quan n'hi ha, sota els xips: el nom i **com va** cada una, com a la web. Toca-hi obre la tasca que la conté — a Android les llistes viuen dins de la tasca i no hi ha pantalla pròpia.
 
-5. **El filtre de projectes**, en una fila plegable sota els xips, amb un epígraf per àmbit i els seus projectes. A la web el botonet va enganxat al xip; aquí els xips emboliquen i fan scroll horitzontal, i un desplegable per sobre quedaria tallat, o sigui que la mateixa idea pren la forma que la pantalla permet. El criteri és el mateix (`docs/14` P7): **un àmbit sense res triat vol dir tots els seus**.
+5. **El filtre de projectes**: un botó fix a la dreta dels xips d'àmbit (fora del scroll horitzontal) que obre un popup flotant amb selecció múltiple per àmbit. El botó només es mostra si algun àmbit actiu té projectes, i el menú epigrafa cada àmbit amb els seus projectes en caselles. El criteri és el mateix (`docs/14` P7): **un àmbit sense res triat vol dir tots els seus**.
 
 Padding lateral de 16px.
 
@@ -64,7 +64,7 @@ Padding lateral de 16px.
 
 Cada columna té la seva llista mandrosa amb l'estat de scroll preservat.
 
-Indicador de posició sota la capçalera: quatre punts, l'actiu amb `--gradient-brand-2stop`.
+Indicador de posició sota les columnes: quatre punts clicables (un per columna INBOX/TODO/DOING/DONE), l'actiu amb `--gradient-brand-2stop`.
 
 **L'Inbox continua sent visualment diferent** (targeta sòlida contra contenidor buit), igual que a la web.
 

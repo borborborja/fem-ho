@@ -32,6 +32,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
@@ -1556,26 +1558,6 @@ private fun TopBar(
                 modifier = Modifier.androidClickable(onDashboard),
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // El commutador Tasques / Calendari / Registre, igual que a la web (docs/02 §3).
-                val targets = buildList {
-                    add(Screen.BOARD to stringResource(R.string.nav_tasks))
-                    add(Screen.CALENDAR to stringResource(R.string.nav_calendar))
-                    if (showRegistre) add(Screen.REGISTRE to stringResource(R.string.nav_registre))
-                    if (showEstadistiques) add(Screen.ESTADISTIQUES to stringResource(R.string.nav_estadistiques))
-                }
-                targets.forEach { (target, label) ->
-                    Text(
-                        text = label,
-                        color = if (view == target) Femho.colors.ink else Femho.colors.inkFaint,
-                        fontSize = FemhoText.body,
-                        fontWeight = if (view == target) FontWeight.Bold else FontWeight.Medium,
-                        modifier = Modifier
-                            .padding(horizontal = 8.dp, vertical = 12.dp)
-                            .testTag("view-${'$'}{target.name.lowercase()}")
-                            .androidClickable { onView(target) },
-                    )
-                }
-
                 // La lupa de la cerca, com a la web: un text, com la resta d'icones.
                 Text(
                     text = "⌕",
@@ -1659,41 +1641,135 @@ private fun TopBar(
         }
 
         Row(
-            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(7.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp)
+                .clip(RoundedCornerShape(FemhoShape.pill))
+                .background(Femho.colors.switcherBg)
+                .border(1.dp, Femho.colors.switcherBorder, RoundedCornerShape(FemhoShape.pill)),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            scopes.forEach { scope ->
-                ScopeChip(
-                    label = scope.name,
-                    color = Femho.colors.scopeColor(scope.color),
-                    active = active.isEmpty() || scope.id in active,
-                    onClick = { onToggle(scope.id) },
+            val targets = buildList {
+                add(Screen.CALENDAR to stringResource(R.string.nav_calendar))
+                add(Screen.BOARD to stringResource(R.string.nav_tasks))
+                if (showRegistre) add(Screen.REGISTRE to stringResource(R.string.nav_registre))
+                if (showEstadistiques) add(Screen.ESTADISTIQUES to stringResource(R.string.nav_estadistiques))
+            }
+            targets.forEach { (target, label) ->
+                val isActive = view == target
+                Text(
+                    text = label,
+                    color = if (isActive) Femho.colors.ink else Femho.colors.inkSoft,
+                    fontSize = FemhoText.body,
+                    fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium,
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(vertical = 7.dp, horizontal = 18.dp)
+                        .clip(RoundedCornerShape(FemhoShape.pill))
+                        .background(if (isActive) Femho.colors.cardBg else androidx.compose.ui.graphics.Color.Transparent)
+                        .testTag("view-${'$'}{target.name.lowercase()}")
+                        .androidClickable { onView(target) },
+                    textAlign = TextAlign.Center,
                 )
             }
         }
 
-        ScopeProjects(
-            scopes = scopes,
-            active = active,
-            projects = projects,
-            activeProjects = activeProjects,
-            onToggleProject = onToggleProject,
-            onAllProjects = onAllProjects,
-        )
+        val ambProjectes = scopes.filter { scope ->
+            (active.isEmpty() || scope.id in active) && projects.any { it.scopeId == scope.id }
+        }
+
+        var projectesOpen by remember { mutableStateOf(false) }
+        val triats = activeProjects.size
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(7.dp),
+        ) {
+            Row(
+                modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(7.dp),
+            ) {
+                scopes.forEach { scope ->
+                    ScopeChip(
+                        label = scope.name,
+                        color = Femho.colors.scopeColor(scope.color),
+                        active = active.isEmpty() || scope.id in active,
+                        onClick = { onToggle(scope.id) },
+                    )
+                }
+            }
+
+            if (ambProjectes.isNotEmpty()) {
+                Box {
+                    Text(
+                        text = stringResource(R.string.nav_allprojects) +
+                            if (triats > 0) "  ($triats)" else "",
+                        color = Femho.colors.inkSoft,
+                        fontSize = FemhoText.meta,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier
+                            .testTag("projects-toggle")
+                            .then(Modifier.androidClickable { projectesOpen = !projectesOpen })
+                            .padding(vertical = 6.dp, horizontal = 8.dp),
+                    )
+
+                    if (projectesOpen) {
+                        Popup(
+                            onDismissRequest = { projectesOpen = false },
+                            alignment = Alignment.BottomEnd,
+                            properties = PopupProperties(focusable = true),
+                        ) {
+                            MenuPanel {
+                                ambProjectes.forEach { scope ->
+                                    val seus = projects.filter { it.scopeId == scope.id }
+                                    Text(
+                                        text = scope.name,
+                                        color = Femho.colors.inkFaint,
+                                        fontSize = FemhoText.meta,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(top = 6.dp),
+                                    )
+                                    Text(
+                                        text = (if (seus.none { it.id in activeProjects }) "✓ " else "· ") +
+                                            stringResource(R.string.nav_allprojects),
+                                        color = Femho.colors.ink,
+                                        fontSize = FemhoText.body,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .testTag("projects-all-${'$'}{scope.id}")
+                                            .then(Modifier.androidClickable {
+                                                onAllProjects(scope.id)
+                                                projectesOpen = false
+                                            })
+                                            .padding(vertical = 5.dp),
+                                    )
+                                    seus.forEach { project ->
+                                        Text(
+                                            text = (if (project.id in activeProjects) "✓ " else "· ") + project.name,
+                                            color = Femho.colors.ink,
+                                            fontSize = FemhoText.body,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .testTag("project-${'$'}{project.id}")
+                                                .then(Modifier.androidClickable {
+                                                    onToggleProject(project.id)
+                                                    projectesOpen = false
+                                                })
+                                                .padding(vertical = 5.dp),
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
         PinnedRow(pinned = pinned, onOpenList = onOpenList)
     }
 }
 
-/**
- * El filtre de projectes dels àmbits actius.
- *
- * A la web el botonet va **enganxat al xip**; aquí els xips emboliquen i el desplegable
- * hauria de sortir per sobre d'una fila que ja fa scroll horitzontal, o sigui que la
- * mateixa idea pren la forma que la pantalla permet: una fila per àmbit, plegada, amb els
- * seus projectes. El que no canvia és el criteri —**un àmbit sense res triat vol dir tots
- * els seus**— ni el vocabulari.
- */
 /**
  * El contingut d'un desplegable és text que ha de ser llegible com a panell;
  * sobre el fons de la pàgina (transparent) el text competeix amb el que hi ha al darrere —
@@ -1710,76 +1786,6 @@ private fun MenuPanel(content: @Composable () -> Unit) {
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         content()
-    }
-}
-
-@Composable
-private fun ScopeProjects(
-    scopes: List<Scope>,
-    active: Set<String>,
-    projects: List<Project>,
-    activeProjects: List<String>,
-    onToggleProject: (String) -> Unit,
-    onAllProjects: (String) -> Unit,
-) {
-    val ambProjectes = scopes.filter { scope ->
-        (active.isEmpty() || scope.id in active) && projects.any { it.scopeId == scope.id }
-    }
-    if (ambProjectes.isEmpty()) return
-
-    var open by remember { mutableStateOf(false) }
-    val triats = activeProjects.size
-
-    Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
-        Text(
-            text = stringResource(R.string.nav_allprojects) +
-                if (triats > 0) "  ($triats)" else "",
-            color = Femho.colors.inkSoft,
-            fontSize = FemhoText.meta,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier
-                .testTag("projects-toggle")
-                .then(Modifier.androidClickable { open = !open })
-                .padding(vertical = 6.dp),
-        )
-
-        if (open) {
-            MenuPanel {
-                ambProjectes.forEach { scope ->
-                    val seus = projects.filter { it.scopeId == scope.id }
-                    Text(
-                        text = scope.name,
-                        color = Femho.colors.inkFaint,
-                        fontSize = FemhoText.meta,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(top = 6.dp),
-                    )
-                    Text(
-                        text = (if (seus.none { it.id in activeProjects }) "✓ " else "· ") +
-                            stringResource(R.string.nav_allprojects),
-                        color = Femho.colors.ink,
-                        fontSize = FemhoText.body,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("projects-all-${'$'}{scope.id}")
-                            .then(Modifier.androidClickable { onAllProjects(scope.id) })
-                            .padding(vertical = 5.dp),
-                    )
-                    seus.forEach { project ->
-                        Text(
-                            text = (if (project.id in activeProjects) "✓ " else "· ") + project.name,
-                            color = Femho.colors.ink,
-                            fontSize = FemhoText.body,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("project-${'$'}{project.id}")
-                                .then(Modifier.androidClickable { onToggleProject(project.id) })
-                                .padding(vertical = 5.dp),
-                        )
-                    }
-                }
-            }
-        }
     }
 }
 
