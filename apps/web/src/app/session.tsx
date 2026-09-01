@@ -69,6 +69,17 @@ interface SessionApi {
   logout: () => Promise<void>;
   /** Torna a llegir el perfil, els àmbits i els projectes. */
   reload: () => Promise<void>;
+  /**
+   * Refresca àmbits i projectes sense tocar la resta de la sessió.
+   *
+   * Ajustos crea i esborra projectes contra el servidor directament, i la resta de
+   * l'app —xips, desplegable de projectes, suggeriments de `#`— llegeix la llista que
+   * es va carregar en entrar: sense això, un projecte nou no existiria enlloc fins a
+   * un refresc complert de la pàgina. A diferència de `reload`, una fallada de xarxa
+   * aquí no ha de fer fora ningú: la llista anterior seguia sent certa fa un moment.
+   * No llança, doncs: qui el crida no ha de gestionar cap error.
+   */
+  refreshEntities: () => Promise<void>;
   updateSettings: (patch: Partial<UserSettings>) => Promise<void>;
   updateProfile: (patch: Partial<UserProfile>) => Promise<void>;
 }
@@ -175,6 +186,22 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         setState({ status: 'anonymous' });
       },
       reload: load,
+      refreshEntities: async () => {
+        try {
+          const [scopes, projects] = await Promise.all([
+            api.get<Scope[]>('/api/v1/scopes'),
+            api.get<Project[]>('/api/v1/projects'),
+          ]);
+          setState((prev) =>
+            prev.status === 'ready'
+              ? { status: 'ready', data: { ...prev.data, scopes, projects } }
+              : prev,
+          );
+        } catch {
+          // Best-effort per contracte (veure el docstring): sense connexió ara mateix,
+          // la llista anterior és la darrera coneguda i no cal fer res més.
+        }
+      },
       updateSettings: async (patch) => {
         const settings = await api.patch<UserSettings>('/api/v1/auth/settings', patch);
         setState((prev) =>
