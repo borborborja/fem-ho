@@ -16,7 +16,8 @@ import {
 } from '../services/session-report.js';
 import { createSession, deleteSession, updateSession } from '../services/sessions.js';
 import { getProfile } from '../services/users.js';
-import { body, handle, ids, query, str } from './handle.js';
+import { reportFilters } from './report-filters.js';
+import { body, handle, query, str } from './handle.js';
 
 export function registerSessionRoutes(app: FastifyInstance): void {
   const db = (): NonNullable<FastifyInstance['connection']> => app.connection!;
@@ -25,13 +26,7 @@ export function registerSessionRoutes(app: FastifyInstance): void {
     const q = query(request);
     const profile = await getProfile(db().db, userId);
     return {
-      from: str(q.from),
-      to: str(q.to),
-      scopeIds: ids(q.scope_ids),
-      projectId: str(q.project_id),
-      userId: str(q.user_id),
-      taskTypeId: str(q.task_type_id),
-      search: str(q.search),
+      ...reportFilters(q),
       timezone: profile.timezone,
     } satisfies SessionFilters;
   };
@@ -51,11 +46,11 @@ export function registerSessionRoutes(app: FastifyInstance): void {
    */
   app.get('/api/v1/sessions/export.csv', async (request, reply) =>
     handle(app, request, reply, async (principal) => {
-      const report = await sessionReport(
-        db().db,
-        principal,
-        await filtersOf(request, principal.userId),
-      );
+      const report = await sessionReport(db().db, principal, {
+        ...(await filtersOf(request, principal.userId)),
+        limit: undefined,
+        cursor: undefined,
+      });
       const profile = await getProfile(db().db, principal.userId);
 
       void reply
@@ -76,13 +71,21 @@ export function registerSessionRoutes(app: FastifyInstance): void {
     handle(app, request, reply, async (principal) => {
       const input = body(request);
       const created = await auditedTransaction(db().db, principal, (ctx) =>
-        createSession(ctx, principal, {
-          task_id: String(input.task_id ?? ''),
-          started_at: String(input.started_at ?? ''),
-          ended_at: String(input.ended_at ?? ''),
-          note: str(input.note),
-          user_id: str(input.user_id),
-        }),
+        createSession(
+          ctx,
+          principal,
+          {
+            id: str(input.id),
+            task_id: str(input.task_id),
+            new_task:
+              input.new_task as import('../services/sessions.js').ManualSessionInput['new_task'],
+            started_at: String(input.started_at ?? ''),
+            ended_at: String(input.ended_at ?? ''),
+            note: str(input.note),
+            user_id: str(input.user_id),
+          },
+          db().engine,
+        ),
       );
       void reply.code(201);
       return created;
@@ -94,6 +97,12 @@ export function registerSessionRoutes(app: FastifyInstance): void {
       const input = body(request);
       return auditedTransaction(db().db, principal, (ctx) =>
         updateSession(ctx, principal, request.params.id, {
+          ...(input.expected_version === undefined
+            ? {}
+            : { expected_version: input.expected_version as number }),
+          ...(input.project_id === undefined
+            ? {}
+            : { project_id: input.project_id === null ? null : String(input.project_id) }),
           ...(str(input.started_at) === undefined ? {} : { started_at: String(input.started_at) }),
           ...(str(input.ended_at) === undefined ? {} : { ended_at: String(input.ended_at) }),
           ...(str(input.task_id) === undefined ? {} : { task_id: String(input.task_id) }),
@@ -160,9 +169,10 @@ export function toCsv(entries: SessionEntry[], timezone: string): string {
     ]);
   }
 
-  return `${files.map((fila) => fila.map(escape).join(',')).join('\r\n')}\r\n`;
+  return `${files.map((fila) => fila.map(escapeCsv).join(',')).join('\r\n')}\r\n`;
 }
 
-function escape(value: string): string {
+export function escapeCsv(value: string): string {
+  if (/^[\s]*[=+@-]/u.test(value)) value = `'${value}`;
   return /[",\r\n]/u.test(value) ? `"${value.replaceAll('"', '""')}"` : value;
 }

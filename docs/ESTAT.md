@@ -7,6 +7,44 @@ Data de l'última verificació completa: **2026-08-12**.
 
 ---
 
+## Cronograma editable · 2026-09-09
+
+A Informes → Registre → Cronograma: desplaçament i dues vores, sessions en curs editables,
+dibuixar dedicació per a tasques noves fetes o existents, canvi de projecte amb confirmació,
+files buides, zoom, solapaments i formulari accessible. El servidor aplica permisos compartits,
+versions contra sobreescriptures i creació idempotent, amb historial dins de la transacció.
+Vegeu [comportament i límits](reporting.md#edició-del-cronograma).
+
+Verificació: 1.190 proves unitàries superades i 5 omeses; construcció de producció web/servidor,
+tipus, lint, format i les 18 comprovacions permanents. 12 escenaris de navegador superats amb servidor real:
+zoom, temps afegit sense canviar l’estat de la tasca, minuts exactes de les dues vores i el desplaçament, Escape, creació dibuixada, canvi de projecte,
+sessió oberta, recuperació d'error de xarxa i conflicte, taula, exportació i informes. Revisió
+visual en escriptori i mòbil, inclòs el formulari i el tema fosc. Les proves de temps cobreixen
+els dos canvis d'horari d'estiu, solapaments i la conservació dels segons automàtics.
+
+Verificat en la mateixa còpia temporal descrita a l'apartat següent. PostgreSQL i l'APK Android
+no s'han executat per a aquest canvi; Android només rep les traduccions regenerades. Sense
+migració de dades, publicació a GitHub ni desplegament.
+
+---
+
+## Informes web · 2026-09-09
+
+Nova entrada visible **Informes**, resum de tasques, dedicació i registre amb filtres a la
+URL, detall de tasques, CSV complet i impressió/PDF. Compatibilitat amb les adreces antigues.
+Recompte de sessions sense el tall de 2.000 i evolució sense el tall de 800 dies.
+Vegeu [definicions i límits](reporting.md).
+
+Verificació d'aquest canvi: construcció web/servidor, tipus, lint i format; 1.181 proves
+unitàries superades (5 omeses). 21 proves de navegador amb servidor real: accés sense registre,
+filtres persistents, detall, CSV, impressió, mòbil fosc, tres idiomes, vuit temes i cronograma editable. Les 18 comprovacions
+permanents passen. La verificació
+s'ha fet en una còpia temporal dels mateixos fonts perquè hi ha memòries cau de compilació
+i `.codegraph` amb permisos d'un altre usuari al directori de treball. Android no incorpora
+pantalles noves; només es regeneren les traduccions compartides. No s'ha desplegat aquest canvi.
+
+---
+
 ## Com es verifica
 
 ```bash

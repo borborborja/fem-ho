@@ -91,7 +91,7 @@ test('moure una targeta a Fent i treure-la deixa la dedicació apuntada', async 
   await expect(page.getByTestId('registre-summary')).toContainText('50m');
 
   // I les pastilles diuen per a qui: sense projecte, «Intern».
-  await expect(page.getByTestId('registre-pills')).toContainText('Intern');
+  await expect(page.getByTestId('registre-table')).toContainText('Intern');
 });
 
 test('el cronograma pinta el bloc i arrossegant-lo es corregeix', async ({ page }) => {
@@ -130,15 +130,29 @@ test('el cronograma pinta el bloc i arrossegant-lo es corregeix', async ({ page 
    * una hora mal comptada, i el que es prova és que el canvi arribi al servidor: es torna a
    * demanar la taula i el minut hi és.
    */
-  const caixa = (await bloc.boundingBox())!;
-  await page.mouse.move(caixa.x + caixa.width - 3, caixa.y + caixa.height / 2);
+  const handle = bloc.locator('[data-testid^="chrono-resize-right-"]');
+  await handle.scrollIntoViewIfNeeded();
+  const caixa = (await handle.boundingBox())!;
+  const track = (await bloc.locator('xpath=ancestor::*[@data-chrono-lane]').boundingBox())!;
+  await page.mouse.move(caixa.x + caixa.width / 2, caixa.y + caixa.height / 2);
   await page.mouse.down();
-  await page.mouse.move(caixa.x + caixa.width + 60, caixa.y + caixa.height / 2, { steps: 8 });
+  await page.mouse.move(caixa.x + caixa.width / 2 + track.width / 10, caixa.y + caixa.height / 2, {
+    steps: 8,
+  });
   await page.mouse.up();
-
-  await expect(bloc).not.toContainText('1h 0m');
+  await expect
+    .poll(async () => {
+      const report = (await (
+        await page.request.get(`/api/v1/sessions?scope_ids=${scope}`, {
+          headers: { authorization: auth },
+        })
+      ).json()) as { totals: { minutes: number } };
+      return report.totals.minutes;
+    })
+    .toBe(120);
+  await expect(bloc).toContainText('2h');
   await page.getByTestId('registre-view').getByText('Taula').click();
-  await expect(page.getByTestId('registre-summary')).not.toContainText('1h ·');
+  await expect(page.getByTestId('registre-summary')).toContainText('2h');
 });
 
 test("l'exportació porta les columnes de sempre", async ({ page }) => {
@@ -146,7 +160,7 @@ test("l'exportació porta les columnes de sempre", async ({ page }) => {
   await page.goto(`/registre?scopes=${scope}`);
 
   const baixada = page.waitForEvent('download');
-  await page.getByTestId('registre-export').click();
+  await page.getByTestId('reports-export').click();
   const fitxer = await baixada;
   expect(fitxer.suggestedFilename()).toBe('registre.csv');
 });
@@ -173,9 +187,13 @@ test('les Estadístiques diuen el mateix que la taula', async ({ page }) => {
   await expect(page.getByTestId('estadistiques-screen')).toBeVisible();
 
   // Dues hores, una tasca: el que diu la taula, dit de lluny.
-  await expect(page.getByTestId('stats-total')).toContainText('2.0 h');
-  await expect(page.getByTestId('stats-tasks')).toContainText('1');
-  await expect(page.getByTestId('stats-average')).toContainText('2h');
+  await expect(
+    page.locator('.reports-metric').filter({ hasText: 'Dedicació total' }),
+  ).toContainText('2h');
+  await expect(
+    page.locator('.reports-metric').filter({ hasText: 'Tasques amb dedicació' }),
+  ).toContainText('1');
+  await expect(page.locator('.reports-metric').filter({ hasText: 'Mitjana' })).toContainText('2h');
 
   // I els desglossaments hi són, amb «Sense tipologia» com una fila més.
   await expect(page.getByTestId('stats-evolution')).toBeVisible();
@@ -193,7 +211,7 @@ test('amb «clients» triat, la pantalla ho diu i cap identificador canvia', asy
 
   await page.goto(`/registre?scopes=${scope}`);
   // La columna i el filtre parlen de clients…
-  await expect(page.getByTestId('registre-project')).toContainText('Tots els clients');
+  await expect(page.getByTestId('reports-projects')).toContainText('Per client');
 
   /**
    * …i el que viatja segueix sent `project_id`. **Només canvia la paraula**: si el camp

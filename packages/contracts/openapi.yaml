@@ -1658,6 +1658,165 @@ paths:
           content:
             { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
 
+  /reports/tasks:
+    get:
+      tags:
+        - tasks
+      operationId: getTaskReport
+      summary: Informe de tasques visibles
+      parameters:
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date
+          description: Primer dia local inclòs, al fus del perfil.
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date
+          description: Últim dia local inclòs, al fus del perfil.
+        - name: scope_ids
+          in: query
+          schema:
+            type: string
+        - name: project_id
+          in: query
+          schema:
+            type: string
+        - name: project_ids
+          in: query
+          schema:
+            type: string
+          description: Identificadors separats per comes; none inclou Intern. Excloent amb project_id.
+        - name: task_type_id
+          in: query
+          schema:
+            type: string
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+        - name: cursor
+          in: query
+          schema:
+            type: string
+          description: Cursor opac retornat a next_cursor.
+        - name: assignee_id
+          in: query
+          schema:
+            type: string
+          description: Persona assignada a la tasca, no qui registra dedicació.
+        - name: metric
+          in: query
+          schema:
+            type: string
+            enum:
+              - created
+              - completed
+              - pending
+              - overdue
+          description: completed per defecte. pending i overdue compten l’estat actual, sense filtre
+            de dates.
+      responses:
+        '200':
+          description: Informe filtrat. Pendents i endarrerides són estat actual; creades i fetes es
+            filtren pel període.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskReport'
+        '400':
+          description: Filtres invàlids
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+  /reports/tasks/export.csv:
+    get:
+      tags:
+        - tasks
+      operationId: exportTaskReport
+      summary: Exportar les tasques filtrades
+      parameters:
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date
+          description: Primer dia local inclòs, al fus del perfil.
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date
+          description: Últim dia local inclòs, al fus del perfil.
+        - name: scope_ids
+          in: query
+          schema:
+            type: string
+        - name: project_id
+          in: query
+          schema:
+            type: string
+        - name: project_ids
+          in: query
+          schema:
+            type: string
+          description: Identificadors separats per comes; none inclou Intern. Excloent amb project_id.
+        - name: task_type_id
+          in: query
+          schema:
+            type: string
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+        - name: cursor
+          in: query
+          schema:
+            type: string
+          description: Cursor opac retornat a next_cursor.
+        - name: assignee_id
+          in: query
+          schema:
+            type: string
+          description: Persona assignada a la tasca, no qui registra dedicació.
+        - name: metric
+          in: query
+          schema:
+            type: string
+            enum:
+              - created
+              - completed
+              - pending
+              - overdue
+          description: completed per defecte. pending i overdue compten l’estat actual, sense filtre
+            de dates.
+      responses:
+        '200':
+          description: Informe filtrat. Pendents i endarrerides són estat actual; creades i fetes es
+            filtren pel període.
+          content:
+            text/csv:
+              schema:
+                type: string
+        '400':
+          description: Filtres invàlids
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+
   /sessions:
     get:
       tags: [tasks]
@@ -1677,53 +1836,128 @@ paths:
         **Qui veu què**: cadascú els seus; qui mana a l'àmbit, els de tothom. El filtre és a
         la consulta i no a la pantalla.
       parameters:
-        - { name: from, in: query, schema: { type: string } }
-        - { name: to, in: query, schema: { type: string } }
-        - { name: scope_ids, in: query, schema: { type: string } }
-        - { name: project_id, in: query, schema: { type: string } }
-        - { name: user_id, in: query, schema: { type: string } }
-        - { name: task_type_id, in: query, schema: { type: string } }
-        - { name: search, in: query, schema: { type: string } }
+        [
+          { 'name': 'from', 'in': 'query', 'schema': { 'type': 'string', 'format': 'date' } },
+          { 'name': 'to', 'in': 'query', 'schema': { 'type': 'string', 'format': 'date' } },
+          { 'name': 'scope_ids', 'in': 'query', 'schema': { 'type': 'string' } },
+          { 'name': 'project_id', 'in': 'query', 'schema': { 'type': 'string' } },
+          { 'name': 'project_ids', 'in': 'query', 'schema': { 'type': 'string' } },
+          { 'name': 'task_type_id', 'in': 'query', 'schema': { 'type': 'string' } },
+          { 'name': 'search', 'in': 'query', 'schema': { 'type': 'string' } },
+          {
+            'name': 'limit',
+            'in': 'query',
+            'schema': { 'type': 'integer', 'minimum': 1, 'maximum': 500 },
+          },
+          { 'name': 'cursor', 'in': 'query', 'schema': { 'type': 'string' } },
+          { 'name': 'user_id', 'in': 'query', 'schema': { 'type': 'string' } },
+        ]
       responses:
         '200':
           description: Els blocs i els totals.
           content: { application/json: { schema: { $ref: '#/components/schemas/SessionReport' } } }
         '401': { $ref: '#/components/responses/Unauthenticated' }
     post:
-      tags: [tasks]
+      tags:
+        - tasks
       operationId: createSession
       summary: Apuntar un bloc a mà
-      description: |
-        L'entrada manual i el bloc que es dibuixa al cronograma. Els instants s'ajusten a 5
+      description:
+        "L'entrada manual i el bloc que es dibuixa al cronograma. Els instants s'ajusten a
+        5
+
         minuts, com les vores que s'arrosseguen.
 
+
         **Els solapaments no es prohibeixen**: dues persones poden treballar alhora a la
+
         mateixa tasca, i el cronograma els ensenya trepitjats en comptes d'impedir-los.
+
+
+        new_task crea una tasca feta i una sola sessió atòmicament. completed_at és el final del bloc.
+
+        "
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [task_id, started_at, ended_at]
+              required:
+                - started_at
+                - ended_at
               properties:
-                task_id: { type: string }
-                started_at: { type: string, format: date-time }
-                ended_at: { type: string, format: date-time }
-                note: { type: string }
+                task_id:
+                  type: string
+                started_at:
+                  type: string
+                  format: date-time
+                ended_at:
+                  type: string
+                  format: date-time
+                note:
+                  type: string
                 user_id:
                   type: string
                   description: De qui és el temps. Per defecte, de qui l'escriu.
+                id:
+                  type: string
+                  format: uuid
+                  description: Identificador del client per a reintents idempotents.
+                new_task:
+                  type: object
+                  required:
+                    - id
+                    - scope_id
+                    - title
+                  properties:
+                    id:
+                      type: string
+                      format: uuid
+                    scope_id:
+                      type: string
+                    project_id:
+                      type: string
+                    title:
+                      type: string
+                    task_type_id:
+                      type: string
+                    assignee_ids:
+                      type: array
+                      items:
+                        type: string
+              oneOf:
+                - required:
+                    - task_id
+                  not:
+                    required:
+                      - new_task
+                - required:
+                    - new_task
+                  not:
+                    required:
+                      - task_id
       responses:
         '201':
           description: El bloc.
-          content: { application/json: { schema: { $ref: '#/components/schemas/Session' } } }
-        '401': { $ref: '#/components/responses/Unauthenticated' }
-        '404': { $ref: '#/components/responses/NotFound' }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
         '422':
           description: El bloc acaba abans de començar, o l'instant no és vàlid.
           content:
-            { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '403':
+          description: No es pot editar aquesta dedicació.
+        '409':
+          description: Identificador reutilitzat amb contingut diferent.
 
   /sessions/export.csv:
     get:
@@ -1736,6 +1970,23 @@ paths:
         l'Excel obre el fitxer en la codificació del sistema i els accents es trenquen.
 
         Exporta exactament el que hi ha filtrat: els mateixos paràmetres que `GET /sessions`.
+      parameters:
+        [
+          { 'name': 'from', 'in': 'query', 'schema': { 'type': 'string', 'format': 'date' } },
+          { 'name': 'to', 'in': 'query', 'schema': { 'type': 'string', 'format': 'date' } },
+          { 'name': 'scope_ids', 'in': 'query', 'schema': { 'type': 'string' } },
+          { 'name': 'project_id', 'in': 'query', 'schema': { 'type': 'string' } },
+          { 'name': 'project_ids', 'in': 'query', 'schema': { 'type': 'string' } },
+          { 'name': 'task_type_id', 'in': 'query', 'schema': { 'type': 'string' } },
+          { 'name': 'search', 'in': 'query', 'schema': { 'type': 'string' } },
+          {
+            'name': 'limit',
+            'in': 'query',
+            'schema': { 'type': 'integer', 'minimum': 1, 'maximum': 500 },
+          },
+          { 'name': 'cursor', 'in': 'query', 'schema': { 'type': 'string' } },
+          { 'name': 'user_id', 'in': 'query', 'schema': { 'type': 'string' } },
+        ]
       responses:
         '200':
           description: El fitxer.
@@ -1755,6 +2006,23 @@ paths:
         L'evolució porta **els dies buits inclosos** —un gràfic que només porta els dies amb
         feina insinua una continuïtat que no hi va ser— i s'agrupa **per setmanes passats els
         70 dies**, perquè un any de punts diaris és una tanca i no una tendència.
+      parameters:
+        [
+          { 'name': 'from', 'in': 'query', 'schema': { 'type': 'string', 'format': 'date' } },
+          { 'name': 'to', 'in': 'query', 'schema': { 'type': 'string', 'format': 'date' } },
+          { 'name': 'scope_ids', 'in': 'query', 'schema': { 'type': 'string' } },
+          { 'name': 'project_id', 'in': 'query', 'schema': { 'type': 'string' } },
+          { 'name': 'project_ids', 'in': 'query', 'schema': { 'type': 'string' } },
+          { 'name': 'task_type_id', 'in': 'query', 'schema': { 'type': 'string' } },
+          { 'name': 'search', 'in': 'query', 'schema': { 'type': 'string' } },
+          {
+            'name': 'limit',
+            'in': 'query',
+            'schema': { 'type': 'integer', 'minimum': 1, 'maximum': 500 },
+          },
+          { 'name': 'cursor', 'in': 'query', 'schema': { 'type': 'string' } },
+          { 'name': 'user_id', 'in': 'query', 'schema': { 'type': 'string' } },
+        ]
       responses:
         '200':
           description: Les mètriques i els desglossaments.
@@ -1763,13 +2031,21 @@ paths:
 
   /sessions/{id}:
     patch:
-      tags: [tasks]
+      tags:
+        - tasks
       operationId: updateSession
       summary: Moure, allargar o reassignar un bloc
-      description: |
-        El que fa el cronograma en arrossegar. `task_id` hi entra perquè canviar de fila vol
-        dir canviar de projecte, i un bloc no té projecte: el té la tasca.
-      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      description:
+        Ometre ended_at manté el final anterior, inclòs null. project_id mou tota la tasca dins
+        del mateix àmbit, atòmicament amb els instants; és excloent amb task_id. expected_version evita
+        sobreescriure un canvi concurrent. Els desplaçaments en passos de cinc minuts preserven
+        els segons originals; la resta dels instants editats s’arrodoneixen a cinc minuts.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
       requestBody:
         required: true
         content:
@@ -1777,30 +2053,65 @@ paths:
             schema:
               type: object
               properties:
-                started_at: { type: string, format: date-time }
-                ended_at: { type: string, format: date-time }
-                task_id: { type: string }
-                note: { type: [string, 'null'] }
+                started_at:
+                  type: string
+                  format: date-time
+                ended_at:
+                  type: string
+                  format: date-time
+                task_id:
+                  type: string
+                note:
+                  type:
+                    - string
+                    - 'null'
+                project_id:
+                  type:
+                    - string
+                    - 'null'
+                expected_version:
+                  type: integer
+                  minimum: 1
       responses:
         '200':
           description: El bloc, com ha quedat.
-          content: { application/json: { schema: { $ref: '#/components/schemas/Session' } } }
-        '401': { $ref: '#/components/responses/Unauthenticated' }
-        '404': { $ref: '#/components/responses/NotFound' }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
         '422':
           description: El bloc acabaria abans de començar.
           content:
-            { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '403':
+          description: No es pot editar aquesta dedicació.
+        '409':
+          description: La sessió ha canviat; cal recarregar.
     delete:
-      tags: [tasks]
+      tags:
+        - tasks
       operationId: deleteSession
       summary: Esborrar un bloc
       description: 'Esborrat suau, com tota la resta: la tombstone ha de poder viatjar.'
-      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
       responses:
-        '204': { description: Esborrat. }
-        '401': { $ref: '#/components/responses/Unauthenticated' }
-        '404': { $ref: '#/components/responses/NotFound' }
+        '204':
+          description: Esborrat.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   /task-types:
     get:
@@ -5646,6 +5957,7 @@ components:
       additionalProperties: false
       required: [id, task_id, scope_id, user_id, started_at, source]
       properties:
+        version: { type: integer }
         id: { type: string }
         task_id: { type: string }
         scope_id: { type: string }
@@ -5674,8 +5986,15 @@ components:
           task_id,
           task_title,
           scope_id,
+          project_id,
+          project_name,
+          task_type_id,
+          task_type_name,
+          task_type_color,
           user_id,
+          user_name,
           started_at,
+          ended_at,
           minutes,
           overtime_minutes,
           needs_review,
@@ -5683,6 +6002,8 @@ components:
           source,
         ]
       properties:
+        version: { type: integer }
+        can_edit: { type: boolean }
         id: { type: string }
         task_id: { type: string }
         task_title: { type: string }
@@ -5720,11 +6041,163 @@ components:
         minutes: { type: integer }
         overtime_minutes: { type: integer }
 
+    TaskReport:
+      type: object
+      required:
+        - generated_at
+        - timezone
+        - metric
+        - counts
+        - weekly
+        - evolution
+        - by_project
+        - data
+        - next_cursor
+      properties:
+        generated_at:
+          type: string
+          format: date-time
+        timezone:
+          type: string
+        metric:
+          type: string
+          enum:
+            - created
+            - completed
+            - pending
+            - overdue
+        counts:
+          type: object
+          required:
+            - created
+            - completed
+            - pending
+            - overdue
+          properties:
+            created:
+              type: integer
+            completed:
+              type: integer
+            pending:
+              type: integer
+            overdue:
+              type: integer
+        weekly:
+          type: boolean
+        evolution:
+          type: array
+          items:
+            type: object
+            required:
+              - key
+              - created
+              - completed
+            properties:
+              key:
+                type: string
+              created:
+                type: integer
+              completed:
+                type: integer
+        by_project:
+          type: array
+          items:
+            type: object
+            required:
+              - key
+              - label
+              - created
+              - completed
+              - pending
+              - overdue
+            properties:
+              key:
+                type: string
+              label:
+                type: string
+              created:
+                type: integer
+              completed:
+                type: integer
+              pending:
+                type: integer
+              overdue:
+                type: integer
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaskReportEntry'
+        next_cursor:
+          type:
+            - string
+            - 'null'
+    TaskReportEntry:
+      type: object
+      required:
+        - id
+        - title
+        - status
+        - scope_id
+        - created_at
+        - project_id
+        - project_name
+        - completed_at
+        - due_date
+        - deadline
+        - assignees
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        status:
+          type: string
+        scope_id:
+          type: string
+        created_at:
+          type: string
+        project_id:
+          type:
+            - string
+            - 'null'
+        project_name:
+          type:
+            - string
+            - 'null'
+        completed_at:
+          type:
+            - string
+            - 'null'
+        due_date:
+          type:
+            - string
+            - 'null'
+        deadline:
+          type:
+            - string
+            - 'null'
+        assignees:
+          type: array
+          items:
+            type: object
+            required:
+              - id
+              - name
+            properties:
+              id:
+                type: string
+              name:
+                type: string
+
     SessionReport:
       type: object
       additionalProperties: false
       required: [data, totals]
       properties:
+        writable_scope_ids: { type: array, items: { type: string } }
+        generated_at: { type: string, format: date-time }
+        open_sessions: { type: integer }
+        next_cursor: { type: [string, 'null'] }
         data: { type: array, items: { $ref: '#/components/schemas/SessionEntry' } }
         totals:
           type: object
@@ -5757,6 +6230,8 @@ components:
           overtime_by_project,
         ]
       properties:
+        generated_at: { type: string, format: date-time }
+        open_sessions: { type: integer }
         tasks: { type: integer }
         minutes: { type: integer }
         overtime_minutes: { type: integer }

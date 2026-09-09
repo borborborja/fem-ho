@@ -25,26 +25,7 @@ import { useApi } from '../app/useApi.js';
 import { ErrorBanner } from './BoardScreen.js';
 import { Cronograma } from './Cronograma.js';
 
-export interface SessionEntry {
-  id: string;
-  task_id: string;
-  task_title: string;
-  scope_id: string;
-  project_id: string | null;
-  project_name: string | null;
-  task_type_id: string | null;
-  task_type_name: string | null;
-  task_type_color: string | null;
-  user_id: string;
-  user_name: string | null;
-  started_at: string;
-  ended_at: string | null;
-  minutes: number;
-  overtime_minutes: number;
-  needs_review: boolean;
-  open: boolean;
-  source: string;
-}
+export type SessionEntry = import('@fem-ho/contracts').components['schemas']['SessionEntry'];
 
 export interface Bucket {
   key: string;
@@ -391,18 +372,20 @@ export function RegistreScreen({
  * posa el separador. El total no es torna a sumar aquí —ve del servidor— perquè la
  * capçalera i les files no puguin dir coses diferents.
  */
-function Taula({
+export function Taula({
   entries,
   byDay,
   onOpenTask,
   nomPersona,
   projectLabel,
+  timezone,
 }: {
   entries: SessionEntry[];
   byDay: Bucket[];
   onOpenTask: (id: string) => void;
   nomPersona: (id: string) => string;
   projectLabel: string;
+  timezone?: string;
 }) {
   const totalDia = new Map(byDay.map((bucket) => [bucket.key, bucket.minutes]));
   const locale = getLocale();
@@ -410,7 +393,7 @@ function Taula({
 
   const files: ReactNode[] = [];
   for (const entry of entries) {
-    const dia = localDay(entry.started_at);
+    const dia = localDay(entry.started_at, timezone);
     if (dia !== diaActual) {
       diaActual = dia;
       files.push(
@@ -439,7 +422,13 @@ function Taula({
         style={{ borderTop: '1px solid var(--divider-soft)' }}
       >
         <td style={{ padding: '8px 10px', fontSize: 12.5, whiteSpace: 'nowrap' }}>
-          {dateTime(locale, new Date(entry.started_at))}
+          {timezone
+            ? new Intl.DateTimeFormat(locale, {
+                timeZone: timezone,
+                dateStyle: 'short',
+                timeStyle: 'short',
+              }).format(new Date(entry.started_at))
+            : dateTime(locale, new Date(entry.started_at))}
         </td>
         <td style={{ padding: '8px 10px', fontSize: 12.5 }}>
           {entry.project_name ?? t('registre.noProject')}
@@ -540,7 +529,14 @@ function Taula({
 }
 
 /** El dia local d'un instant, `YYYY-MM-DD`. */
-export function localDay(instant: string): string {
+export function localDay(instant: string, timezone?: string): string {
+  if (timezone)
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date(instant));
   const d = new Date(instant);
   return `${String(d.getFullYear())}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
     d.getDate(),
