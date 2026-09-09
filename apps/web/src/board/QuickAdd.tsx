@@ -81,15 +81,11 @@ export function QuickAdd({ context, columnLabel, scopeColors = {}, onCreate }: Q
     const open = openSigil(text);
     if (open === null) return [];
 
-    /**
-     * Si el sigil JA està resolt del tot, no hi ha res a suggerir.
-     *
-     * Sense això, escriure `#Feina Enviar proposta @Alba` i prémer Enter
-     * **autocompletava en comptes de crear la tasca**: el desplegable seguia obert
-     * sobre `@Alba` i es quedava la tecla. És el cas més normal del món i era un bug
-     * de veritat, no una raresa de la prova.
-     */
-    const resolved = parsed.tokens.some((token) => token.end === text.length);
+    // El parser no inclou l'espai final que insereix l'autocompletat. Un sigil
+    // resolt seguit només d'espais també ha de deixar passar Enter per crear.
+    const resolved = parsed.tokens.some(
+      (token) => token.start >= open.start && text.slice(token.end).trim() === '',
+    );
     if (resolved) return [];
 
     const fold = (value: string): string =>

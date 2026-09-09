@@ -14,6 +14,7 @@ import { useState } from 'react';
 import { dateTime, getLocale, relativeTime, t } from '@fem-ho/contracts';
 import { v7 as uuidv7 } from 'uuid';
 import { TaskCard, type CardList } from '@fem-ho/design-system/femho';
+import { DeleteTaskDialog } from './DeleteTaskDialog.js';
 import { SourceIcon } from './SourceIcon.js';
 import { api } from '../app/api.js';
 import { useApi } from '../app/useApi.js';
@@ -48,6 +49,7 @@ export function BoardCard({
   const [expanded, setExpanded] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [draft, setDraft] = useState('');
+  const [deleting, setDeleting] = useState(false);
 
   /**
    * `null` mentre no calgui: `useApi` no demana res amb un camí nul.
@@ -154,93 +156,100 @@ export function BoardCard({
   };
 
   return (
-    <TaskCard
-      data-status={task.status}
-      // Les d'algú altre, atenuades: es veuen, però es veu que no són teves.
-      style={task.assignedToOther === true ? { opacity: 0.55 } : undefined}
-      title={task.title}
-      sourceIcon={<SourceIcon kind={task.sourceKind} />}
-      project={task.project}
-      assigneeInitials={task.assigneeInitials}
-      time={task.time}
-      aiMode={task.aiMode ?? 'manual'}
-      aiModeLabel={
-        task.aiMode === 'delegated'
-          ? t('ai.mode.delegated')
-          : task.aiMode === 'assisted'
-            ? t('ai.mode.assisted')
+    <>
+      <TaskCard
+        data-status={task.status}
+        // Les d'algú altre, atenuades: es veuen, però es veu que no són teves.
+        style={task.assignedToOther === true ? { opacity: 0.55 } : undefined}
+        title={task.title}
+        sourceIcon={<SourceIcon kind={task.sourceKind} />}
+        project={task.project}
+        assigneeInitials={task.assigneeInitials}
+        time={task.time}
+        aiMode={task.aiMode ?? 'manual'}
+        aiModeLabel={
+          task.aiMode === 'delegated'
+            ? t('ai.mode.delegated')
+            : task.aiMode === 'assisted'
+              ? t('ai.mode.assisted')
+              : undefined
+        }
+        hasUnseenAiChange={task.hasUnseenAiChange ?? false}
+        attentionLabel={task.needsAttention === true ? t('ai.attention.card') : undefined}
+        lockLabel={task.lockedUntil == null ? undefined : t('ai.lock.card')}
+        activityLabel={
+          task.lastActivityAt == null
+            ? undefined
+            : relativeTime(getLocale(), new Date(task.lastActivityAt), new Date())
+        }
+        activityTitle={
+          task.lastActivityAt == null
+            ? undefined
+            : dateTime(getLocale(), new Date(task.lastActivityAt))
+        }
+        checklistProgress={
+          progress.total > 0
+            ? t('checklist.count', { done: progress.done, total: progress.total })
             : undefined
-      }
-      hasUnseenAiChange={task.hasUnseenAiChange ?? false}
-      attentionLabel={task.needsAttention === true ? t('ai.attention.card') : undefined}
-      lockLabel={task.lockedUntil == null ? undefined : t('ai.lock.card')}
-      activityLabel={
-        task.lastActivityAt == null
-          ? undefined
-          : relativeTime(getLocale(), new Date(task.lastActivityAt), new Date())
-      }
-      activityTitle={
-        task.lastActivityAt == null
-          ? undefined
-          : dateTime(getLocale(), new Date(task.lastActivityAt))
-      }
-      checklistProgress={
-        progress.total > 0
-          ? t('checklist.count', { done: progress.done, total: progress.total })
-          : undefined
-      }
-      dragging={dragging}
-      done={task.status === 'done'}
-      onOpen={onOpen}
-      onToggleDone={onToggleDone}
-      toggleLabel={t('sync.complete')}
-      onAdvance={onAdvance}
-      advanceLabel={
-        onAdvance === undefined
-          ? undefined
-          : t('board.card.advance', {
-              column: t(task.status === 'inbox' ? 'board.column.todo' : 'board.column.doing'),
-            })
-      }
-      /**
-       * El commutador compta **blocs**, no ítems: "Llistes (2)" vol dir les subtasques i
-       * una llista. El número ve de l'agregat, perquè plegada la targeta encara no ha
-       * demanat res. La pastilla `3/7` de la fila de metadades és una altra cosa i
-       * docs/02 §4 la demana a part.
-       */
-      lists={lists}
-      listsExpanded={expanded}
-      listsToggleLabel={
-        progress.lists === 0
-          ? undefined
-          : t(expanded ? 'card.lists.expanded' : 'card.lists.collapsed', {
-              count: progress.lists,
-            })
-      }
-      onToggleLists={() => setExpanded(!expanded)}
-      // El llapis de la cantonada: obre el mateix modal que clicar la targeta, però
-      // sense haver-hi de clicar a sobre —que és el que fa que arrossegar-la i obrir-la
-      // es trepitgin.
-      onEdit={onOpen}
-      editLabel={t('task.edit')}
-      addForm={{
-        open: addOpen,
-        onToggle: () => {
-          // Obrir el formulari desplega la targeta: afegir-hi alguna cosa i no veure-la
-          // aparèixer sembla que no hagi passat res.
-          if (!addOpen) setExpanded(true);
-          setAddOpen(!addOpen);
-        },
-        toggleLabel: t('card.add'),
-        placeholder: t('card.addPlaceholder'),
-        text: draft,
-        onText: (event) => setDraft(event.target.value),
-        onKeyDown: (event) => {
-          if (event.key !== 'Enter') return;
-          event.preventDefault();
-          void submitAdd();
-        },
-      }}
-    />
+        }
+        dragging={dragging}
+        done={task.status === 'done'}
+        onOpen={onOpen}
+        onToggleDone={onToggleDone}
+        toggleLabel={t('sync.complete')}
+        onAdvance={onAdvance}
+        advanceLabel={
+          onAdvance === undefined
+            ? undefined
+            : t('board.card.advance', {
+                column: t(task.status === 'inbox' ? 'board.column.todo' : 'board.column.doing'),
+              })
+        }
+        /**
+         * El commutador compta **blocs**, no ítems: "Llistes (2)" vol dir les subtasques i
+         * una llista. El número ve de l'agregat, perquè plegada la targeta encara no ha
+         * demanat res. La pastilla `3/7` de la fila de metadades és una altra cosa i
+         * docs/02 §4 la demana a part.
+         */
+        lists={lists}
+        listsExpanded={expanded}
+        listsToggleLabel={
+          progress.lists === 0
+            ? undefined
+            : t(expanded ? 'card.lists.expanded' : 'card.lists.collapsed', {
+                count: progress.lists,
+              })
+        }
+        onToggleLists={() => setExpanded(!expanded)}
+        // El llapis de la cantonada: obre el mateix modal que clicar la targeta, però
+        // sense haver-hi de clicar a sobre —que és el que fa que arrossegar-la i obrir-la
+        // es trepitgin.
+        onEdit={onOpen}
+        editLabel={t('task.edit')}
+        onDelete={dragging ? undefined : () => setDeleting(true)}
+        deleteLabel={t('nav.delete')}
+        addForm={{
+          open: addOpen,
+          onToggle: () => {
+            // Obrir el formulari desplega la targeta: afegir-hi alguna cosa i no veure-la
+            // aparèixer sembla que no hagi passat res.
+            if (!addOpen) setExpanded(true);
+            setAddOpen(!addOpen);
+          },
+          toggleLabel: t('card.add'),
+          placeholder: t('card.addPlaceholder'),
+          text: draft,
+          onText: (event) => setDraft(event.target.value),
+          onKeyDown: (event) => {
+            if (event.key !== 'Enter') return;
+            event.preventDefault();
+            void submitAdd();
+          },
+        }}
+      />
+      {deleting && (
+        <DeleteTaskDialog task={task} onClose={() => setDeleting(false)} onChanged={onChanged} />
+      )}
+    </>
   );
 }

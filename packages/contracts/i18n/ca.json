@@ -654,7 +654,7 @@
   "task.checklists": "Llistes senzilles",
   "task.comments": "Comentaris",
   "task.deadline": "Data límit",
-  "task.deleteConfirm": "Segur que vols esborrar «{title}»? També se n'aniran les seves subtasques i llistes.",
+  "task.deleteConfirm": "Vols esborrar definitivament «{title}»? També s’esborraran les seves subtasques i llistes. Si prové d’un esdeveniment del calendari, l’esdeveniment es conservarà.",
   "task.description": "Descripció",
   "task.dueDate": "Data",
   "task.dueTime": "Hora",

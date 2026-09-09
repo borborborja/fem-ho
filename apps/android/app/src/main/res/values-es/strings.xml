@@ -665,7 +665,7 @@
     <string name="task_checklists">Listas sencillas</string>
     <string name="task_comments">Comentarios</string>
     <string name="task_deadline">Fecha límite</string>
-    <string name="task_deleteconfirm">¿Seguro que quieres borrar «{title}»? También se irán sus subtareas y listas.</string>
+    <string name="task_deleteconfirm">¿Quieres borrar definitivamente «{title}»? También se borrarán sus subtareas y listas. Si procede de un evento del calendario, el evento se conservará.</string>
     <string name="task_description">Descripción</string>
     <string name="task_duedate">Fecha</string>
     <string name="task_duetime">Hora</string>

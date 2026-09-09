@@ -646,7 +646,7 @@
   "task.checklists": "Simple lists",
   "task.comments": "Comments",
   "task.deadline": "Deadline",
-  "task.deleteConfirm": "Delete “{title}”? Its subtasks and lists go too.",
+  "task.deleteConfirm": "Permanently delete “{title}”? Its subtasks and lists will also be deleted. If it came from a calendar event, the event will be kept.",
   "task.description": "Description",
   "task.dueDate": "Date",
   "task.dueTime": "Time",

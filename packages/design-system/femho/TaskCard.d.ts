@@ -97,6 +97,9 @@ export interface TaskCardProps extends React.HTMLAttributes<HTMLDivElement> {
   onEdit?: (() => void) | undefined;
   /** L'etiqueta del llapis. Del catàleg. */
   editLabel?: string | undefined;
+  /** Demana confirmació abans d’esborrar la tasca. */
+  onDelete?: (() => void) | undefined;
+  deleteLabel?: string | undefined;
   /** Punt taronja de 6px: la IA hi ha tocat i l'usuari encara no ho ha mirat. */
   hasUnseenAiChange?: boolean | undefined;
   /** Mentre s'arrossega, la targeta original queda a opacity 0.4. */
