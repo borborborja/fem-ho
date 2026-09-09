@@ -1658,6 +1658,165 @@ paths:
           content:
             { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
 
+  /reports/tasks:
+    get:
+      tags:
+        - tasks
+      operationId: getTaskReport
+      summary: Informe de tasques visibles
+      parameters:
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date
+          description: Primer dia local inclòs, al fus del perfil.
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date
+          description: Últim dia local inclòs, al fus del perfil.
+        - name: scope_ids
+          in: query
+          schema:
+            type: string
+        - name: project_id
+          in: query
+          schema:
+            type: string
+        - name: project_ids
+          in: query
+          schema:
+            type: string
+          description: Identificadors separats per comes; none inclou Intern. Excloent amb project_id.
+        - name: task_type_id
+          in: query
+          schema:
+            type: string
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+        - name: cursor
+          in: query
+          schema:
+            type: string
+          description: Cursor opac retornat a next_cursor.
+        - name: assignee_id
+          in: query
+          schema:
+            type: string
+          description: Persona assignada a la tasca, no qui registra dedicació.
+        - name: metric
+          in: query
+          schema:
+            type: string
+            enum:
+              - created
+              - completed
+              - pending
+              - overdue
+          description: completed per defecte. pending i overdue compten l’estat actual, sense filtre
+            de dates.
+      responses:
+        '200':
+          description: Informe filtrat. Pendents i endarrerides són estat actual; creades i fetes es
+            filtren pel període.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskReport'
+        '400':
+          description: Filtres invàlids
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+  /reports/tasks/export.csv:
+    get:
+      tags:
+        - tasks
+      operationId: exportTaskReport
+      summary: Exportar les tasques filtrades
+      parameters:
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date
+          description: Primer dia local inclòs, al fus del perfil.
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date
+          description: Últim dia local inclòs, al fus del perfil.
+        - name: scope_ids
+          in: query
+          schema:
+            type: string
+        - name: project_id
+          in: query
+          schema:
+            type: string
+        - name: project_ids
+          in: query
+          schema:
+            type: string
+          description: Identificadors separats per comes; none inclou Intern. Excloent amb project_id.
+        - name: task_type_id
+          in: query
+          schema:
+            type: string
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+        - name: cursor
+          in: query
+          schema:
+            type: string
+          description: Cursor opac retornat a next_cursor.
+        - name: assignee_id
+          in: query
+          schema:
+            type: string
+          description: Persona assignada a la tasca, no qui registra dedicació.
+        - name: metric
+          in: query
+          schema:
+            type: string
+            enum:
+              - created
+              - completed
+              - pending
+              - overdue
+          description: completed per defecte. pending i overdue compten l’estat actual, sense filtre
+            de dates.
+      responses:
+        '200':
+          description: Informe filtrat. Pendents i endarrerides són estat actual; creades i fetes es
+            filtren pel període.
+          content:
+            text/csv:
+              schema:
+                type: string
+        '400':
+          description: Filtres invàlids
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+
   /sessions:
     get:
       tags: [tasks]
@@ -1677,13 +1836,22 @@ paths:
         **Qui veu què**: cadascú els seus; qui mana a l'àmbit, els de tothom. El filtre és a
         la consulta i no a la pantalla.
       parameters:
-        - { name: from, in: query, schema: { type: string } }
-        - { name: to, in: query, schema: { type: string } }
-        - { name: scope_ids, in: query, schema: { type: string } }
-        - { name: project_id, in: query, schema: { type: string } }
-        - { name: user_id, in: query, schema: { type: string } }
-        - { name: task_type_id, in: query, schema: { type: string } }
-        - { name: search, in: query, schema: { type: string } }
+        [
+          { 'name': 'from', 'in': 'query', 'schema': { 'type': 'string', 'format': 'date' } },
+          { 'name': 'to', 'in': 'query', 'schema': { 'type': 'string', 'format': 'date' } },
+          { 'name': 'scope_ids', 'in': 'query', 'schema': { 'type': 'string' } },
+          { 'name': 'project_id', 'in': 'query', 'schema': { 'type': 'string' } },
+          { 'name': 'project_ids', 'in': 'query', 'schema': { 'type': 'string' } },
+          { 'name': 'task_type_id', 'in': 'query', 'schema': { 'type': 'string' } },
+          { 'name': 'search', 'in': 'query', 'schema': { 'type': 'string' } },
+          {
+            'name': 'limit',
+            'in': 'query',
+            'schema': { 'type': 'integer', 'minimum': 1, 'maximum': 500 },
+          },
+          { 'name': 'cursor', 'in': 'query', 'schema': { 'type': 'string' } },
+          { 'name': 'user_id', 'in': 'query', 'schema': { 'type': 'string' } },
+        ]
       responses:
         '200':
           description: Els blocs i els totals.
@@ -1736,6 +1904,23 @@ paths:
         l'Excel obre el fitxer en la codificació del sistema i els accents es trenquen.
 
         Exporta exactament el que hi ha filtrat: els mateixos paràmetres que `GET /sessions`.
+      parameters:
+        [
+          { 'name': 'from', 'in': 'query', 'schema': { 'type': 'string', 'format': 'date' } },
+          { 'name': 'to', 'in': 'query', 'schema': { 'type': 'string', 'format': 'date' } },
+          { 'name': 'scope_ids', 'in': 'query', 'schema': { 'type': 'string' } },
+          { 'name': 'project_id', 'in': 'query', 'schema': { 'type': 'string' } },
+          { 'name': 'project_ids', 'in': 'query', 'schema': { 'type': 'string' } },
+          { 'name': 'task_type_id', 'in': 'query', 'schema': { 'type': 'string' } },
+          { 'name': 'search', 'in': 'query', 'schema': { 'type': 'string' } },
+          {
+            'name': 'limit',
+            'in': 'query',
+            'schema': { 'type': 'integer', 'minimum': 1, 'maximum': 500 },
+          },
+          { 'name': 'cursor', 'in': 'query', 'schema': { 'type': 'string' } },
+          { 'name': 'user_id', 'in': 'query', 'schema': { 'type': 'string' } },
+        ]
       responses:
         '200':
           description: El fitxer.
@@ -1755,6 +1940,23 @@ paths:
         L'evolució porta **els dies buits inclosos** —un gràfic que només porta els dies amb
         feina insinua una continuïtat que no hi va ser— i s'agrupa **per setmanes passats els
         70 dies**, perquè un any de punts diaris és una tanca i no una tendència.
+      parameters:
+        [
+          { 'name': 'from', 'in': 'query', 'schema': { 'type': 'string', 'format': 'date' } },
+          { 'name': 'to', 'in': 'query', 'schema': { 'type': 'string', 'format': 'date' } },
+          { 'name': 'scope_ids', 'in': 'query', 'schema': { 'type': 'string' } },
+          { 'name': 'project_id', 'in': 'query', 'schema': { 'type': 'string' } },
+          { 'name': 'project_ids', 'in': 'query', 'schema': { 'type': 'string' } },
+          { 'name': 'task_type_id', 'in': 'query', 'schema': { 'type': 'string' } },
+          { 'name': 'search', 'in': 'query', 'schema': { 'type': 'string' } },
+          {
+            'name': 'limit',
+            'in': 'query',
+            'schema': { 'type': 'integer', 'minimum': 1, 'maximum': 500 },
+          },
+          { 'name': 'cursor', 'in': 'query', 'schema': { 'type': 'string' } },
+          { 'name': 'user_id', 'in': 'query', 'schema': { 'type': 'string' } },
+        ]
       responses:
         '200':
           description: Les mètriques i els desglossaments.
@@ -5674,8 +5876,15 @@ components:
           task_id,
           task_title,
           scope_id,
+          project_id,
+          project_name,
+          task_type_id,
+          task_type_name,
+          task_type_color,
           user_id,
+          user_name,
           started_at,
+          ended_at,
           minutes,
           overtime_minutes,
           needs_review,
@@ -5720,11 +5929,162 @@ components:
         minutes: { type: integer }
         overtime_minutes: { type: integer }
 
+    TaskReport:
+      type: object
+      required:
+        - generated_at
+        - timezone
+        - metric
+        - counts
+        - weekly
+        - evolution
+        - by_project
+        - data
+        - next_cursor
+      properties:
+        generated_at:
+          type: string
+          format: date-time
+        timezone:
+          type: string
+        metric:
+          type: string
+          enum:
+            - created
+            - completed
+            - pending
+            - overdue
+        counts:
+          type: object
+          required:
+            - created
+            - completed
+            - pending
+            - overdue
+          properties:
+            created:
+              type: integer
+            completed:
+              type: integer
+            pending:
+              type: integer
+            overdue:
+              type: integer
+        weekly:
+          type: boolean
+        evolution:
+          type: array
+          items:
+            type: object
+            required:
+              - key
+              - created
+              - completed
+            properties:
+              key:
+                type: string
+              created:
+                type: integer
+              completed:
+                type: integer
+        by_project:
+          type: array
+          items:
+            type: object
+            required:
+              - key
+              - label
+              - created
+              - completed
+              - pending
+              - overdue
+            properties:
+              key:
+                type: string
+              label:
+                type: string
+              created:
+                type: integer
+              completed:
+                type: integer
+              pending:
+                type: integer
+              overdue:
+                type: integer
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaskReportEntry'
+        next_cursor:
+          type:
+            - string
+            - 'null'
+    TaskReportEntry:
+      type: object
+      required:
+        - id
+        - title
+        - status
+        - scope_id
+        - created_at
+        - project_id
+        - project_name
+        - completed_at
+        - due_date
+        - deadline
+        - assignees
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        status:
+          type: string
+        scope_id:
+          type: string
+        created_at:
+          type: string
+        project_id:
+          type:
+            - string
+            - 'null'
+        project_name:
+          type:
+            - string
+            - 'null'
+        completed_at:
+          type:
+            - string
+            - 'null'
+        due_date:
+          type:
+            - string
+            - 'null'
+        deadline:
+          type:
+            - string
+            - 'null'
+        assignees:
+          type: array
+          items:
+            type: object
+            required:
+              - id
+              - name
+            properties:
+              id:
+                type: string
+              name:
+                type: string
+
     SessionReport:
       type: object
       additionalProperties: false
       required: [data, totals]
       properties:
+        generated_at: { type: string, format: date-time }
+        open_sessions: { type: integer }
+        next_cursor: { type: [string, 'null'] }
         data: { type: array, items: { $ref: '#/components/schemas/SessionEntry' } }
         totals:
           type: object
@@ -5757,6 +6117,8 @@ components:
           overtime_by_project,
         ]
       properties:
+        generated_at: { type: string, format: date-time }
+        open_sessions: { type: integer }
         tasks: { type: integer }
         minutes: { type: integer }
         overtime_minutes: { type: integer }

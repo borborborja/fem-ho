@@ -17,8 +17,10 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { t } from '@fem-ho/contracts';
+import { localDateOf, localTimeToInstant } from '@fem-ho/contracts';
+import { useSessionData } from '../app/session.js';
 import { api } from '../app/api.js';
-import { fmtMinutes, localDay, localTime, type SessionEntry } from './RegistreScreen.js';
+import { fmtMinutes, localDay, type SessionEntry } from './RegistreScreen.js';
 
 /** L'ajust, en minuts. El mateix que fa servir el servidor en desar. */
 const SNAP = 5;
@@ -43,9 +45,17 @@ export interface CronogramaProps {
 }
 
 /** Minuts des de mitjanit local d'un instant. */
-function minutsDe(instant: string): number {
-  const d = new Date(instant);
-  return d.getHours() * 60 + d.getMinutes();
+function minutsDe(instant: string, timezone: string, day: string): number {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: timezone,
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(new Date(instant));
+  const hour = Number(parts.find((part) => part.type === 'hour')?.value ?? 0);
+  const minute = Number(parts.find((part) => part.type === 'minute')?.value ?? 0);
+  const date = localDateOf(timezone, new Date(instant));
+  return Math.round((Date.parse(date) - Date.parse(day)) / 86400000) * 1440 + hour * 60 + minute;
 }
 
 function snap(minuts: number): number {
@@ -53,14 +63,18 @@ function snap(minuts: number): number {
 }
 
 /** L'instant d'un minut del dia que es mira. */
-function instantDe(day: string, minuts: number): string {
-  const [y, m, d] = day.split('-').map(Number);
-  const at = new Date(y ?? 1970, (m ?? 1) - 1, d ?? 1, 0, 0, 0, 0);
-  at.setMinutes(minuts);
-  return at.toISOString();
+function instantDe(day: string, minuts: number, timezone: string): string {
+  const wall = new Date(Date.parse(day) + minuts * 60000);
+  return localTimeToInstant(
+    timezone,
+    wall.toISOString().slice(0, 10),
+    wall.toISOString().slice(11, 16),
+  );
 }
 
 export function Cronograma({ entries, day, projects, onChanged, onOpenTask }: CronogramaProps) {
+  const { profile } = useSessionData();
+  const timezone = profile.timezone;
   const pista = useRef<HTMLDivElement>(null);
   const [ample, setAmple] = useState(900);
   const [zoom, setZoom] = useState(1);
@@ -80,16 +94,18 @@ export function Cronograma({ entries, day, projects, onChanged, onOpenTask }: Cr
     return () => observer.disconnect();
   }, []);
 
-  const delDia = entries.filter((entry) => localDay(entry.started_at) === day);
+  const delDia = entries.filter((entry) => localDay(entry.started_at, timezone) === day);
 
   // L'eix cobreix la jornada, i s'eixampla si hi ha feina a fora: el que va passar mana per
   // sobre de l'horari.
   let inici = OBRE;
   let fi = TANCA;
   for (const entry of delDia) {
-    inici = Math.min(inici, Math.floor(minutsDe(entry.started_at) / 60) * 60);
+    inici = Math.min(inici, Math.floor(minutsDe(entry.started_at, timezone, day) / 60) * 60);
     const acaba =
-      entry.ended_at === null ? minutsDe(new Date().toISOString()) : minutsDe(entry.ended_at);
+      entry.ended_at === null
+        ? minutsDe(new Date().toISOString(), timezone, day)
+        : minutsDe(entry.ended_at, timezone, day);
     fi = Math.max(fi, Math.ceil(acaba / 60) * 60);
   }
   const span = Math.max(60, fi - inici);
@@ -276,8 +292,11 @@ function Bloc({
   onOpenTask: (id: string) => void;
   onDesa: (id: string, body: Record<string, unknown>) => void;
 }) {
-  const desde = minutsDe(entry.started_at);
-  const fins = entry.ended_at === null ? desde + entry.minutes : minutsDe(entry.ended_at);
+  const { profile } = useSessionData();
+  const timezone = profile.timezone;
+  const desde = minutsDe(entry.started_at, timezone, day);
+  const fins =
+    entry.ended_at === null ? desde + entry.minutes : minutsDe(entry.ended_at, timezone, day);
   const [drag, setDrag] = useState<{ dx: number; mode: 'move' | 'left' | 'right' } | null>(null);
 
   const left = (desde - inici) * px;
@@ -308,13 +327,17 @@ function Bloc({
 
       if (mode === 'move') {
         onDesa(entry.id, {
-          started_at: instantDe(day, desde + delta),
-          ended_at: instantDe(day, fins + delta),
+          started_at: instantDe(day, desde + delta, timezone),
+          ended_at: instantDe(day, fins + delta, timezone),
         });
       } else if (mode === 'left') {
-        onDesa(entry.id, { started_at: instantDe(day, Math.min(desde + delta, fins - SNAP)) });
+        onDesa(entry.id, {
+          started_at: instantDe(day, Math.min(desde + delta, fins - SNAP), timezone),
+        });
       } else {
-        onDesa(entry.id, { ended_at: instantDe(day, Math.max(fins + delta, desde + SNAP)) });
+        onDesa(entry.id, {
+          ended_at: instantDe(day, Math.max(fins + delta, desde + SNAP), timezone),
+        });
       }
     };
 
@@ -329,7 +352,7 @@ function Bloc({
   return (
     <div
       data-testid={`chrono-block-${entry.id}`}
-      title={`${entry.task_title} · ${localTime(entry.started_at)} · ${fmtMinutes(entry.minutes)}`}
+      title={`${entry.task_title} · ${new Intl.DateTimeFormat('en-GB', { timeZone: timezone, timeStyle: 'short' }).format(new Date(entry.started_at))} · ${fmtMinutes(entry.minutes)}`}
       onPointerDown={(event) => onPointerDown(event, 'move')}
       style={{
         position: 'absolute',

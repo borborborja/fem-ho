@@ -324,7 +324,7 @@ describe('les Estadístiques diuen el mateix que el Registre', () => {
      */
     expect(s.minutes).toBe(r.totals.minutes);
     expect(s.tasks).toBe(r.totals.tasks);
-    expect(s.projects).toBe(r.totals.by_project.length);
+    expect(s.projects).toBe(r.totals.by_project.filter((project) => project.key !== 'none').length);
     expect(s.average_minutes).toBe(Math.round(r.totals.minutes / r.totals.tasks));
   });
 
@@ -409,4 +409,210 @@ describe("l'administrador de l'àmbit", () => {
     const esborrat = await api('DELETE', `/api/v1/scopes/${scopeId}`, undefined, comMarta);
     expect(esborrat.statusCode).toBe(403);
   });
+});
+
+describe('informes complets i tasques independents del registre', () => {
+  it('no retalla sessions, totals, CSV ni evolució després del dia 800', async () => {
+    const scope = (
+      await api('POST', '/api/v1/scopes', { name: 'Arxiu llarg', color: '--plou-blue' })
+    ).json<{ id: string }>().id;
+    await api('PATCH', `/api/v1/scopes/${scope}/settings`, { time_tracking: true });
+    const task = (
+      await api('POST', '/api/v1/tasks', { scope_id: scope, title: '=SUM(1,2)' })
+    ).json<{ id: string }>().id;
+    for (let i = 0; i < 2105; i++) {
+      const start = new Date(Date.UTC(2020, 0, 1 + i, 10));
+      const end = new Date(start.getTime() + 300000);
+      await sql`INSERT INTO task_sessions (id,task_id,scope_id,user_id,started_at,ended_at,source,created_at,updated_at)
+        VALUES (${uuidv7()},${task},${scope},${borjaId},${start.toISOString()},${end.toISOString()},'manual',${NOW},${NOW})`.execute(
+        conn.db,
+      );
+    }
+    const query = `scope_ids=${scope}&from=2020-01-01&to=2026-12-31`;
+    const first = (await api('GET', `/api/v1/sessions?${query}&limit=100`)).json<
+      Report & { next_cursor: string }
+    >();
+    expect(first.data).toHaveLength(100);
+    expect(first.totals.minutes).toBe(2105 * 5);
+    const next = (
+      await api('GET', `/api/v1/sessions?${query}&limit=100&cursor=${first.next_cursor}`)
+    ).json<Report>();
+    expect(next.data).toHaveLength(100);
+    expect(next.data[0]?.id).not.toBe(first.data[0]?.id);
+    expect(next.totals).toEqual(first.totals);
+    const stats = (await api('GET', `/api/v1/sessions/stats?${query}`)).json<{
+      minutes: number;
+      tasks: number;
+      projects: number;
+      evolution: { key: string; minutes: number }[];
+    }>();
+    expect(stats.minutes).toBe(10525);
+    expect(stats.tasks).toBe(1);
+    expect(stats.projects).toBe(0);
+    expect(stats.evolution.reduce((sum, p) => sum + p.minutes, 0)).toBe(stats.minutes);
+    expect(stats.evolution.at(-1)?.key).toMatch(/^2026/);
+    const csv = await api('GET', `/api/v1/sessions/export.csv?${query}&limit=1`);
+    expect(csv.body.split('\r\n')).toHaveLength(2107);
+    expect(csv.body).toContain("'=SUM(1,2)");
+    const denied = (
+      await api('GET', `/api/v1/sessions?${query}`, undefined, comMarta)
+    ).json<Report>();
+    expect(denied.totals.minutes).toBe(0);
+    await sql`UPDATE task_sessions SET deleted_at=${NOW} WHERE id=${first.data.at(-1)!.id}`.execute(
+      conn.db,
+    );
+    const afterDelete = (
+      await api(
+        'GET',
+        `/api/v1/sessions?${query}&limit=100&cursor=${encodeURIComponent(first.next_cursor)}`,
+      )
+    ).json<Report>();
+    expect(afterDelete.data.map((row) => row.id)).toEqual(next.data.map((row) => row.id));
+  }, 30000);
+
+  it('compta creades i fetes en dates locals; pendents són estat actual', async () => {
+    const scope = (
+      await api('POST', '/api/v1/scopes', {
+        name: 'Tasques sense temps',
+        color: '--plou-blue',
+        kind: 'collective',
+      })
+    ).json<{ id: string }>().id;
+    const make = async (
+      title: string,
+      status: string,
+      created: string,
+      completed: string | null,
+      due: string | null = null,
+    ) => {
+      const task = (await api('POST', '/api/v1/tasks', { scope_id: scope, title })).json<{
+        id: string;
+      }>().id;
+      await sql`UPDATE tasks SET status=${status},created_at=${created},completed_at=${completed},due_date=${due} WHERE id=${task}`.execute(
+        conn.db,
+      );
+      return task;
+    };
+    const done = await make(
+      'Acabada',
+      'done',
+      '2026-07-22T22:15:00.000Z',
+      '2026-07-23T15:00:00.000Z',
+    );
+    await make('Pendent antiga', 'todo', '2020-01-01T00:00:00.000Z', null, '2020-01-02');
+    await make('Sense data', 'inbox', '2020-01-01T00:00:00.000Z', null);
+    const removed = await make(
+      'Esborrada',
+      'done',
+      '2026-07-23T00:00:00.000Z',
+      '2026-07-23T10:00:00.000Z',
+    );
+    await api('DELETE', `/api/v1/tasks/${removed}`);
+    const query = `scope_ids=${scope}&from=2026-07-23&to=2026-07-23`;
+    type Summary = {
+      counts: { created: number; completed: number; pending: number; overdue: number };
+      data: { id: string }[];
+      next_cursor: string | null;
+    };
+    const report = (await api('GET', `/api/v1/reports/tasks?${query}`)).json<Summary>();
+    expect(report.counts).toEqual({ created: 1, completed: 1, pending: 2, overdue: 1 });
+    expect(report.data.map((t) => t.id)).toEqual([done]);
+    const first = (
+      await api('GET', `/api/v1/reports/tasks?${query}&metric=pending&limit=1`)
+    ).json<Summary>();
+    const second = (
+      await api(
+        'GET',
+        `/api/v1/reports/tasks?${query}&metric=pending&limit=1&cursor=${first.next_cursor}`,
+      )
+    ).json<Summary>();
+    expect(first.data[0]?.id).not.toBe(second.data[0]?.id);
+    expect(second.next_cursor).toBeNull();
+    expect(second.counts).toEqual(first.counts);
+    const denied = (
+      await api('GET', `/api/v1/reports/tasks?${query}`, undefined, comMarta)
+    ).json<Summary>();
+    expect(denied.counts.pending).toBe(0);
+    await api('POST', `/api/v1/scopes/${scope}/members`, { user_id: martaId, role: 'viewer' });
+    const visible = (
+      await api('GET', `/api/v1/reports/tasks?${query}`, undefined, comMarta)
+    ).json<Summary>();
+    expect(visible.counts).toEqual(report.counts);
+    await sql`UPDATE tasks SET status='todo',completed_at=NULL WHERE id=${done}`.execute(conn.db);
+    const reopened = (await api('GET', `/api/v1/reports/tasks?${query}`)).json<Summary>();
+    expect(reopened.counts.completed).toBe(0);
+    expect(reopened.counts.pending).toBe(3);
+    const csv = await api(
+      'GET',
+      `/api/v1/reports/tasks/export.csv?${query}&metric=pending&limit=1`,
+    );
+    expect(csv.body).toContain('Pendent antiga');
+    expect(csv.body).toContain('Sense data');
+  });
+
+  it('valida rangs, paginació i filtres de projecte incompatibles', async () => {
+    for (const path of [
+      '/sessions',
+      '/sessions/stats',
+      '/sessions/export.csv',
+      '/reports/tasks',
+      '/reports/tasks/export.csv',
+    ]) {
+      for (const q of [
+        'from=2026-02-30',
+        'from=2026-07-02&to=2026-07-01',
+        'limit=0',
+        'project_id=a&project_ids=b',
+      ]) {
+        expect((await api('GET', `/api/v1${path}?${q}`)).statusCode).toBe(400);
+      }
+    }
+  });
+});
+
+it('filtra diversos projectes i separa persona assignada de qui registra hores', async () => {
+  const scope = (
+    await api('POST', '/api/v1/scopes', {
+      name: 'Filtres combinats',
+      kind: 'collective',
+      color: '--plou-blue',
+    })
+  ).json<{ id: string }>().id;
+  await api('PATCH', `/api/v1/scopes/${scope}/settings`, { time_tracking: true });
+  await api('POST', `/api/v1/scopes/${scope}/members`, { user_id: martaId, role: 'collaborator' });
+  const project = (
+    await api('POST', '/api/v1/projects', { scope_id: scope, name: 'Projecte del filtre' })
+  ).json<{ id: string }>().id;
+  const ids: string[] = [];
+  for (const project_id of [project, null]) {
+    const task = (
+      await api('POST', '/api/v1/tasks', { scope_id: scope, title: 'Coincident', project_id })
+    ).json<{ id: string }>().id;
+    ids.push(task);
+    await sql`DELETE FROM task_assignees WHERE task_id=${task}`.execute(conn.db);
+    await sql`INSERT INTO task_assignees (task_id,user_id,assigned_at) VALUES (${task},${martaId},${NOW})`.execute(
+      conn.db,
+    );
+    await api('POST', '/api/v1/sessions', {
+      task_id: task,
+      started_at: '2026-03-28T23:15:00.000Z',
+      ended_at: '2026-03-29T01:15:00.000Z',
+    });
+  }
+  const query = `scope_ids=${scope}&project_ids=${project},none&task_type_id=none&search=Coincident`;
+  const report = (
+    await api('GET', `/api/v1/reports/tasks?${query}&metric=pending&assignee_id=${martaId}`)
+  ).json<{ data: { id: string }[] }>();
+  expect(report.data.map((task) => task.id).sort()).toEqual(ids.sort());
+  const notAssigned = (
+    await api('GET', `/api/v1/reports/tasks?${query}&metric=pending&assignee_id=${borjaId}`)
+  ).json<{ data: unknown[] }>();
+  expect(notAssigned.data).toHaveLength(0);
+  const sessions = (
+    await api('GET', `/api/v1/sessions?${query}&from=2026-03-29&to=2026-03-29&user_id=${borjaId}`)
+  ).json<Report>();
+  expect(sessions.totals.minutes).toBe(240);
+  expect(sessions.totals.by_day.map((day) => day.key)).toEqual(['2026-03-29']);
+  const hidden = await api('GET', `/api/v1/sessions/export.csv?${query}`, undefined, comMarta);
+  expect(hidden.body).not.toContain('Coincident');
 });

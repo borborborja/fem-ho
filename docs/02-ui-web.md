@@ -57,7 +57,9 @@ D'esquerra a dreta:
 
 **1. Wordmark "Fem-ho"** — 24px, pes 900, gradient retallat al text. **És un botó**: clicar-lo obre el dashboard global. El prototip no ho té i el brief ho demana (línia 38). Ha de tenir `cursor:pointer` i `aria-label`.
 
-**2. Switch Tasques / Calendari** — `SegmentedControl` mida `md`, ~200px.
+**2. Switch Calendari / Tasques / Informes** — tres entrades visibles, també a mòbil.
+Informes agrupa Resum, Dedicació i Registre; el resum és disponible sense activar el
+cronometratge. Definicions, filtres, permisos i exportació a [reporting.md](reporting.md).
 
 **3. Chips d'àmbit** — un per àmbit, multiselecció. Actiu: fons del color de l'àmbit, text blanc, pes 700. Inactiu: `var(--ghost-bg)`, `var(--ink-soft)`, pes 500. Píndola de 100px, padding `9px 16px`.
 

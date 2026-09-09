@@ -18,7 +18,7 @@
 import { sql } from 'kysely';
 import type { MigrationDb } from '../db/migration-db.js';
 import { hasCapability, type Principal } from '../policy/principal.js';
-import { missingCapability } from '../policy/errors.js';
+import { missingCapability, PolicyError } from '../policy/errors.js';
 import { roleCan } from '../policy/scope-roles.js';
 import { needsReview, splitWorkTime } from '../policy/work-hours.js';
 import { localDateOf, localDayBounds } from '../time/local-day.js';
@@ -33,6 +33,9 @@ export interface SessionFilters {
   scopeIds?: string[] | undefined;
   /** `'none'` són les tasques sense projecte: l'espai general de l'àmbit. */
   projectId?: string | undefined;
+  projectIds?: string[] | undefined;
+  limit?: number | undefined;
+  cursor?: string | undefined;
   userId?: string | undefined;
   taskTypeId?: string | undefined;
   search?: string | undefined;
@@ -73,6 +76,9 @@ export interface Bucket {
 
 export interface SessionReport {
   data: SessionEntry[];
+  next_cursor?: string | null;
+  generated_at?: string | undefined;
+  open_sessions?: number | undefined;
   totals: {
     minutes: number;
     overtime_minutes: number;
@@ -146,7 +152,12 @@ export async function sessionReport(
 
   const finestra = window(filters);
 
-  const rows = await sql<Row>`
+  const ara = new Date().toISOString();
+  const entries: SessionEntry[] = [];
+  let after: { started_at: string; id: string } | undefined;
+  // Els lots limiten la lectura, mai el període ni els totals de l'informe.
+  for (;;) {
+    const rows = await sql<Row>`
     SELECT s.id, s.task_id, t.title AS task_title, s.scope_id, t.project_id,
            p.name AS project_name, t.task_type_id, tt.name AS task_type_name,
            tt.color AS task_type_color, s.user_id, u.name AS user_name,
@@ -173,16 +184,47 @@ export async function sessionReport(
             ? sql`AND t.project_id IS NULL`
             : sql`AND t.project_id = ${filters.projectId}`
       }
-      ${filters.taskTypeId === undefined ? sql`` : sql`AND t.task_type_id = ${filters.taskTypeId}`}
+      ${filters.projectIds === undefined ? sql`` : sql`AND (t.project_id IN (${sql.join(filters.projectIds)}) ${filters.projectIds.includes('none') ? sql`OR t.project_id IS NULL` : sql``})`}
+      ${filters.taskTypeId === undefined ? sql`` : filters.taskTypeId === 'none' ? sql`AND t.task_type_id IS NULL` : sql`AND t.task_type_id = ${filters.taskTypeId}`}
+      ${after === undefined ? sql`` : sql`AND (s.started_at < ${after.started_at} OR (s.started_at = ${after.started_at} AND s.id < ${after.id}))`}
       ${searchFilter(filters.search)}
     ORDER BY s.started_at DESC, s.id DESC
-    LIMIT 2000
+    LIMIT 500
   `.execute(db);
 
-  const ara = new Date().toISOString();
-  const data = rows.rows.map((row) => enrich(row, filters.timezone, settings, ara));
-
-  return { data, totals: totals(data, filters.timezone) };
+    entries.push(...rows.rows.map((row) => enrich(row, filters.timezone, settings, ara)));
+    after = rows.rows.at(-1);
+    if (rows.rows.length < 500) break;
+  }
+  // El cursor porta la posició, no depèn que el bloc anterior continuï existint.
+  let offset = 0;
+  if (filters.cursor !== undefined && filters.limit !== undefined) {
+    const [startedAt, id] = filters.cursor.split('|');
+    if (!startedAt || !id || !Number.isFinite(Date.parse(startedAt))) {
+      throw new PolicyError(
+        'invalid-report-filter',
+        'Invalid report filter',
+        400,
+        'Invalid session cursor.',
+      );
+    }
+    const index = entries.findIndex(
+      (row) => row.started_at < startedAt || (row.started_at === startedAt && row.id < id),
+    );
+    offset = index < 0 ? entries.length : index;
+  }
+  const data =
+    filters.limit === undefined ? entries : entries.slice(offset, offset + filters.limit);
+  return {
+    data,
+    totals: totals(entries, filters.timezone),
+    generated_at: ara,
+    open_sessions: entries.filter((row) => row.open).length,
+    next_cursor:
+      filters.limit !== undefined && offset + data.length < entries.length
+        ? `${data.at(-1)!.started_at}|${data.at(-1)!.id}`
+        : null,
+  };
 }
 
 /** Els límits UTC de la finestra demanada, al fus de qui mira. */
@@ -284,6 +326,8 @@ export interface StatsPoint {
 }
 
 export interface SessionStats {
+  generated_at?: string | undefined;
+  open_sessions?: number | undefined;
   tasks: number;
   minutes: number;
   overtime_minutes: number;
@@ -322,7 +366,11 @@ export async function sessionStats(
   principal: Principal,
   filters: SessionFilters,
 ): Promise<SessionStats> {
-  const report = await sessionReport(db, principal, filters);
+  const report = await sessionReport(db, principal, {
+    ...filters,
+    limit: undefined,
+    cursor: undefined,
+  });
   const { data, totals } = report;
 
   const perTipus = new Map<string, Bucket>();
@@ -337,10 +385,12 @@ export async function sessionStats(
   }
 
   return {
+    generated_at: report.generated_at,
+    open_sessions: report.open_sessions,
     tasks: totals.tasks,
     minutes: totals.minutes,
     overtime_minutes: totals.overtime_minutes,
-    projects: totals.by_project.length,
+    projects: totals.by_project.filter((bucket) => bucket.key !== 'none').length,
     average_minutes: totals.tasks === 0 ? 0 : Math.round(totals.minutes / totals.tasks),
     ...evolution(data, filters),
     by_type: [...perTipus.values()].sort((a, b) => b.minutes - a.minutes),
@@ -376,25 +426,20 @@ function evolution(
   const fins = filters.to ?? dies[dies.length - 1] ?? '';
   if (desde === '' || fins === '') return { evolution: [], weekly: false };
 
-  const tots: StatsPoint[] = [];
-  for (let dia = desde, guard = 0; dia <= fins && guard < 800; dia = nextDay(dia), guard++) {
-    tots.push({ key: dia, minutes: perDia.get(dia) ?? 0 });
+  const span = Math.round((Date.parse(fins) - Date.parse(desde)) / 86_400_000) + 1;
+  const weekly = span > DIES_PER_SETMANES;
+  const step = weekly ? 7 : 1;
+  const points: StatsPoint[] = [];
+  for (let offset = 0; offset < span; offset += step) {
+    const key = new Date(Date.parse(desde) + offset * 86_400_000).toISOString().slice(0, 10);
+    let minutes = 0;
+    for (let d = 0; d < step && offset + d < span; d++) {
+      const day = new Date(Date.parse(desde) + (offset + d) * 86_400_000)
+        .toISOString()
+        .slice(0, 10);
+      minutes += perDia.get(day) ?? 0;
+    }
+    points.push({ key, minutes });
   }
-
-  if (tots.length <= DIES_PER_SETMANES) return { evolution: tots, weekly: false };
-
-  const setmanes: StatsPoint[] = [];
-  for (let i = 0; i < tots.length; i += 7) {
-    const tros = tots.slice(i, i + 7);
-    setmanes.push({
-      key: tros[0]?.key ?? '',
-      minutes: tros.reduce((sum, punt) => sum + punt.minutes, 0),
-    });
-  }
-  return { evolution: setmanes, weekly: true };
-}
-
-function nextDay(date: string): string {
-  const [y, m, d] = date.split('-').map(Number);
-  return new Date(Date.UTC(y ?? 1970, (m ?? 1) - 1, (d ?? 1) + 1)).toISOString().slice(0, 10);
+  return { evolution: points, weekly };
 }

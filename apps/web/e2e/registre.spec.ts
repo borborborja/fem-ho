@@ -91,7 +91,7 @@ test('moure una targeta a Fent i treure-la deixa la dedicació apuntada', async 
   await expect(page.getByTestId('registre-summary')).toContainText('50m');
 
   // I les pastilles diuen per a qui: sense projecte, «Intern».
-  await expect(page.getByTestId('registre-pills')).toContainText('Intern');
+  await expect(page.getByTestId('registre-table')).toContainText('Intern');
 });
 
 test('el cronograma pinta el bloc i arrossegant-lo es corregeix', async ({ page }) => {
@@ -146,7 +146,7 @@ test("l'exportació porta les columnes de sempre", async ({ page }) => {
   await page.goto(`/registre?scopes=${scope}`);
 
   const baixada = page.waitForEvent('download');
-  await page.getByTestId('registre-export').click();
+  await page.getByTestId('reports-export').click();
   const fitxer = await baixada;
   expect(fitxer.suggestedFilename()).toBe('registre.csv');
 });
@@ -173,9 +173,13 @@ test('les Estadístiques diuen el mateix que la taula', async ({ page }) => {
   await expect(page.getByTestId('estadistiques-screen')).toBeVisible();
 
   // Dues hores, una tasca: el que diu la taula, dit de lluny.
-  await expect(page.getByTestId('stats-total')).toContainText('2.0 h');
-  await expect(page.getByTestId('stats-tasks')).toContainText('1');
-  await expect(page.getByTestId('stats-average')).toContainText('2h');
+  await expect(
+    page.locator('.reports-metric').filter({ hasText: 'Dedicació total' }),
+  ).toContainText('2h');
+  await expect(
+    page.locator('.reports-metric').filter({ hasText: 'Tasques amb dedicació' }),
+  ).toContainText('1');
+  await expect(page.locator('.reports-metric').filter({ hasText: 'Mitjana' })).toContainText('2h');
 
   // I els desglossaments hi són, amb «Sense tipologia» com una fila més.
   await expect(page.getByTestId('stats-evolution')).toBeVisible();
@@ -193,7 +197,7 @@ test('amb «clients» triat, la pantalla ho diu i cap identificador canvia', asy
 
   await page.goto(`/registre?scopes=${scope}`);
   // La columna i el filtre parlen de clients…
-  await expect(page.getByTestId('registre-project')).toContainText('Tots els clients');
+  await expect(page.getByTestId('reports-projects')).toContainText('Per client');
 
   /**
    * …i el que viatja segueix sent `project_id`. **Només canvia la paraula**: si el camp

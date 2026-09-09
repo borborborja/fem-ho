@@ -912,6 +912,40 @@ export interface paths {
         patch: operations["updateScope"];
         trace?: never;
     };
+    "/reports/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Informe de tasques visibles */
+        get: operations["getTaskReport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/reports/tasks/export.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Exportar les tasques filtrades */
+        get: operations["exportTaskReport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/sessions": {
         parameters: {
             query?: never;
@@ -3911,17 +3945,17 @@ export interface components {
             task_id: string;
             task_title: string;
             scope_id: string;
-            project_id?: string | null;
-            project_name?: string | null;
-            task_type_id?: string | null;
-            task_type_name?: string | null;
-            task_type_color?: string | null;
+            project_id: string | null;
+            project_name: string | null;
+            task_type_id: string | null;
+            task_type_name: string | null;
+            task_type_color: string | null;
             user_id: string;
-            user_name?: string | null;
+            user_name: string | null;
             /** Format: date-time */
             started_at: string;
             /** Format: date-time */
-            ended_at?: string | null;
+            ended_at: string | null;
             /** @description En un bloc obert, els que porta fins ara. */
             minutes: number;
             /** @description Dels minuts, quants cauen fora de l'horari o en dia no laborable. */
@@ -3940,7 +3974,56 @@ export interface components {
             minutes: number;
             overtime_minutes: number;
         };
+        TaskReport: {
+            /** Format: date-time */
+            generated_at: string;
+            timezone: string;
+            /** @enum {string} */
+            metric: "created" | "completed" | "pending" | "overdue";
+            counts: {
+                created: number;
+                completed: number;
+                pending: number;
+                overdue: number;
+            };
+            weekly: boolean;
+            evolution: {
+                key: string;
+                created: number;
+                completed: number;
+            }[];
+            by_project: {
+                key: string;
+                label: string;
+                created: number;
+                completed: number;
+                pending: number;
+                overdue: number;
+            }[];
+            data: components["schemas"]["TaskReportEntry"][];
+            next_cursor: string | null;
+        };
+        TaskReportEntry: {
+            id: string;
+            title: string;
+            status: string;
+            scope_id: string;
+            created_at: string;
+            project_id: string | null;
+            project_name: string | null;
+            completed_at: string | null;
+            due_date: string | null;
+            deadline: string | null;
+            assignees: {
+                id: string;
+                name: string;
+            }[];
+        };
         SessionReport: {
+            /** Format: date-time */
+            generated_at?: string;
+            open_sessions?: number;
+            next_cursor?: string | null;
             data: components["schemas"]["SessionEntry"][];
             totals: {
                 minutes: number;
@@ -3953,6 +4036,9 @@ export interface components {
             };
         };
         SessionStats: {
+            /** Format: date-time */
+            generated_at?: string;
+            open_sessions?: number;
             tasks: number;
             minutes: number;
             overtime_minutes: number;
@@ -6016,6 +6102,98 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
+    getTaskReport: {
+        parameters: {
+            query?: {
+                /** @description Primer dia local inclòs, al fus del perfil. */
+                from?: string;
+                /** @description Últim dia local inclòs, al fus del perfil. */
+                to?: string;
+                scope_ids?: string;
+                project_id?: string;
+                /** @description Identificadors separats per comes; none inclou Intern. Excloent amb project_id. */
+                project_ids?: string;
+                task_type_id?: string;
+                search?: string;
+                limit?: number;
+                /** @description Cursor opac retornat a next_cursor. */
+                cursor?: string;
+                /** @description Persona assignada a la tasca, no qui registra dedicació. */
+                assignee_id?: string;
+                /** @description completed per defecte. pending i overdue compten l’estat actual, sense filtre de dates. */
+                metric?: "created" | "completed" | "pending" | "overdue";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Informe filtrat. Pendents i endarrerides són estat actual; creades i fetes es filtren pel període. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskReport"];
+                };
+            };
+            /** @description Filtres invàlids */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    exportTaskReport: {
+        parameters: {
+            query?: {
+                /** @description Primer dia local inclòs, al fus del perfil. */
+                from?: string;
+                /** @description Últim dia local inclòs, al fus del perfil. */
+                to?: string;
+                scope_ids?: string;
+                project_id?: string;
+                /** @description Identificadors separats per comes; none inclou Intern. Excloent amb project_id. */
+                project_ids?: string;
+                task_type_id?: string;
+                search?: string;
+                limit?: number;
+                /** @description Cursor opac retornat a next_cursor. */
+                cursor?: string;
+                /** @description Persona assignada a la tasca, no qui registra dedicació. */
+                assignee_id?: string;
+                /** @description completed per defecte. pending i overdue compten l’estat actual, sense filtre de dates. */
+                metric?: "created" | "completed" | "pending" | "overdue";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Informe filtrat. Pendents i endarrerides són estat actual; creades i fetes es filtren pel període. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": string;
+                };
+            };
+            /** @description Filtres invàlids */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
     listSessions: {
         parameters: {
             query?: {
@@ -6023,9 +6201,12 @@ export interface operations {
                 to?: string;
                 scope_ids?: string;
                 project_id?: string;
-                user_id?: string;
+                project_ids?: string;
                 task_type_id?: string;
                 search?: string;
+                limit?: number;
+                cursor?: string;
+                user_id?: string;
             };
             header?: never;
             path?: never;
@@ -6091,7 +6272,18 @@ export interface operations {
     };
     exportSessions: {
         parameters: {
-            query?: never;
+            query?: {
+                from?: string;
+                to?: string;
+                scope_ids?: string;
+                project_id?: string;
+                project_ids?: string;
+                task_type_id?: string;
+                search?: string;
+                limit?: number;
+                cursor?: string;
+                user_id?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -6112,7 +6304,18 @@ export interface operations {
     };
     sessionStats: {
         parameters: {
-            query?: never;
+            query?: {
+                from?: string;
+                to?: string;
+                scope_ids?: string;
+                project_id?: string;
+                project_ids?: string;
+                task_type_id?: string;
+                search?: string;
+                limit?: number;
+                cursor?: string;
+                user_id?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;

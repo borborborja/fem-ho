@@ -16,7 +16,8 @@ import {
 } from '../services/session-report.js';
 import { createSession, deleteSession, updateSession } from '../services/sessions.js';
 import { getProfile } from '../services/users.js';
-import { body, handle, ids, query, str } from './handle.js';
+import { reportFilters } from './report-filters.js';
+import { body, handle, query, str } from './handle.js';
 
 export function registerSessionRoutes(app: FastifyInstance): void {
   const db = (): NonNullable<FastifyInstance['connection']> => app.connection!;
@@ -25,13 +26,7 @@ export function registerSessionRoutes(app: FastifyInstance): void {
     const q = query(request);
     const profile = await getProfile(db().db, userId);
     return {
-      from: str(q.from),
-      to: str(q.to),
-      scopeIds: ids(q.scope_ids),
-      projectId: str(q.project_id),
-      userId: str(q.user_id),
-      taskTypeId: str(q.task_type_id),
-      search: str(q.search),
+      ...reportFilters(q),
       timezone: profile.timezone,
     } satisfies SessionFilters;
   };
@@ -51,11 +46,11 @@ export function registerSessionRoutes(app: FastifyInstance): void {
    */
   app.get('/api/v1/sessions/export.csv', async (request, reply) =>
     handle(app, request, reply, async (principal) => {
-      const report = await sessionReport(
-        db().db,
-        principal,
-        await filtersOf(request, principal.userId),
-      );
+      const report = await sessionReport(db().db, principal, {
+        ...(await filtersOf(request, principal.userId)),
+        limit: undefined,
+        cursor: undefined,
+      });
       const profile = await getProfile(db().db, principal.userId);
 
       void reply
@@ -160,9 +155,10 @@ export function toCsv(entries: SessionEntry[], timezone: string): string {
     ]);
   }
 
-  return `${files.map((fila) => fila.map(escape).join(',')).join('\r\n')}\r\n`;
+  return `${files.map((fila) => fila.map(escapeCsv).join(',')).join('\r\n')}\r\n`;
 }
 
-function escape(value: string): string {
+export function escapeCsv(value: string): string {
+  if (/^[\s]*[=+@-]/u.test(value)) value = `'${value}`;
   return /[",\r\n]/u.test(value) ? `"${value.replaceAll('"', '""')}"` : value;
 }

@@ -7,6 +7,23 @@ Data de l'última verificació completa: **2026-08-12**.
 
 ---
 
+## Informes web · 2026-09-09
+
+Nova entrada visible **Informes**, resum de tasques, dedicació i registre amb filtres a la
+URL, detall de tasques, CSV complet i impressió/PDF. Compatibilitat amb les adreces antigues.
+Recompte de sessions sense el tall de 2.000 i evolució sense el tall de 800 dies.
+Vegeu [definicions i límits](reporting.md).
+
+Verificació d'aquest canvi: construcció web/servidor, tipus, lint i format; 1.181 proves
+unitàries superades (5 omeses). 21 proves de navegador amb servidor real: accés sense registre,
+filtres persistents, detall, CSV, impressió, mòbil fosc, tres idiomes, vuit temes i cronograma editable. Les 18 comprovacions
+permanents passen. La verificació
+s'ha fet en una còpia temporal dels mateixos fonts perquè hi ha memòries cau de compilació
+i `.codegraph` amb permisos d'un altre usuari al directori de treball. Android no incorpora
+pantalles noves; només es regeneren les traduccions compartides. No s'ha desplegat aquest canvi.
+
+---
+
 ## Com es verifica
 
 ```bash

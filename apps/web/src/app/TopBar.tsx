@@ -82,7 +82,7 @@ function RobotIcon() {
 }
 
 export interface TopBarProps {
-  view: 'tasks' | 'calendar';
+  view: 'tasks' | 'calendar' | 'reports';
   activeScopeIds: string[];
   onActiveScopesChange: (ids: string[]) => void;
   /** Els projectes que es veuen. **Buit vol dir tots.** */
@@ -128,7 +128,6 @@ export function TopBar({
   aiEnabled = false,
   aiBoardActive = false,
   attentionCount = 0,
-  timeTracking = false,
   projectNoun = 'project',
   onToggleAiBoard,
 }: TopBarProps) {
@@ -544,6 +543,7 @@ export function TopBar({
                 */
                 { key: 'calendar', label: t('nav.calendar'), href: '/calendar' },
                 { key: 'tasks', label: t('nav.tasks'), href: '/' },
+                { key: 'reports', label: t('reports.title'), href: '/informes' },
               ] as const
             ).map((tab) => (
               <button
@@ -552,7 +552,12 @@ export function TopBar({
                 role="tab"
                 aria-selected={view === tab.key}
                 data-testid={`view-${tab.key}`}
-                onClick={() => navigate(tab.href)}
+                onClick={() => {
+                  const query = new URLSearchParams();
+                  query.set('scopes', activeScopeIds.join(','));
+                  if (projectIds.length) query.set('projects', projectIds.join(','));
+                  navigate(`${tab.href}?${query.toString()}`);
+                }}
                 style={{
                   padding: '7px 18px',
                   minHeight: mobile ? 44 : undefined,
@@ -844,14 +849,10 @@ export function TopBar({
                   {profile.email ?? ''}
                 </div>
                 {/*
-                  **El Registre i les Estadístiques surten només si algun àmbit els té.**
-                  Són una funció de nínxol —qui factura hores—: ensenyar-les a qui no les ha
-                  demanades seria dues entrades de menú que no porten enlloc.
+                  **Informes també és accessible des del menú de perfil.**
+                  El resum de tasques funciona també sense activar el registre.
                 */}
-                {timeTracking ? menuItem(t('nav.registre'), () => navigate('/registre')) : null}
-                {timeTracking
-                  ? menuItem(t('nav.estadistiques'), () => navigate('/estadistiques'))
-                  : null}
+                {menuItem(t('reports.title'), () => navigate('/informes'))}
                 {menuItem(t('nav.settings'), () => navigate('/settings'))}
                 {menuItem(t('nav.logout'), () => void logout(), true)}
               </>,

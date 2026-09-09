@@ -232,7 +232,7 @@ function Targeta({ testId, value, label }: { testId: string; value: string; labe
  * haver feina i quins no—, i el número que importa és el màxim, que va escrit a dalt. Un eix
  * complet ompliria d'etiquetes un gràfic de 190 píxels d'alt.
  */
-function Linia({ points }: { points: { key: string; minutes: number }[] }) {
+export function Linia({ points }: { points: { key: string; minutes: number }[] }) {
   const locale = getLocale();
   const w = 720;
   const h = 190;
@@ -263,13 +263,31 @@ function Linia({ points }: { points: { key: string; minutes: number }[] }) {
   return (
     <div data-testid="stats-evolution" style={{ display: 'grid', gap: 4 }}>
       <span style={{ fontSize: 11, color: 'var(--ink-faint)' }}>{fmtMinutes(max)}</span>
-      <svg viewBox={`0 0 ${String(w)} ${String(h)}`} style={{ width: '100%', height: 190 }}>
+      <svg
+        role="img"
+        aria-label={t('stats.evolution')}
+        viewBox={`0 0 ${String(w)} ${String(h)}`}
+        style={{ width: '100%', height: 190 }}
+      >
         <path d={area} fill="var(--gradient-wash-warm)" opacity={0.5} />
         <path d={linia} fill="none" stroke="var(--kicker)" strokeWidth={2} />
         {coords.map((c) => (
           <circle key={c.punt.key} cx={c.x} cy={c.y} r={3} fill="var(--kicker)" />
         ))}
       </svg>
+      <details>
+        <summary>{t('reports.values')}</summary>
+        <table>
+          <tbody>
+            {points.map((point) => (
+              <tr key={point.key}>
+                <th>{point.key}</th>
+                <td>{fmtMinutes(point.minutes)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </details>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5 }}>
         {points
           .filter((_, i) => i % cada === 0)
@@ -284,18 +302,20 @@ function Linia({ points }: { points: { key: string; minutes: number }[] }) {
 }
 
 /** Barres horitzontals, escalades al màxim de la sèrie. */
-function Barres({
+export function Barres({
   testId,
   title,
   buckets,
   label,
   value = (bucket) => bucket.minutes,
+  onSelect,
 }: {
   testId: string;
   title: string;
   buckets: Bucket[];
   label: (bucket: Bucket) => string;
   value?: (bucket: Bucket) => number;
+  onSelect?: (bucket: Bucket) => void;
 }) {
   const max = Math.max(1, ...buckets.map(value));
 
@@ -313,7 +333,17 @@ function Barres({
             <span
               style={{ color: 'var(--ink-soft)', overflow: 'hidden', textOverflow: 'ellipsis' }}
             >
-              {label(bucket)}
+              {onSelect ? (
+                <button
+                  type="button"
+                  className="plou-btn plou-btn-ghost"
+                  onClick={() => onSelect(bucket)}
+                >
+                  {label(bucket)}
+                </button>
+              ) : (
+                label(bucket)
+              )}
             </span>
             <span
               style={{

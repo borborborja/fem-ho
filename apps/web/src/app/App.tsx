@@ -30,8 +30,7 @@ import { RegisterScreen } from '../screens/RegisterScreen.js';
 import { PublicShareScreen } from '../screens/PublicShareScreen.js';
 import { CommandPalette } from '../screens/CommandPalette.js';
 import { projectNoun } from './project-noun.js';
-import { EstadistiquesScreen } from '../screens/EstadistiquesScreen.js';
-import { RegistreScreen } from '../screens/RegistreScreen.js';
+import { ReportsScreen } from '../screens/ReportsScreen.js';
 import { SearchScreen } from '../screens/SearchScreen.js';
 import { SettingsScreen } from '../screens/SettingsScreen.js';
 import { WelcomeScreen } from '../screens/WelcomeScreen.js';
@@ -294,13 +293,32 @@ function AppShell() {
    * ensenyar-ne una de provisional al darrere faria que la tria semblés un filtre més.
    * Surt només a qui no ho ha dit mai i quan hi ha res a triar (`app/scope-mode.ts`).
    */
+  useEffect(() => {
+    if (route.path !== '/registre' && route.path !== '/estadistiques') return;
+    const query = new URLSearchParams(route.query);
+    query.set('tab', route.path === '/registre' ? 'register' : 'time');
+    for (const [oldKey, newKey] of [
+      ['scope_ids', 'scopes'],
+      ['project_id', 'projects'],
+      ['user_id', 'person'],
+      ['task_type_id', 'type'],
+    ]) {
+      if (query.has(oldKey!)) {
+        query.set(newKey!, query.get(oldKey!)!);
+        query.delete(oldKey!);
+      }
+    }
+    navigate(`/informes?${query.toString()}`, { replace: true });
+  }, [route.path, navigate]);
+
   if (needsScopeModeWizard(instance, settings)) return <WelcomeScreen />;
 
   // Ajustos no porta ni switch de vista ni chips d'àmbit (docs/02 §9), i per tant no
   // porta `TopBar`: es pinta sencera.
   if (route.path === '/settings') return <SettingsScreen />;
 
-  const view: 'tasks' | 'calendar' = route.path === '/calendar' ? 'calendar' : 'tasks';
+  const view =
+    route.path === '/calendar' ? 'calendar' : route.path === '/informes' ? 'reports' : 'tasks';
   const list = match('/lists/:id', route.path);
 
   /**
@@ -354,10 +372,21 @@ function AppShell() {
          */
         onActiveScopesChange={(ids) => {
           dismiss('last-scope');
-          setQuery({ scopes: ids.join(','), projects: null });
+          setQuery({
+            scopes: ids.join(','),
+            projects: null,
+            task_cursor: null,
+            session_cursor: null,
+          });
         }}
         projectIds={projectIds}
-        onProjectsChange={(ids) => setQuery({ projects: ids.length === 0 ? null : ids.join(',') })}
+        onProjectsChange={(ids) =>
+          setQuery({
+            projects: ids.length === 0 ? null : ids.join(','),
+            task_cursor: null,
+            session_cursor: null,
+          })
+        }
         pinned={pinned.data ?? []}
         // Els projectes viuen amb els àmbits: s'hi va directament, no a la porta.
         onNewProject={() => navigate('/settings?tab=scopes')}
@@ -431,14 +460,17 @@ function AppShell() {
           />
         ) : route.path === '/search' ? (
           <SearchScreen onOpenTask={setOpenTask} />
-        ) : route.path === '/registre' ? (
-          <RegistreScreen
+        ) : route.path === '/informes' ||
+          route.path === '/registre' ||
+          route.path === '/estadistiques' ? (
+          <ReportsScreen
             activeScopeIds={activeScopeIds}
-            onOpenTask={setOpenTask}
+            projectIds={projectIds}
+            trackingScopeIds={ambRegistre}
             projectNoun={noun}
+            onOpenTask={setOpenTask}
+            reloadKey={reloadKey}
           />
-        ) : route.path === '/estadistiques' ? (
-          <EstadistiquesScreen activeScopeIds={activeScopeIds} />
         ) : route.path === '/dashboard' ? (
           <DashboardScreen
             onOpenTask={setOpenTask}
@@ -512,6 +544,7 @@ function AppShell() {
           destinations={[
             { id: 'tasks', label: t('nav.tasks'), href: '/' },
             { id: 'calendar', label: t('nav.calendar'), href: '/calendar' },
+            { id: 'reports', label: t('reports.title'), href: '/informes' },
             { id: 'dashboard', label: t('nav.dashboard'), href: '/dashboard' },
             { id: 'search', label: t('nav.search'), href: '/search' },
             { id: 'settings', label: t('nav.settings'), href: '/settings' },
