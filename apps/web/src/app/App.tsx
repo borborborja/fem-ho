@@ -14,6 +14,7 @@ import { match, useRouter } from './router.js';
 import { useSession, useSessionData } from './session.js';
 import { needsScopeModeWizard, resolveScopeMode } from './scope-mode.js';
 import { installShortcuts } from './shortcuts.js';
+import { ToastProvider, useToasts } from './toasts.js';
 import { TopBar } from './TopBar.js';
 import type { Agent, Checklist } from './types.js';
 import type { TaskStatus } from '@fem-ho/contracts';
@@ -96,7 +97,11 @@ export function App() {
   }
 
   if (state.status === 'anonymous') return <LoginScreen />;
-  return <AppShell />;
+  return (
+    <ToastProvider>
+      <AppShell />
+    </ToastProvider>
+  );
 }
 
 function AppShell() {
@@ -143,7 +148,7 @@ function AppShell() {
    */
   const projectsQuery = route.query.get('projects');
   const projectIds = projectsQuery === null || projectsQuery === '' ? [] : projectsQuery.split(',');
-  const [warning, setWarning] = useState<string | null>(null);
+  const { notify, dismiss, clear: clearToasts } = useToasts();
   const [openTask, setOpenTask] = useState<string | null>(null);
   /** Una tasca nova des de l'edició completa: quina columna, i si és per a la IA. */
   const [newTask, setNewTask] = useState<{
@@ -264,22 +269,23 @@ function AppShell() {
           ? activeScopeIds.filter((id) => id !== scope.id)
           : [...activeScopeIds, scope.id];
         if (next.length === 0) {
-          setWarning(t('nav.lastScope'));
+          notify(t('nav.lastScope'), { id: 'last-scope' });
           return;
         }
-        setQuery({ scopes: next.join(','), project: null });
+        dismiss('last-scope');
+        setQuery({ scopes: next.join(','), projects: null });
       },
       onDashboard: () => navigate('/dashboard'),
       onSettings: () => navigate('/settings'),
       onSearch: () => navigate('/search'),
-      onHelp: () => setWarning(t('shortcuts.title')),
+      onHelp: () => notify(t('shortcuts.title'), { id: 'shortcuts' }),
       onPalette: () => setPaletteOpen((open) => !open),
       onEscape: () => {
-        setWarning(null);
+        clearToasts();
         setPaletteOpen(false);
       },
     });
-  }, [navigate, scopes, activeScopeIds, setQuery]);
+  }, [navigate, scopes, activeScopeIds, setQuery, notify, dismiss, clearToasts]);
 
   /**
    * **La primera pregunta va abans que res, i abans que Ajustos.**
@@ -346,14 +352,17 @@ function AppShell() {
          * Canviar d'àmbits **buida els projectes triats** (docs/02 §2): un projecte d'un
          * àmbit que s'acaba d'apagar filtraria el tauler sense que es vegi per què.
          */
-        onActiveScopesChange={(ids) => setQuery({ scopes: ids.join(','), projects: null })}
+        onActiveScopesChange={(ids) => {
+          dismiss('last-scope');
+          setQuery({ scopes: ids.join(','), projects: null });
+        }}
         projectIds={projectIds}
         onProjectsChange={(ids) => setQuery({ projects: ids.length === 0 ? null : ids.join(',') })}
         pinned={pinned.data ?? []}
         // Els projectes viuen amb els àmbits: s'hi va directament, no a la porta.
         onNewProject={() => navigate('/settings?tab=scopes')}
         onNewChecklist={() => navigate('/settings')}
-        onScopeWarning={setWarning}
+        onScopeWarning={(message) => notify(message, { id: 'last-scope' })}
         aiEnabled={aiEnabled}
         aiBoardActive={aiBoard}
         attentionCount={attention.data?.count ?? 0}
@@ -414,23 +423,6 @@ function AppShell() {
             : {}),
         }}
       >
-        {warning === null ? null : (
-          <div
-            role="status"
-            data-testid="app-warning"
-            style={{
-              marginBottom: 14,
-              padding: '9px 13px',
-              borderRadius: 12,
-              background: 'var(--ghost-bg)',
-              fontSize: 12.5,
-              color: 'var(--ink-soft)',
-            }}
-          >
-            {warning}
-          </div>
-        )}
-
         {list !== null ? (
           <ListScreen
             checklistId={list.id!}

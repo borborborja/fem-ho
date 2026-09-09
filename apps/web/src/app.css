@@ -142,3 +142,66 @@ button {
   opacity: 0.6;
   cursor: wait;
 }
+
+/* Floten fora del tauler: cap avís puntual n'ha de canviar l'alçada. */
+.femho-toast-viewport {
+  position: fixed;
+  right: max(16px, env(safe-area-inset-right));
+  bottom: max(16px, env(safe-area-inset-bottom));
+  width: min(360px, calc(100vw - 32px));
+  z-index: 200;
+  pointer-events: none;
+}
+
+.femho-toast {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  padding: 8px 8px 8px 14px;
+  border: 1px solid var(--card-border);
+  border-radius: 14px;
+  background: var(--panel-bg);
+  color: var(--ink);
+  box-shadow: var(--card-shadow);
+  font-size: 13px;
+  line-height: 1.4;
+  pointer-events: auto;
+}
+
+.femho-toast[data-tone='warning'] {
+  border-left: 3px solid var(--plou-orange);
+}
+
+.femho-toast[data-tone='error'] {
+  color: var(--danger-text);
+  border-left: 3px solid var(--danger-text);
+}
+
+.femho-toast > svg {
+  flex-shrink: 0;
+}
+
+.femho-toast > span {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.femho-toast button {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.femho-toast button:hover {
+  background: var(--ghost-bg);
+}
