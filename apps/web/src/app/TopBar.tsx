@@ -175,6 +175,7 @@ export function TopBar({
      * seguides des d'aquí: totes dues llegien la mateixa URL i la segona esborrava el
      * que la primera acabava d'escriure. Els chips no feien res i no fallava res.
      */
+    setMenu(null);
     onActiveScopesChange(next);
   };
 
@@ -188,19 +189,9 @@ export function TopBar({
   const projectsOf = (scopeId: string) =>
     projects.filter((project) => project.scope_id === scopeId);
 
-  /**
-   * Quan té sentit oferir el filtre de projectes d'un àmbit.
-   *
-   * **Ha de tenir projectes i ha d'estar encès.** El segon no hi era: un àmbit apagat no
-   * té cap tasca al tauler, o sigui que el seu desplegable s'obria, es podia marcar el que
-   * fos i no canviava res. Un botó que no fa res ensenya a ignorar la barra sencera — que
-   * és exactament el motiu pel qual es va treure el desplegable global.
-   *
-   * Android ja ho feia així; la web no. Dues regles per al mateix control a dues
-   * superfícies que han de sentir-se la mateixa cosa.
-   */
-  const canFilter = (scopeId: string): boolean =>
-    activeScopeIds.includes(scopeId) && projectsOf(scopeId).length > 0;
+  // Reservem el lloc del filtre també amb l'àmbit apagat, perquè la barra no salti.
+  // El botó només es mostra i rep focus quan l'àmbit és actiu.
+  const hasProjects = (scopeId: string): boolean => projectsOf(scopeId).length > 0;
 
   const toggleProject = (id: string): void => {
     onProjectsChange(
@@ -618,12 +609,16 @@ export function TopBar({
                     aria-label={t('nav.scopeToggle', { name: scope.name })}
                     onClick={() => toggleScope(scope.id)}
                     style={
-                      canFilter(scope.id)
-                        ? { borderTopRightRadius: 0, borderBottomRightRadius: 0, paddingRight: 10 }
+                      hasProjects(scope.id)
+                        ? {
+                            borderTopRightRadius: activeScopeIds.includes(scope.id) ? 0 : 100,
+                            borderBottomRightRadius: activeScopeIds.includes(scope.id) ? 0 : 100,
+                            paddingRight: 10,
+                          }
                         : undefined
                     }
                   />
-                  {canFilter(scope.id) ? projectButton(scope) : null}
+                  {hasProjects(scope.id) ? projectButton(scope) : null}
                 </span>
               ))}
             </div>
@@ -765,6 +760,7 @@ export function TopBar({
         <button
           type="button"
           data-testid={`scope-projects-${scope.id}`}
+          disabled={!actiu}
           aria-expanded={menu === key}
           aria-haspopup="menu"
           aria-label={t('nav.scopeProjects', { name: scope.name })}
@@ -784,18 +780,24 @@ export function TopBar({
             // El mateix fons que el xip, perquè es llegeixin com una sola píndola.
             background: actiu ? `var(${scope.color})` : 'var(--ghost-bg)',
             color: actiu ? 'var(--on-brand)' : 'var(--ink-soft)',
-            opacity: actiu ? 1 : 0.9,
+            visibility: actiu ? 'visible' : 'hidden',
           }}
         >
           {/*
             El recompte només si n'hi ha de triats. Amb "tots", un número seria soroll que
             no diu res: el que hi ha és el que hi havia.
           */}
-          {triats.length > 0 ? triats.length : null}
+          <span style={{ display: 'inline-grid' }}>
+            {/* El recompte tampoc ha de desplaçar la barra quan es trien projectes. */}
+            <span aria-hidden="true" style={{ gridArea: '1 / 1', visibility: 'hidden' }}>
+              {seus.length}
+            </span>
+            <span style={{ gridArea: '1 / 1' }}>{triats.length > 0 ? triats.length : null}</span>
+          </span>
           <span aria-hidden="true">▾</span>
         </button>
 
-        {menu === key
+        {actiu && menu === key
           ? menuBox(
               <>
                 {/*

@@ -31,6 +31,7 @@ export function ScopeChip({ label, color, active = false, onClick, style, ...res
       onClick={onClick}
       aria-pressed={active}
       style={{
+        display: 'inline-grid',
         borderRadius: 100,
         padding: '9px 16px',
         border: 'none',
@@ -45,7 +46,11 @@ export function ScopeChip({ label, color, active = false, onClick, style, ...res
       }}
       {...rest}
     >
-      {label}
+      {/* La negreta reserva l'amplada: activar el xip no ha de moure els del costat. */}
+      <span aria-hidden="true" style={{ gridArea: '1 / 1', visibility: 'hidden', fontWeight: 700 }}>
+        {label}
+      </span>
+      <span style={{ gridArea: '1 / 1' }}>{label}</span>
     </button>
   );
 }
