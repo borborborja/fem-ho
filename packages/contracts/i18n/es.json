@@ -645,7 +645,7 @@
   "task.checklists": "Listas sencillas",
   "task.comments": "Comentarios",
   "task.deadline": "Fecha límite",
-  "task.deleteConfirm": "¿Seguro que quieres borrar «{title}»? También se irán sus subtareas y listas.",
+  "task.deleteConfirm": "¿Quieres borrar definitivamente «{title}»? También se borrarán sus subtareas y listas. Si procede de un evento del calendario, el evento se conservará.",
   "task.description": "Descripción",
   "task.dueDate": "Fecha",
   "task.dueTime": "Hora",

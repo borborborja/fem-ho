@@ -17,7 +17,7 @@ class BatchStatusTest {
     fun `una operació acceptada`() {
         assertEquals(
             "ok",
-            batchStatus("""{"results":[{"op_id":"a","status":"ok","entity":{"id":"1"}}]}"""),
+            batchStatus("""{"results":[{"op_id":"a","status":"ok","entity":{"id":"1"}}]}""", "a"),
         )
     }
 
@@ -25,7 +25,7 @@ class BatchStatusTest {
     fun `una operació rebutjada`() {
         assertEquals(
             "rejected",
-            batchStatus("""{"results":[{"op_id":"a","status":"rejected","error":{"detail":"x"}}]}"""),
+            batchStatus("""{"results":[{"op_id":"a","status":"rejected","error":{"detail":"x"}}]}""", "a"),
         )
     }
 
@@ -33,7 +33,7 @@ class BatchStatusTest {
     fun `un conflicte`() {
         assertEquals(
             "conflict",
-            batchStatus("""{"results":[{"op_id":"a","status":"conflict","server_entity":{}}]}"""),
+            batchStatus("""{"results":[{"op_id":"a","status":"conflict","server_entity":{}}]}""", "a"),
         )
     }
 
@@ -47,14 +47,14 @@ class BatchStatusTest {
         assertEquals(
             "ok",
             batchStatus(
-                """{"results":[{"op_id":"a","status":"ok","entity":{"id":"1","status":"todo"}}]}""",
+                """{"results":[{"op_id":"a","status":"ok","entity":{"id":"1","status":"todo"}}]}""", "a",
             ),
         )
     }
 
     @Test
     fun `una resposta que no s'entén no diu res, i llavors no es dona per bona`() {
-        assertNull(batchStatus("no és json"))
-        assertNull(batchStatus("""{"results":[]}"""))
+        assertNull(batchStatus("no és json", "a"))
+        assertNull(batchStatus("""{"results":[]}""", "a"))
     }
 }

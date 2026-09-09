@@ -184,9 +184,14 @@ function AppShell() {
    *
    * Ho decideix el menú —el Registre i les Estadístiques només surten si n'hi ha algun— i
    * ho decideix la pantalla, que sense cap àmbit amb registre no té res a ensenyar.
+   *
+   * Es torna a demanar en entrar i sortir d'Ajustos: els ajustos d'àmbit només es canvien
+   * allà, i sense això el Registre no apareixia ni desapareixia del menú fins a un
+   * refresc complert de la pàgina.
    */
   const timeTracking = useApi<{ data: { scope_id: string; time_tracking: boolean }[] }>(
     '/api/v1/scopes/settings',
+    [route.path === '/settings'],
   );
   const ambRegistre = (timeTracking.data?.data ?? [])
     .filter((row) => row.time_tracking)

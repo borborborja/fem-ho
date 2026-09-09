@@ -599,6 +599,7 @@ function ColorPicker({
  */
 function ProjectsOfScope({ scope }: { scope: Scope }) {
   const projects = useApi<Project[]>(`/api/v1/projects?scope_id=${scope.id}`);
+  const { refreshEntities } = useSession();
   const [name, setName] = useState('');
 
   const create = useMutation(async () => {
@@ -606,6 +607,9 @@ function ProjectsOfScope({ scope }: { scope: Scope }) {
     await api.post('/api/v1/projects', { id: uuidv7(), scope_id: scope.id, name: name.trim() });
     setName('');
     projects.reload();
+    // La llista de la sessió és la que llegeixen els xips i els suggeriments de `#`:
+    // sense refrescar-la, el projecte nou no existiria enlloc fora d'Ajustos.
+    void refreshEntities();
   });
 
   const rows = (projects.data ?? []).filter((project) => project.scope_id === scope.id);
@@ -649,6 +653,7 @@ function ProjectsOfScope({ scope }: { scope: Scope }) {
               onClick={() => {
                 void api.delete(`/api/v1/projects/${project.id}`).then(() => {
                   projects.reload();
+                  void refreshEntities();
                 });
               }}
             >

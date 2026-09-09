@@ -45,6 +45,24 @@ function ListPlusIcon() {
   );
 }
 
+function TrashIcon() {
+  return (
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7" />
+    </svg>
+  );
+}
+
 /** La xinxeta de pinejar. Plena quan ho està. */
 function PinIcon({ size = 13, filled = false }) {
   return (
@@ -75,6 +93,9 @@ function CardAction({ label, onClick, revealed, testId, color, children }) {
         event.stopPropagation();
         onClick?.();
       }}
+      // Els sensors d’arrossegament del pare no han de capturar aquestes accions.
+      onPointerDown={(event) => event.stopPropagation()}
+      onKeyDown={(event) => event.stopPropagation()}
       title={label}
       aria-label={label}
       data-testid={testId}
@@ -136,6 +157,8 @@ export function TaskCard({
   /** Les accions que surten a la cantonada en passar-hi per sobre. */
   onEdit,
   editLabel,
+  onDelete,
+  deleteLabel,
   hasUnseenAiChange = false,
   /**
    * «Espera resposta teva». Si hi ha text, la targeta va destacada **i el diu**: el color
@@ -181,6 +204,8 @@ export function TaskCard({
   const mobile = useIsMobile();
   const [active, setActive] = useState(false);
   const revealed = mobile || active;
+  const actionCount =
+    Number(onEdit !== undefined) + Number(addForm !== undefined) + Number(onDelete !== undefined);
 
   return (
     <div
@@ -276,6 +301,17 @@ export function TaskCard({
               <ListPlusIcon />
             </CardAction>
           )}
+          {onDelete === undefined ? null : (
+            <CardAction
+              label={deleteLabel}
+              onClick={onDelete}
+              revealed={revealed}
+              testId="card-delete"
+              color="var(--danger-text)"
+            >
+              <TrashIcon />
+            </CardAction>
+          )}
         </div>
 
         <div
@@ -283,8 +319,8 @@ export function TaskCard({
             display: 'flex',
             gap: 9,
             alignItems: 'flex-start',
-            // 66px: dues icones de 20 amb 4 de separació, i aire fins a la vora.
-            paddingRight: onEdit === undefined && addForm === undefined ? 0 : 66,
+            // Espai per les icones de 20px, la separació i el marge fins al títol.
+            paddingRight: actionCount === 0 ? 0 : actionCount * 24 + 18,
           }}
         >
           <button

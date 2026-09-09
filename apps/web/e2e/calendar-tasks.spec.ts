@@ -12,7 +12,7 @@
  */
 
 import { expect, test, type Page } from '@playwright/test';
-import { enterAsNew } from './entrar.js';
+import { enter, enterAsNew } from './entrar.js';
 
 test.describe.configure({ mode: 'serial' });
 
@@ -86,7 +86,7 @@ test('una tasca ja feta no omple el mes', async ({ page }) => {
    * El que ja has fet no és una cosa que t'esperi aquell dia, i el mes s'ompliria del que
    * ja no cal mirar. Es mira a la columna Fet, que per a això té el seu selector de dia.
    */
-  await enterAsNew(page, MEU);
+  await enter(page, MEU);
   const scopes = JSON.parse(await apiCall(page, 'GET', '/api/v1/scopes')) as { id: string }[];
   const feta = JSON.parse(
     await apiCall(page, 'POST', '/api/v1/tasks', {
@@ -101,4 +101,19 @@ test('una tasca ja feta no omple el mes', async ({ page }) => {
 
   await page.goto('/calendar?date=2026-08-12');
   await expect(page.getByTestId('day-items-2026-08-21')).not.toContainText('Ja la vaig fer');
+});
+
+test('canviar la data de l’enllaç actualitza la graella sense remuntar la pantalla', async ({
+  page,
+}) => {
+  await enter(page, MEU);
+  await page.goto('/calendar?date=2026-08-20');
+  await expect(page.getByTestId('day-items-2026-08-20')).toBeVisible();
+  await page.evaluate(() => {
+    window.history.pushState(null, '', '/calendar?date=2026-09-09');
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  });
+  await expect(page.getByTestId('day-items-2026-08-20')).toHaveCount(0);
+  await page.goBack();
+  await expect(page.getByTestId('day-items-2026-08-20')).toBeVisible();
 });

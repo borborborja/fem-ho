@@ -665,7 +665,7 @@
     <string name="task_checklists">Simple lists</string>
     <string name="task_comments">Comments</string>
     <string name="task_deadline">Deadline</string>
-    <string name="task_deleteconfirm">Delete “{title}”? Its subtasks and lists go too.</string>
+    <string name="task_deleteconfirm">Permanently delete “{title}”? Its subtasks and lists will also be deleted. If it came from a calendar event, the event will be kept.</string>
     <string name="task_description">Description</string>
     <string name="task_duedate">Date</string>
     <string name="task_duetime">Time</string>

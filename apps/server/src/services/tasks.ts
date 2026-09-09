@@ -487,6 +487,8 @@ export async function createTask(
   `.execute(ctx.tx);
   const already = existing.rows[0];
   if (already !== undefined) {
+    // L'id del client no concedeix accés a la fila que ja existia.
+    await assertScopeAccess(ctx.tx, principal, already.scope_id, { type: 'La tasca', id });
     ctx.noChange();
     const [task] = await withAssignees(ctx.tx, [already]);
     return { task: task!, created: false };
@@ -696,6 +698,24 @@ async function assertWritable(
   throw refusalError(refusal, { agentName, now: ctx.now });
 }
 
+/** Cada filla completada necessita un delta propi perquè els altres clients ho vegin. */
+async function completeSubtasks(ctx: AuditContext, taskId: string, scopeId: string): Promise<void> {
+  const completed = await sql<{ id: string }>`
+    UPDATE subtasks SET done = ${dbBool(true)}, updated_at = ${ctx.now}, version = version + 1
+    WHERE task_id = ${taskId} AND done = ${dbBool(false)} AND deleted_at IS NULL
+    RETURNING id
+  `.execute(ctx.tx);
+  for (const subtask of completed.rows) {
+    ctx.record({
+      entityType: 'subtask',
+      entityId: subtask.id,
+      scopeId,
+      verb: 'cascade_complete',
+      changes: { done: { from: false, to: true } },
+    });
+  }
+}
+
 export async function moveTask(
   ctx: AuditContext,
   principal: Principal,
@@ -807,10 +827,7 @@ export async function moveTask(
     // subtasques cauen amb ella i, si es repeteix, neix la següent. Una tasca que es
     // repeteix i que s'acaba arrossegant-la ha de tornar igual que una que s'acaba
     // amb el commutador; que depengui del gest seria el pitjor dels dos móns.
-    await sql`
-      UPDATE subtasks SET done = ${dbBool(true)}, updated_at = ${ctx.now}, version = version + 1
-      WHERE task_id = ${id} AND done = ${dbBool(false)} AND deleted_at IS NULL
-    `.execute(ctx.tx);
+    await completeSubtasks(ctx, id, current.scope_id);
     await createNextOccurrence(ctx, principal, id, current);
   }
 
@@ -901,8 +918,10 @@ export async function completeTask(
   ctx: AuditContext,
   principal: Principal,
   id: string,
+  options: { cascade?: boolean } = {},
 ): Promise<Task> {
-  if (!hasCapability(principal, 'tasks:write')) throw missingCapability('tasks:write');
+  const capability = options.cascade === true ? 'checklists:write' : 'tasks:write';
+  if (!hasCapability(principal, capability)) throw missingCapability(capability);
 
   const found = await sql<TaskRow>`
     SELECT ${TASK_COLUMNS} FROM tasks WHERE id = ${id} AND deleted_at IS NULL
@@ -911,6 +930,11 @@ export async function completeTask(
   if (current === undefined) throw notFound('task', id);
   await assertScopeAccess(ctx.tx, principal, current.scope_id, { type: 'La tasca', id });
   await assertWritable(ctx, principal, current, 'move');
+  if (current.status === 'done') {
+    ctx.noChange();
+    const [task] = await withAssignees(ctx.tx, [current]);
+    return task!;
+  }
 
   await sql`
     UPDATE tasks
@@ -932,16 +956,13 @@ export async function completeTask(
 
   // Les subtasques cauen amb la tasca. La cascada AMUNT —marcar l'últim ítem d'una
   // llista marca la subtasca i la tasca— arriba a M8, que és quan hi ha llistes.
-  await sql`
-    UPDATE subtasks SET done = ${dbBool(true)}, updated_at = ${ctx.now}, version = version + 1
-    WHERE task_id = ${id} AND done = ${dbBool(false)} AND deleted_at IS NULL
-  `.execute(ctx.tx);
+  await completeSubtasks(ctx, id, current.scope_id);
 
   ctx.record({
     entityType: 'task',
     entityId: id,
     scopeId: current.scope_id,
-    verb: 'completed',
+    verb: options.cascade === true ? 'cascade_complete' : 'completed',
     changes: { status: { from: current.status, to: 'done' } },
   });
 

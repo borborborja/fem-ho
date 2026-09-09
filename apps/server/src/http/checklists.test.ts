@@ -22,6 +22,7 @@ import { loadConfig } from '../config.js';
 import { hashPassword } from '../auth/password.js';
 import { connect, type Connection } from '../db/connection.js';
 import { migrateToLatest } from '../db/migrator.js';
+import { listPinnedChecklists } from '../services/checklists.js';
 
 const tmp = mkdtempSync(join(tmpdir(), 'femho-checklists-'));
 const NOW = '2026-08-05T10:00:00.000Z';
@@ -434,4 +435,147 @@ describe("l'agregat de la targeta", () => {
     }>().progress;
     expect(progress).toEqual({ done: 0, total: 0, lists: 1 });
   });
+});
+
+describe('aïllament i sincronització de les llistes', () => {
+  it('no deixa ancorar una llista a una subtasca d’una altra tasca', async () => {
+    const foreign = await muntaLlista({ titol: 'Una altra tasca', items: [], subtasca: true });
+    const local = await muntaLlista({ titol: 'Tasca destinatària', items: [] });
+    const response = await api('POST', `/api/v1/tasks/${local.taskId}/checklists`, {
+      name: 'No ha de travessar tasques',
+      subtask_id: foreign.subtaskId,
+    });
+    expect(response.statusCode).toBe(404);
+  });
+
+  it('un identificador de subtasca repetit no retorna la d’una altra tasca', async () => {
+    const foreign = await muntaLlista({ titol: 'Tasca original', items: [], subtasca: true });
+    const local = await muntaLlista({ titol: 'Una segona tasca', items: [] });
+    const response = await api('POST', `/api/v1/tasks/${local.taskId}/subtasks`, {
+      id: foreign.subtaskId,
+      title: 'Reintent equivocat',
+    });
+    expect(response.statusCode).toBe(404);
+  });
+
+  it('les pinejades respecten l’abast d’un token sense exigir scopes:read', async () => {
+    const { checklistId } = await muntaLlista({ titol: 'Pinejada restringida', items: ['Privat'] });
+    await api('POST', `/api/v1/checklists/${checklistId}/pin`);
+    const principal = {
+      kind: 'user' as const,
+      userId,
+      capabilities: new Set(['checklists:read'] as const),
+      scopeIds: new Set<string>(),
+      source: 'api' as const,
+    };
+    expect(await listPinnedChecklists(conn.db, principal)).toEqual([]);
+    expect(
+      (await listPinnedChecklists(conn.db, { ...principal, scopeIds: new Set([scopeId]) })).some(
+        (c) => c.id === checklistId,
+      ),
+    ).toBe(true);
+  });
+
+  it('una pinejada deixa de ser visible després de perdre l’accés', async () => {
+    const { checklistId } = await muntaLlista({ titol: 'Pinejada revocada', items: ['Privat'] });
+    await api('POST', `/api/v1/checklists/${checklistId}/pin`, undefined, altreAuth);
+    await sql`DELETE FROM scope_members WHERE scope_id = ${scopeId} AND user_id = ${altreUserId}`.execute(
+      conn.db,
+    );
+    try {
+      const response = await api('GET', '/api/v1/pinned-checklists', undefined, altreAuth);
+      expect(response.statusCode).toBe(200);
+      expect(JSON.stringify(response.json())).not.toContain(checklistId);
+    } finally {
+      await sql`INSERT INTO scope_members (id, scope_id, user_id, role, created_at)
+        VALUES (${uuidv7()}, ${scopeId}, ${altreUserId}, 'collaborator', ${NOW})`.execute(conn.db);
+    }
+  });
+
+  it('esborrar una subtasca envia el desancoratge de la llista al sync', async () => {
+    const { taskId, checklistId, subtaskId } = await muntaLlista({
+      titol: 'Desancoratge',
+      items: [],
+      subtasca: true,
+    });
+    const before = (await api('GET', '/api/v1/sync')).json<{ next_cursor: string }>();
+    expect((await api('DELETE', `/api/v1/subtasks/${subtaskId}`)).statusCode).toBe(204);
+    const changes = (await api('GET', `/api/v1/sync?cursor=${before.next_cursor}`)).json<{
+      changes: { id: string; data?: { subtask_id: string | null } }[];
+    }>().changes;
+    expect(changes.find((c) => c.id === checklistId)?.data?.subtask_id).toBeNull();
+    expect((await api('GET', `/api/v1/tasks/${taskId}/checklists`)).statusCode).toBe(200);
+  });
+});
+
+it('reutilitzar un id de tasca no permet llegir una tasca d’un altre àmbit', async () => {
+  const privateScope = uuidv7();
+  await sql`INSERT INTO scopes (id, name, kind, color, owner_id, position, created_at, updated_at)
+    VALUES (${privateScope}, 'Privat', 'individual', '--plou-blue', ${altreUserId}, 'a1', ${NOW}, ${NOW})`.execute(
+    conn.db,
+  );
+  const created = await api(
+    'POST',
+    '/api/v1/tasks',
+    { scope_id: privateScope, title: 'Text privat' },
+    altreAuth,
+  );
+  expect(created.statusCode).toBe(201);
+  const response = await api('POST', '/api/v1/tasks', {
+    id: created.json<{ id: string }>().id,
+    scope_id: scopeId,
+    title: 'Reintent',
+  });
+  expect(response.statusCode).toBe(403);
+  expect(response.body).not.toContain('Text privat');
+});
+
+it('completar per una llista tanca el temps i crea una sola recurrència', async () => {
+  const { taskId, itemIds } = await muntaLlista({ titol: 'Rutina amb temps', items: ['Acabar'] });
+  expect(
+    (await api('PATCH', `/api/v1/scopes/${scopeId}/settings`, { time_tracking: true })).statusCode,
+  ).toBe(200);
+  expect(
+    (await api('PATCH', `/api/v1/tasks/${taskId}`, { rrule: 'FREQ=DAILY', due_date: '2026-09-09' }))
+      .statusCode,
+  ).toBe(200);
+  expect((await api('POST', `/api/v1/tasks/${taskId}/move`, { status: 'doing' })).statusCode).toBe(
+    200,
+  );
+  // Evita que el llindar de blocs de zero segons amagui una sessió que ha de tancar-se.
+  await sql`UPDATE task_sessions SET started_at = '2026-09-09T08:00:00.000Z' WHERE task_id = ${taskId}`.execute(
+    conn.db,
+  );
+  expect(
+    (await api('PATCH', `/api/v1/checklist-items/${itemIds[0]}`, { done: true })).statusCode,
+  ).toBe(200);
+  const sessions = await sql<{
+    ended_at: string | null;
+  }>`SELECT ended_at FROM task_sessions WHERE task_id = ${taskId}`.execute(conn.db);
+  expect(sessions.rows).toHaveLength(1);
+  expect(sessions.rows[0]?.ended_at).not.toBeNull();
+  const next = await sql<{
+    id: string;
+  }>`SELECT id FROM tasks WHERE recurrence_parent_id = ${taskId}`.execute(conn.db);
+  expect(next.rows).toHaveLength(1);
+  expect((await api('POST', `/api/v1/tasks/${taskId}/complete`)).statusCode).toBe(200);
+  const repeated = await sql<{
+    id: string;
+  }>`SELECT id FROM tasks WHERE recurrence_parent_id = ${taskId}`.execute(conn.db);
+  expect(repeated.rows).toHaveLength(1);
+});
+
+it('completar la tasca envia també el canvi de cada subtasca al sync', async () => {
+  const { taskId } = await muntaLlista({ titol: 'Completar i sincronitzar', items: [] });
+  const subtask = (await api('POST', `/api/v1/tasks/${taskId}/subtasks`, { title: 'Filla' })).json<{
+    id: string;
+  }>();
+  const cursor = (await api('GET', '/api/v1/sync')).json<{ next_cursor: string }>().next_cursor;
+  expect((await api('POST', `/api/v1/tasks/${taskId}/move`, { status: 'done' })).statusCode).toBe(
+    200,
+  );
+  const changes = (await api('GET', `/api/v1/sync?cursor=${cursor}`)).json<{
+    changes: { id: string; data?: { done: unknown } }[];
+  }>().changes;
+  expect(changes.find((c) => c.id === subtask.id)?.data?.done).toBeTruthy();
 });

@@ -10,7 +10,7 @@
  * amb aquestes paraules.
  */
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   getLocale,
   longDay,
@@ -92,17 +92,28 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
    * sortir del calendari.
    */
   const { route, navigate } = useRouter();
-  const [selected, setSelectedState] = useState<string>(() => {
-    const fromUrl = route.query.get('date');
-    return fromUrl !== null && /^\d{4}-\d{2}-\d{2}$/u.test(fromUrl) ? fromUrl : iso(new Date());
-  });
+  const fromUrl = route.query.get('date');
+  const parsedDay =
+    fromUrl !== null && /^\d{4}-\d{2}-\d{2}$/u.test(fromUrl)
+      ? new Date(`${fromUrl}T12:00:00`)
+      : null;
+  const routeDay =
+    parsedDay !== null && !Number.isNaN(parsedDay.getTime()) && iso(parsedDay) === fromUrl
+      ? fromUrl!
+      : iso(new Date());
+  const [selected, setSelectedState] = useState(routeDay);
   const setSelected = (day: string): void => {
     setSelectedState(day);
     const query = new URLSearchParams(window.location.search);
     query.set('date', day);
     navigate(`${window.location.pathname}?${query.toString()}`, { replace: true });
   };
-  const [cursor, setCursor] = useState<Date>(() => new Date());
+  const [cursor, setCursor] = useState<Date>(() => new Date(`${routeDay}T12:00:00`));
+  // La graella i el rail han d'obrir el mateix dia, també en tornar enrere al navegador.
+  useEffect(() => {
+    setSelectedState(routeDay);
+    setCursor(new Date(`${routeDay}T12:00:00`));
+  }, [routeDay]);
   /**
    * Quin esdeveniment s'ha obert.
    *

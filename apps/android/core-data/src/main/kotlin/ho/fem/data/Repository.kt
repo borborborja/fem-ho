@@ -28,12 +28,17 @@ import ho.fem.model.TaskType
 import ho.fem.model.UserProfile
 import ho.fem.model.generatePosition
 import ho.fem.network.FemhoApi
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import java.io.IOException
 import java.util.UUID
 
 /**
@@ -49,6 +54,8 @@ class Repository(
     private val dao: FemhoDao,
     private val api: FemhoApi,
 ) {
+    private val flushLock = Mutex()
+
     val tasks: Flow<List<Task>> = dao.tasks().map { rows -> rows.map { it.toDomain() } }
     val scopes: Flow<List<Scope>> = dao.scopes().map { rows -> rows.map { it.toDomain() } }
     val projects: Flow<List<Project>> = dao.projects().map { rows -> rows.map { it.toDomain() } }
@@ -81,33 +88,31 @@ class Repository(
     }
 
     /**
-     * Buida la cua de sortida.
+     * Només una confirmació de l'op_id retira una operació.
      *
-     * **La crida que no peta no vol dir que l'operació s'hagi aplicat.** `/sync/batch`
-     * respon 200 amb l'estat de cada operació per separat (docs/06 §4), i mirar només si
-     * la petició ha anat bé feia que una operació rebutjada sortís de la cua com si
-     * s'hagués guardat: la tasca desapareixia del telèfon i no arribava mai al servidor.
-     *
-     * `ok` i `conflict` surten de la cua —el servidor ja ha decidit—; una rebutjada
-     * també, perquè reintentar-la no la farà passar mai, però es compta com a fallada
-     * perquè quedi rastre. Si la petició no arriba, es queda i es reintenta.
+     * Un rebuig o un conflicte conserva la intenció local i atura les dependents.
+     * Llançar també impedeix que refresh sobreescrigui les tasques que no s'han pujat.
+     * El pany evita que el refresc de pantalla i el de fons enviïn la mateixa cua alhora.
      */
-    suspend fun flush() {
+    suspend fun flush() = flushLock.withLock {
         for (operation in dao.outbox()) {
-            val response = runCatching {
+            val response = try {
                 api.syncBatch(
                     """{"operations":[{"op_id":"${operation.opId}","entity":"${operation.entity}",""" +
                         """"op":"${operation.op}","id":"${operation.entityId}",""" +
                         """"base_version":${operation.baseVersion},"data":${operation.payload}}]}""",
                 )
-            }.getOrNull()
-
-            if (response == null) {
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: IOException) {
                 dao.failed(operation.opId)
-                continue
+                throw error
             }
 
-            if (batchStatus(response) == "rejected") dao.failed(operation.opId)
+            if (batchStatus(response, operation.opId) != "ok") {
+                dao.failed(operation.opId)
+                throw IOException("Sync operation was not confirmed: ${operation.opId}")
+            }
             dao.dequeue(operation.opId)
         }
     }
@@ -578,8 +583,7 @@ class Repository(
     ) =
         api.updateSettings(gravatar, weekStart, eventTaskDeleted, showCalendarWidget, showOverdueSection, inboxPosition, inboxShowOverdue)
 
-    private fun quote(value: String): String =
-        "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n") + "\""
+    private fun quote(value: String): String = JsonPrimitive(value).toString()
 }
 
 /**
@@ -588,11 +592,11 @@ class Repository(
  * Es llegeix amb el JSON de `kotlinx` i no amb un regex: `"status"` també és un camp de
  * les tasques, i l'entitat que el servidor torna dins del resultat en porta un.
  */
-internal fun batchStatus(response: String): String? = runCatching {
+internal fun batchStatus(response: String, opId: String): String? = runCatching {
     Json.parseToJsonElement(response)
         .jsonObject["results"]
         ?.jsonArray
-        ?.firstOrNull()
+        ?.firstOrNull { it.jsonObject["op_id"]?.jsonPrimitive?.content == opId }
         ?.jsonObject
         ?.get("status")
         ?.jsonPrimitive

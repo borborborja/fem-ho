@@ -154,3 +154,29 @@ test("el sigil !ia posa el mode d'IA", async ({ page }) => {
   await expect(created).toHaveAttribute('data-ai-mode', 'delegated');
   await expect(created).toHaveAttribute('data-title', 'Migrar el servidor');
 });
+
+for (const shortcut of [
+  { text: 'Comprar pa #Per', completed: 'Comprar pa #Personal ', scope: 'scope-personal' },
+  {
+    text: 'Enviar proposta #Feina/Client S',
+    completed: 'Enviar proposta #Feina/Client Salt ',
+    scope: 'scope-feina',
+  },
+  {
+    text: '#Personal Comprar pa @Alb',
+    completed: '#Personal Comprar pa @Alba ',
+    scope: 'scope-personal',
+  },
+]) {
+  test(`Enter confirma després d'autocompletar ${shortcut.text}`, async ({ page }) => {
+    const field = page.getByRole('combobox');
+    await field.fill(shortcut.text);
+    await field.press('Tab');
+    await expect(field).toHaveValue(shortcut.completed);
+    await field.press('Enter');
+    await expect(page.getByTestId('created-0')).toHaveAttribute('data-scope', shortcut.scope);
+    await expect(page.locator('[data-testid="created"] li')).toHaveCount(1);
+    await expect(field).toHaveValue('');
+    await expect(field).toBeFocused();
+  });
+}
