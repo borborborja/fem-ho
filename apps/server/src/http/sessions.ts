@@ -71,13 +71,21 @@ export function registerSessionRoutes(app: FastifyInstance): void {
     handle(app, request, reply, async (principal) => {
       const input = body(request);
       const created = await auditedTransaction(db().db, principal, (ctx) =>
-        createSession(ctx, principal, {
-          task_id: String(input.task_id ?? ''),
-          started_at: String(input.started_at ?? ''),
-          ended_at: String(input.ended_at ?? ''),
-          note: str(input.note),
-          user_id: str(input.user_id),
-        }),
+        createSession(
+          ctx,
+          principal,
+          {
+            id: str(input.id),
+            task_id: str(input.task_id),
+            new_task:
+              input.new_task as import('../services/sessions.js').ManualSessionInput['new_task'],
+            started_at: String(input.started_at ?? ''),
+            ended_at: String(input.ended_at ?? ''),
+            note: str(input.note),
+            user_id: str(input.user_id),
+          },
+          db().engine,
+        ),
       );
       void reply.code(201);
       return created;
@@ -89,6 +97,12 @@ export function registerSessionRoutes(app: FastifyInstance): void {
       const input = body(request);
       return auditedTransaction(db().db, principal, (ctx) =>
         updateSession(ctx, principal, request.params.id, {
+          ...(input.expected_version === undefined
+            ? {}
+            : { expected_version: input.expected_version as number }),
+          ...(input.project_id === undefined
+            ? {}
+            : { project_id: input.project_id === null ? null : String(input.project_id) }),
           ...(str(input.started_at) === undefined ? {} : { started_at: String(input.started_at) }),
           ...(str(input.ended_at) === undefined ? {} : { ended_at: String(input.ended_at) }),
           ...(str(input.task_id) === undefined ? {} : { task_id: String(input.task_id) }),

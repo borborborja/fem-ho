@@ -67,3 +67,39 @@ context, filtres i data de generació, i s'oculten controls i llista paginada de
 - Estadístiques i exports inclouen totes les coincidències, també si superen 2.000 sessions.
 
 El contracte detallat és `packages/contracts/openapi.yaml`. No cal migració de base de dades.
+
+## Edició del cronograma
+
+A **Informes → Registre → Cronograma**, arrossegar el cos mou el bloc i conserva la durada;
+les vores ajusten l'inici o el final. Els gestos avancen en passos de cinc minuts, amb una
+durada mínima de cinc minuts i previsualització de les hores. Els segons dels registres
+automàtics es conserven quan es desplacen. Una sessió en curs permet moure l'inici i segueix
+oberta: només sortir de Fent la tanca. La durada visible s'actualitza cada minut.
+
+Dibuixar en una fila buida proposa un interval; clicar-hi proposa trenta minuts. El formulari
+permet associar-lo a una tasca existent (sense canviar-ne l'estat) o crear una tasca feta,
+amb una única sessió manual i `completed_at` igual al final registrat. Tasca, sessió i
+historial s'escriuen en una transacció. Els identificadors del client eviten duplicats en
+reintentar el mateix desament.
+
+Moure un bloc a una altra fila demana confirmar el canvi de projecte de **tota la tasca**,
+inclosos els altres blocs. Només s'admeten projectes del mateix àmbit i «Intern». Es poden
+afegir files de projectes sense dedicació prèvia. Els noms queden fixos durant el desplaçament
+horitzontal, i els solapaments ocupen subfiles. Zoom i Ajusta canvien l'escala. El control del
+dia substitueix el selector general de període en aquesta vista.
+
+Clicar el bloc o activar-lo amb el teclat obre el formulari equivalent als gestos. El botó
+«+» de cada fila permet crear temps sense arrossegar. Escape, cancel·lació del punter o
+canvi de dia cancel·len el gest. Un error de xarxa restaura el bloc i mostra un avís; un
+conflicte d'edició recarrega les dades sense sobreescriure el canvi remot.
+
+Col·laboradors amb `tasks:write` editen el temps propi; propietaris i administradors també
+el d'altres membres. Observadors només llegeixen. El servidor i `can_edit` comparteixen
+la mateixa política. `expected_version` retorna 409 si el bloc ha canviat. Els instants
+es calculen en UTC i es mostren al fus del perfil, incloses les hores repetides o inexistents
+als canvis d'horari. Els blocs que travessen mitjanit continuen al dia d'inici.
+
+L'API amplia `POST /sessions` amb `id` i l'alternativa `new_task`, i `PATCH /sessions/{id}`
+amb `project_id` i `expected_version`. Ometre `ended_at` conserva també un final obert.
+No hi ha migració ni canvi de pantalles d'Android. L'edició del registre necessita connexió;
+no s'encuen gestos per reproduir-los més tard sobre dades potencialment diferents.

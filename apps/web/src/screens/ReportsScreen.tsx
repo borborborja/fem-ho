@@ -252,31 +252,35 @@ export function ReportsScreen({
       </nav>
       <h2 className="reports-print-only">{t(`reports.tab.${tab}`)}</h2>
       <div className="reports-filters reports-no-print">
-        <label>
-          {t('reports.period')}
-          <select
-            className="plou-input"
-            data-testid="reports-period"
-            value={period}
-            onChange={(e) => {
-              const range = reportRange(
-                e.target.value,
-                timezone,
-                new Date(),
-                resolveWeekStart(settings.week_start, getLocale()),
-              );
-              change({ period: e.target.value, from: range.from, to: range.to });
-            }}
-          >
-            {REPORT_PERIODS.map((key) => (
-              <option key={key} value={key}>
-                {t(`reports.period.${key}`)}
-              </option>
-            ))}
-          </select>
-        </label>
-        {dateInput('reports.from', from, 'from')}
-        {dateInput('reports.to', to, 'to')}
+        {!chrono && (
+          <>
+            <label>
+              {t('reports.period')}
+              <select
+                className="plou-input"
+                data-testid="reports-period"
+                value={period}
+                onChange={(e) => {
+                  const range = reportRange(
+                    e.target.value,
+                    timezone,
+                    new Date(),
+                    resolveWeekStart(settings.week_start, getLocale()),
+                  );
+                  change({ period: e.target.value, from: range.from, to: range.to });
+                }}
+              >
+                {REPORT_PERIODS.map((key) => (
+                  <option key={key} value={key}>
+                    {t(`reports.period.${key}`)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {dateInput('reports.from', from, 'from')}
+            {dateInput('reports.to', to, 'to')}
+          </>
+        )}
         <label>
           {tab === 'summary' ? t('reports.assignee') : t('reports.person')}
           <select
@@ -586,6 +590,7 @@ export function ReportsScreen({
                       entries={registerData.data}
                       day={day}
                       projects={activeProjects}
+                      writableScopeIds={registerData.writable_scope_ids ?? []}
                       onChanged={sessions.reload}
                       onOpenTask={onOpenTask}
                     />

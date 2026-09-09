@@ -130,15 +130,29 @@ test('el cronograma pinta el bloc i arrossegant-lo es corregeix', async ({ page 
    * una hora mal comptada, i el que es prova és que el canvi arribi al servidor: es torna a
    * demanar la taula i el minut hi és.
    */
-  const caixa = (await bloc.boundingBox())!;
-  await page.mouse.move(caixa.x + caixa.width - 3, caixa.y + caixa.height / 2);
+  const handle = bloc.locator('[data-testid^="chrono-resize-right-"]');
+  await handle.scrollIntoViewIfNeeded();
+  const caixa = (await handle.boundingBox())!;
+  const track = (await bloc.locator('xpath=ancestor::*[@data-chrono-lane]').boundingBox())!;
+  await page.mouse.move(caixa.x + caixa.width / 2, caixa.y + caixa.height / 2);
   await page.mouse.down();
-  await page.mouse.move(caixa.x + caixa.width + 60, caixa.y + caixa.height / 2, { steps: 8 });
+  await page.mouse.move(caixa.x + caixa.width / 2 + track.width / 10, caixa.y + caixa.height / 2, {
+    steps: 8,
+  });
   await page.mouse.up();
-
-  await expect(bloc).not.toContainText('1h 0m');
+  await expect
+    .poll(async () => {
+      const report = (await (
+        await page.request.get(`/api/v1/sessions?scope_ids=${scope}`, {
+          headers: { authorization: auth },
+        })
+      ).json()) as { totals: { minutes: number } };
+      return report.totals.minutes;
+    })
+    .toBe(120);
+  await expect(bloc).toContainText('2h');
   await page.getByTestId('registre-view').getByText('Taula').click();
-  await expect(page.getByTestId('registre-summary')).not.toContainText('1h ·');
+  await expect(page.getByTestId('registre-summary')).toContainText('2h');
 });
 
 test("l'exportació porta les columnes de sempre", async ({ page }) => {

@@ -616,3 +616,188 @@ it('filtra diversos projectes i separa persona assignada de qui registra hores',
   const hidden = await api('GET', `/api/v1/sessions/export.csv?${query}`, undefined, comMarta);
   expect(hidden.body).not.toContain('Coincident');
 });
+
+describe('gestos del cronograma', () => {
+  it('crea una tasca feta i una sola sessió de manera atòmica i idempotent', async () => {
+    const scope = (
+      await api('POST', '/api/v1/scopes', {
+        name: 'Dibuix',
+        kind: 'individual',
+        color: '--plou-blue',
+      })
+    ).json<{ id: string }>().id;
+    await api('PATCH', `/api/v1/scopes/${scope}/settings`, { time_tracking: true });
+    const body = {
+      id: uuidv7(),
+      new_task: { id: uuidv7(), scope_id: scope, title: 'Feina dibuixada' },
+      started_at: '2026-03-29T00:00:00Z',
+      ended_at: '2026-03-29T02:00:00Z',
+    };
+    const created = await api('POST', '/api/v1/sessions', body);
+    expect(created.statusCode).toBe(201);
+    const task = (await api('GET', `/api/v1/tasks/${body.new_task.id}`)).json<{
+      status: string;
+      completed_at: string;
+    }>();
+    expect(task.status).toBe('done');
+    expect(task.completed_at).toBe('2026-03-29T02:00:00.000Z');
+    const retried = await api('POST', '/api/v1/sessions', body);
+    expect(retried.statusCode).toBe(201);
+    expect(retried.json()).toEqual(created.json());
+    const report = (await api('GET', `/api/v1/sessions?scope_ids=${scope}`)).json<Report>();
+    expect(report.data).toHaveLength(1);
+    expect(report.totals.minutes).toBe(120);
+    const badTask = uuidv7();
+    const failed = await api('POST', '/api/v1/sessions', {
+      ...body,
+      id: uuidv7(),
+      new_task: { ...body.new_task, id: badTask },
+      ended_at: body.started_at,
+    });
+    expect(failed.statusCode).toBe(422);
+    expect((await api('GET', `/api/v1/tasks/${badTask}`)).statusCode).toBe(404);
+  });
+  it('corregeix una sessió oberta sense aturar-la i rebutja una versió antiga', async () => {
+    const task = (
+      await api('POST', '/api/v1/tasks', { scope_id: scopeId, title: 'Continua en curs' })
+    ).json<{ id: string }>().id;
+    await api('POST', `/api/v1/tasks/${task}/move`, { status: 'doing' });
+    type Entry = {
+      id: string;
+      task_id: string;
+      version: number;
+      ended_at: string | null;
+      started_at: string;
+    };
+    const report = (await api('GET', `/api/v1/sessions?scope_ids=${scopeId}`)).json<{
+      data: Entry[];
+    }>();
+    const entry = report.data.find((e) => e.task_id === task)!;
+    const start = new Date(Math.floor((Date.now() - 3600000) / 300000) * 300000).toISOString();
+    const edited = await api('PATCH', `/api/v1/sessions/${entry.id}`, {
+      started_at: start,
+      expected_version: entry.version,
+    });
+    expect(edited.statusCode).toBe(200);
+    expect(edited.json<Entry>().ended_at).toBeNull();
+    expect(edited.json<Entry>().started_at).toBe(start);
+    const conflict = await api('PATCH', `/api/v1/sessions/${entry.id}`, {
+      started_at: start,
+      expected_version: entry.version,
+    });
+    expect(conflict.statusCode).toBe(409);
+    await api('POST', `/api/v1/tasks/${task}/move`, { status: 'todo' });
+    const closed = (await api('GET', `/api/v1/sessions?scope_ids=${scopeId}`))
+      .json<{ data: Entry[] }>()
+      .data.find((e) => e.id === entry.id)!;
+    expect(closed.ended_at).not.toBeNull();
+  });
+  it('canvia el projecte de tota la tasca i reverteix tot el gest si el destí és invàlid', async () => {
+    const task = await feina(
+      'Projecte del cronograma',
+      '2026-07-23T08:00:00Z',
+      '2026-07-23T09:00:00Z',
+    );
+    type Entry = {
+      id: string;
+      task_id: string;
+      version: number;
+      project_id: string | null;
+      started_at: string;
+    };
+    const get = async () =>
+      (await api('GET', `/api/v1/sessions?scope_ids=${scopeId}`))
+        .json<{ data: Entry[] }>()
+        .data.find((e) => e.task_id === task)!;
+    const entry = await get();
+    const bad = await api('PATCH', `/api/v1/sessions/${entry.id}`, {
+      started_at: '2026-07-23T07:00:00Z',
+      project_id: uuidv7(),
+      expected_version: entry.version,
+    });
+    expect(bad.statusCode).toBe(404);
+    expect(await get()).toEqual(entry);
+    const moved = await api('PATCH', `/api/v1/sessions/${entry.id}`, {
+      started_at: '2026-07-23T07:00:00Z',
+      project_id: projectId,
+      expected_version: entry.version,
+    });
+    expect(moved.statusCode).toBe(200);
+    expect((await get()).project_id).toBe(projectId);
+    expect((await get()).started_at).toBe('2026-07-23T07:00:00.000Z');
+    expect(
+      (await api('GET', `/api/v1/tasks/${task}`)).json<{ project_id: string }>().project_id,
+    ).toBe(projectId);
+  });
+  it('moure un registre automàtic conserva els segons i la durada exacta', async () => {
+    const task = await feina('Segons conservats', '2026-07-23T08:00:00Z', '2026-07-23T09:00:00Z');
+    await sql`UPDATE task_sessions SET started_at=${'2026-07-23T08:02:13.000Z'},
+      ended_at=${'2026-07-23T09:03:49.000Z'},source='board' WHERE task_id=${task}`.execute(conn.db);
+    const entry = (await api('GET', `/api/v1/sessions?scope_ids=${scopeId}`))
+      .json<{ data: { id: string; task_id: string; version: number }[] }>()
+      .data.find((e) => e.task_id === task)!;
+    const response = await api('PATCH', `/api/v1/sessions/${entry.id}`, {
+      started_at: '2026-07-23T08:32:13.000Z',
+      ended_at: '2026-07-23T09:33:49.000Z',
+      expected_version: entry.version,
+    });
+    expect(response.statusCode).toBe(200);
+    const moved = response.json<{ started_at: string; ended_at: string; version: number }>();
+    expect(moved.started_at).toBe('2026-07-23T08:32:13.000Z');
+    expect(moved.ended_at).toBe('2026-07-23T09:33:49.000Z');
+    expect(Date.parse(moved.ended_at) - Date.parse(moved.started_at)).toBe(3696000);
+    const resized = await api('PATCH', `/api/v1/sessions/${entry.id}`, {
+      started_at: moved.started_at,
+      ended_at: '2026-07-23T09:38:49.000Z',
+      expected_version: moved.version,
+    });
+    expect(resized.json<{ started_at: string }>().started_at).toBe(moved.started_at);
+  });
+  it('observadors no editen; col·laboradors només el temps propi', async () => {
+    const scope = (
+      await api('POST', '/api/v1/scopes', {
+        name: 'Permisos del cronograma',
+        kind: 'collective',
+        color: '--plou-blue',
+      })
+    ).json<{ id: string }>().id;
+    await api('PATCH', `/api/v1/scopes/${scope}/settings`, { time_tracking: true });
+    await api('POST', `/api/v1/scopes/${scope}/members`, { user_id: martaId, role: 'viewer' });
+    const task = (
+      await api('POST', '/api/v1/tasks', { scope_id: scope, title: 'Dedicació compartida' })
+    ).json<{ id: string }>().id;
+    const body = {
+      task_id: task,
+      started_at: '2026-07-23T10:00:00Z',
+      ended_at: '2026-07-23T11:00:00Z',
+    };
+    const entry = (await api('POST', '/api/v1/sessions', { ...body, user_id: martaId })).json<{
+      id: string;
+    }>();
+    expect(
+      (await api('PATCH', `/api/v1/sessions/${entry.id}`, { note: 'No' }, comMarta)).statusCode,
+    ).toBe(403);
+    expect(
+      (await api('DELETE', `/api/v1/sessions/${entry.id}`, undefined, comMarta)).statusCode,
+    ).toBe(403);
+    const report = (
+      await api('GET', `/api/v1/sessions?scope_ids=${scope}`, undefined, comMarta)
+    ).json<{ data: { can_edit: boolean }[]; writable_scope_ids: string[] }>();
+    expect(report.data[0]?.can_edit).toBe(false);
+    expect(report.writable_scope_ids).toEqual([]);
+    const member = (await api('GET', `/api/v1/scopes/${scope}/members`))
+      .json<{ id: string; user_id: string }[]>()
+      .find((row) => row.user_id === martaId)!;
+    expect(
+      (await api('PATCH', `/api/v1/scopes/${scope}/members/${member.id}`, { role: 'collaborator' }))
+        .statusCode,
+    ).toBe(200);
+    expect(
+      (await api('PATCH', `/api/v1/sessions/${entry.id}`, { note: 'Sí' }, comMarta)).statusCode,
+    ).toBe(200);
+    const other = (await api('POST', '/api/v1/sessions', body)).json<{ id: string }>();
+    expect(
+      (await api('PATCH', `/api/v1/sessions/${other.id}`, { note: 'No' }, comMarta)).statusCode,
+    ).toBe(403);
+  });
+});

@@ -977,6 +977,8 @@ export interface paths {
          *
          *     **Els solapaments no es prohibeixen**: dues persones poden treballar alhora a la
          *     mateixa tasca, i el cronograma els ensenya trepitjats en comptes d'impedir-los.
+         *
+         *     new_task crea una tasca feta i una sola sessió atòmicament. completed_at és el final del bloc.
          */
         post: operations["createSession"];
         delete?: never;
@@ -1054,8 +1056,7 @@ export interface paths {
         head?: never;
         /**
          * Moure, allargar o reassignar un bloc
-         * @description El que fa el cronograma en arrossegar. `task_id` hi entra perquè canviar de fila vol
-         *     dir canviar de projecte, i un bloc no té projecte: el té la tasca.
+         * @description Ometre ended_at manté el final anterior, inclòs null. project_id mou tota la tasca dins del mateix àmbit, atòmicament amb els instants; és excloent amb task_id. expected_version evita sobreescriure un canvi concurrent. Els desplaçaments en passos de cinc minuts preserven els segons originals; la resta dels instants editats s’arrodoneixen a cinc minuts.
          */
         patch: operations["updateSession"];
         trace?: never;
@@ -3920,6 +3921,7 @@ export interface components {
             version: number;
         };
         Session: {
+            version?: number;
             id: string;
             task_id: string;
             scope_id: string;
@@ -3941,6 +3943,8 @@ export interface components {
             note?: string | null;
         };
         SessionEntry: {
+            version?: number;
+            can_edit?: boolean;
             id: string;
             task_id: string;
             task_title: string;
@@ -4020,6 +4024,7 @@ export interface components {
             }[];
         };
         SessionReport: {
+            writable_scope_ids?: string[];
             /** Format: date-time */
             generated_at?: string;
             open_sessions?: number;
@@ -6236,7 +6241,7 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    task_id: string;
+                    task_id?: string;
                     /** Format: date-time */
                     started_at: string;
                     /** Format: date-time */
@@ -6244,7 +6249,21 @@ export interface operations {
                     note?: string;
                     /** @description De qui és el temps. Per defecte, de qui l'escriu. */
                     user_id?: string;
-                };
+                    /**
+                     * Format: uuid
+                     * @description Identificador del client per a reintents idempotents.
+                     */
+                    id?: string;
+                    new_task?: {
+                        /** Format: uuid */
+                        id: string;
+                        scope_id: string;
+                        project_id?: string;
+                        title: string;
+                        task_type_id?: string;
+                        assignee_ids?: string[];
+                    };
+                } & (unknown | unknown);
             };
         };
         responses: {
@@ -6258,7 +6277,21 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            /** @description No es pot editar aquesta dedicació. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             404: components["responses"]["NotFound"];
+            /** @description Identificador reutilitzat amb contingut diferent. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description El bloc acaba abans de començar, o l'instant no és vàlid. */
             422: {
                 headers: {
@@ -6374,6 +6407,8 @@ export interface operations {
                     ended_at?: string;
                     task_id?: string;
                     note?: string | null;
+                    project_id?: string | null;
+                    expected_version?: number;
                 };
             };
         };
@@ -6388,7 +6423,21 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            /** @description No es pot editar aquesta dedicació. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             404: components["responses"]["NotFound"];
+            /** @description La sessió ha canviat; cal recarregar. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description El bloc acabaria abans de començar. */
             422: {
                 headers: {

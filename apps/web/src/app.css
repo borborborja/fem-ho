@@ -386,3 +386,175 @@ button {
 [data-theme='dark'] .reports-filters input[type='date'] {
   color-scheme: dark;
 }
+
+/* Cronograma: els noms es mantenen visibles i els solapaments tenen subfiles. */
+.chrono-shell {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.chrono-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.chrono-viewport {
+  overflow-x: auto;
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+}
+.chrono-row {
+  display: flex;
+  border-bottom: 1px solid var(--divider-soft);
+}
+.chrono-gutter {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  flex-shrink: 0;
+  background: var(--panel-bg);
+  border-right: 1px solid var(--divider-soft);
+  padding: 8px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.chrono-axis {
+  position: relative;
+  height: 32px;
+}
+.chrono-axis span {
+  position: absolute;
+  white-space: nowrap;
+  font-size: 10px;
+  top: 7px;
+}
+.chrono-track {
+  position: relative;
+  flex-shrink: 0;
+  background-image: linear-gradient(90deg, var(--divider-soft) 1px, transparent 1px);
+  touch-action: pan-y;
+}
+.chrono-block {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  height: 34px;
+  border: 2px solid var(--card-border);
+  border-radius: 6px;
+  background: var(--panel-bg);
+  color: var(--ink);
+  user-select: none;
+  touch-action: none;
+}
+.chrono-block[data-editable='true'] {
+  cursor: grab;
+}
+.chrono-block:focus-within,
+.chrono-block:hover {
+  outline: 2px solid var(--kicker);
+  z-index: 2;
+}
+.chrono-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 11px;
+  padding: 4px 10px;
+  width: 100%;
+  text-align: start;
+  cursor: inherit;
+}
+.chrono-handle {
+  position: absolute;
+  top: 0;
+  width: 10px;
+  height: 100%;
+  cursor: ew-resize;
+  z-index: 1;
+}
+.chrono-handle-left {
+  left: 0;
+  border-left: 3px solid var(--kicker);
+}
+.chrono-handle-right {
+  right: 0;
+  border-right: 3px solid var(--kicker);
+}
+.chrono-block[data-editable='false'] .chrono-handle {
+  display: none;
+}
+.chrono-add {
+  margin-left: auto;
+  min-width: 32px;
+  min-height: 32px;
+  background: var(--ghost-bg);
+  color: var(--ink);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.chrono-ghost {
+  position: absolute;
+  top: 5px;
+  height: 34px;
+  border: 2px dashed var(--kicker);
+  background: var(--ghost-bg);
+  pointer-events: none;
+}
+.chrono-dialog {
+  width: min(480px, calc(100vw - 32px));
+  max-height: 90dvh;
+  overflow: auto;
+  border: 1px solid var(--card-border);
+  border-radius: 16px;
+  padding: 24px;
+  background: var(--panel-bg);
+  color: var(--ink);
+}
+.chrono-dialog::backdrop {
+  background: var(--scrim);
+}
+.chrono-dialog form {
+  display: grid;
+  gap: 14px;
+}
+.chrono-dialog h2,
+.chrono-dialog p {
+  margin: 0;
+}
+.chrono-dialog label {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+}
+.chrono-dialog input:not([type='checkbox']),
+.chrono-dialog select {
+  width: 100%;
+  min-height: 40px;
+  background: var(--ghost-bg);
+  color: var(--ink);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  padding: 8px;
+  font: inherit;
+}
+[data-theme='dark'] .chrono-dialog {
+  color-scheme: dark;
+}
+
+.chrono-gutter,
+.chrono-block,
+.chrono-ghost,
+.chrono-dialog,
+.chrono-dialog input,
+.chrono-dialog select {
+  box-sizing: border-box;
+}

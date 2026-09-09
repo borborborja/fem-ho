@@ -25,26 +25,7 @@ import { useApi } from '../app/useApi.js';
 import { ErrorBanner } from './BoardScreen.js';
 import { Cronograma } from './Cronograma.js';
 
-export interface SessionEntry {
-  id: string;
-  task_id: string;
-  task_title: string;
-  scope_id: string;
-  project_id: string | null;
-  project_name: string | null;
-  task_type_id: string | null;
-  task_type_name: string | null;
-  task_type_color: string | null;
-  user_id: string;
-  user_name: string | null;
-  started_at: string;
-  ended_at: string | null;
-  minutes: number;
-  overtime_minutes: number;
-  needs_review: boolean;
-  open: boolean;
-  source: string;
-}
+export type SessionEntry = import('@fem-ho/contracts').components['schemas']['SessionEntry'];
 
 export interface Bucket {
   key: string;

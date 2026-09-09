@@ -19,7 +19,8 @@ import { sql } from 'kysely';
 import type { MigrationDb } from '../db/migration-db.js';
 import { hasCapability, type Principal } from '../policy/principal.js';
 import { missingCapability, PolicyError } from '../policy/errors.js';
-import { roleCan } from '../policy/scope-roles.js';
+import { canEditSession } from '../policy/session-writes.js';
+import { roleCan, type ScopeRole } from '../policy/scope-roles.js';
 import { needsReview, splitWorkTime } from '../policy/work-hours.js';
 import { localDateOf, localDayBounds } from '../time/local-day.js';
 import { roleOf } from '../policy/scope-visibility.js';
@@ -43,6 +44,8 @@ export interface SessionFilters {
 }
 
 export interface SessionEntry {
+  version: number;
+  can_edit: boolean;
   id: string;
   task_id: string;
   task_title: string;
@@ -75,6 +78,7 @@ export interface Bucket {
 }
 
 export interface SessionReport {
+  writable_scope_ids?: string[];
   data: SessionEntry[];
   next_cursor?: string | null;
   generated_at?: string | undefined;
@@ -91,6 +95,7 @@ export interface SessionReport {
 }
 
 interface Row {
+  version: number;
   id: string;
   task_id: string;
   task_title: string;
@@ -145,8 +150,10 @@ export async function sessionReport(
    * deixa el dia que copiï la funció.
    */
   const senseLimit: string[] = [];
+  const roles = new Map<string, ScopeRole | null>();
   for (const scopeId of ambRegistre) {
     const role = await roleOf(db, principal.userId, scopeId);
+    roles.set(scopeId, role);
     if (role !== null && roleCan(role, 'reports')) senseLimit.push(scopeId);
   }
 
@@ -161,7 +168,7 @@ export async function sessionReport(
     SELECT s.id, s.task_id, t.title AS task_title, s.scope_id, t.project_id,
            p.name AS project_name, t.task_type_id, tt.name AS task_type_name,
            tt.color AS task_type_color, s.user_id, u.name AS user_name,
-           s.started_at, s.ended_at, s.source
+           s.started_at, s.ended_at, s.source, s.version
     FROM task_sessions s
     JOIN tasks t ON t.id = s.task_id AND t.deleted_at IS NULL
     LEFT JOIN projects p ON p.id = t.project_id
@@ -192,7 +199,12 @@ export async function sessionReport(
     LIMIT 500
   `.execute(db);
 
-    entries.push(...rows.rows.map((row) => enrich(row, filters.timezone, settings, ara)));
+    entries.push(
+      ...rows.rows.map((row) => ({
+        ...enrich(row, filters.timezone, settings, ara),
+        can_edit: canEditSession(principal, roles.get(row.scope_id) ?? null, row.user_id),
+      })),
+    );
     after = rows.rows.at(-1);
     if (rows.rows.length < 500) break;
   }
@@ -217,6 +229,9 @@ export async function sessionReport(
     filters.limit === undefined ? entries : entries.slice(offset, offset + filters.limit);
   return {
     data,
+    writable_scope_ids: ambRegistre.filter((id) =>
+      canEditSession(principal, roles.get(id) ?? null, principal.userId),
+    ),
     totals: totals(entries, filters.timezone),
     generated_at: ara,
     open_sessions: entries.filter((row) => row.open).length,
@@ -254,7 +269,7 @@ function enrich(
     { work_start: string; work_end: string; work_days: string; long_session_hours: number }
   >,
   now: string,
-): SessionEntry {
+): Omit<SessionEntry, 'can_edit'> {
   const config = settings.get(row.scope_id);
   const fins = row.ended_at ?? now;
   const split = splitWorkTime(

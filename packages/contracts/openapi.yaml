@@ -1858,40 +1858,106 @@ paths:
           content: { application/json: { schema: { $ref: '#/components/schemas/SessionReport' } } }
         '401': { $ref: '#/components/responses/Unauthenticated' }
     post:
-      tags: [tasks]
+      tags:
+        - tasks
       operationId: createSession
       summary: Apuntar un bloc a mà
-      description: |
-        L'entrada manual i el bloc que es dibuixa al cronograma. Els instants s'ajusten a 5
+      description:
+        "L'entrada manual i el bloc que es dibuixa al cronograma. Els instants s'ajusten a
+        5
+
         minuts, com les vores que s'arrosseguen.
 
+
         **Els solapaments no es prohibeixen**: dues persones poden treballar alhora a la
+
         mateixa tasca, i el cronograma els ensenya trepitjats en comptes d'impedir-los.
+
+
+        new_task crea una tasca feta i una sola sessió atòmicament. completed_at és el final del bloc.
+
+        "
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [task_id, started_at, ended_at]
+              required:
+                - started_at
+                - ended_at
               properties:
-                task_id: { type: string }
-                started_at: { type: string, format: date-time }
-                ended_at: { type: string, format: date-time }
-                note: { type: string }
+                task_id:
+                  type: string
+                started_at:
+                  type: string
+                  format: date-time
+                ended_at:
+                  type: string
+                  format: date-time
+                note:
+                  type: string
                 user_id:
                   type: string
                   description: De qui és el temps. Per defecte, de qui l'escriu.
+                id:
+                  type: string
+                  format: uuid
+                  description: Identificador del client per a reintents idempotents.
+                new_task:
+                  type: object
+                  required:
+                    - id
+                    - scope_id
+                    - title
+                  properties:
+                    id:
+                      type: string
+                      format: uuid
+                    scope_id:
+                      type: string
+                    project_id:
+                      type: string
+                    title:
+                      type: string
+                    task_type_id:
+                      type: string
+                    assignee_ids:
+                      type: array
+                      items:
+                        type: string
+              oneOf:
+                - required:
+                    - task_id
+                  not:
+                    required:
+                      - new_task
+                - required:
+                    - new_task
+                  not:
+                    required:
+                      - task_id
       responses:
         '201':
           description: El bloc.
-          content: { application/json: { schema: { $ref: '#/components/schemas/Session' } } }
-        '401': { $ref: '#/components/responses/Unauthenticated' }
-        '404': { $ref: '#/components/responses/NotFound' }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
         '422':
           description: El bloc acaba abans de començar, o l'instant no és vàlid.
           content:
-            { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '403':
+          description: No es pot editar aquesta dedicació.
+        '409':
+          description: Identificador reutilitzat amb contingut diferent.
 
   /sessions/export.csv:
     get:
@@ -1965,13 +2031,21 @@ paths:
 
   /sessions/{id}:
     patch:
-      tags: [tasks]
+      tags:
+        - tasks
       operationId: updateSession
       summary: Moure, allargar o reassignar un bloc
-      description: |
-        El que fa el cronograma en arrossegar. `task_id` hi entra perquè canviar de fila vol
-        dir canviar de projecte, i un bloc no té projecte: el té la tasca.
-      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      description:
+        Ometre ended_at manté el final anterior, inclòs null. project_id mou tota la tasca dins
+        del mateix àmbit, atòmicament amb els instants; és excloent amb task_id. expected_version evita
+        sobreescriure un canvi concurrent. Els desplaçaments en passos de cinc minuts preserven
+        els segons originals; la resta dels instants editats s’arrodoneixen a cinc minuts.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
       requestBody:
         required: true
         content:
@@ -1979,30 +2053,65 @@ paths:
             schema:
               type: object
               properties:
-                started_at: { type: string, format: date-time }
-                ended_at: { type: string, format: date-time }
-                task_id: { type: string }
-                note: { type: [string, 'null'] }
+                started_at:
+                  type: string
+                  format: date-time
+                ended_at:
+                  type: string
+                  format: date-time
+                task_id:
+                  type: string
+                note:
+                  type:
+                    - string
+                    - 'null'
+                project_id:
+                  type:
+                    - string
+                    - 'null'
+                expected_version:
+                  type: integer
+                  minimum: 1
       responses:
         '200':
           description: El bloc, com ha quedat.
-          content: { application/json: { schema: { $ref: '#/components/schemas/Session' } } }
-        '401': { $ref: '#/components/responses/Unauthenticated' }
-        '404': { $ref: '#/components/responses/NotFound' }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
         '422':
           description: El bloc acabaria abans de començar.
           content:
-            { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '403':
+          description: No es pot editar aquesta dedicació.
+        '409':
+          description: La sessió ha canviat; cal recarregar.
     delete:
-      tags: [tasks]
+      tags:
+        - tasks
       operationId: deleteSession
       summary: Esborrar un bloc
       description: 'Esborrat suau, com tota la resta: la tombstone ha de poder viatjar.'
-      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
       responses:
-        '204': { description: Esborrat. }
-        '401': { $ref: '#/components/responses/Unauthenticated' }
-        '404': { $ref: '#/components/responses/NotFound' }
+        '204':
+          description: Esborrat.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   /task-types:
     get:
@@ -5848,6 +5957,7 @@ components:
       additionalProperties: false
       required: [id, task_id, scope_id, user_id, started_at, source]
       properties:
+        version: { type: integer }
         id: { type: string }
         task_id: { type: string }
         scope_id: { type: string }
@@ -5892,6 +6002,8 @@ components:
           source,
         ]
       properties:
+        version: { type: integer }
+        can_edit: { type: boolean }
         id: { type: string }
         task_id: { type: string }
         task_title: { type: string }
@@ -6082,6 +6194,7 @@ components:
       additionalProperties: false
       required: [data, totals]
       properties:
+        writable_scope_ids: { type: array, items: { type: string } }
         generated_at: { type: string, format: date-time }
         open_sessions: { type: integer }
         next_cursor: { type: [string, 'null'] }
