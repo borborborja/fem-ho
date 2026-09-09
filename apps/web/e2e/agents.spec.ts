@@ -367,7 +367,7 @@ test('deixar una tasca a un àmbit sense agent avisa que no la farà ningú', as
     .getByTestId(`task-${tascaId}`)
     .getByRole('button', { name: /Moure a/u })
     .click();
-  await expect(page.getByTestId('board-notice')).toContainText('es quedarà sense fer');
+  await expect(page.getByTestId('toast')).toContainText('es quedarà sense fer');
 
   /**
    * I ha quedat **delegada**, que és el que fa que un agent la pugui agafar el dia que

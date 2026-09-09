@@ -495,7 +495,8 @@ test('un àmbit apagat no ensenya el botonet de projectes', async ({ page }) => 
 
   await page.goto(`/board?scopes=${altre.id}`);
   await expect(page.locator('[data-testid="topbar"]')).toBeVisible();
-  await expect(page.locator(`[data-testid="scope-projects-${scope.id}"]`)).toHaveCount(0);
+  await expect(page.locator(`[data-testid="scope-projects-${scope.id}"]`)).toBeHidden();
+  await expect(page.locator(`[data-testid="scope-projects-${scope.id}"]`)).toBeDisabled();
 });
 
 /**

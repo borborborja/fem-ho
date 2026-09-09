@@ -377,6 +377,10 @@ No s'activen mentre el focus és en un camp de text.
 
 **Error**: banda discreta a dalt amb `var(--danger-bg)` i botó de reintentar. Els errors de xarxa amb mutacions pendents no bloquegen: la cua es reintenta sola.
 
+**Avisos puntuals**: toasts a la cantonada inferior dreta, fora del flux del contingut. Informació durant 5 segons; advertiments i errors d’un gest durant 8. Es poden tancar, es dedupliquen i se’n mostren com a màxim tres. El temps es pausa amb el ratolí, el focus o la pestanya oculta, i els missatges s’anuncien als lectors de pantalla.
+
+Hi encaixen el rebuig de desactivar l’últim àmbit, la informació de dreceres, un moviment de tasca rebutjat i l’avís de delegació sense agent. L’avís de l’últim àmbit es retira en fer una selecció vàlida. Els errors de formulari o càrrega, l’estat sense connexió, la manca d’agents al tauler d’IA i les confirmacions amb decisions continuen visibles al seu context. La confirmació de còpia ja apareix al botó i no necessita un segon avís.
+
 **Offline**: pastilla persistent "Sense connexió · N canvis pendents". En recuperar-la, "Sincronitzat" 2 segons i desapareix.
 
 

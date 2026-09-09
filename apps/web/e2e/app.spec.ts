@@ -154,7 +154,7 @@ test('desactivar tots els àmbits es rebutja', async ({ page }) => {
   for (let index = 0; index < total; index += 1) await chips.nth(index).click();
 
   // L'últim no s'apaga: es rebutja el canvi i es diu per què.
-  await expect(page.locator('[data-testid="app-warning"]')).toBeVisible();
+  await expect(page.locator('[data-testid="toast"]')).toBeVisible();
   await expect(page.locator('[data-testid="kanban"]')).toBeVisible();
 });
 
