@@ -100,10 +100,12 @@ export async function createSubtask(
   }
 
   const id = input.id ?? uuidv7();
-  const existing = await sql<SubtaskRow>`
-    SELECT id, task_id, title, done, position, version FROM subtasks WHERE id = ${id}
+  const existing = await sql<SubtaskRow & { deleted_at: string | null }>`
+    SELECT id, task_id, title, done, position, version, deleted_at FROM subtasks WHERE id = ${id}
   `.execute(ctx.tx);
   if (existing.rows[0] !== undefined) {
+    if (existing.rows[0].task_id !== taskId || existing.rows[0].deleted_at !== null)
+      throw notFound('subtask', id);
     ctx.noChange();
     return toView(existing.rows[0]);
   }
@@ -123,7 +125,7 @@ export async function createSubtask(
   ctx.record({ entityType: 'subtask', entityId: id, scopeId, verb: 'created' });
 
   const created = await sql<SubtaskRow>`
-    SELECT id, task_id, title, done, position, version FROM subtasks WHERE id = ${id}
+    SELECT id, task_id, title, done, position, version FROM subtasks WHERE id = ${id} AND deleted_at IS NULL
   `.execute(ctx.tx);
   return toView(created.rows[0]!);
 }
@@ -196,10 +198,21 @@ export async function deleteSubtask(
   const { scopeId } = await taskOfSubtask(ctx.tx, subtaskId);
   await assertScopeAccess(ctx.tx, principal, scopeId);
 
-  await sql`
+  const detached = await sql<{ id: string }>`
     UPDATE checklists SET subtask_id = NULL, updated_at = ${ctx.now}, version = version + 1
     WHERE subtask_id = ${subtaskId} AND deleted_at IS NULL
+    RETURNING id
   `.execute(ctx.tx);
+  // El canvi de la llista necessita el seu propi delta, a més de la tombstone de la subtasca.
+  for (const checklist of detached.rows) {
+    ctx.record({
+      entityType: 'checklist',
+      entityId: checklist.id,
+      scopeId,
+      verb: 'updated',
+      changes: { subtask_id: { from: subtaskId, to: null } },
+    });
+  }
 
   await sql`
     UPDATE subtasks SET deleted_at = ${ctx.now}, updated_at = ${ctx.now}, version = version + 1

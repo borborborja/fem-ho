@@ -31,8 +31,10 @@ import { dbBool, isTrue } from '../db/bool.js';
 import type { AuditContext } from '../audit/audited-transaction.js';
 import type { MigrationDb } from '../db/migration-db.js';
 import { PolicyError, missingCapability, notFound } from '../policy/errors.js';
-import { hasCapability, type Principal } from '../policy/principal.js';
+import { canSeeScope, hasCapability, type Principal } from '../policy/principal.js';
 import { assertScopeAccess } from './scopes.js';
+import { completeTask } from './tasks.js';
+import { visibleScopeIds } from '../policy/scope-visibility.js';
 
 export interface ChecklistItemRow {
   id: string;
@@ -179,6 +181,12 @@ export async function listPinnedChecklists(
    * existeix precisament per saltar a la que toca. El `JOIN` ja hi era per comprovar que
    * la tasca no estigui esborrada; només calia demanar-ne el títol.
    */
+  // Pinejar no concedeix accés: la pertinença i l'abast del token poden haver canviat.
+  const allowed = [...(await visibleScopeIds(db, principal.userId))].filter((id) =>
+    canSeeScope(principal, id),
+  );
+  if (allowed.length === 0) return [];
+
   const rows = await sql<ChecklistRow & { task_title: string }>`
     SELECT c.id, c.task_id, c.subtask_id, c.name, c.pinned, c.pinned_by,
            c.show_completed_inline, c.position, c.version, t.title AS task_title
@@ -186,6 +194,7 @@ export async function listPinnedChecklists(
     JOIN tasks t ON t.id = c.task_id
     WHERE c.deleted_at IS NULL AND t.deleted_at IS NULL
       AND c.pinned = ${dbBool(true)} AND c.pinned_by = ${principal.userId}
+      AND t.scope_id IN (${sql.join(allowed)})
     ORDER BY c.position
   `.execute(db);
 
@@ -221,6 +230,15 @@ export async function createChecklist(
   const scopeId = task.rows[0]?.scope_id;
   if (scopeId === undefined) throw notFound('task', taskId);
   await assertScopeAccess(ctx.tx, principal, scopeId, { type: 'La tasca', id: taskId });
+
+  // La cascada escriu a la subtasca ancorada: ha de pertànyer a aquesta mateixa tasca.
+  if (input.subtask_id != null) {
+    const anchor = await sql<{ id: string }>`
+      SELECT id FROM subtasks
+      WHERE id = ${input.subtask_id} AND task_id = ${taskId} AND deleted_at IS NULL
+    `.execute(ctx.tx);
+    if (anchor.rows.length === 0) throw notFound('subtask', input.subtask_id);
+  }
 
   const id = input.id ?? uuidv7();
   const last = await sql<{ position: string }>`
@@ -462,20 +480,9 @@ async function applyCascade(
     `.execute(ctx.tx);
 
     if (task.rows[0]?.status !== 'done') {
-      await sql`
-        UPDATE tasks SET status = 'done', completed_at = ${ctx.now}, updated_at = ${ctx.now},
-                         version = version + 1
-        WHERE id = ${taskId}
-      `.execute(ctx.tx);
-
+      // Acabar per una llista té els mateixos efectes: temps, atenció i recurrència.
+      await completeTask(ctx, principal, taskId, { cascade: true });
       result.task_completed = true;
-      ctx.record({
-        entityType: 'task',
-        entityId: taskId,
-        scopeId,
-        verb: 'cascade_complete',
-        changes: { status: { from: task.rows[0]?.status ?? 'inbox', to: 'done' } },
-      });
     }
   }
 

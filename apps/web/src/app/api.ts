@@ -32,11 +32,11 @@ export interface Problem {
  * mai deixa una pantalla muda ni obliga a desplegar les dues coses alhora.
  */
 export function problemText(problem: Problem | undefined, fallback: string): string {
-  if (problem === undefined) return fallback;
+  if (problem == null || typeof problem.type !== 'string') return fallback;
   const slug = problem.type.slice(problem.type.lastIndexOf('/') + 1);
   const key = `error.${slug}`;
   const text = t(key, problem.params ?? {});
-  return text === key ? problem.detail : text;
+  return text === key ? (typeof problem.detail === 'string' ? problem.detail : fallback) : text;
 }
 
 /**
@@ -121,9 +121,12 @@ export function saveTokens(tokens: Tokens | null): void {
 
 let tokens: Tokens | null = loadTokens();
 let refreshing: Promise<boolean> | null = null;
+let sessionEpoch = 0;
 let onSessionLost: (() => void) | null = null;
 
 export function setTokens(next: Tokens | null): void {
+  sessionEpoch += 1;
+  refreshing = null;
   tokens = next;
   saveTokens(next);
 }
@@ -139,32 +142,52 @@ export function onSessionExpired(handler: () => void): void {
 
 async function refresh(): Promise<boolean> {
   const current = tokens;
+  const epoch = sessionEpoch;
   if (current === null) return false;
+  if (refreshing !== null) return refreshing;
 
-  refreshing ??= (async () => {
-    try {
-      const res = await fetch('/api/v1/auth/refresh', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ refresh_token: current.refresh_token }),
-      });
-      if (!res.ok) {
+  const pending = (async () => {
+    const res = await fetch('/api/v1/auth/refresh', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ refresh_token: current.refresh_token }),
+    });
+    // Sortir o entrar amb un altre compte invalida les respostes que encara viatjaven.
+    if (epoch !== sessionEpoch) return false;
+    if (!res.ok) {
+      if (res.status === 401) {
         setTokens(null);
         onSessionLost?.();
         return false;
       }
-      setTokens((await res.json()) as Tokens);
-      return true;
-    } catch {
-      // Una xarxa caiguda no és una sessió caducada: no es tanca res, i qui crida
-      // rebrà l'error de xarxa i podrà reintentar.
-      return false;
-    } finally {
-      refreshing = null;
+      // Un 429 o un error del servidor no revoca cap credencial.
+      throw new ApiError(res.status, undefined, `HTTP ${String(res.status)}`);
     }
+    const next = (await res.json()) as Tokens;
+    if (epoch !== sessionEpoch) return false;
+    tokens = next;
+    saveTokens(next);
+    return true;
   })();
+  refreshing = pending;
+  try {
+    return await pending;
+  } finally {
+    if (refreshing === pending) refreshing = null;
+  }
+}
 
-  return refreshing;
+/** Un reintent pertany a la mateixa sessió que la petició original. */
+async function withRefresh(send: () => Promise<Response>): Promise<Response> {
+  const epoch = sessionEpoch;
+  const access = tokens?.access_token;
+  const res = await send();
+  if (res.status !== 401 || tokens === null || epoch !== sessionEpoch) return res;
+  // Un 401 tardà pot correspondre al token que un altre request ja ha renovat.
+  if (tokens.access_token !== access || (await refresh())) {
+    if (epoch === sessionEpoch) return send();
+  }
+  return res;
 }
 
 export interface RequestOptions {
@@ -196,10 +219,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
     });
   };
 
-  let res = await send();
-  if (res.status === 401 && tokens !== null) {
-    if (await refresh()) res = await send();
-  }
+  const res = await withRefresh(send);
 
   if (res.status === 204) return undefined as T;
 
@@ -239,8 +259,7 @@ export const api = {
       return fetch(path.startsWith('/') ? path : `/api/v1/${path}`, { headers });
     };
 
-    let res = await send();
-    if (res.status === 401 && tokens !== null && (await refresh())) res = await send();
+    const res = await withRefresh(send);
     if (!res.ok) throw new ApiError(res.status, undefined, `HTTP ${String(res.status)}`);
     return res.text();
   },
@@ -261,8 +280,7 @@ export const api = {
       return fetch(path.startsWith('/') ? path : `/api/v1/${path}`, { headers });
     };
 
-    let res = await send();
-    if (res.status === 401 && tokens !== null && (await refresh())) res = await send();
+    const res = await withRefresh(send);
     if (!res.ok) throw new ApiError(res.status, undefined, `HTTP ${String(res.status)}`);
     return res.blob();
   },
@@ -297,8 +315,7 @@ export const api = {
 
     // El mateix refresc d'una sola oportunitat que `request()`: una sessió que caduca
     // just en pujar no ha de perdre el fitxer.
-    let res = await send();
-    if (res.status === 401 && tokens !== null && (await refresh())) res = await send();
+    const res = await withRefresh(send);
 
     if (!res.ok) {
       let problem: Problem | undefined;

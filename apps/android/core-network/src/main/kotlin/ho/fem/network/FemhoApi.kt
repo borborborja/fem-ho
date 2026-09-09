@@ -164,10 +164,11 @@ class FemhoApi(
             return client.newCall(builder.build()).execute()
         }
 
+        val sentAccess = tokens.access()
         var response = send()
         if (response.code == 401 && authenticated) {
             response.close()
-            if (refresh()) response = send() else throw ApiException(401, "")
+            if (refresh(sentAccess)) response = send() else throw ApiException(401, "")
         }
 
         response.use {
@@ -183,22 +184,24 @@ class FemhoApi(
      * Si un altre fil ja l'ha refrescat mentre aquest esperava el pany, no se'n fa un
      * altre: es mira si el testimoni d'accés ha canviat.
      */
-    private suspend fun refresh(): Boolean = refreshLock.withLock {
-        val before = tokens.access()
+    private suspend fun refresh(sentAccess: String?): Boolean = refreshLock.withLock {
         val refreshToken = tokens.refresh() ?: return@withLock false
-        if (before != tokens.access()) return@withLock true
+        if (sentAccess != tokens.access()) return@withLock true
 
-        return@withLock runCatching {
+        return@withLock try {
             val text = raw(
                 "POST",
                 "/api/v1/auth/refresh",
                 """{"refresh_token":"$refreshToken"}""",
                 authenticated = false,
             )
+            // Una resposta tardana no pot restaurar una sessió que ja s'ha tancat.
+            if (tokens.refresh() != refreshToken) return@withLock false
             tokens.save(json.decodeFromString<AuthTokens>(text))
             true
-        }.getOrElse {
-            tokens.clear()
+        } catch (error: ApiException) {
+            if (error.status != 401) throw error
+            if (tokens.refresh() == refreshToken) tokens.clear()
             false
         }
     }

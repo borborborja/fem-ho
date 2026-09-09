@@ -7,8 +7,17 @@
  */
 
 import { setLocale, t } from '@fem-ho/contracts';
-import { afterEach, describe, expect, it } from 'vitest';
-import { ApiError, failureText, problemText, type Problem } from './api.js';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  ApiError,
+  api,
+  currentTokens,
+  failureText,
+  onSessionExpired,
+  problemText,
+  setTokens,
+  type Problem,
+} from './api.js';
 
 const notFound: Problem = {
   type: 'https://femho.app/errors/not-found',
@@ -120,4 +129,87 @@ describe('què ha fallat', () => {
     expect(failureText(new Error('vés a saber'))).toBe(t('error.generic'));
     expect(failureText('una cadena')).toBe(t('error.generic'));
   });
+});
+
+describe('la sessió davant errors i respostes tardanes', () => {
+  afterEach(() => {
+    setTokens(null);
+    onSessionExpired(() => undefined);
+    vi.unstubAllGlobals();
+  });
+
+  it.each([429, 500, 502, 503, 504])(
+    'un refresc amb HTTP %i conserva la sessió',
+    async (status) => {
+      const original = { access_token: 'old', refresh_token: 'refresh' };
+      setTokens(original);
+      const lost = vi.fn();
+      onSessionExpired(lost);
+      vi.stubGlobal(
+        'fetch',
+        vi
+          .fn()
+          .mockResolvedValueOnce(new Response('{}', { status: 401 }))
+          .mockResolvedValueOnce(new Response('{}', { status })),
+      );
+      await expect(api.get('tasks')).rejects.toMatchObject({ status });
+      expect(currentTokens()).toEqual(original);
+      expect(lost).not.toHaveBeenCalled();
+    },
+  );
+
+  it('una credencial de refresc rebutjada sí que tanca la sessió', async () => {
+    setTokens({ access_token: 'old', refresh_token: 'refresh' });
+    const lost = vi.fn();
+    onSessionExpired(lost);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(() => Promise.resolve(new Response('{}', { status: 401 }))),
+    );
+    await expect(api.get('tasks')).rejects.toMatchObject({ status: 401 });
+    expect(currentTokens()).toBeNull();
+    expect(lost).toHaveBeenCalledOnce();
+  });
+
+  it.each([200, 401])(
+    'un refresc tardà amb HTTP %i no modifica un altre compte',
+    async (status) => {
+      setTokens({ access_token: 'old', refresh_token: 'refresh' });
+      let finish!: (response: Response) => void;
+      const fetcher = vi
+        .fn()
+        .mockResolvedValueOnce(new Response('{}', { status: 401 }))
+        .mockImplementationOnce(
+          () =>
+            new Promise<Response>((resolve) => {
+              finish = resolve;
+            }),
+        );
+      vi.stubGlobal('fetch', fetcher);
+      const pending = api.get('tasks');
+      const rejected = expect(pending).rejects.toMatchObject({ status: 401 });
+      await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(2));
+      const other = { access_token: 'other-user', refresh_token: 'other-refresh' };
+      setTokens(other);
+      finish(
+        new Response(
+          JSON.stringify({ access_token: 'renewed-old', refresh_token: 'renewed-refresh' }),
+          { status },
+        ),
+      );
+      await rejected;
+      expect(currentTokens()).toEqual(other);
+      expect(fetcher).toHaveBeenCalledTimes(2);
+    },
+  );
+});
+
+describe('respostes no normalitzades', () => {
+  it.each([null, {}, { detail: 'proxy error' }, { type: 'unknown' }])(
+    'no perd l’error HTTP amb %j',
+    (body) => {
+      expect(() => new ApiError(503, body as unknown as Problem, 'HTTP 503')).not.toThrow();
+      expect(new ApiError(503, body as unknown as Problem, 'HTTP 503').status).toBe(503);
+    },
+  );
 });
