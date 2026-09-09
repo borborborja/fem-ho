@@ -22,7 +22,7 @@ async function bearer(page: Page): Promise<Record<string, string>> {
   return { authorization: `Bearer ${await token(page)}` };
 }
 
-test("un projecte creat a Ajustos surt al desplegable del xip sense recarregar", async ({
+test('un projecte creat a Ajustos surt al desplegable del xip sense recarregar', async ({
   page,
 }) => {
   await enterAsNew(page, MEU);
