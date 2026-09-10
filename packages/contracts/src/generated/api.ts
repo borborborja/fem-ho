@@ -3233,6 +3233,11 @@ export interface components {
              * @enum {string|null}
              */
             scope_mode?: "single" | "multi" | null;
+            /**
+             * @description Mostra Informes al selector principal de la web; si és fals, queda només al menú de perfil.
+             * @default true
+             */
+            show_reports: boolean;
             show_calendar_widget?: boolean;
             show_overdue_section?: boolean;
             quiet_hours_start?: string | null;

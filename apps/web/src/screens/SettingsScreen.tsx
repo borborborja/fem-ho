@@ -244,7 +244,9 @@ function Toggle({
   onChange,
   label,
   testId,
+  disabled = false,
 }: {
+  disabled?: boolean;
   checked: boolean;
   onChange: (next: boolean) => void;
   label: string;
@@ -255,6 +257,7 @@ function Toggle({
       <input
         type="checkbox"
         checked={checked}
+        disabled={disabled}
         data-testid={testId}
         onChange={(event) => onChange(event.target.checked)}
       />
@@ -314,6 +317,16 @@ function GeneralTab() {
   // `/info` és públic i sense autenticar: el dret al codi el té qualsevol que hi arribi.
   const info = useApi<Info>('/info').data ?? { version: '', license: '', source_url: '' };
   const { updateProfile, updateSettings } = useSession();
+  const [showReports, setShowReports] = useState(settings.show_reports !== false);
+  useEffect(() => setShowReports(settings.show_reports !== false), [settings.show_reports]);
+  const reportsPreference = useMutation(async (value: boolean) => {
+    try {
+      await updateSettings({ show_reports: value });
+    } catch (cause) {
+      setShowReports(settings.show_reports !== false);
+      throw cause;
+    }
+  });
 
   return (
     <>
@@ -390,6 +403,20 @@ function GeneralTab() {
         </p>
       </Group>
 
+      <Group title={t('reports.title')}>
+        <Toggle
+          testId="settings-show-reports"
+          checked={showReports}
+          disabled={reportsPreference.busy}
+          label={t('settings.showReports')}
+          onChange={(value) => {
+            setShowReports(value);
+            void reportsPreference.run(value);
+          }}
+        />
+        <p>{t('settings.showReportsHint')}</p>
+        {reportsPreference.error && <p role="alert">{failureText(reportsPreference.error)}</p>}
+      </Group>
       <Group title={t('settings.weekStart')}>
         <Chips
           testId="week-start"

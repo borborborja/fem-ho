@@ -1,7 +1,9 @@
 # Informes web
 
-L'entrada **Informes** és visible a la barra principal, al menú del perfil i al cercador
-d'ordres. `/informes` ofereix Resum, Dedicació i Registre. Les adreces `/estadistiques`
+L'entrada **Informes** és configurable a Ajustos → General. Amb `show_reports=true`
+(per defecte) és a la barra principal; si es desactiva, queda només al menú del perfil.
+El cercador d'ordres i l'adreça directa continuen disponibles. La preferència és personal
+i es desa al servidor. `/informes` ofereix Resum i Registre de temps. Les adreces `/estadistiques`
 i `/registre` redirigeixen a les pestanyes corresponents conservant els filtres compatibles.
 La interfície d'Android no canvia.
 
@@ -66,7 +68,8 @@ context, filtres i data de generació, i s'oculten controls i llista paginada de
 - Les consultes de sessions admeten `project_ids`; és excloent amb `project_id`.
 - Estadístiques i exports inclouen totes les coincidències, també si superen 2.000 sessions.
 
-El contracte detallat és `packages/contracts/openapi.yaml`. No cal migració de base de dades.
+El contracte detallat és `packages/contracts/openapi.yaml`. La migració 021 afegeix
+`user_settings.show_reports`, amb valor inicial cert per conservar la navegació existent.
 
 ## Edició del cronograma
 
@@ -101,5 +104,29 @@ als canvis d'horari. Els blocs que travessen mitjanit continuen al dia d'inici.
 
 L'API amplia `POST /sessions` amb `id` i l'alternativa `new_task`, i `PATCH /sessions/{id}`
 amb `project_id` i `expected_version`. Ometre `ended_at` conserva també un final obert.
-No hi ha migració ni canvi de pantalles d'Android. L'edició del registre necessita connexió;
+L'edició del cronograma no requereix migració ni canvia pantalles d'Android. L'edició del registre necessita connexió;
 no s'encuen gestos per reproduir-los més tard sobre dades potencialment diferents.
+
+## Simplificació del 10 de setembre
+
+El Resum reuneix els recomptes de tasques i la dedicació en una sola vista. Les quatre
+xifres de tasques obren el detall corresponent; les taules i els desglossaments de temps
+queden plegats inicialment. L'evolució de tasques utilitza barres amb escala numèrica.
+L'antiga adreça `tab=time` porta al resum unificat conservant els filtres.
+
+El Registre de temps conserva la taula i el cronograma amb els mateixos gestos. La capçalera
+mostra un total compacte i explica que **tasques fetes i temps registrat són mesures diferents**.
+L'enllaç «Veure les tasques fetes» obre el detall de completades amb el període vigent;
+des del cronograma, utilitza el seu dia. No s'inventa dedicació per completar una tasca.
+Les sessions de menys d'un minut tancades automàticament es descarten; els filtres d'àmbit,
+projecte, data i permisos també poden reduir el registre visible.
+
+Només el període o el dia són visibles inicialment. Persona, tipologia, text i projectes
+queden a Filtres, amb un recompte dels filtres actius i una acció per netejar-los. Les dates
+manuals només apareixen en el període personalitzat. «Exporta o imprimeix» reuneix les
+sortides: al resum es pot triar entre el CSV de la mètrica de tasques i el del temps.
+Els filtres de persona assignada i de persona que registra temps continuen sent independents.
+
+Prova de diagnòstic: sis tasques completades i dues amb sessions produeixen sis completades
+al resum i dues tasques amb temps al registre. Això verifica la distinció, però no confirma
+el motiu d'una absència concreta en una instància que no s'ha consultat.

@@ -5111,6 +5111,10 @@ components:
             el wizard la primera vegada. Mentre val `null` s'aplica `multi`, que és com
             funciona l'app avui: a qui ja la fa servir no se li canvia la barra sense
             demanar-ho. Qui mana per damunt de tot és `Info.scope_mode` de la instància.
+        show_reports:
+          type: boolean
+          default: true
+          description: Mostra Informes al selector principal de la web; si és fals, queda només al menú de perfil.
         show_calendar_widget: { type: boolean }
         show_overdue_section: { type: boolean }
         quiet_hours_start: { type: [string, 'null'] }

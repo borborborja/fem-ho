@@ -69,6 +69,7 @@ export interface UserSettings {
    * instància. Veure migració 015.
    */
   scope_mode: UserScopeMode | null;
+  show_reports: boolean;
   show_calendar_widget: boolean;
   show_overdue_section: boolean;
   quiet_hours_start: string | null;
@@ -283,6 +284,7 @@ const DEFAULT_SETTINGS: UserSettings = {
   hidden_calendar_ids: [],
   week_start: 'auto',
   scope_mode: null,
+  show_reports: true,
   show_calendar_widget: true,
   show_overdue_section: true,
   quiet_hours_start: null,
@@ -308,6 +310,7 @@ export async function getSettings(db: MigrationDb, userId: string): Promise<User
     hidden_calendar_ids: string | null;
     week_start: WeekStartChoice;
     scope_mode: UserScopeMode | null;
+    show_reports: unknown;
     show_calendar_widget: unknown;
     show_overdue_section: unknown;
     quiet_hours_start: string | null;
@@ -317,7 +320,7 @@ export async function getSettings(db: MigrationDb, userId: string): Promise<User
     event_task_deleted: EventTaskDeleted;
   }>`SELECT done_cleared_at, inbox_position, inbox_show_overdue, inbox_origin, collapsed_groups,
             hidden_calendar_ids, week_start, scope_mode,
-            show_calendar_widget, show_overdue_section, quiet_hours_start, quiet_hours_end,
+            show_reports, show_calendar_widget, show_overdue_section, quiet_hours_start, quiet_hours_end,
             daily_digest_at, gravatar, event_task_deleted
      FROM user_settings WHERE user_id = ${userId}`.execute(db);
 
@@ -333,6 +336,7 @@ export async function getSettings(db: MigrationDb, userId: string): Promise<User
     hidden_calendar_ids: parseGroups(row.hidden_calendar_ids),
     week_start: row.week_start ?? 'auto',
     scope_mode: row.scope_mode ?? null,
+    show_reports: isTrue(row.show_reports),
     show_calendar_widget: isTrue(row.show_calendar_widget),
     show_overdue_section: isTrue(row.show_overdue_section),
     quiet_hours_start: row.quiet_hours_start,
@@ -364,6 +368,7 @@ export interface UpdateSettingsInput {
   week_start?: string | undefined;
   /** `null` explícit torna a «no ho ha dit»; absent no toca res. */
   scope_mode?: string | null | undefined;
+  show_reports?: boolean | undefined;
   show_calendar_widget?: boolean | undefined;
   show_overdue_section?: boolean | undefined;
   quiet_hours_start?: string | null | undefined;
@@ -410,6 +415,7 @@ export async function updateSettings(
               USER_SCOPE_MODES,
               before.scope_mode ?? 'multi',
             ),
+    show_reports: input.show_reports ?? before.show_reports,
     show_calendar_widget: input.show_calendar_widget ?? before.show_calendar_widget,
     show_overdue_section: input.show_overdue_section ?? before.show_overdue_section,
     quiet_hours_start:
@@ -433,14 +439,14 @@ export async function updateSettings(
     INSERT INTO user_settings (user_id, done_cleared_at, inbox_position, inbox_show_overdue,
                                inbox_origin, collapsed_groups, hidden_calendar_ids, week_start,
                                scope_mode,
-                               show_calendar_widget, show_overdue_section,
+                               show_reports, show_calendar_widget, show_overdue_section,
                                quiet_hours_start, quiet_hours_end, daily_digest_at,
                                gravatar, event_task_deleted, notify_prefs, updated_at)
     VALUES (${principal.userId}, ${next.done_cleared_at}, ${next.inbox_position},
             ${dbBool(next.inbox_show_overdue)}, ${next.inbox_origin},
             ${JSON.stringify(next.collapsed_groups)},
             ${JSON.stringify(next.hidden_calendar_ids)}, ${next.week_start}, ${next.scope_mode},
-            ${dbBool(next.show_calendar_widget)}, ${dbBool(next.show_overdue_section)},
+            ${dbBool(next.show_reports)}, ${dbBool(next.show_calendar_widget)}, ${dbBool(next.show_overdue_section)},
             ${next.quiet_hours_start}, ${next.quiet_hours_end}, ${next.daily_digest_at},
             ${dbBool(next.gravatar)}, ${next.event_task_deleted}, '{}', ${ctx.now})
     ON CONFLICT (user_id) DO UPDATE SET
@@ -453,6 +459,7 @@ export async function updateSettings(
       hidden_calendar_ids = excluded.hidden_calendar_ids,
       week_start = excluded.week_start,
       scope_mode = excluded.scope_mode,
+      show_reports = excluded.show_reports,
       show_calendar_widget = excluded.show_calendar_widget,
       show_overdue_section = excluded.show_overdue_section,
       quiet_hours_start = excluded.quiet_hours_start,

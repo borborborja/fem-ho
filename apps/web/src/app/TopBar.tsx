@@ -545,35 +545,37 @@ export function TopBar({
                 { key: 'tasks', label: t('nav.tasks'), href: '/' },
                 { key: 'reports', label: t('reports.title'), href: '/informes' },
               ] as const
-            ).map((tab) => (
-              <button
-                key={tab.key}
-                type="button"
-                role="tab"
-                aria-selected={view === tab.key}
-                data-testid={`view-${tab.key}`}
-                onClick={() => {
-                  const query = new URLSearchParams();
-                  query.set('scopes', activeScopeIds.join(','));
-                  if (projectIds.length) query.set('projects', projectIds.join(','));
-                  navigate(`${tab.href}?${query.toString()}`);
-                }}
-                style={{
-                  padding: '7px 18px',
-                  minHeight: mobile ? 44 : undefined,
-                  borderRadius: 100,
-                  border: 'none',
-                  cursor: 'pointer',
-                  font: 'inherit',
-                  fontSize: 12.5,
-                  fontWeight: view === tab.key ? 700 : 500,
-                  background: view === tab.key ? 'var(--card-bg)' : 'transparent',
-                  color: view === tab.key ? 'var(--ink)' : 'var(--ink-soft)',
-                }}
-              >
-                {tab.label}
-              </button>
-            ))}
+            )
+              .filter((tab) => tab.key !== 'reports' || settings.show_reports !== false)
+              .map((tab) => (
+                <button
+                  key={tab.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={view === tab.key}
+                  data-testid={`view-${tab.key}`}
+                  onClick={() => {
+                    const query = new URLSearchParams();
+                    query.set('scopes', activeScopeIds.join(','));
+                    if (projectIds.length) query.set('projects', projectIds.join(','));
+                    navigate(`${tab.href}?${query.toString()}`);
+                  }}
+                  style={{
+                    padding: '7px 18px',
+                    minHeight: mobile ? 44 : undefined,
+                    borderRadius: 100,
+                    border: 'none',
+                    cursor: 'pointer',
+                    font: 'inherit',
+                    fontSize: 12.5,
+                    fontWeight: view === tab.key ? 700 : 500,
+                    background: view === tab.key ? 'var(--card-bg)' : 'transparent',
+                    color: view === tab.key ? 'var(--ink)' : 'var(--ink-soft)',
+                  }}
+                >
+                  {tab.label}
+                </button>
+              ))}
           </div>
 
           {/*
@@ -849,10 +851,11 @@ export function TopBar({
                   {profile.email ?? ''}
                 </div>
                 {/*
-                  **Informes també és accessible des del menú de perfil.**
+                  **El menú ofereix Informes quan no és a la barra principal.**
                   El resum de tasques funciona també sense activar el registre.
                 */}
-                {menuItem(t('reports.title'), () => navigate('/informes'))}
+                {settings.show_reports === false &&
+                  menuItem(t('reports.title'), () => navigate('/informes'))}
                 {menuItem(t('nav.settings'), () => navigate('/settings'))}
                 {menuItem(t('nav.logout'), () => void logout(), true)}
               </>,

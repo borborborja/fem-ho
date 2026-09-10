@@ -178,6 +178,7 @@ export function registerMeRoutes(app: FastifyInstance): void {
           hidden_calendar_ids: Array.isArray(input.hidden_calendar_ids)
             ? input.hidden_calendar_ids.filter((v): v is string => typeof v === 'string')
             : undefined,
+          show_reports: typeof input.show_reports === 'boolean' ? input.show_reports : undefined,
           show_calendar_widget:
             typeof input.show_calendar_widget === 'boolean'
               ? input.show_calendar_widget

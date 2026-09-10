@@ -7,6 +7,23 @@ Data de l'última verificació completa: **2026-08-12**.
 
 ---
 
+## Informes simplificats · 2026-09-10
+
+Resum i dedicació unificats; Registre de temps amb capçalera compacta, filtres plegats,
+exportació explícita i accés a les tasques fetes. Ajustos → General permet triar si Informes
+apareix a la barra principal o només al menú de perfil. Preferència personal persistent,
+amb migració 021, contracte i traduccions en català, anglès i castellà.
+
+Verificat en una còpia dels mateixos fonts: 1.190 proves unitàries superades (5 omeses),
+14 escenaris de navegador, construcció de producció web/servidor, tipus, lint, format i
+18 comprovacions permanents. Inclou sis tasques fetes amb només dues sessions, persistència
+i recuperació d'error de l'ajust, compatibilitat d'URL, exportació, impressió, cronograma,
+vuit temes i tres idiomes. Captures revisades d'escriptori i mòbil fosc. Les migracions
+SQLite passen la prova d'anada/tornada; PostgreSQL i Android no s'han executat en aquest canvi.
+No s'ha consultat la base de dades de la instància de l'usuari ni s'ha publicat aquest canvi.
+
+---
+
 ## Cronograma editable · 2026-09-09
 
 A Informes → Registre → Cronograma: desplaçament i dues vores, sessions en curs editables,
