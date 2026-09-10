@@ -726,6 +726,7 @@ describe('el compte propi', () => {
     const res = await api('PATCH', '/api/v1/auth/settings', {
       inbox_position: 'below',
       show_reports: false,
+      show_task_time: false,
       show_calendar_widget: false,
       collapsed_groups: [scopeIndividual],
     });
@@ -735,6 +736,7 @@ describe('el compte propi', () => {
     expect(llegit.json<{ settings: { inbox_position: string } }>().settings).toMatchObject({
       inbox_position: 'below',
       show_reports: false,
+      show_task_time: false,
       show_calendar_widget: false,
       collapsed_groups: [scopeIndividual],
     });

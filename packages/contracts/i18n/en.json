@@ -827,7 +827,7 @@
   "reports.exportContent": "CSV content",
   "reports.exportTasks": "Tasks · {metric}",
   "reports.registerTitle": "Recorded time",
-  "reports.registerHint": "This shows time recorded while a task is Doing with tracking enabled, or added manually. Completing a task does not assign it any time.",
+  "reports.registerHint": "Time is recorded while Doing or by entering a duration when completing a task directly. Each session is kept separately.",
   "reports.filters": "Filters",
   "reports.clearFilters": "Clear filters",
   "reports.openRegister": "Open time log",
@@ -835,5 +835,17 @@
   "reports.closeDetails": "Close details",
   "reports.recordedTasks": "Time recorded on {count} tasks",
   "reports.seeCompleted": "View completed tasks",
-  "reports.aboutData": "About this data"
+  "reports.aboutData": "About this data",
+  "tracking.cardsTitle": "Time on task cards",
+  "tracking.showCards": "Show time on Doing and Done cards",
+  "tracking.cardsHint": "Adds all visible sessions. While Doing, the counter updates every second; Done shows the total. Only in scopes with time tracking enabled.",
+  "tracking.askDuration": "How much time did you spend?",
+  "tracking.completionHint": "Time tracking is enabled for this scope. Enter the duration to complete the task and add a work session.",
+  "tracking.minutes": "Duration in minutes",
+  "tracking.saveComplete": "Save time and complete task",
+  "tracking.invalidDuration": "Enter between 1 and 10,080 minutes.",
+  "tracking.total": "Time spent: {duration}",
+  "tracking.oneSegment": "1 session",
+  "tracking.segments": "{count} sessions",
+  "tracking.seconds": "{count}s"
 }

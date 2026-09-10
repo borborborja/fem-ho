@@ -629,3 +629,15 @@ button {
     grid-template-columns: 1fr;
   }
 }
+
+.task-time-badge {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-soft);
+  padding: 2px 5px;
+  border-radius: 5px;
+  background: var(--ghost-bg);
+}
+.task-time-badge[data-running='true'] {
+  color: var(--ink);
+}

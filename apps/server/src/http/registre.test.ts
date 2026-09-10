@@ -796,6 +796,25 @@ describe('gestos del cronograma', () => {
       (await api('PATCH', `/api/v1/sessions/${entry.id}`, { note: 'Sí' }, comMarta)).statusCode,
     ).toBe(200);
     const other = (await api('POST', '/api/v1/sessions', body)).json<{ id: string }>();
+    await api('POST', `/api/v1/tasks/${task}/move`, { status: 'done' });
+    for (const [headers, seconds, segments] of [
+      [undefined, 7200, 2],
+      [comMarta, 3600, 1],
+    ] as const) {
+      const board = (
+        await api('GET', `/api/v1/board?scope_ids=${scope}`, undefined, headers)
+      ).json<{
+        columns: {
+          groups: {
+            tasks: { id: string; time_summary: { seconds: number; segments: number } }[];
+          }[];
+        }[];
+      }>();
+      expect(
+        board.columns.flatMap((c) => c.groups.flatMap((g) => g.tasks)).find((t) => t.id === task)
+          ?.time_summary,
+      ).toMatchObject({ seconds, segments });
+    }
     expect(
       (await api('PATCH', `/api/v1/sessions/${other.id}`, { note: 'No' }, comMarta)).statusCode,
     ).toBe(403);

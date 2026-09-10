@@ -43,6 +43,7 @@ export interface TaskCardProps extends React.HTMLAttributes<HTMLDivElement> {
   assigneeInitials?: string | undefined;
   /** Hora, si la tasca en té. Normalment no en té (docs/01 §4). */
   time?: string | undefined;
+  timeSpent?: React.ReactNode;
   /** `manual` no pinta res: és el cas normal i no ha d'ocupar espai (docs/09 §3). */
   aiMode?: 'manual' | 'assisted' | 'delegated' | undefined;
   /** El text del distintiu, traduït. El color no és mai l'únic senyal. */

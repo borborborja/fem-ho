@@ -383,7 +383,7 @@
     <string name="reports_projects">Por proyecto</string>
     <string name="reports_projects_client">Por cliente</string>
     <string name="reports_recordedtasks">Tiempo registrado en {count} tareas</string>
-    <string name="reports_registerhint">Aquí se muestra el tiempo registrado al pasar por En curso con el registro activado, o añadido manualmente. Marcar una tarea como hecha no le asigna tiempo.</string>
+    <string name="reports_registerhint">El tiempo se registra al pasar por En curso o al indicar la duración al completar directamente una tarea. Cada tramo se conserva por separado.</string>
     <string name="reports_registertitle">Tiempo registrado</string>
     <string name="reports_seecompleted">Ver las tareas hechas</string>
     <string name="reports_status">Estado</string>
@@ -805,6 +805,18 @@
     <string name="tokens_revoke">Revoca</string>
     <string name="tokens_scopes">Ámbitos</string>
     <string name="tokens_title">Tokens de API</string>
+    <string name="tracking_askduration">¿Cuánto tiempo le has dedicado?</string>
+    <string name="tracking_cardshint">Suma todos los tramos visibles. En curso, el contador avanza cada segundo; en Hecho, muestra el total. Solo en ámbitos con el registro activado.</string>
+    <string name="tracking_cardstitle">Dedicación en las tarjetas</string>
+    <string name="tracking_completionhint">El ámbito tiene el registro de tiempo activado. Anota la duración para completar la tarea y añadir un tramo de trabajo.</string>
+    <string name="tracking_invalidduration">Introduce entre 1 y 10.080 minutos.</string>
+    <string name="tracking_minutes">Duración en minutos</string>
+    <string name="tracking_onesegment">1 tramo</string>
+    <string name="tracking_savecomplete">Guardar el tiempo y marcar como hecha</string>
+    <string name="tracking_seconds">{count}s</string>
+    <string name="tracking_segments">{count} tramos</string>
+    <string name="tracking_showcards">Mostrar el tiempo en En curso y Hecho</string>
+    <string name="tracking_total">Dedicación: {duration}</string>
     <string name="welcome_changeable">Puedes cambiarlo siempre que quieras en Ajustes. No se mueve ni se borra nada.</string>
     <string name="welcome_lead">Elige cómo quieres ver Fem-ho. No hay respuesta mala y se cambia cuando quieras.</string>
     <string name="welcome_multi">Por ámbitos de la vida</string>

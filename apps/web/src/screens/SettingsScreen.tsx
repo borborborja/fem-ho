@@ -317,6 +317,16 @@ function GeneralTab() {
   // `/info` és públic i sense autenticar: el dret al codi el té qualsevol que hi arribi.
   const info = useApi<Info>('/info').data ?? { version: '', license: '', source_url: '' };
   const { updateProfile, updateSettings } = useSession();
+  const [showTaskTime, setShowTaskTime] = useState(settings.show_task_time !== false);
+  useEffect(() => setShowTaskTime(settings.show_task_time !== false), [settings.show_task_time]);
+  const timePreference = useMutation(async (value: boolean) => {
+    try {
+      await updateSettings({ show_task_time: value });
+    } catch (cause) {
+      setShowTaskTime(settings.show_task_time !== false);
+      throw cause;
+    }
+  });
   const [showReports, setShowReports] = useState(settings.show_reports !== false);
   useEffect(() => setShowReports(settings.show_reports !== false), [settings.show_reports]);
   const reportsPreference = useMutation(async (value: boolean) => {
@@ -403,6 +413,20 @@ function GeneralTab() {
         </p>
       </Group>
 
+      <Group title={t('tracking.cardsTitle')}>
+        <Toggle
+          testId="settings-show-task-time"
+          checked={showTaskTime}
+          disabled={timePreference.busy}
+          label={t('tracking.showCards')}
+          onChange={(value) => {
+            setShowTaskTime(value);
+            void timePreference.run(value);
+          }}
+        />
+        <p>{t('tracking.cardsHint')}</p>
+        {timePreference.error && <p role="alert">{failureText(timePreference.error)}</p>}
+      </Group>
       <Group title={t('reports.title')}>
         <Toggle
           testId="settings-show-reports"

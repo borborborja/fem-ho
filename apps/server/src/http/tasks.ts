@@ -203,6 +203,9 @@ export function registerTaskRoutes(app: FastifyInstance): void {
         moveTask(ctx, principal, request.params.id, {
           status: parseStatuses(input.status)?.[0],
           position: str(input.position),
+          time_entry: input.time_entry as
+            import('../services/tasks.js').CompletionTimeInput | undefined,
+          expected_version: input.expected_version as number | undefined,
           before_id: str(input.before_id) ?? null,
           after_id: str(input.after_id) ?? null,
         }),

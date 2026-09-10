@@ -8,7 +8,7 @@
  */
 
 import { sql } from 'kysely';
-import { v7 as uuidv7 } from 'uuid';
+import { v7 as uuidv7, validate as validUuid } from 'uuid';
 import {
   TASK_STATUSES,
   generatePosition,
@@ -31,7 +31,8 @@ import { refusalError, refuseTaskWrite, type WriteIntent } from '../policy/ai-wr
 import { clearAttention } from './attention.js';
 import { settingsOf } from './scope-settings.js';
 import { assertTypeInScope } from './task-types.js';
-import { closeSession, openSession } from './sessions.js';
+import { closeSession, openSession, createSession } from './sessions.js';
+import { taskTimeSummaries, type TaskTimeSummary } from './task-time.js';
 import { leaseOf, releaseIfHeld } from './leases.js';
 import { assertScopeAccess, listScopes } from './scopes.js';
 
@@ -94,6 +95,7 @@ export interface TaskRow {
 }
 
 export interface Task extends TaskRow {
+  time_summary?: TaskTimeSummary;
   assignee_ids: string[];
   /**
    * Subtasques i ítems de llista, comptats junts.
@@ -635,6 +637,7 @@ export async function createTask(
     entityId: id,
     scopeId: input.scope_id,
     verb: 'created',
+    ...(status === 'doing' ? { changes: { status: { from: null, to: status } } } : {}),
   });
 
   const created = await sql<TaskRow>`
@@ -642,10 +645,18 @@ export async function createTask(
   `.execute(ctx.tx);
   const [task] = await withAssignees(ctx.tx, created.rows);
   if (task === undefined) throw notFound('task', id);
+  if (task.status === 'doing') await openSession(ctx, principal.userId, task);
   return { task, created: true };
 }
 
+export interface CompletionTimeInput {
+  id: string;
+  minutes: number;
+  ended_at: string;
+}
 export interface MoveTaskInput {
+  time_entry?: CompletionTimeInput | undefined;
+  expected_version?: number | undefined;
   status?: TaskStatus | undefined;
   position?: string | undefined;
   before_id?: string | null | undefined;
@@ -733,6 +744,63 @@ export async function moveTask(
   await assertWritable(ctx, principal, current, 'move');
 
   const status = input.status ?? current.status;
+  const time = input.time_entry;
+  const conflict = () =>
+    new PolicyError(
+      'session-conflict',
+      'Session conflict',
+      409,
+      'The task or its time changed. Reload before editing.',
+    );
+  if (time !== undefined) {
+    if (
+      !time ||
+      !validUuid(time.id) ||
+      !Number.isInteger(time.minutes) ||
+      time.minutes < 1 ||
+      time.minutes > 10080 ||
+      !Number.isFinite(Date.parse(time.ended_at))
+    )
+      throw new PolicyError(
+        'invalid-session',
+        'Invalid session',
+        422,
+        'Provide a valid duration and session identifier.',
+      );
+    const previous = (
+      await sql<{
+        task_id: string;
+        user_id: string;
+        started_at: string;
+        ended_at: string;
+        deleted_at: string | null;
+      }>`
+      SELECT task_id,user_id,started_at,ended_at,deleted_at FROM task_sessions WHERE id=${time.id}`.execute(
+        ctx.tx,
+      )
+    ).rows[0];
+    if (previous) {
+      if (
+        previous.task_id !== id ||
+        previous.user_id !== principal.userId ||
+        previous.deleted_at !== null ||
+        Date.parse(previous.ended_at) !== Date.parse(time.ended_at) ||
+        Date.parse(previous.ended_at) - Date.parse(previous.started_at) !== time.minutes * 60000
+      )
+        throw conflict();
+      ctx.noChange();
+      return (await withAssignees(ctx.tx, [current]))[0]!;
+    }
+    if (
+      status !== 'done' ||
+      !['todo', 'inbox'].includes(current.status) ||
+      !(await settingsOf(ctx.tx, current.scope_id)).time_tracking
+    )
+      throw conflict();
+    if (input.expected_version === undefined) throw conflict();
+  }
+  if (input.expected_version !== undefined && input.expected_version !== current.version)
+    throw conflict();
 
   /**
    * **Arribar a Fet ÉS completar-la.**
@@ -784,12 +852,26 @@ export async function moveTask(
     }
   }
 
-  await sql`
+  const changed = await sql`
     UPDATE tasks
     SET status = ${status}, position = ${position}, completed_at = ${completedAt},
         updated_at = ${ctx.now}, version = version + 1
-    WHERE id = ${id}
+    WHERE id = ${id} ${input.expected_version === undefined ? sql`` : sql`AND version=${input.expected_version}`}
   `.execute(ctx.tx);
+  if (Number(changed.numAffectedRows ?? 0) === 0) throw conflict();
+  if (time)
+    await createSession(
+      ctx,
+      principal,
+      {
+        id: time.id,
+        task_id: id,
+        started_at: new Date(Date.parse(time.ended_at) - time.minutes * 60000).toISOString(),
+        ended_at: time.ended_at,
+      },
+      'sqlite',
+      false,
+    );
 
   // El registre guarda el valor anterior i el nou: és el que fa possible desfer un
   // canvi autònom de la IA (docs/01 §7). El segell hi va perquè, si no, desfer un
@@ -1148,6 +1230,11 @@ export async function getBoard(
   `.execute(db);
 
   const tasks = await withAssignees(db, rows.rows);
+  const summaries = await taskTimeSummaries(db, principal, tasks);
+  for (const task of tasks) {
+    const summary = summaries.get(task.id);
+    if (summary) task.time_summary = summary;
+  }
 
   for (const column of columns) {
     const ofColumn = tasks.filter((t) => t.status === column.status);

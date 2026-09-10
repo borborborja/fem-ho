@@ -383,7 +383,7 @@
     <string name="reports_projects">Per projecte</string>
     <string name="reports_projects_client">Per client</string>
     <string name="reports_recordedtasks">Temps anotat en {count} tasques</string>
-    <string name="reports_registerhint">Aquí es mostra el temps anotat en passar per Fent amb el registre activat, o afegit manualment. Marcar una tasca com a feta no li assigna temps.</string>
+    <string name="reports_registerhint">El temps es registra en passar per Fent o en indicar la durada quan completes directament una tasca. Cada tram es conserva per separat.</string>
     <string name="reports_registertitle">Temps registrat</string>
     <string name="reports_seecompleted">Veure les tasques fetes</string>
     <string name="reports_status">Estat</string>
@@ -805,6 +805,18 @@
     <string name="tokens_revoke">Revoca</string>
     <string name="tokens_scopes">Àmbits</string>
     <string name="tokens_title">Tokens d\'API</string>
+    <string name="tracking_askduration">Quanta estona hi has dedicat?</string>
+    <string name="tracking_cardshint">Suma tots els trams visibles. A Fent, el comptador avança cada segon; a Fet, mostra el total. Només als àmbits amb el registre activat.</string>
+    <string name="tracking_cardstitle">Dedicació a les targetes</string>
+    <string name="tracking_completionhint">L’àmbit té el registre de temps activat. Anota la durada per completar la tasca i afegir un tram de feina.</string>
+    <string name="tracking_invalidduration">Introdueix entre 1 i 10.080 minuts.</string>
+    <string name="tracking_minutes">Durada en minuts</string>
+    <string name="tracking_onesegment">1 tram</string>
+    <string name="tracking_savecomplete">Desa el temps i marca com a feta</string>
+    <string name="tracking_seconds">{count}s</string>
+    <string name="tracking_segments">{count} trams</string>
+    <string name="tracking_showcards">Mostra el temps a Fent i Fet</string>
+    <string name="tracking_total">Dedicació: {duration}</string>
     <string name="welcome_changeable">Ho pots canviar sempre que vulguis a Ajustos. No es mou ni s’esborra res.</string>
     <string name="welcome_lead">Tria com vols veure Fem-ho. No hi ha resposta dolenta i es canvia quan vulguis.</string>
     <string name="welcome_multi">Per àmbits de la vida</string>

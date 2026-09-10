@@ -7,6 +7,31 @@ Data de l'última verificació completa: **2026-08-12**.
 
 ---
 
+## Dedicació per trams al tauler · 2026-09-10
+
+Entrar a Fent obre una sessió (també si la tasca es crea en aquest estat); sortir-ne
+la tanca i tornar-hi n'obre una altra. Es conserven els trams de menys d'un minut,
+que abans es descartaven; el registre els mostra en segons. A la web, completar
+directament des de Per fer o Inbox demana minuts si l'àmbit té el registre activat.
+La durada exacta i la compleció es desen juntes, amb reintents idempotents i versió
+contra canvis concurrents. Cancel·lar deixa la tasca intacta.
+
+Ajustos → General incorpora el comptador personal de dedicació a Fent i Fet:
+actualització cada segon, total acumulat i nombre de trams al text accessible.
+Migració 022, contracte OpenAPI i tres idiomes. Els agregats respecten els permisos
+existents dels informes. Vegeu [detall i límits](reporting.md#temps-des-del-tauler--10-de-setembre).
+
+Verificat en la còpia temporal dels mateixos fonts: 1.195 proves unitàries superades
+(5 omeses; el cas de temps s'ha repetit després de corregir una asserció d'historial),
+16 escenaris de navegador coberts entre les execucions, construcció de producció
+web/servidor, tipus, lint, format i les 18 comprovacions permanents. Inclou arrossegament,
+cancel·lació, durades de 23 i 19 minuts, reobertura, trams curts, permisos, conflictes,
+reintents de xarxa i persistència/recuperació d'error dels ajustos. Captures d'escriptori
+i formulari mòbil revisades. PostgreSQL i l'APK Android no s'han executat; els controls
+nous són web i Android només rep els textos generats. Sense publicació ni desplegament.
+
+---
+
 ## Informes simplificats · 2026-09-10
 
 Resum i dedicació unificats; Registre de temps amb capçalera compacta, filtres plegats,

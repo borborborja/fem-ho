@@ -118,8 +118,8 @@ El Registre de temps conserva la taula i el cronograma amb els mateixos gestos. 
 mostra un total compacte i explica que **tasques fetes i temps registrat són mesures diferents**.
 L'enllaç «Veure les tasques fetes» obre el detall de completades amb el període vigent;
 des del cronograma, utilitza el seu dia. No s'inventa dedicació per completar una tasca.
-Les sessions de menys d'un minut tancades automàticament es descarten; els filtres d'àmbit,
-projecte, data i permisos també poden reduir el registre visible.
+Les sessions automàtiques es conserven també quan duren menys d'un minut. Els filtres
+d'àmbit, projecte, data i permisos poden reduir el registre visible.
 
 Només el període o el dia són visibles inicialment. Persona, tipologia, text i projectes
 queden a Filtres, amb un recompte dels filtres actius i una acció per netejar-los. Les dates
@@ -130,3 +130,31 @@ Els filtres de persona assignada i de persona que registra temps continuen sent 
 Prova de diagnòstic: sis tasques completades i dues amb sessions produeixen sis completades
 al resum i dues tasques amb temps al registre. Això verifica la distinció, però no confirma
 el motiu d'una absència concreta en una instància que no s'ha consultat.
+
+
+## Temps des del tauler · 10 de setembre
+
+Amb Ajustos → Àmbits → Registre de dedicació activat, entrar a Fent (també en crear
+la tasca) obre un tram; sortir-ne el tanca. Tornar de Fet a Fent obre un altre tram
+sense alterar el primer. Els trams curts es conserven i la taula mostra segons quan
+no arriben a un minut. Els totals de l'informe mantenen l'arrodoniment a minuts per tram.
+
+Completar directament una tasca de Per fer o Inbox, des de la fitxa, el botó o arrossegant,
+obre un formulari de minuts si l'àmbit té el registre activat. Cancel·lar no canvia l'estat.
+Desar anota la durada exacta (sense arrodonir-la a cinc minuts) i completa la tasca en
+una sola transacció. Un error manté el formulari; un reintent no duplica el tram.
+Un canvi concurrent de la tasca retorna conflicte i cal cancel·lar i tornar-ho a intentar.
+Amb el registre desactivat, completar no pregunta la durada.
+
+Ajustos → General → Dedicació a les targetes controla el comptador de Fent i Fet.
+El temps de Fent s'actualitza cada segon i suma els trams anteriors; Fet mostra el total.
+El text accessible i l'ajuda en passar-hi el ratolí indiquen el nombre de trams.
+És una preferència personal persistent (`show_task_time`, migració 022, activa per defecte).
+L'agregat del tauler segueix els permisos de l'informe: temps propi per als membres,
+temps de l'àmbit per a propietaris i administradors.
+
+`POST /tasks/{id}/move` accepta `time_entry: {id, minutes, ended_at}` i `expected_version`.
+La durada admet enters d'1 a 10.080 minuts. Els clients existents continuen podent completar
+sense aquest camp; el formulari i l'ajust de visibilitat estan implementats a la web.
+Les pantalles natives d'Android no incorporen encara aquests controls. El comportament
+automàtic del servidor sí que és compartit amb Android i les integracions.

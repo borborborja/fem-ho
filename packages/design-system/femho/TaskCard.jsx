@@ -146,6 +146,7 @@ export function TaskCard({
   sourceIcon,
   assigneeInitials,
   time,
+  timeSpent,
   aiMode = 'manual',
   aiModeLabel,
   checklistProgress,
@@ -403,6 +404,7 @@ export function TaskCard({
                 </span>
               ) : null}
 
+              {timeSpent}
               {time ? (
                 <span style={{ fontSize: 10.5, color: 'var(--ink-faint)' }}>{time}</span>
               ) : null}

@@ -41,6 +41,8 @@ import * as scopeAdmin from './migrations/020-scope-admin.js';
 
 import * as reportsNavigation from './migrations/021-reports-navigation.js';
 
+import * as taskTimeBadges from './migrations/022-task-time-badges.js';
+
 export interface Migration {
   name: string;
   up: (db: MigrationDb, engine: Engine) => Promise<void>;
@@ -118,6 +120,7 @@ export const MIGRATIONS: Migration[] = [
     needsForeignKeysOff: true,
   },
   { name: '021-reports-navigation', up: reportsNavigation.up, down: reportsNavigation.down },
+  { name: '022-task-time-badges', up: taskTimeBadges.up, down: taskTimeBadges.down },
 ];
 
 const MIGRATIONS_TABLE = 'schema_migrations';

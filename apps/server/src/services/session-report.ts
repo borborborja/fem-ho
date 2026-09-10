@@ -19,8 +19,8 @@ import { sql } from 'kysely';
 import type { MigrationDb } from '../db/migration-db.js';
 import { hasCapability, type Principal } from '../policy/principal.js';
 import { missingCapability, PolicyError } from '../policy/errors.js';
-import { canEditSession } from '../policy/session-writes.js';
-import { roleCan, type ScopeRole } from '../policy/scope-roles.js';
+import { canEditSession, canReadOthersSessions } from '../policy/session-writes.js';
+import { type ScopeRole } from '../policy/scope-roles.js';
 import { needsReview, splitWorkTime } from '../policy/work-hours.js';
 import { localDateOf, localDayBounds } from '../time/local-day.js';
 import { roleOf } from '../policy/scope-visibility.js';
@@ -154,7 +154,7 @@ export async function sessionReport(
   for (const scopeId of ambRegistre) {
     const role = await roleOf(db, principal.userId, scopeId);
     roles.set(scopeId, role);
-    if (role !== null && roleCan(role, 'reports')) senseLimit.push(scopeId);
+    if (canReadOthersSessions(role)) senseLimit.push(scopeId);
   }
 
   const finestra = window(filters);

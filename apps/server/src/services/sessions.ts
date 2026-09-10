@@ -77,9 +77,8 @@ export async function openSession(
 /**
  * Tanca el bloc obert d'una tasca, perquè acaba de sortir de Fent.
  *
- * **Els de durada zero no es desen.** Passar per Fent en un clic —arrossegant una targeta de
- * Per fer a Fet a través de la columna del mig, o rectificant— no és temps treballat, i el
- * Registre s'ompliria de línies de zero minuts que no diuen res.
+ * Cada sortida tanca el seu tram, també si dura menys d’un minut. Reobrir la tasca
+ * conserva els trams tancats i n’obre un altre.
  */
 export async function closeSession(ctx: AuditContext, taskId: string): Promise<void> {
   const obertes = await sql<{ id: string; started_at: string }>`
@@ -88,13 +87,6 @@ export async function closeSession(ctx: AuditContext, taskId: string): Promise<v
   `.execute(ctx.tx);
 
   for (const oberta of obertes.rows) {
-    const segons = (Date.parse(ctx.now) - Date.parse(oberta.started_at)) / 1000;
-
-    if (segons < MINIM_SEGONS) {
-      await sql`DELETE FROM task_sessions WHERE id = ${oberta.id}`.execute(ctx.tx);
-      continue;
-    }
-
     await sql`
       UPDATE task_sessions SET ended_at = ${ctx.now}, updated_at = ${ctx.now},
                                version = version + 1
@@ -102,15 +94,6 @@ export async function closeSession(ctx: AuditContext, taskId: string): Promise<v
     `.execute(ctx.tx);
   }
 }
-
-/**
- * Per sota d'un minut no és feina.
- *
- * Arrossegar una targeta de Per fer a Fet passant per la columna del mig, o rectificar de
- * seguida, deixaria una fila de zero minuts al Registre. Amb prou d'aquestes, la taula deixa
- * de ser llegible per dir una cosa que ningú necessita saber.
- */
-const MINIM_SEGONS = 60;
 
 /**
  * Escriu els blocs del passat que l'historial permet deduir.
@@ -300,14 +283,15 @@ export async function createSession(
   principal: Principal,
   input: ManualSessionInput,
   engine: 'sqlite' | 'postgres' = 'sqlite',
+  roundTimes = true,
 ): Promise<SessionRow> {
   if (!hasCapability(principal, 'tasks:write')) throw missingCapability('tasks:write');
   if (!!input.task_id === !!input.new_task)
     invalidSession('Choose an existing task or a new task.');
   const id = input.id ?? uuidv7();
   if (!validUuid(id)) invalidSession('Invalid session identifier.');
-  const started = snap(input.started_at),
-    ended = snap(input.ended_at);
+  const started = roundTimes ? snap(input.started_at) : new Date(input.started_at).toISOString(),
+    ended = roundTimes ? snap(input.ended_at) : new Date(input.ended_at).toISOString();
   const userId = input.user_id ?? principal.userId;
   // Serialitza els reintents del mateix identificador abans de crear una tasca nova.
   if (engine === 'postgres')

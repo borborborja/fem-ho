@@ -174,7 +174,7 @@ test('sis tasques fetes i dues amb temps tenen recomptes diferents i identificab
   await page.getByRole('button', { name: 'Obre el registre de temps', exact: true }).click();
   await expect(page.getByTestId('registre-summary')).toContainText('Temps anotat en 2 tasques');
   await expect(
-    page.getByText('Marcar una tasca com a feta no li assigna temps.', { exact: false }),
+    page.getByText('El temps es registra en passar per Fent', { exact: false }),
   ).toBeVisible();
   await page.getByRole('button', { name: 'Veure les tasques fetes', exact: true }).click();
   await expect(
@@ -224,7 +224,7 @@ test('la preferència situa Informes només a la barra o al menú del perfil i p
     if (route.request().method() === 'PATCH') await route.abort('failed');
     else await route.continue();
   });
-  await page.getByTestId('settings-show-reports').uncheck();
+  await page.getByTestId('settings-show-reports').click();
   await expect(page.getByRole('alert')).toBeVisible();
   await expect(page.getByTestId('settings-show-reports')).toBeChecked();
 });

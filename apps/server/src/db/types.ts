@@ -585,6 +585,7 @@ export interface UserSettings {
   notify_prefs: Generated<string>;
   quiet_hours_end: string | null;
   quiet_hours_start: string | null;
+  show_task_time: Generated<number>;
   show_reports: Generated<number>;
   show_calendar_widget: Generated<number>;
   show_overdue_section: Generated<number>;

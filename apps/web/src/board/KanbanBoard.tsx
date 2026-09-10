@@ -23,6 +23,7 @@ import { InboxRail } from './InboxRail.js';
 import type { InboxEvent, InboxMail } from '../app/types.js';
 
 export interface BoardTask {
+  timeSummary?: import('@fem-ho/contracts').components['schemas']['TaskTimeSummary'] | undefined;
   id: string;
   title: string;
   /** De quina mena de font ve, o `undefined` si l'ha escrita una persona. */

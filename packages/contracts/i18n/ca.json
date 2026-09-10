@@ -828,7 +828,7 @@
   "reports.exportContent": "Contingut del CSV",
   "reports.exportTasks": "Tasques · {metric}",
   "reports.registerTitle": "Temps registrat",
-  "reports.registerHint": "Aquí es mostra el temps anotat en passar per Fent amb el registre activat, o afegit manualment. Marcar una tasca com a feta no li assigna temps.",
+  "reports.registerHint": "El temps es registra en passar per Fent o en indicar la durada quan completes directament una tasca. Cada tram es conserva per separat.",
   "reports.filters": "Filtres",
   "reports.clearFilters": "Neteja els filtres",
   "reports.openRegister": "Obre el registre de temps",
@@ -836,5 +836,17 @@
   "reports.closeDetails": "Tanca el detall",
   "reports.recordedTasks": "Temps anotat en {count} tasques",
   "reports.seeCompleted": "Veure les tasques fetes",
-  "reports.aboutData": "Sobre aquestes dades"
+  "reports.aboutData": "Sobre aquestes dades",
+  "tracking.cardsTitle": "Dedicació a les targetes",
+  "tracking.showCards": "Mostra el temps a Fent i Fet",
+  "tracking.cardsHint": "Suma tots els trams visibles. A Fent, el comptador avança cada segon; a Fet, mostra el total. Només als àmbits amb el registre activat.",
+  "tracking.askDuration": "Quanta estona hi has dedicat?",
+  "tracking.completionHint": "L’àmbit té el registre de temps activat. Anota la durada per completar la tasca i afegir un tram de feina.",
+  "tracking.minutes": "Durada en minuts",
+  "tracking.saveComplete": "Desa el temps i marca com a feta",
+  "tracking.invalidDuration": "Introdueix entre 1 i 10.080 minuts.",
+  "tracking.total": "Dedicació: {duration}",
+  "tracking.oneSegment": "1 tram",
+  "tracking.segments": "{count} trams",
+  "tracking.seconds": "{count}s"
 }

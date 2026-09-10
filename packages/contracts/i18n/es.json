@@ -826,7 +826,7 @@
   "reports.exportContent": "Contenido del CSV",
   "reports.exportTasks": "Tareas · {metric}",
   "reports.registerTitle": "Tiempo registrado",
-  "reports.registerHint": "Aquí se muestra el tiempo registrado al pasar por En curso con el registro activado, o añadido manualmente. Marcar una tarea como hecha no le asigna tiempo.",
+  "reports.registerHint": "El tiempo se registra al pasar por En curso o al indicar la duración al completar directamente una tarea. Cada tramo se conserva por separado.",
   "reports.filters": "Filtros",
   "reports.clearFilters": "Limpiar filtros",
   "reports.openRegister": "Abrir el registro de tiempo",
@@ -834,5 +834,17 @@
   "reports.closeDetails": "Cerrar el detalle",
   "reports.recordedTasks": "Tiempo registrado en {count} tareas",
   "reports.seeCompleted": "Ver las tareas hechas",
-  "reports.aboutData": "Sobre estos datos"
+  "reports.aboutData": "Sobre estos datos",
+  "tracking.cardsTitle": "Dedicación en las tarjetas",
+  "tracking.showCards": "Mostrar el tiempo en En curso y Hecho",
+  "tracking.cardsHint": "Suma todos los tramos visibles. En curso, el contador avanza cada segundo; en Hecho, muestra el total. Solo en ámbitos con el registro activado.",
+  "tracking.askDuration": "¿Cuánto tiempo le has dedicado?",
+  "tracking.completionHint": "El ámbito tiene el registro de tiempo activado. Anota la duración para completar la tarea y añadir un tramo de trabajo.",
+  "tracking.minutes": "Duración en minutos",
+  "tracking.saveComplete": "Guardar el tiempo y marcar como hecha",
+  "tracking.invalidDuration": "Introduce entre 1 y 10.080 minutos.",
+  "tracking.total": "Dedicación: {duration}",
+  "tracking.oneSegment": "1 tramo",
+  "tracking.segments": "{count} tramos",
+  "tracking.seconds": "{count}s"
 }

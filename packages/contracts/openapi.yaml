@@ -590,6 +590,10 @@ paths:
 
         S'accepta `position` directament —el camí normal, calculada al client (D3)— o
         `{before_id, after_id}` perquè el servidor la calculi, per a clients simples.
+        `time_entry` anota minuts exactes en completar des de Per fer o Inbox amb registre activat;
+        requereix `expected_version`. Completar i anotar formen una única transacció.
+        L’identificador del bloc fa els reintents idempotents; un canvi concurrent retorna 409.
+        Entrar a Fent obre un tram nou i sortir-ne el tanca, també per sota d’un minut.
       parameters:
         - name: id
           in: path
@@ -615,6 +619,18 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          description: La tasca o el registre han canviat.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          description: Durada o identificador invàlid.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
 
   /tasks/{id}/complete:
     post:
@@ -5111,6 +5127,10 @@ components:
             el wizard la primera vegada. Mentre val `null` s'aplica `multi`, que és com
             funciona l'app avui: a qui ja la fa servir no se li canvia la barra sense
             demanar-ho. Qui mana per damunt de tot és `Info.scope_mode` de la instància.
+        show_task_time:
+          type: boolean
+          default: true
+          description: Mostra la dedicació visible a les targetes Fent i Fet dels àmbits amb registre activat.
         show_reports:
           type: boolean
           default: true
@@ -5817,6 +5837,9 @@ components:
           version,
         ]
       properties:
+        time_summary:
+          $ref: '#/components/schemas/TaskTimeSummary'
+          description: Agregat del tauler; mateixos permisos de lectura que el registre de dedicació.
         id: { type: string }
         scope_id: { type: string }
         project_id: { type: [string, 'null'] }
@@ -6383,10 +6406,29 @@ components:
             uid: { type: string }
             recurrence_id: { type: [string, 'null'] }
 
+    CompletionTime:
+      type: object
+      additionalProperties: false
+      required: [id, minutes, ended_at]
+      properties:
+        id: { type: string, format: uuid }
+        minutes: { type: integer, minimum: 1, maximum: 10080 }
+        ended_at: { type: string, format: date-time }
+    TaskTimeSummary:
+      type: object
+      required: [seconds, segments, open_started_at]
+      properties:
+        seconds: { type: number, minimum: 0, description: Segons dels trams tancats visibles. }
+        segments: { type: integer, minimum: 0 }
+        open_started_at:
+          type: array
+          items: { type: string, format: date-time }
     MoveInput:
       type: object
       additionalProperties: false
       properties:
+        time_entry: { $ref: '#/components/schemas/CompletionTime' }
+        expected_version: { type: integer, minimum: 1 }
         status:
           type: string
           enum: [inbox, todo, doing, done]
