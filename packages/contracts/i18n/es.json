@@ -851,5 +851,12 @@
   "widget.configure": "Configurar",
   "widget.columnEmpty": "No hay tareas en esta columna.",
   "widget.advance": "→ {column}",
-  "widget.pendingSync": "Cambio guardado en el móvil. Pendiente de sincronizar."
+  "widget.pendingSync": "Cambio guardado en el móvil. Pendiente de sincronizar.",
+  "widget.taskBoard.name": "Fem-ho · Tablero",
+  "widget.taskBoard.title": "Tablero",
+  "widget.taskBoard.description": "Inbox, Por hacer y En curso. Toca una tarea para avanzarla.",
+  "widget.taskBoard.open": "Abre",
+  "widget.taskBoard.viewAll": "Ver todas",
+  "widget.taskBoard.empty": "Sin tareas.",
+  "widget.taskBoard.advance": "{task}. Mover a {column}."
 }

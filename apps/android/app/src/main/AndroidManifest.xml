@@ -106,6 +106,18 @@
 
 
         <receiver
+            android:name=".widget.TaskBoardWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_taskboard_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_task_board_info" />
+        </receiver>
+
+        <receiver
             android:name=".widget.TodayWidgetReceiver"
             android:exported="true"
             android:label="@string/widget_today_name">

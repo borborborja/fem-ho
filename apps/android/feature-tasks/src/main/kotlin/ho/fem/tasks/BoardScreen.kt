@@ -16,6 +16,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
@@ -121,9 +122,17 @@ fun BoardScreen(
      * arriba abans de decidir-ho.
      */
     aiBoard: Boolean = false,
+    requestedStatus: TaskStatus? = null,
+    onStatusOpened: () -> Unit = {},
 ) {
     val pager = rememberPagerState(pageCount = { ORDER.size })
     val scope = rememberCoroutineScope()
+    LaunchedEffect(requestedStatus) {
+        requestedStatus?.let {
+            pager.scrollToPage(ORDER.indexOf(it))
+            onStatusOpened()
+        }
+    }
 
     Column(
         modifier = modifier.fillMaxSize(),

@@ -853,5 +853,12 @@
   "widget.configure": "Configura",
   "widget.columnEmpty": "No hi ha tasques en aquesta columna.",
   "widget.advance": "→ {column}",
-  "widget.pendingSync": "Canvi desat al mòbil. Pendent de sincronitzar."
+  "widget.pendingSync": "Canvi desat al mòbil. Pendent de sincronitzar.",
+  "widget.taskBoard.name": "Fem-ho · Tauler",
+  "widget.taskBoard.title": "Tauler",
+  "widget.taskBoard.description": "Inbox, Per fer i Fent. Toca una tasca per avançar-la.",
+  "widget.taskBoard.open": "Obre",
+  "widget.taskBoard.viewAll": "Veure totes",
+  "widget.taskBoard.empty": "Cap tasca.",
+  "widget.taskBoard.advance": "{task}. Passa a {column}."
 }

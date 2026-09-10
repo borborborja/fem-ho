@@ -75,6 +75,8 @@ const SHAPE_TOKENS = [
    * `--dialog-bg` és justament el token pensat per seure damunt d'una cosa que no
    * controlem, i és opac als dos temes.
    */
+  '--ink',
+  '--ink-soft',
   '--dialog-bg',
   '--panel-bg',
   '--card-bg',
@@ -440,15 +442,19 @@ function assertNeutral(accents) {
   }
 }
 
+// El selector de widgets no té accés al perfil: la mostra usa l’accent per defecte.
+// Aquests recursos són exclusius de la previsualització; el widget real tenyeix vectors.
+const PREVIEW_TOKENS = ['--plou-blue', '--plou-orange'];
+
 function renderRes({ light, dark }, variant) {
   const block = variant === 'night' ? dark : light;
-  const rows = SHAPE_TOKENS.map((token) => {
+  const rows = [...SHAPE_TOKENS, ...PREVIEW_TOKENS].map((token) => {
     const argb = block[token] ?? light[token];
     if (argb === undefined) {
       console.error(`tokens-compose · falta el token ${token} al CSS de Plou.`);
       process.exit(1);
     }
-    return `    <color name="${resName(token)}">${toResColor(argb)}</color>`;
+    return `    <color name="${PREVIEW_TOKENS.includes(token) ? resName(token).replace('femho_', 'femho_preview_') : resName(token)}">${toResColor(argb)}</color>`;
   });
 
   return `<?xml version="1.0" encoding="utf-8"?>

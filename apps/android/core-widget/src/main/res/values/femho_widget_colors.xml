@@ -7,6 +7,8 @@
   llegir un `ColorProvider` de Kotlin.
 -->
 <resources>
+    <color name="femho_ink">#FF14151A</color>
+    <color name="femho_ink_soft">#8C14161E</color>
     <color name="femho_dialog_bg">#FFFFFFFF</color>
     <color name="femho_panel_bg">#FFFFFFFF</color>
     <color name="femho_card_bg">#FFFFFFFF</color>
@@ -16,4 +18,6 @@
     <color name="femho_input_border">#1A14161E</color>
     <color name="femho_danger_bg">#1AE64646</color>
     <color name="femho_divider">#1414161E</color>
+    <color name="femho_preview_plou_blue">#FF6EA8FF</color>
+    <color name="femho_preview_plou_orange">#FFFF9D4D</color>
 </resources>

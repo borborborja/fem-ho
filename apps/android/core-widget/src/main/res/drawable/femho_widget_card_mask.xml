@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Màscara opaca: el tint aporta l’alfa del token un sol cop. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/femho_dialog_bg" />
+    <corners android:radius="16dp" />
+</shape>

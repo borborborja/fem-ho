@@ -171,6 +171,7 @@ class MainActivity : ComponentActivity() {
 private fun Root(model: AppViewModel, pending: MutableState<Intent?>) {
     val session by model.session.collectAsStateWithLifecycle()
     var screen by remember { mutableStateOf(Screen.BOARD) }
+    var requestedStatus by remember { mutableStateOf<TaskStatus?>(null) }
     // El token d'un convit que arriba per deep link (femho://join|invite/{token}).
     var joinToken by remember { mutableStateOf<String?>(null) }
     var inviteToken by remember { mutableStateOf<String?>(null) }
@@ -185,6 +186,7 @@ private fun Root(model: AppViewModel, pending: MutableState<Intent?>) {
     LaunchedEffect(pending.value) {
         val intent = pending.value ?: return@LaunchedEffect
         screen = Route.screenOf(intent)
+        requestedStatus = Route.statusOf(intent)
         Route.taskOf(intent)?.let { model.openById(it) }
         if (Route.quickAddOf(intent)) model.requestQuickAdd(Route.draftOf(intent) ?: "")
         // El full de compartir: el text rebut es converteix en una tasca a la bústia.
@@ -228,6 +230,8 @@ private fun Root(model: AppViewModel, pending: MutableState<Intent?>) {
                 when (screen) {
                 Screen.BOARD -> BoardHost(
                     model = model,
+                    requestedStatus = requestedStatus,
+                    onStatusOpened = { requestedStatus = null },
                     onSettings = { screen = Screen.SETTINGS },
                     onCalendar = { screen = Screen.CALENDAR },
                     onRegistre = { screen = Screen.REGISTRE },
@@ -821,7 +825,7 @@ private fun WelcomeCard(title: String, body: String, testTag: String, onClick: (
 }
 
 @Composable
-private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: () -> Unit, onRegistre: () -> Unit, onEstadistiques: () -> Unit, onSearch: () -> Unit, onDashboard: () -> Unit) {
+private fun BoardHost(model: AppViewModel, requestedStatus: TaskStatus?, onStatusOpened: () -> Unit, onSettings: () -> Unit, onCalendar: () -> Unit, onRegistre: () -> Unit, onEstadistiques: () -> Unit, onSearch: () -> Unit, onDashboard: () -> Unit) {
     val tasks by model.tasks.collectAsStateWithLifecycle()
     val scopes by model.scopes.collectAsStateWithLifecycle()
     val pending by model.pending.collectAsStateWithLifecycle()
@@ -963,6 +967,8 @@ private fun BoardHost(model: AppViewModel, onSettings: () -> Unit, onCalendar: (
         val lockNoticeText = stringResource(R.string.ai_lock_card)
 
         BoardScreen(
+            requestedStatus = requestedStatus,
+            onStatusOpened = onStatusOpened,
             tasks = visible,
             labels = BoardLabels(
                 columns = mapOf(

@@ -1,6 +1,7 @@
 package ho.fem.app.widget
 
 import android.content.Context
+import ho.fem.data.SnapshotUpdates
 import androidx.glance.appwidget.updateAll
 
 /**
@@ -17,7 +18,11 @@ import androidx.glance.appwidget.updateAll
  * `updateAll` **no falla si no hi ha cap instància col·locada**: no cal preguntar-ho.
  */
 object FemhoWidgets {
+    internal val snapshots = SnapshotUpdates()
     suspend fun updateAll(context: Context) {
+        // updateAll no reinicia provideGlance si la composició segueix viva.
+        snapshots.invalidate()
+        TaskBoardWidget().updateAll(context)
         BoardWidget().updateAll(context)
         TodayWidget().updateAll(context)
     }

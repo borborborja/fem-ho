@@ -7,6 +7,31 @@ Data de l'última verificació completa: **2026-08-12**.
 
 ---
 
+## Widget Tauler amb tres columnes · 2026-09-10
+
+Nou widget independent «Fem-ho · Tauler»: Inbox, Per fer i Fent de costat,
+desplaçament independent, recompte complet i fins a 25 tasques per columna.
+«Veure totes» obre la columna corresponent dins l’app. Tocar una targeta l’avança
+amb la cua i el registre de trams existents. Mida inicial 4 × 4, redimensionable
+fins a 300 × 180 dp; tema Plou i textos en els tres idiomes.
+
+La lectura del tauler és transaccional. Els tres widgets ara observen les
+invalidacions mentre la composició Glance és viva: això evita dades antigues
+després d’un moviment, una reconfiguració o un tancament de sessió.
+
+Verificat: 120 proves Kotlin (inclosa la integració real amb un servidor aïllat
+que registra dos trams), 30 proves de sincronització del servidor i les 18
+comprovacions permanents. APK release compilat i signat amb clau de proves;
+provider, receiver i callback preservats per R8. Lint Android sense errors:
+431 avisos i 2 notes, inclosos sis avisos nous de la previsualització XML.
+
+**Pendent de validació al llançador:** aspecte clar/fosc, fonts ampliades,
+redimensionament, desplaçament, toc i coexistència dels widgets. No hi ha cap
+dispositiu connectat i aquesta sessió no té accés a KVM; no s’ha instal·lat l’APK.
+Vegeu [comportament, arquitectura i comprovacions manuals](widget-tauler-android.md).
+
+---
+
 ## Auditoria d’Android i widget configurable · 2026-09-10
 
 El widget de tasques permet triar Inbox, Per fer o Fent per instància i avançar les

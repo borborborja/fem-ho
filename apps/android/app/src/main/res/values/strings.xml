@@ -845,6 +845,13 @@
     <string name="widget_quickadd_description">Apunta una tasca sense obrir l\'app.</string>
     <string name="widget_quickadd_name">Fem-ho · Afegir</string>
     <string name="widget_signedout">Connecta\'t per veure les teves tasques.</string>
+    <string name="widget_taskboard_advance">{task}. Passa a {column}.</string>
+    <string name="widget_taskboard_description">Inbox, Per fer i Fent. Toca una tasca per avançar-la.</string>
+    <string name="widget_taskboard_empty">Cap tasca.</string>
+    <string name="widget_taskboard_name">Fem-ho · Tauler</string>
+    <string name="widget_taskboard_open">Obre</string>
+    <string name="widget_taskboard_title">Tauler</string>
+    <string name="widget_taskboard_viewall">Veure totes</string>
     <string name="widget_today_description">El que venç avui, amb afegida ràpida.</string>
     <string name="widget_today_name">Fem-ho · Avui</string>
 </resources>
