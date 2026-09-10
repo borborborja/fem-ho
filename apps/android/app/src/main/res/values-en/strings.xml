@@ -845,6 +845,13 @@
     <string name="widget_quickadd_description">Jot down a task without opening the app.</string>
     <string name="widget_quickadd_name">Fem-ho · Add</string>
     <string name="widget_signedout">Sign in to see your tasks.</string>
+    <string name="widget_taskboard_advance">{task}. Move to {column}.</string>
+    <string name="widget_taskboard_description">Inbox, To do and Doing. Tap a task to advance it.</string>
+    <string name="widget_taskboard_empty">No tasks.</string>
+    <string name="widget_taskboard_name">Fem-ho · Board</string>
+    <string name="widget_taskboard_open">Open</string>
+    <string name="widget_taskboard_title">Board</string>
+    <string name="widget_taskboard_viewall">View all</string>
     <string name="widget_today_description">What is due today, with quick add.</string>
     <string name="widget_today_name">Fem-ho · Today</string>
 </resources>

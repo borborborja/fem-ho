@@ -6,6 +6,12 @@ import ho.fem.model.Scope
 import ho.fem.model.Task
 import ho.fem.model.TaskStatus
 
+data class TaskBoardSnapshot(
+    val columns: Map<TaskStatus, List<Task>>,
+    val counts: Map<TaskStatus, Int>,
+    val scopeColors: Map<String, String>,
+)
+
 /**
  * Lectura local, sense servidor.
  *
@@ -63,6 +69,10 @@ class LocalReads internal constructor(private val dao: FemhoDao) {
 
     suspend fun column(status: TaskStatus, activeScopeIds: List<String>, limit: Int = 25): List<Task> =
         dao.columnTasks(status.name.lowercase(), resolve(activeScopeIds), limit).map { it.toDomain() }
+
+    /** Una sola instantània: un moviment no pot duplicar la tasca entre columnes. */
+    suspend fun taskBoard(activeScopeIds: List<String>): TaskBoardSnapshot =
+        dao.taskBoardSnapshot(activeScopeIds)
 
     suspend fun scopes(): List<Scope> = dao.scopesOnce().map { it.toDomain() }
 

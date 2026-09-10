@@ -852,5 +852,12 @@
   "widget.configure": "Configure",
   "widget.columnEmpty": "There are no tasks in this column.",
   "widget.advance": "→ {column}",
-  "widget.pendingSync": "Saved on this device. Waiting to sync."
+  "widget.pendingSync": "Saved on this device. Waiting to sync.",
+  "widget.taskBoard.name": "Fem-ho · Board",
+  "widget.taskBoard.title": "Board",
+  "widget.taskBoard.description": "Inbox, To do and Doing. Tap a task to advance it.",
+  "widget.taskBoard.open": "Open",
+  "widget.taskBoard.viewAll": "View all",
+  "widget.taskBoard.empty": "No tasks.",
+  "widget.taskBoard.advance": "{task}. Move to {column}."
 }

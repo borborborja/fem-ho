@@ -19,6 +19,7 @@ enum class Screen { BOARD, CALENDAR, SETTINGS, REGISTRE, ESTADISTIQUES, SEARCH, 
 
 object Route {
     const val EXTRA_SCREEN = "ho.fem.screen"
+    const val EXTRA_STATUS = "ho.fem.status"
     const val EXTRA_TASK = "ho.fem.task_id"
 
     /** Obre l'afegida ràpida amb el camp enfocat i, si escau, un text ja escrit. */
@@ -38,6 +39,9 @@ object Route {
         else -> Screen.BOARD
     }
 
+    fun statusOf(intent: Intent?): ho.fem.model.TaskStatus? =
+        ho.fem.model.TaskStatus.entries.firstOrNull { it.name == intent?.getStringExtra(EXTRA_STATUS) }
+
     fun taskOf(intent: Intent?): String? = intent?.getStringExtra(EXTRA_TASK)
 
     fun quickAddOf(intent: Intent?): Boolean = intent?.getBooleanExtra(EXTRA_QUICK_ADD, false) == true
@@ -49,11 +53,13 @@ object Route {
         taskId: String? = null,
         quickAdd: Boolean = false,
         draft: String? = null,
+        status: ho.fem.model.TaskStatus? = null,
     ): Intent = Intent().apply {
         putExtra(EXTRA_SCREEN, screen.name.lowercase())
         if (taskId != null) putExtra(EXTRA_TASK, taskId)
         if (quickAdd) putExtra(EXTRA_QUICK_ADD, true)
         if (draft != null) putExtra(EXTRA_DRAFT, draft)
+        if (status != null) putExtra(EXTRA_STATUS, status.name)
     }
 
     /**

@@ -10,6 +10,7 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.RoomDatabase
+import ho.fem.model.TaskStatus
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -379,6 +380,20 @@ interface FemhoDao {
 
     @Query("SELECT * FROM tasks WHERE deleted=0 AND status=:status AND scope_id IN (:scopeIds) ORDER BY position, id LIMIT :limit")
     suspend fun columnTasks(status: String, scopeIds: List<String>, limit: Int): List<TaskEntity>
+
+    @Transaction
+    suspend fun taskBoardSnapshot(activeScopeIds: List<String>): TaskBoardSnapshot {
+        val scopes = scopesOnce()
+        val ids = activeScopeIds.ifEmpty { scopes.map { it.id } }
+        val statuses = listOf(TaskStatus.INBOX, TaskStatus.TODO, TaskStatus.DOING)
+        val counts = countByStatus(ids).associate { it.status to it.total }
+        // El sostre és per columna; el recompte conserva també les tasques no carregades.
+        return TaskBoardSnapshot(
+            columns = statuses.associateWith { status -> columnTasks(status.name.lowercase(), ids, 25).map { it.toDomain() } },
+            counts = statuses.associateWith { counts[it.name.lowercase()] ?: 0 },
+            scopeColors = scopes.filter { it.id in ids }.associate { it.id to it.color },
+        )
+    }
 
     // ------------------------------------------------------------------- cua
 

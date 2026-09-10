@@ -2,6 +2,8 @@ package ho.fem.app.widget
 
 import android.content.Context
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.glance.GlanceId
@@ -47,6 +49,7 @@ import ho.fem.widget.WidgetSize
 import ho.fem.widget.WidgetSurface
 import ho.fem.widget.WidgetText
 import ho.fem.widget.R as WidgetR
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
@@ -72,28 +75,34 @@ class TodayWidget : GlanceAppWidget() {
     )
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
-        val widget = widgetContext(context)
+        suspend fun read(): Pair<WidgetContext, TodayData?> {
+            val widget = widgetContext(context)
 
-        val data = if (!widget.signedIn) {
-            null
-        } else {
-            withContext(Dispatchers.IO) {
-                val local = Container.get(context).local
-                val today = LocalDate.now().toString()
-                val scopes = local.scopes().associate { it.id to it.color }
-                val locale = context.resources.configuration.locales[0]?.language ?: "ca"
-                val date = LocalDate.parse(today)
-                TodayData(
-                    tasks = local.due(today, widget.activeScopes),
-                    overdue = local.overdue(today, widget.activeScopes),
-                    scopeColors = scopes,
-                    today = today,
-                    weekday = Dates.dayName(locale, date),
-                )
+            val data = if (!widget.signedIn) {
+                null
+            } else {
+                withContext(Dispatchers.IO) {
+                    val local = Container.get(context).local
+                    val today = LocalDate.now().toString()
+                    val scopes = local.scopes().associate { it.id to it.color }
+                    val locale = context.resources.configuration.locales[0]?.language ?: "ca"
+                    val date = LocalDate.parse(today)
+                    TodayData(
+                        tasks = local.due(today, widget.activeScopes),
+                        overdue = local.overdue(today, widget.activeScopes),
+                        scopeColors = scopes,
+                        today = today,
+                        weekday = Dates.dayName(locale, date),
+                    )
+                }
             }
+            return widget to data
         }
-
+        val initial = read()
+        val frames = FemhoWidgets.snapshots.observe { read() }.flowOn(Dispatchers.IO)
         provideContent {
+            val frame by frames.collectAsState(initial)
+            val (widget, data) = frame
             FemhoGlance(widget.palette) {
                 WidgetSurface {
                     if (data == null) {

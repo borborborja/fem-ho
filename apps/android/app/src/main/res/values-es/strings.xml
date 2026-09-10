@@ -845,6 +845,13 @@
     <string name="widget_quickadd_description">Apunta una tarea sin abrir la app.</string>
     <string name="widget_quickadd_name">Fem-ho · Añadir</string>
     <string name="widget_signedout">Conéctate para ver tus tareas.</string>
+    <string name="widget_taskboard_advance">{task}. Mover a {column}.</string>
+    <string name="widget_taskboard_description">Inbox, Por hacer y En curso. Toca una tarea para avanzarla.</string>
+    <string name="widget_taskboard_empty">Sin tareas.</string>
+    <string name="widget_taskboard_name">Fem-ho · Tablero</string>
+    <string name="widget_taskboard_open">Abre</string>
+    <string name="widget_taskboard_title">Tablero</string>
+    <string name="widget_taskboard_viewall">Ver todas</string>
     <string name="widget_today_description">Lo que vence hoy, con añadido rápido.</string>
     <string name="widget_today_name">Fem-ho · Hoy</string>
 </resources>

@@ -4,6 +4,8 @@ import android.content.Context
 import android.content.Intent
 import android.appwidget.AppWidgetManager
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.datastore.preferences.core.Preferences
@@ -26,6 +28,7 @@ import ho.fem.data.Container
 import ho.fem.model.Task
 import ho.fem.model.TaskStatus
 import ho.fem.widget.*
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
@@ -35,6 +38,11 @@ private val TASK_ID = ActionParameters.Key<String>("task_id")
 private val SOURCE_STATUS = ActionParameters.Key<String>("source_status")
 private val ACCOUNT_KEY = ActionParameters.Key<String>("account")
 
+internal fun advanceTaskAction(task: Task, account: String): Action =
+    actionRunCallback<AdvanceTaskAction>(actionParametersOf(
+        TASK_ID to task.id, SOURCE_STATUS to task.status.name, ACCOUNT_KEY to account,
+    ))
+
 fun widgetColumn(value: String?): TaskStatus =
     TaskStatus.entries.firstOrNull { it != TaskStatus.DONE && it.name.equals(value, true) } ?: TaskStatus.INBOX
 
@@ -43,16 +51,21 @@ class BoardWidget : GlanceAppWidget() {
     override val sizeMode = SizeMode.Responsive(setOf(DpSize(180.dp, 100.dp), DpSize(250.dp, 180.dp), DpSize(250.dp, 300.dp)))
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
-        val widget = widgetContext(context)
-        val prefs = getAppWidgetState<Preferences>(context, id)
-        val column = widgetColumn(prefs[WIDGET_COLUMN])
-        val container = Container.get(context)
-        val data = withContext(Dispatchers.IO) {
-            if (widget.signedIn) container.local.column(column, widget.activeScopes) else emptyList()
+        suspend fun read(): BoardFrame = withContext(Dispatchers.IO) {
+            val widget = widgetContext(context)
+            val prefs = getAppWidgetState<Preferences>(context, id)
+            val column = widgetColumn(prefs[WIDGET_COLUMN])
+            val container = Container.get(context)
+            BoardFrame(widget, column,
+                if (widget.signedIn) container.local.column(column, widget.activeScopes) else emptyList(),
+                widget.signedIn && (container.repositoryOrNull()?.pending?.first() ?: 0) > 0,
+                if (widget.signedIn) widgetAccount(container) else "")
         }
-        val pending = withContext(Dispatchers.IO) { if (widget.signedIn) (container.repositoryOrNull()?.pending?.first() ?: 0) > 0 else false }
-        val account = withContext(Dispatchers.IO) { widgetAccount(container) }
+        val initial = read()
+        val frames = FemhoWidgets.snapshots.observe { read() }.flowOn(Dispatchers.IO)
         provideContent {
+            val frame by frames.collectAsState(initial)
+            val (widget, column, data, pending, account) = frame
             FemhoGlance(widget.palette) {
                 WidgetSurface {
                     if (!widget.signedIn) {
@@ -86,13 +99,20 @@ class BoardWidget : GlanceAppWidget() {
     }
 }
 
+private data class BoardFrame(
+    val widget: WidgetContext,
+    val column: TaskStatus,
+    val tasks: List<Task>,
+    val pending: Boolean,
+    val account: String,
+)
+
 @Composable
 private fun TaskRow(task: Task, column: TaskStatus, account: String) {
     val context = LocalContext.current
     val next = TaskStatus.entries[column.ordinal + 1]
     val nextLabel = context.getString(COLUMNS.first { it.status == next }.label)
-    Row(GlanceModifier.fillMaxWidth().padding(vertical = 10.dp).clickable(actionRunCallback<AdvanceTaskAction>(
-        actionParametersOf(TASK_ID to task.id, SOURCE_STATUS to column.name, ACCOUNT_KEY to account))), verticalAlignment = Alignment.CenterVertically) {
+    Row(GlanceModifier.fillMaxWidth().padding(vertical = 10.dp).clickable(advanceTaskAction(task, account)), verticalAlignment = Alignment.CenterVertically) {
         Text(task.title, maxLines = 2, style = TextStyle(color = FemhoWidget.palette.color { ink }, fontSize = WidgetText.row), modifier = GlanceModifier.defaultWeight())
         Spacer(GlanceModifier.width(8.dp))
         Text(context.getString(R.string.widget_advance).replace("{column}", nextLabel), maxLines = 1,
@@ -104,9 +124,9 @@ private fun TaskRow(task: Task, column: TaskStatus, account: String) {
 class AdvanceTaskAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
         val taskId = parameters[TASK_ID] ?: return
-        val source = widgetColumn(parameters[SOURCE_STATUS])
+        val source = TaskStatus.entries.firstOrNull { it != TaskStatus.DONE && it.name == parameters[SOURCE_STATUS] } ?: return
         val widget = widgetContext(context)
-        if (!widget.signedIn) { BoardWidget().update(context, glanceId); return }
+        if (!widget.signedIn) { FemhoWidgets.updateAll(context); return }
         val container = Container.get(context)
         withContext(Dispatchers.IO) {
             val account = widgetAccount(container)
