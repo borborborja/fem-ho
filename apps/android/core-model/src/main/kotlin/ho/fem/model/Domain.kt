@@ -524,6 +524,7 @@ data class Session(
 @Serializable
 data class SessionEntry(
     val id: String,
+    @SerialName("can_edit") val canEdit: Boolean = false,
     @SerialName("task_id") val taskId: String,
     @SerialName("task_title") val taskTitle: String? = null,
     @SerialName("project_id") val projectId: String? = null,

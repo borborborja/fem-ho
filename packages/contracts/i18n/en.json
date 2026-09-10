@@ -713,8 +713,8 @@
   "welcome.single": "By projects of a single thing",
   "welcome.single.body": "The bar shows your projects. Good if you use Fem-ho for one thing: your job, your company, a project.",
   "welcome.title": "How do you split your work?",
-  "widget.board.description": "The counts for the four columns.",
-  "widget.board.name": "Fem-ho · Board",
+  "widget.board.description": "Choose Inbox, To do or Doing and tap a task to advance it.",
+  "widget.board.name": "Fem-ho · Tasks",
   "widget.more": "+{count} more",
   "widget.pending": "pending",
   "widget.pinned.choose": "Choose which list to show",
@@ -847,5 +847,10 @@
   "tracking.total": "Time spent: {duration}",
   "tracking.oneSegment": "1 session",
   "tracking.segments": "{count} sessions",
-  "tracking.seconds": "{count}s"
+  "tracking.seconds": "{count}s",
+  "widget.chooseColumn": "What should this widget show?",
+  "widget.configure": "Configure",
+  "widget.columnEmpty": "There are no tasks in this column.",
+  "widget.advance": "→ {column}",
+  "widget.pendingSync": "Saved on this device. Waiting to sync."
 }

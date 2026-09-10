@@ -1872,6 +1872,15 @@ private fun Modifier.androidClickable(onClick: () -> Unit): Modifier = this.clic
 
 @Composable
 private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> Unit) {
+    val locale by model.preferenceLocale.collectAsStateWithLifecycle(initialValue = "ca")
+    val scopeMode by model.preferenceScopeMode.collectAsStateWithLifecycle(initialValue = "multi")
+    val weekStart by model.preferenceWeekStart.collectAsStateWithLifecycle(initialValue = "auto")
+    val eventTaskDeleted by model.preferenceEventTaskDeleted.collectAsStateWithLifecycle(initialValue = "return_to_inbox")
+    val showCalendarWidget by model.preferenceShowCalendarWidget.collectAsStateWithLifecycle(initialValue = true)
+    val showOverdueSection by model.preferenceShowOverdueSection.collectAsStateWithLifecycle(initialValue = true)
+    val inboxPosition by model.preferenceInboxPosition.collectAsStateWithLifecycle(initialValue = "right")
+    val inboxShowOverdue by model.preferenceInboxShowOverdue.collectAsStateWithLifecycle(initialValue = true)
+
     val theme by model.theme.collectAsStateWithLifecycle()
     val accent by model.accent.collectAsStateWithLifecycle()
     val profile by model.profile.collectAsStateWithLifecycle()
@@ -1907,6 +1916,14 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
     }
 
     SettingsScreen(
+        locale = locale,
+        scopeMode = scopeMode,
+        weekStart = weekStart,
+        eventTaskDeleted = eventTaskDeleted,
+        showCalendarWidget = showCalendarWidget,
+        showOverdueSection = showOverdueSection,
+        inboxPosition = inboxPosition,
+        inboxShowOverdue = inboxShowOverdue,
         labels = SettingsLabels(
             title = stringResource(R.string.settings_title),
             back = stringResource(R.string.nav_backtoboard),
@@ -2168,7 +2185,7 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
         onTheme = model::setTheme,
         onAccent = model::setAccent,
         onLocale = model::setLocale,
-        onScopeMode = { /* TODO: persistir al perfil */ },
+        onScopeMode = model::setScopeMode,
         onWeekStart = model::setWeekStart,
         onEventTaskDeleted = model::setEventTaskDeleted,
         onShowCalendarWidget = model::setShowCalendarWidget,
@@ -2247,7 +2264,7 @@ private fun RegistreHost(model: AppViewModel, onBoard: () -> Unit) {
     val report by model.sessions.collectAsStateWithLifecycle()
 
     var periode by remember { mutableStateOf("days30") }
-    var from by remember { mutableStateOf(java.time.LocalDate.now().minusDays(30).toString()) }
+    var from by remember { mutableStateOf(java.time.LocalDate.now().minusDays(29).toString()) }
     var to by remember { mutableStateOf(java.time.LocalDate.now().toString()) }
     var projecte by remember { mutableStateOf<String?>(null) }
     var persona by remember { mutableStateOf<String?>(null) }
@@ -2274,10 +2291,10 @@ private fun RegistreHost(model: AppViewModel, onBoard: () -> Unit) {
         to = t?.toString() ?: ""
     }
 
-    androidx.compose.runtime.LaunchedEffect(periode, projecte, persona, cerca) {
+    androidx.compose.runtime.LaunchedEffect(from, to, vista, dia, projecte, persona, cerca) {
         model.loadSessions(
-            from = from.ifEmpty { null },
-            to = to.ifEmpty { null },
+            from = if (vista == "chrono") dia else from.ifEmpty { null },
+            to = if (vista == "chrono") dia else to.ifEmpty { null },
             projectId = projecte,
             userId = persona,
             search = cerca.ifBlank { null },
@@ -2414,22 +2431,19 @@ private fun RegistreHost(model: AppViewModel, onBoard: () -> Unit) {
 
                 // El cronograma: una fila per projecte, blocs a l'hora, arrossegables amb
                 // snap de 5 min (PATCH /sessions/{id} en deixar anar, com la web).
-                val delDia = entries.filter { it.startedAt.take(10) == dia }
+                val zone = java.time.ZoneId.systemDefault()
+                val delDia = entries.filter { java.time.Instant.parse(it.startedAt).atZone(zone).toLocalDate().toString() == dia }
+                val density = androidx.compose.ui.platform.LocalDensity.current.density
                 val obre = 8 * 60
                 val tanca = 18 * 60
                 var inici = obre
                 var fi = tanca
                 fun minutsDe(instant: String): Int {
-                    val h = instant.substring(11, 13).toIntOrNull() ?: 0
-                    val m = instant.substring(14, 16).toIntOrNull() ?: 0
-                    return h * 60 + m
+                    val local = java.time.Instant.parse(instant).atZone(zone)
+                    val day = java.time.LocalDate.parse(dia)
+                    return (java.time.temporal.ChronoUnit.DAYS.between(day, local.toLocalDate()) * 1440 + local.hour * 60 + local.minute).toInt()
                 }
-                fun snap(minuts: Int): Int = ((minuts + 2.5) / 5).toInt() * 5
-                fun instantDe(day: String, minuts: Int): String {
-                    val h = (minuts / 60).toString().padStart(2, '0')
-                    val m = (minuts % 60).toString().padStart(2, '0')
-                    return "$day" + "T$h:$m:00.000Z"
-                }
+                fun snap(minuts: Int): Int = (minuts / 5f).roundToInt() * 5
                 delDia.forEach { entry ->
                     inici = minOf(inici, minutsDe(entry.startedAt))
                     val acaba = entry.endedAt?.let { minutsDe(it) }
@@ -2487,21 +2501,22 @@ private fun RegistreHost(model: AppViewModel, onBoard: () -> Unit) {
                                             .height(36.dp)
                                             .clip(RoundedCornerShape(6.dp))
                                             .background(Femho.colors.plouBlue)
-                                            .pointerInput(entry.id) {
-                                                detectDragGestures(
+                                            .pointerInput(entry.id, entry.startedAt, entry.endedAt, px) {
+                                                if (entry.canEdit && !entry.open) detectDragGestures(
                                                     onDrag = { change, dragAmount ->
                                                         change.consume()
                                                         offsetX += dragAmount.x
                                                     },
                                                     onDragEnd = {
-                                                        val deltaMin = snap((offsetX / px).roundToInt())
+                                                        val deltaMin = snap((offsetX / (px * density)).roundToInt())
                                                         if (deltaMin != 0) {
                                                             model.updateSession(
                                                                 entry.id,
-                                                                startedAt = instantDe(dia, startMin + deltaMin),
-                                                                endedAt = entry.endedAt?.let { instantDe(dia, endMin + deltaMin) },
-                                                            )
-                                                            model.loadSessions(from.ifEmpty { null }, to.ifEmpty { null }, projecte, persona, cerca.ifBlank { null })
+                                                                startedAt = java.time.Instant.parse(entry.startedAt).plusSeconds(deltaMin * 60L).toString(),
+                                                                endedAt = entry.endedAt?.let { java.time.Instant.parse(it).plusSeconds(deltaMin * 60L).toString() },
+                                                            ) {
+                                                                model.loadSessions(dia, dia, projecte, persona, cerca.ifBlank { null })
+                                                            }
                                                         }
                                                         offsetX = 0f
                                                     },
@@ -2660,8 +2675,8 @@ private fun RegistreHost(model: AppViewModel, onBoard: () -> Unit) {
                 modifier = Modifier
                     .clickable {
                         model.exportSessionsCsv(
-                            from = from.ifEmpty { null },
-                            to = to.ifEmpty { null },
+                            from = if (vista == "chrono") dia else from.ifEmpty { null },
+                            to = if (vista == "chrono") dia else to.ifEmpty { null },
                             projectId = projecte,
                             userId = persona,
                             search = cerca.ifBlank { null },
@@ -2702,7 +2717,7 @@ private fun RegistreHost(model: AppViewModel, onBoard: () -> Unit) {
                     fontSize = FemhoText.meta,
                 )
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 totals.byUser.forEach { bucket ->
                     Text(
                         text = "${nomPersona(bucket.key)}: ${fmtMinutes(bucket.minutes)}",
@@ -2783,7 +2798,10 @@ private fun RegistreHost(model: AppViewModel, onBoard: () -> Unit) {
                             modifier = Modifier.weight(2f).testTag("registre-row-${entry.id}"),
                         )
                         Text(
-                            text = "${fmtMinutes(entry.minutes)}${if (entry.open) " ▶" else ""}",
+                            text = entry.endedAt?.let { end -> java.time.Duration.between(java.time.Instant.parse(entry.startedAt), java.time.Instant.parse(end)).seconds }.let { seconds ->
+                                if (seconds != null && seconds < 60) stringResource(R.string.tracking_seconds).replace("{count}", seconds.coerceAtLeast(0).toString())
+                                else "${fmtMinutes(entry.minutes)}${if (entry.open) " ▶" else ""}"
+                            },
                             color = if (entry.needsReview) Femho.colors.dangerText else Femho.colors.ink,
                             fontSize = FemhoText.meta,
                             fontWeight = if (entry.needsReview) FontWeight.Bold else FontWeight.Medium,
@@ -3052,7 +3070,7 @@ private fun EstadistiquesHost(model: AppViewModel, onBoard: () -> Unit) {
         to = t?.toString() ?: ""
     }
 
-    androidx.compose.runtime.LaunchedEffect(periode, persona) {
+    androidx.compose.runtime.LaunchedEffect(from, to, persona) {
         model.loadStats(
             from = from.ifEmpty { null },
             to = to.ifEmpty { null },

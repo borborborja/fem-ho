@@ -343,6 +343,7 @@ export type BatchOperation = {
   op_id: string;
   entity: string;
   op: 'create' | 'update' | 'delete' | 'move';
+  occurred_at?: string | undefined;
   id: string;
   base_version?: number | undefined;
   data?: Record<string, unknown> | undefined;

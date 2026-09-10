@@ -830,10 +830,15 @@
     <string name="welcome_single">Por proyectos de una sola cosa</string>
     <string name="welcome_single_body">Arriba tienes los proyectos. Va bien si usas Fem-ho para una sola cosa: tu trabajo, tu empresa, un proyecto.</string>
     <string name="welcome_title">¿Cómo repartes el trabajo?</string>
-    <string name="widget_board_description">Los contadores de las cuatro columnas.</string>
-    <string name="widget_board_name">Fem-ho · Tablero</string>
+    <string name="widget_advance">→ {column}</string>
+    <string name="widget_board_description">Elige Inbox, Por hacer o En curso y toca una tarea para avanzarla.</string>
+    <string name="widget_board_name">Fem-ho · Tareas</string>
+    <string name="widget_choosecolumn">¿Qué quieres ver en el widget?</string>
+    <string name="widget_columnempty">No hay tareas en esta columna.</string>
+    <string name="widget_configure">Configurar</string>
     <string name="widget_more">+{count} más</string>
     <string name="widget_pending">pendientes</string>
+    <string name="widget_pendingsync">Cambio guardado en el móvil. Pendiente de sincronizar.</string>
     <string name="widget_pinned_choose">Elige qué lista quieres ver</string>
     <string name="widget_pinned_description">Una lista fijada, para marcar desde la pantalla de inicio.</string>
     <string name="widget_pinned_name">Fem-ho · Lista</string>

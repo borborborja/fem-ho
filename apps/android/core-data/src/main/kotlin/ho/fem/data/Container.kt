@@ -54,7 +54,10 @@ class Container(context: Context) {
         return FemhoApi(baseUrl, tokens, der)
     }
 
-    fun repository(baseUrl: String): Repository = Repository(database.dao(), api(baseUrl))
+    // App, widget i WorkManager comparteixen el pany: no poden enviar el mateix tram alhora.
+    private val syncLock = kotlinx.coroutines.sync.Mutex()
+    private val moveLock = kotlinx.coroutines.sync.Mutex()
+    fun repository(baseUrl: String): Repository = Repository(database.dao(), api(baseUrl), syncLock, moveLock)
 
     /**
      * Lectura local sense servidor, per als widgets. `database` i `dao()` es queden
@@ -116,6 +119,7 @@ class Settings(private val context: Context) {
     private val themeKey = stringPreferencesKey("theme")
     private val accentKey = stringPreferencesKey("accent")
     // Preferències de la pestanya General (paritat amb la web)
+    private val scopeModeKey = stringPreferencesKey("scope_mode")
     private val localeKey = stringPreferencesKey("locale")
     private val weekStartKey = stringPreferencesKey("week_start")
     private val eventTaskDeletedKey = stringPreferencesKey("event_task_deleted")
@@ -131,6 +135,8 @@ class Settings(private val context: Context) {
         read(projectsKey).map { it?.split(",")?.filter(String::isNotEmpty) ?: emptyList() }
     val theme: Flow<String> = read(themeKey).map { it ?: "system" }
     val accent: Flow<String> = read(accentKey).map { it ?: "default" }
+    val scopeMode: Flow<String> = read(scopeModeKey).map { it ?: "multi" }
+    suspend fun setScopeMode(value: String) = write(scopeModeKey, value)
     val locale: Flow<String> = read(localeKey).map { it ?: "ca" }
     val weekStart: Flow<String> = read(weekStartKey).map { it ?: "auto" }
     val eventTaskDeleted: Flow<String> = read(eventTaskDeletedKey).map { it ?: "return_to_inbox" }

@@ -7,6 +7,7 @@
  */
 
 import { sql } from 'kysely';
+import type { TaskStatus } from '@fem-ho/contracts';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { auditedTransaction, type AuditContext } from '../audit/audited-transaction.js';
 import { PolicyError, notFound, unauthenticated } from '../policy/errors.js';
@@ -14,7 +15,7 @@ import type { Principal } from '../policy/principal.js';
 import { assertScopeAccess } from '../services/scopes.js';
 import { createChecklist, createChecklistItem } from '../services/checklists.js';
 import { createSubtask } from '../services/subtasks.js';
-import { createTask } from '../services/tasks.js';
+import { createTask, moveTask, updateTask, deleteTask, type Task } from '../services/tasks.js';
 import { addComment } from '../services/comments.js';
 import { createProject } from '../services/scopes.js';
 import { createEvent } from '../services/events.js';
@@ -193,13 +194,15 @@ async function createFromBatch(
   principal: Principal,
   entity: string,
   data: Record<string, unknown>,
+  occurredAt = ctx.now,
+  engine: 'sqlite' | 'postgres' = 'sqlite',
 ): Promise<Record<string, unknown>> {
   const text = (key: string): string | undefined =>
     typeof data[key] === 'string' ? (data[key] as string) : undefined;
 
   switch (entity) {
     case 'task': {
-      const { task } = await createTask(ctx, principal, data as never);
+      const { task } = await createTask(ctx, principal, data as never, engine, occurredAt);
       return task as unknown as Record<string, unknown>;
     }
     case 'subtask': {
@@ -317,146 +320,243 @@ async function applyOne(
       app.connection!.db,
       principal,
       async (ctx): Promise<BatchResult> => {
-        const found = await sql`
+        if (app.connection!.engine === 'postgres')
+          await sql`SELECT pg_advisory_xact_lock(851004, hashtext(${principal.userId + operation.op_id}))`.execute(
+            ctx.tx,
+          );
+        const previous = await recallOp(ctx.tx, principal, operation.op_id);
+        if (previous) {
+          ctx.noChange();
+          return previous;
+        }
+        const apply = async (): Promise<BatchResult> => {
+          const found = await sql`
           SELECT * FROM ${sql.raw(table)} WHERE id = ${operation.id}
         `.execute(ctx.tx);
-        const server = found.rows[0] as Record<string, unknown> | undefined;
+          const server = found.rows[0] as Record<string, unknown> | undefined;
 
-        /**
-         * **L'àmbit es comprova AQUÍ, abans de qualsevol branca.**
-         *
-         * Estava trenta línies més avall, després del `return` de `delete` i del de
-         * `create` sobre una fila existent. El resultat era que **qualsevol autenticat
-         * podia esborrar per identificador una tasca d'un àmbit que no era seu**, i
-         * llegir-la amb `op: 'create'`. Comprovat contra el servidor amb dos comptes: la
-         * víctima passava a rebre 404 de la seva pròpia tasca.
-         *
-         * El `create` sobre una fila absent no hi passa a posta: allà encara no hi ha
-         * `scope_id` del servidor i qui comprova és el servei que la crea, amb el `scope_id`
-         * que porta la petició.
-         *
-         * Que no s'hagi vist abans té una explicació incòmoda: la guarda de la regla 4
-         * tapava la fuita de lectura —el `create` sobre una fila existent no registra res
-         * a l'historial i `auditedTransaction` llançava—, però l'esborrat sí que registra,
-         * i per tant passava net.
-         */
-        if (server !== undefined) {
-          const owner = server.scope_id as string | undefined;
-          if (owner !== undefined) await assertScopeAccess(ctx.tx, principal, owner);
-        }
+          /**
+           * **L'àmbit es comprova AQUÍ, abans de qualsevol branca.**
+           *
+           * Estava trenta línies més avall, després del `return` de `delete` i del de
+           * `create` sobre una fila existent. El resultat era que **qualsevol autenticat
+           * podia esborrar per identificador una tasca d'un àmbit que no era seu**, i
+           * llegir-la amb `op: 'create'`. Comprovat contra el servidor amb dos comptes: la
+           * víctima passava a rebre 404 de la seva pròpia tasca.
+           *
+           * El `create` sobre una fila absent no hi passa a posta: allà encara no hi ha
+           * `scope_id` del servidor i qui comprova és el servei que la crea, amb el `scope_id`
+           * que porta la petició.
+           *
+           * Que no s'hagi vist abans té una explicació incòmoda: la guarda de la regla 4
+           * tapava la fuita de lectura —el `create` sobre una fila existent no registra res
+           * a l'historial i `auditedTransaction` llançava—, però l'esborrat sí que registra,
+           * i per tant passava net.
+           */
+          if (server !== undefined) {
+            const owner = server.scope_id as string | undefined;
+            if (owner !== undefined) await assertScopeAccess(ctx.tx, principal, owner);
+          }
 
-        if (operation.op === 'delete') {
-          if (server === undefined) throw notFound(operation.entity, operation.id);
-          await softDelete(
-            ctx,
-            operation.entity,
-            operation.id,
-            (server.scope_id as string | undefined) ?? null,
-          );
-          return { op_id: operation.op_id, status: 'ok' };
-        }
+          if (operation.op === 'delete') {
+            if (server === undefined) throw notFound(operation.entity, operation.id);
+            if (operation.entity === 'task') await deleteTask(ctx, principal, operation.id);
+            else
+              await softDelete(
+                ctx,
+                operation.entity,
+                operation.id,
+                (server.scope_id as string | undefined) ?? null,
+              );
+            return { op_id: operation.op_id, status: 'ok' };
+          }
 
-        /**
-         * **Crear des de la cua de sortida.**
-         *
-         * `docs/06` §3 posa `create` entre les operacions de l'outbox: una tasca escrita
-         * al metro no existeix enlloc fins que el lot arriba. Es delega als serveis de
-         * sempre i no a un `INSERT` propi, perquè són ells els que fan complir les
-         * invariants —una tasca sense àmbit es rebutja, un àmbit individual s'autoassigna—
-         * i els que deixen la fila a `activity_log` dins de la mateixa transacció.
-         *
-         * Si la fila **ja hi és**, no es torna a crear: el mateix `op_id` reenviat ja el
-         * para la memòria d'idempotència, però dos `op_id` diferents amb el mateix `id`
-         * —un reintent d'una cua que va perdre la resposta— han de convergir igual.
-         */
-        if (operation.op === 'create' && server === undefined) {
-          const data = { ...(operation.data ?? {}), id: operation.id } as Record<string, unknown>;
-          const entity = await createFromBatch(ctx, principal, operation.entity, data);
-          return { op_id: operation.op_id, status: 'ok', entity };
-        }
+          /**
+           * **Crear des de la cua de sortida.**
+           *
+           * `docs/06` §3 posa `create` entre les operacions de l'outbox: una tasca escrita
+           * al metro no existeix enlloc fins que el lot arriba. Es delega als serveis de
+           * sempre i no a un `INSERT` propi, perquè són ells els que fan complir les
+           * invariants —una tasca sense àmbit es rebutja, un àmbit individual s'autoassigna—
+           * i els que deixen la fila a `activity_log` dins de la mateixa transacció.
+           *
+           * Si la fila **ja hi és**, no es torna a crear: el mateix `op_id` reenviat ja el
+           * para la memòria d'idempotència, però dos `op_id` diferents amb el mateix `id`
+           * —un reintent d'una cua que va perdre la resposta— han de convergir igual.
+           */
+          if (operation.op === 'create' && server === undefined) {
+            const data = { ...(operation.data ?? {}), id: operation.id } as Record<string, unknown>;
+            let occurredAt = ctx.now;
+            if (operation.occurred_at !== undefined) {
+              const timestamp = Date.parse(operation.occurred_at);
+              if (!Number.isFinite(timestamp) || timestamp > Date.parse(ctx.now) + 300_000)
+                throw new PolicyError(
+                  'invalid-move-time',
+                  'Invalid move time',
+                  422,
+                  'Invalid device timestamp.',
+                );
+              occurredAt = new Date(Math.min(timestamp, Date.parse(ctx.now))).toISOString();
+            }
+            const entity = await createFromBatch(
+              ctx,
+              principal,
+              operation.entity,
+              data,
+              occurredAt,
+              app.connection!.engine,
+            );
+            return { op_id: operation.op_id, status: 'ok', entity };
+          }
 
-        if (server === undefined) {
-          throw notFound(operation.entity, operation.id);
-        }
+          if (server === undefined) {
+            throw notFound(operation.entity, operation.id);
+          }
 
-        // Una creació d'una fila que ja hi és: ja està feta. Es respon amb la de dins,
-        // que és el que el client vol saber.
-        if (operation.op === 'create') {
-          return { op_id: operation.op_id, status: 'ok', entity: server };
-        }
+          // Una creació d'una fila que ja hi és: ja està feta. Es respon amb la de dins,
+          // que és el que el client vol saber.
+          if (operation.op === 'create') {
+            return { op_id: operation.op_id, status: 'ok', entity: server };
+          }
 
-        const scopeId = server.scope_id as string | undefined;
+          const scopeId = server.scope_id as string | undefined;
 
-        /**
-         * Esborrat contra edició: **guanya l'esborrat** (docs/06 §5). L'edició es
-         * conserva a l'historial, o sigui que no es perd res del que va voler fer qui
-         * editava — simplement no reviu la fila.
-         */
-        if (server.deleted_at != null) {
-          ctx.record({
-            entityType: operation.entity,
-            entityId: operation.id,
-            scopeId: scopeId ?? null,
-            verb: 'updated',
-            changes: Object.fromEntries(
-              Object.entries(operation.data ?? {}).map(([k, v]) => [k, { from: null, to: v }]),
-            ),
+          /**
+           * Esborrat contra edició: **guanya l'esborrat** (docs/06 §5). L'edició es
+           * conserva a l'historial, o sigui que no es perd res del que va voler fer qui
+           * editava — simplement no reviu la fila.
+           */
+          if (server.deleted_at != null) {
+            ctx.record({
+              entityType: operation.entity,
+              entityId: operation.id,
+              scopeId: scopeId ?? null,
+              verb: 'updated',
+              changes: Object.fromEntries(
+                Object.entries(operation.data ?? {}).map(([k, v]) => [k, { from: null, to: v }]),
+              ),
+            });
+            return {
+              op_id: operation.op_id,
+              status: 'conflict',
+              server_entity: server,
+            };
+          }
+
+          const { apply, needsUser } = resolveConflict({
+            incoming: operation.data ?? {},
+            server,
+            baseVersion: operation.base_version,
           });
-          return {
-            op_id: operation.op_id,
-            status: 'conflict',
-            server_entity: server,
-          };
-        }
 
-        const { apply, needsUser } = resolveConflict({
-          incoming: operation.data ?? {},
-          server,
-          baseVersion: operation.base_version,
-        });
+          if (needsUser) {
+            ctx.noChange();
+            return { op_id: operation.op_id, status: 'conflict', server_entity: server };
+          }
 
-        if (needsUser) {
-          ctx.noChange();
-          return { op_id: operation.op_id, status: 'conflict', server_entity: server };
-        }
+          const fields = Object.keys(apply).filter((f) => f !== 'id' && f !== 'version');
+          if (fields.length === 0) {
+            ctx.noChange();
+            return { op_id: operation.op_id, status: 'ok', entity: server };
+          }
 
-        const fields = Object.keys(apply).filter((f) => f !== 'id' && f !== 'version');
-        if (fields.length === 0) {
-          ctx.noChange();
-          return { op_id: operation.op_id, status: 'ok', entity: server };
-        }
-
-        const assignments = fields.map((field) => sql`${sql.raw(field)} = ${apply[field]}`);
-        await sql`
+          if (operation.entity === 'task') {
+            const moveFields = new Set(['status', 'position', 'occurred_at', 'from_status']);
+            const updateFields = new Set([
+              'title',
+              'description',
+              'due_date',
+              'due_time',
+              'deadline',
+              'project_id',
+              'task_type_id',
+              'rrule',
+              'recurrence_mode',
+              'ai_mode',
+              'ai_instructions',
+            ]);
+            for (const field of fields)
+              if (!moveFields.has(field) && !updateFields.has(field))
+                throw new PolicyError(
+                  'invalid-sync-field',
+                  'Invalid sync field',
+                  422,
+                  `Task field ${field} is not writable.`,
+                );
+            let task: Task | undefined;
+            const patch = Object.fromEntries(
+              Object.entries(apply).filter(([key]) => updateFields.has(key)),
+            );
+            if (Object.keys(patch).length)
+              task = await updateTask(ctx, principal, operation.id, patch);
+            if (fields.some((field) => moveFields.has(field)))
+              task = await moveTask(ctx, principal, operation.id, {
+                status: apply.status as TaskStatus | undefined,
+                position: apply.position as string | undefined,
+                occurred_at: apply.occurred_at as string | undefined,
+                from_status: apply.from_status as TaskStatus | undefined,
+              });
+            return {
+              op_id: operation.op_id,
+              status: 'ok',
+              entity: task as unknown as Record<string, unknown>,
+            };
+          }
+          // Els noms de columna són identificadors, no SQL proporcionat pel client.
+          if (
+            fields.some(
+              (field) =>
+                !/^[a-z_]+$/.test(field) ||
+                [
+                  'scope_id',
+                  'task_id',
+                  'checklist_id',
+                  'created_by',
+                  'user_id',
+                  'created_at',
+                  'deleted_at',
+                ].includes(field),
+            )
+          )
+            throw new PolicyError(
+              'invalid-sync-field',
+              'Invalid sync field',
+              422,
+              'Immutable or invalid field.',
+            );
+          const assignments = fields.map((field) => sql`${sql.raw(field)} = ${apply[field]}`);
+          await sql`
           UPDATE ${sql.raw(table)}
           SET ${sql.join(assignments)}, updated_at = ${ctx.now}, version = version + 1
           WHERE id = ${operation.id}
         `.execute(ctx.tx);
 
-        ctx.record({
-          entityType: operation.entity,
-          entityId: operation.id,
-          scopeId: scopeId ?? null,
-          verb: operation.op === 'move' ? 'moved' : 'updated',
-          changes: Object.fromEntries(
-            fields.map((field) => [field, { from: server[field], to: apply[field] }]),
-          ),
-        });
+          ctx.record({
+            entityType: operation.entity,
+            entityId: operation.id,
+            scopeId: scopeId ?? null,
+            verb: operation.op === 'move' ? 'moved' : 'updated',
+            changes: Object.fromEntries(
+              fields.map((field) => [field, { from: server[field], to: apply[field] }]),
+            ),
+          });
 
-        const updated = await sql`
+          const updated = await sql`
           SELECT * FROM ${sql.raw(table)} WHERE id = ${operation.id}
         `.execute(ctx.tx);
 
-        return {
-          op_id: operation.op_id,
-          status: 'ok',
-          entity: updated.rows[0] as Record<string, unknown>,
+          return {
+            op_id: operation.op_id,
+            status: 'ok',
+            entity: updated.rows[0] as Record<string, unknown>,
+          };
         };
+        const outcome = await apply();
+        await rememberOp(ctx.tx, principal, operation.op_id, outcome, now);
+        return outcome;
       },
       { engine: app.connection!.engine },
     );
-
-    await rememberOp(db, principal, operation.op_id, result, now);
     return result;
   } catch (error) {
     const rejected: BatchResult = {

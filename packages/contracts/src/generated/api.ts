@@ -879,7 +879,13 @@ export interface paths {
          * @description **Cada operació es resol per separat**: una que falli no ha de tombar el lot.
          *
          *     `op_id` és la clau d'idempotència. Reenviar un lot després d'una caiguda no
-         *     duplica res.
+         *     duplica res. La confirmació i els canvis es desen junts.
+         *     Les transicions de tasques executen la mateixa política, cascades i registre de temps
+         *     que `/tasks/{id}/move`. No s'han de fusionar moviments pendents.
+         *     En moviments de tasques, `data.occurred_at` (ISO UTC) conserva l'hora real del gest
+         *     i `data.from_status` detecta canvis d'estat des d'un altre dispositiu.
+         *     Un instant més de cinc minuts al futur es rebutja; els petits desajustos es limiten
+         *     a l'hora del servidor. Un gest anterior al temps ja registrat retorna conflicte.
          */
         post: operations["pushSync"];
         delete?: never;
@@ -3496,6 +3502,11 @@ export interface components {
             /** @enum {string} */
             op: "create" | "update" | "delete" | "move";
             id: string;
+            /**
+             * Format: date-time
+             * @description Hora de la creació offline; permet iniciar el tram real quan es crea a Fent.
+             */
+            occurred_at?: string;
             /** @description La versió sobre la qual s'edita. */
             base_version?: number;
             data?: {

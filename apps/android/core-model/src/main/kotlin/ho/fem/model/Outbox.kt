@@ -39,6 +39,7 @@ data class Operation(
  * de la primera: és la versió que el client tenia quan va començar a editar, i és el que
  * el servidor ha de comparar per detectar un conflicte de veritat.
  *
+ * Els moviments tampoc es fusionen: cada transició pot obrir o tancar un tram de temps.
  * Els `create` no es fusionen mai amb res: crear i després editar són dues coses, i
  * col·lapsar-les perdria la creació.
  */
@@ -47,7 +48,7 @@ fun mergeOperations(operations: List<Operation>): List<Operation> {
     val indexOfKey = mutableMapOf<String, Int>()
 
     for (operation in operations) {
-        if (operation.op == "create") {
+        if (operation.op == "create" || operation.op == "move") {
             result += operation
             continue
         }

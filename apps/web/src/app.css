@@ -209,6 +209,7 @@ button {
 /* Informes: una mateixa lectura a pantalla i paper, sense controls impresos. */
 .reports {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
   min-width: 0;
 }

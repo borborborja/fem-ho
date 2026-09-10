@@ -279,6 +279,14 @@ data class SettingsEmptyStates(
 
 @Composable
 fun SettingsScreen(
+    locale: String = "ca",
+    scopeMode: String = "multi",
+    weekStart: String = "auto",
+    eventTaskDeleted: String = "return_to_inbox",
+    showCalendarWidget: Boolean = true,
+    showOverdueSection: Boolean = true,
+    inboxPosition: String = "right",
+    inboxShowOverdue: Boolean = true,
     labels: SettingsLabels,
     theme: String,
     accent: String,
@@ -439,6 +447,14 @@ fun SettingsScreen(
         ) {
             when (selectedTab) {
                 "general" -> GeneralTab(
+                    locale = locale,
+                    scopeMode = scopeMode,
+                    weekStart = weekStart,
+                    eventTaskDeleted = eventTaskDeleted,
+                    showCalendarWidget = showCalendarWidget,
+                    showOverdueSection = showOverdueSection,
+                    inboxPosition = inboxPosition,
+                    inboxShowOverdue = inboxShowOverdue,
                     labels = labels,
                     theme = theme,
                     accent = accent,
@@ -562,6 +578,14 @@ fun SettingsScreen(
 
 @Composable
 private fun GeneralTab(
+    locale: String,
+    scopeMode: String,
+    weekStart: String,
+    eventTaskDeleted: String,
+    showCalendarWidget: Boolean,
+    showOverdueSection: Boolean,
+    inboxPosition: String,
+    inboxShowOverdue: Boolean,
     labels: SettingsLabels,
     theme: String,
     accent: String,
@@ -580,7 +604,7 @@ private fun GeneralTab(
 ) {
     // Idioma — el primer, perquè és el que canvia la pantalla on l'estàs triant
     Group(labels.language) {
-        Chips(labels.languageOptions, "ca", onLocale, "language")
+        Chips(labels.languageOptions, locale, onLocale, "language")
     }
 
     // Mode d'àmbits — decideix què hi ha a la barra superior
@@ -590,7 +614,7 @@ private fun GeneralTab(
                 "multi" to labels.scopeModeMulti,
                 "single" to labels.scopeModeSingle,
             ),
-            value = "multi",
+            value = scopeMode,
             onChange = onScopeMode,
             tag = "scope-mode",
         )
@@ -610,7 +634,7 @@ private fun GeneralTab(
                 "monday" to labels.weekStartMonday,
                 "sunday" to labels.weekStartSunday,
             ),
-            value = "auto",
+            value = weekStart,
             onChange = onWeekStart,
             tag = "week-start",
         )
@@ -623,7 +647,7 @@ private fun GeneralTab(
                 "return_to_inbox" to labels.eventTaskDeletedReturn,
                 "hide_from_inbox" to labels.eventTaskDeletedHide,
             ),
-            value = "return_to_inbox",
+            value = eventTaskDeleted,
             onChange = onEventTaskDeleted,
             tag = "event-task-deleted",
         )
@@ -641,8 +665,8 @@ private fun GeneralTab(
 
     // Què es mostra al tauler general
     Group(labels.dashboardItems) {
-        Toggle(labels.showCalendarWidget, checked = true, onChange = onShowCalendarWidget)
-        Toggle(labels.showOverdueSection, checked = true, onChange = onShowOverdueSection)
+        Toggle(labels.showCalendarWidget, checked = showCalendarWidget, onChange = onShowCalendarWidget)
+        Toggle(labels.showOverdueSection, checked = showOverdueSection, onChange = onShowOverdueSection)
     }
 
     // Posició de l'Inbox
@@ -653,11 +677,11 @@ private fun GeneralTab(
                 "right" to labels.inboxRight,
                 "below" to labels.inboxBelow,
             ),
-            value = "right",
+            value = inboxPosition,
             onChange = onInboxPosition,
             tag = "inbox-position",
         )
-        Toggle(labels.inboxShowOverdue, checked = true, onChange = onInboxShowOverdue)
+        Toggle(labels.inboxShowOverdue, checked = inboxShowOverdue, onChange = onInboxShowOverdue)
     }
 
     // Sobre

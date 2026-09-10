@@ -1,96 +1,84 @@
 package ho.fem.app.widget
 
 import android.content.Context
+import android.content.Intent
+import android.appwidget.AppWidgetManager
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
-import androidx.glance.GlanceId
-import androidx.glance.GlanceModifier
-import androidx.glance.ImageProvider
-import androidx.glance.LocalContext
-import androidx.glance.LocalSize
-import androidx.glance.action.clickable
-import androidx.glance.action.actionStartActivity
-import androidx.glance.appwidget.GlanceAppWidget
-import androidx.glance.appwidget.GlanceAppWidgetReceiver
-import androidx.glance.appwidget.SizeMode
-import androidx.glance.appwidget.provideContent
-import androidx.glance.background
-import androidx.glance.layout.Alignment
-import androidx.glance.layout.Column
-import androidx.glance.layout.Row
-import androidx.glance.layout.Spacer
-import androidx.glance.layout.fillMaxHeight
-import androidx.glance.layout.fillMaxSize
-import androidx.glance.layout.fillMaxWidth
-import androidx.glance.layout.height
-import androidx.glance.layout.padding
-import androidx.glance.layout.width
-import androidx.glance.text.FontWeight
-import androidx.glance.text.Text
-import androidx.glance.text.TextAlign
-import androidx.glance.text.TextStyle
-import androidx.glance.unit.ColorProvider
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.glance.*
+import androidx.glance.action.*
+import androidx.glance.appwidget.*
+import androidx.glance.appwidget.action.ActionCallback
+import androidx.glance.appwidget.action.actionRunCallback
+import androidx.glance.appwidget.action.actionStartActivity
+import androidx.glance.appwidget.lazy.LazyColumn
+import androidx.glance.appwidget.lazy.items
+import androidx.glance.appwidget.state.getAppWidgetState
+import androidx.glance.layout.*
+import androidx.glance.text.*
 import ho.fem.app.MainActivity
 import ho.fem.app.R
-import ho.fem.widget.R as WidgetR
+import ho.fem.app.Notifications
 import ho.fem.data.Container
+import ho.fem.model.Task
 import ho.fem.model.TaskStatus
-import ho.fem.widget.Dot
-import ho.fem.widget.EmptyState
-import ho.fem.widget.FemhoGlance
-import ho.fem.widget.FemhoWidget
-import ho.fem.widget.WidgetSize
-import ho.fem.widget.WidgetSurface
-import ho.fem.widget.WidgetText
+import ho.fem.widget.*
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 
-/**
- * El tauler, reduït a quatre xifres.
- *
- * És el widget que menys demana i el que més sovint es mira: quantes coses hi ha a cada
- * columna, sense obrir res. **Funciona sencer sense connexió**, perquè els comptadors
- * surten de Room i no del servidor.
- *
- * La bústia va a part i a dalt, a tota amplada, i les altres tres sota. No és decoració:
- * `docs/02` §4 separa l'Inbox de les tres columnes amb més aire que les tres entre elles
- * (`FemhoSize.inboxGap`), i el widget respecta la mateixa jerarquia que el tauler.
- */
-class BoardWidget : GlanceAppWidget() {
+val WIDGET_COLUMN = stringPreferencesKey("column")
+private val TASK_ID = ActionParameters.Key<String>("task_id")
+private val SOURCE_STATUS = ActionParameters.Key<String>("source_status")
+private val ACCOUNT_KEY = ActionParameters.Key<String>("account")
 
-    /**
-     * Tres talles, no una.
-     *
-     * A 4×1 les xifres soles ja diuen el que cal; a 2×1 només hi cap la que importa. Un
-     * widget que es deixa redimensionar i ensenya el mateix retallat és pitjor que un que
-     * no es deixa redimensionar.
-     */
-    override val sizeMode = SizeMode.Responsive(
-        setOf(
-            DpSize(110.dp, 48.dp),
-            DpSize(250.dp, 48.dp),
-            DpSize(250.dp, 110.dp),
-        ),
-    )
+fun widgetColumn(value: String?): TaskStatus =
+    TaskStatus.entries.firstOrNull { it != TaskStatus.DONE && it.name.equals(value, true) } ?: TaskStatus.INBOX
+
+/** Cada instància conserva la seva columna. La llista i les accions funcionen amb Room. */
+class BoardWidget : GlanceAppWidget() {
+    override val sizeMode = SizeMode.Responsive(setOf(DpSize(180.dp, 100.dp), DpSize(250.dp, 180.dp), DpSize(250.dp, 300.dp)))
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val widget = widgetContext(context)
-        val counts = if (!widget.signedIn) {
-            emptyMap()
-        } else {
-            withContext(Dispatchers.IO) {
-                Container.get(context).local.counts(widget.activeScopes)
-            }
+        val prefs = getAppWidgetState<Preferences>(context, id)
+        val column = widgetColumn(prefs[WIDGET_COLUMN])
+        val container = Container.get(context)
+        val data = withContext(Dispatchers.IO) {
+            if (widget.signedIn) container.local.column(column, widget.activeScopes) else emptyList()
         }
-
+        val pending = withContext(Dispatchers.IO) { if (widget.signedIn) (container.repositoryOrNull()?.pending?.first() ?: 0) > 0 else false }
+        val account = withContext(Dispatchers.IO) { widgetAccount(container) }
         provideContent {
             FemhoGlance(widget.palette) {
-                WidgetSurface(modifier = GlanceModifier.clickable(actionStartActivity<MainActivity>())) {
+                WidgetSurface {
                     if (!widget.signedIn) {
-                        EmptyState(LocalContext.current.getString(R.string.widget_signedout))
+                        Box(GlanceModifier.fillMaxSize().clickable(actionStartActivity(Intent(context, MainActivity::class.java)))) {
+                            EmptyState(context.getString(R.string.widget_signedout))
+                        }
                     } else {
-                        BoardContent(counts)
+                        Column(GlanceModifier.fillMaxSize()) {
+                            Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                Text(context.getString(COLUMNS.first { it.status == column }.label),
+                                    style = TextStyle(color = FemhoWidget.palette.color { ink }, fontSize = WidgetText.title, fontWeight = FontWeight.Bold),
+                                    modifier = GlanceModifier.defaultWeight())
+                                Text(context.getString(R.string.widget_configure),
+                                    style = TextStyle(color = FemhoWidget.palette.color { inkSoft }, fontSize = WidgetText.meta),
+                                    modifier = GlanceModifier.padding(8.dp).clickable(actionStartActivity(
+                                        Intent(context, WidgetConfigurationActivity::class.java)
+                                            .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, GlanceAppWidgetManager(context).getAppWidgetId(id)))))
+                            }
+                            if (pending) {
+                                Text(context.getString(R.string.widget_pendingsync), style = TextStyle(color = FemhoWidget.palette.color { inkSoft }, fontSize = WidgetText.meta))
+                            }
+                            if (data.isEmpty()) EmptyState(context.getString(R.string.widget_columnempty))
+                            else LazyColumn(GlanceModifier.fillMaxSize()) {
+                                items(data) { task -> TaskRow(task, column, account) }
+                            }
+                        }
                     }
                 }
             }
@@ -99,125 +87,43 @@ class BoardWidget : GlanceAppWidget() {
 }
 
 @Composable
-private fun BoardContent(counts: Map<TaskStatus, Int>) {
-    val size = LocalSize.current
-    val narrow = size.width < 180.dp
-    val short = size.height < 90.dp
+private fun TaskRow(task: Task, column: TaskStatus, account: String) {
+    val context = LocalContext.current
+    val next = TaskStatus.entries[column.ordinal + 1]
+    val nextLabel = context.getString(COLUMNS.first { it.status == next }.label)
+    Row(GlanceModifier.fillMaxWidth().padding(vertical = 10.dp).clickable(actionRunCallback<AdvanceTaskAction>(
+        actionParametersOf(TASK_ID to task.id, SOURCE_STATUS to column.name, ACCOUNT_KEY to account))), verticalAlignment = Alignment.CenterVertically) {
+        Text(task.title, maxLines = 2, style = TextStyle(color = FemhoWidget.palette.color { ink }, fontSize = WidgetText.row), modifier = GlanceModifier.defaultWeight())
+        Spacer(GlanceModifier.width(8.dp))
+        Text(context.getString(R.string.widget_advance).replace("{column}", nextLabel), maxLines = 1,
+            style = TextStyle(color = FemhoWidget.palette.color { inkSoft }, fontSize = WidgetText.meta))
+    }
+}
 
-    when {
-        // 2×1 · una xifra i prou: tot el que queda per fer.
-        narrow -> {
-            val pending = counts.entries
-                .filter { it.key != TaskStatus.DONE }
-                .sumOf { it.value }
-            Figure(
-                value = pending,
-                label = LocalContext.current.getString(R.string.widget_pending),
-                emphasis = true,
-            )
-        }
-
-        // 4×1 · les quatre xifres en fila, sense tessel·les: no hi cabrien.
-        short -> Row(modifier = GlanceModifier.fillMaxWidth()) {
-            for (column in COLUMNS) {
-                Column(modifier = GlanceModifier.defaultWeight()) {
-                    Figure(counts[column.status] ?: 0, label(column), emphasis = false)
-                }
-            }
-        }
-
-        // 4×2 · la bústia a dalt, les tres columnes sota.
-        else -> Column(modifier = GlanceModifier.fillMaxSize()) {
-            Tile(
-                column = COLUMNS.first(),
-                total = counts[TaskStatus.INBOX] ?: 0,
-                modifier = GlanceModifier.fillMaxWidth().defaultWeight(),
-            )
-            Spacer(GlanceModifier.height(WidgetSize.gap))
-            Row(modifier = GlanceModifier.fillMaxWidth().defaultWeight()) {
-                COLUMNS.drop(1).forEachIndexed { index, column ->
-                    if (index > 0) Spacer(GlanceModifier.width(WidgetSize.rowGap))
-                    Tile(
-                        column = column,
-                        total = counts[column.status] ?: 0,
-                        modifier = GlanceModifier.fillMaxHeight().defaultWeight(),
-                    )
-                }
-            }
+/** El callback contrasta l’estat local: un doble toc no completa dues columnes de cop. */
+class AdvanceTaskAction : ActionCallback {
+    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
+        val taskId = parameters[TASK_ID] ?: return
+        val source = widgetColumn(parameters[SOURCE_STATUS])
+        val widget = widgetContext(context)
+        if (!widget.signedIn) { BoardWidget().update(context, glanceId); return }
+        val container = Container.get(context)
+        withContext(Dispatchers.IO) {
+            val account = widgetAccount(container)
+            if (account.isEmpty() || parameters[ACCOUNT_KEY] != account) return@withContext
+            val repository = container.repositoryOrNull() ?: return@withContext
+            val task = repository.tasks.first().find { it.id == taskId && it.status == source } ?: return@withContext
+            if (widget.activeScopes.isNotEmpty() && task.scopeId !in widget.activeScopes) return@withContext
+            val next = TaskStatus.entries[source.ordinal + 1]
+            val last = repository.tasks.first().filter { it.scopeId == task.scopeId && it.status == next }.maxByOrNull { it.position }?.position
+            repository.moveTask(task, next, last to null)
+            // El worker conserva el reintent encara que el sistema mati el callback.
+            Notifications.requestSync(context)
+            FemhoWidgets.updateAll(context)
         }
     }
 }
 
-/**
- * Una cel·la: la xifra gran i el nom a sota.
- *
- * **La regla de color de dalt és el que la fa reconeixible.** Cada columna porta el seu
- * to de la tríada de l'accent —el mateix que a l'app— i per tant canviar l'accent a
- * Ajustos repinta el widget. Si el color fos inventat aquí, seria l'única superfície del
- * producte que no obeeix la preferència de la persona.
- */
-@Composable
-private fun Tile(column: BoardColumn, total: Int, modifier: GlanceModifier) {
-    val palette = FemhoWidget.palette
-    Column(
-        modifier = modifier
-            .background(ImageProvider(WidgetR.drawable.femho_widget_tile))
-            .padding(horizontal = 10.dp, vertical = 8.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Dot(palette.color(column.tint), size = 6.dp)
-            Spacer(GlanceModifier.width(5.dp))
-            Text(
-                text = label(column),
-                style = TextStyle(
-                    color = palette.color { inkSoft },
-                    fontSize = WidgetText.kicker,
-                    fontWeight = FontWeight.Medium,
-                ),
-            )
-        }
-        Text(
-            text = total.toString(),
-            style = TextStyle(
-                color = palette.color { ink },
-                fontSize = WidgetText.figure,
-                fontWeight = FontWeight.Bold,
-            ),
-        )
-    }
-}
-
-@Composable
-private fun Figure(value: Int, label: String, emphasis: Boolean) {
-    val palette = FemhoWidget.palette
-    Column(
-        modifier = GlanceModifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text(
-            text = value.toString(),
-            style = TextStyle(
-                color = if (emphasis) palette.color { plouOrange } else palette.color { ink },
-                fontSize = WidgetText.figure,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center,
-            ),
-        )
-        Text(
-            text = label,
-            style = TextStyle(
-                color = palette.color { inkSoft },
-                fontSize = WidgetText.kicker,
-                textAlign = TextAlign.Center,
-            ),
-        )
-    }
-}
-
-@Composable
-private fun label(column: BoardColumn): String = LocalContext.current.getString(column.label)
-
-/** El receptor que el sistema instancia. Ha de ser públic i tenir constructor buit. */
 class BoardWidgetReceiver : GlanceAppWidgetReceiver() {
     override val glanceAppWidget: GlanceAppWidget = BoardWidget()
 }

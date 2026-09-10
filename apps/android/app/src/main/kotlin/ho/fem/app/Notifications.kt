@@ -50,6 +50,12 @@ object Notifications {
      * posta: demanar-ne menys no en dona menys, dona el mateix amb una promesa que el
      * sistema no complirà.
      */
+    fun requestSync(context: Context) {
+        WorkManager.getInstance(context).enqueueUniqueWork("widget-sync", androidx.work.ExistingWorkPolicy.KEEP,
+            androidx.work.OneTimeWorkRequestBuilder<SyncWorker>()
+                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()).build())
+    }
+
     fun schedulePolling(context: Context) {
         WorkManager.getInstance(context).enqueueUniquePeriodicWork(
             SYNC_WORK,
@@ -74,7 +80,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
     override suspend fun doWork(): Result {
         val container = (applicationContext as FemhoApplication).container
         val base = container.settings.serverUrl.first() ?: return Result.success()
-        if (container.tokens.refresh() == null) return Result.success()
+        if (runCatching { container.tokens.refresh() }.getOrNull() == null) return Result.success()
 
         val active = container.settings.activeScopes.first()
         return runCatching { container.repository(base).refresh(active, null) }
