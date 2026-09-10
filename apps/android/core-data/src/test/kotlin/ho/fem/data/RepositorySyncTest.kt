@@ -31,6 +31,7 @@ class RepositorySyncTest {
                 "failed", "putTasks" -> Unit
                 "lastPosition" -> null
                 "enqueue" -> { queue += args!![0] as OutboxEntity; Unit }
+                "putTaskAndEnqueue" -> { queue += args!![1] as OutboxEntity; Unit }
                 "tasks", "scopes", "projects", "people", "outboxFlow", "labels", "taskTypes", "sessions", "calendars", "mailAccounts", "mailRules", "agents" -> flowOf(emptyList<Any>())
                 else -> error("Crida inesperada: ${method.name}")
             }

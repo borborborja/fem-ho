@@ -712,8 +712,8 @@
   "welcome.single": "Por proyectos de una sola cosa",
   "welcome.single.body": "Arriba tienes los proyectos. Va bien si usas Fem-ho para una sola cosa: tu trabajo, tu empresa, un proyecto.",
   "welcome.title": "¿Cómo repartes el trabajo?",
-  "widget.board.description": "Los contadores de las cuatro columnas.",
-  "widget.board.name": "Fem-ho · Tablero",
+  "widget.board.description": "Elige Inbox, Por hacer o En curso y toca una tarea para avanzarla.",
+  "widget.board.name": "Fem-ho · Tareas",
   "widget.more": "+{count} más",
   "widget.pending": "pendientes",
   "widget.pinned.choose": "Elige qué lista quieres ver",
@@ -846,5 +846,10 @@
   "tracking.total": "Dedicación: {duration}",
   "tracking.oneSegment": "1 tramo",
   "tracking.segments": "{count} tramos",
-  "tracking.seconds": "{count}s"
+  "tracking.seconds": "{count}s",
+  "widget.chooseColumn": "¿Qué quieres ver en el widget?",
+  "widget.configure": "Configurar",
+  "widget.columnEmpty": "No hay tareas en esta columna.",
+  "widget.advance": "→ {column}",
+  "widget.pendingSync": "Cambio guardado en el móvil. Pendiente de sincronizar."
 }

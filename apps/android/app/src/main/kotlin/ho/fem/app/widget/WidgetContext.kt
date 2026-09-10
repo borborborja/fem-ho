@@ -53,3 +53,12 @@ suspend fun widgetContext(context: Context): WidgetContext = withContext(Dispatc
         activeScopes = if (signedIn) settings.activeScopes.first() else emptyList(),
     )
 }
+
+/** Identitat estable davant la renovació del token; mai es passa cap credencial al llançador. */
+suspend fun widgetAccount(container: Container): String = runCatching {
+    val payload = container.tokens.access()?.split(".")?.getOrNull(1) ?: return@runCatching ""
+    val decoded = String(android.util.Base64.decode(payload, android.util.Base64.URL_SAFE))
+    val subject = org.json.JSONObject(decoded).optString("sub").takeIf { it.isNotBlank() } ?: return@runCatching ""
+    val server = container.settings.serverUrl.first()?.takeIf { it.isNotBlank() } ?: return@runCatching ""
+    "$server|$subject"
+}.getOrDefault("")

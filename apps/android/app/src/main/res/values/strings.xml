@@ -830,10 +830,15 @@
     <string name="welcome_single">Per projectes d’una sola cosa</string>
     <string name="welcome_single_body">A dalt hi tens els projectes. Va bé si fas servir Fem-ho per a una sola cosa: la teva feina, la teva empresa, un projecte.</string>
     <string name="welcome_title">Com reparteixes la feina?</string>
-    <string name="widget_board_description">Els comptadors de les quatre columnes.</string>
-    <string name="widget_board_name">Fem-ho · Tauler</string>
+    <string name="widget_advance">→ {column}</string>
+    <string name="widget_board_description">Tria Inbox, Per fer o Fent i toca una tasca per avançar-la.</string>
+    <string name="widget_board_name">Fem-ho · Tasques</string>
+    <string name="widget_choosecolumn">Què vols veure al widget?</string>
+    <string name="widget_columnempty">No hi ha tasques en aquesta columna.</string>
+    <string name="widget_configure">Configura</string>
     <string name="widget_more">+{count} més</string>
     <string name="widget_pending">pendents</string>
+    <string name="widget_pendingsync">Canvi desat al mòbil. Pendent de sincronitzar.</string>
     <string name="widget_pinned_choose">Tria quina llista vols veure</string>
     <string name="widget_pinned_description">Una llista pinejada, per marcar des de la pantalla d\'inici.</string>
     <string name="widget_pinned_name">Fem-ho · Llista</string>

@@ -320,10 +320,10 @@ class AppViewModel(private val container: Container) : ViewModel() {
     }
 
     /** Mou o allarga un bloc del cronograma. PATCH /api/v1/sessions/{id}. */
-    fun updateSession(id: String, startedAt: String?, endedAt: String?) {
+    fun updateSession(id: String, startedAt: String?, endedAt: String?, onSaved: () -> Unit = {}) {
         val base = serverUrl ?: return
         viewModelScope.launch {
-            runCatching { container.api(base).updateSession(id, startedAt = startedAt, endedAt = endedAt) }
+            runCatching { container.api(base).updateSession(id, startedAt = startedAt, endedAt = endedAt) }.onSuccess { onSaved() }
         }
     }
 
@@ -665,6 +665,7 @@ class AppViewModel(private val container: Container) : ViewModel() {
     private fun refreshScopeModeWizard(base: String) {
         viewModelScope.launch {
             val settings = runCatching { container.api(base).settings() }.getOrNull()
+            settings?.settings?.scopeMode?.let { container.settings.setScopeMode(it) }
             val instance = runCatching { container.api(base).info() }.getOrNull()
             _needsScopeModeWizard.value =
                 settings?.settings?.scopeMode == null && (instance?.scopeMode ?: "both") == "both"
@@ -672,11 +673,21 @@ class AppViewModel(private val container: Container) : ViewModel() {
     }
 
     /** El wizard ha triat mode d'àmbits: es desa al servidor i es tanca el wizard. */
+    val preferenceLocale = container.settings.locale
+    val preferenceScopeMode = container.settings.scopeMode
+    val preferenceWeekStart = container.settings.weekStart
+    val preferenceEventTaskDeleted = container.settings.eventTaskDeleted
+    val preferenceShowCalendarWidget = container.settings.showCalendarWidget
+    val preferenceShowOverdueSection = container.settings.showOverdueSection
+    val preferenceInboxPosition = container.settings.inboxPosition
+    val preferenceInboxShowOverdue = container.settings.inboxShowOverdue
+
     fun setScopeMode(mode: String) {
         val base = serverUrl ?: return
         viewModelScope.launch {
             runCatching { container.api(base).updateSettings(scopeMode = mode) }
                 .onSuccess {
+                    container.settings.setScopeMode(mode)
                     _needsScopeModeWizard.value = false
                     refresh()
                 }
@@ -688,6 +699,7 @@ class AppViewModel(private val container: Container) : ViewModel() {
         viewModelScope.launch {
             container.api(base).logout()
             _session.value = Session.NeedsLogin(base, "")
+            ho.fem.app.widget.FemhoWidgets.updateAll(container.appContext)
         }
     }
 
@@ -727,7 +739,7 @@ class AppViewModel(private val container: Container) : ViewModel() {
             val active = container.settings.activeScopes.first()
             runCatching { container.repository(base).refresh(active, null) }
         }
-        viewModelScope.launch { _pinned.value = container.api(base).pinnedChecklists() }
+        viewModelScope.launch { runCatching { container.api(base).pinnedChecklists() }.onSuccess { _pinned.value = it } }
     }
 
     /**
@@ -1049,7 +1061,7 @@ class AppViewModel(private val container: Container) : ViewModel() {
             // Persistir al servidor si hi ha sessió
             if (_session.value is Session.Ready) {
                 val base = (_session.value as Session.Ready).serverUrl
-                container.api(base).updateProfile(locale = value)
+                runCatching { container.api(base).updateProfile(locale = value) }
             }
         }
     }
@@ -1059,7 +1071,7 @@ class AppViewModel(private val container: Container) : ViewModel() {
             container.settings.setWeekStart(value)
             if (_session.value is Session.Ready) {
                 val base = (_session.value as Session.Ready).serverUrl
-                container.api(base).updateSettings(weekStart = value)
+                runCatching { container.api(base).updateSettings(weekStart = value) }
             }
         }
     }
@@ -1069,7 +1081,7 @@ class AppViewModel(private val container: Container) : ViewModel() {
             container.settings.setEventTaskDeleted(value)
             if (_session.value is Session.Ready) {
                 val base = (_session.value as Session.Ready).serverUrl
-                container.api(base).updateSettings(eventTaskDeleted = value)
+                runCatching { container.api(base).updateSettings(eventTaskDeleted = value) }
             }
         }
     }
@@ -1079,7 +1091,7 @@ class AppViewModel(private val container: Container) : ViewModel() {
             container.settings.setShowCalendarWidget(value)
             if (_session.value is Session.Ready) {
                 val base = (_session.value as Session.Ready).serverUrl
-                container.api(base).updateSettings(showCalendarWidget = value)
+                runCatching { container.api(base).updateSettings(showCalendarWidget = value) }
             }
         }
     }
@@ -1089,7 +1101,7 @@ class AppViewModel(private val container: Container) : ViewModel() {
             container.settings.setShowOverdueSection(value)
             if (_session.value is Session.Ready) {
                 val base = (_session.value as Session.Ready).serverUrl
-                container.api(base).updateSettings(showOverdueSection = value)
+                runCatching { container.api(base).updateSettings(showOverdueSection = value) }
             }
         }
     }
@@ -1099,7 +1111,7 @@ class AppViewModel(private val container: Container) : ViewModel() {
             container.settings.setInboxPosition(value)
             if (_session.value is Session.Ready) {
                 val base = (_session.value as Session.Ready).serverUrl
-                container.api(base).updateSettings(inboxPosition = value)
+                runCatching { container.api(base).updateSettings(inboxPosition = value) }
             }
         }
     }
@@ -1109,7 +1121,7 @@ class AppViewModel(private val container: Container) : ViewModel() {
             container.settings.setInboxShowOverdue(value)
             if (_session.value is Session.Ready) {
                 val base = (_session.value as Session.Ready).serverUrl
-                container.api(base).updateSettings(inboxShowOverdue = value)
+                runCatching { container.api(base).updateSettings(inboxShowOverdue = value) }
             }
         }
     }
@@ -1432,7 +1444,9 @@ class AppViewModel(private val container: Container) : ViewModel() {
                 .onSuccess { _labels.value = it }
             runCatching { container.api(base).taskTypes() }
                 .onSuccess { _taskTypes.value = it }
-            scopes.value.forEach { scope ->
+            val available = runCatching { container.api(base).scopes() }.getOrDefault(scopes.value)
+            _scopeSettings.value = _scopeSettings.value.filterKeys { id -> available.any { it.id == id } }
+            available.forEach { scope ->
                 runCatching { container.api(base).scopeSettings(scope.id) }
                     .onSuccess { settings ->
                         _scopeSettings.value = _scopeSettings.value + (scope.id to settings)
@@ -1659,7 +1673,9 @@ class AppViewModel(private val container: Container) : ViewModel() {
             val last = _tasks.value.filter { it.status == status && it.id != task.id }
                 .maxByOrNull { it.position }?.position
             repository.moveTask(task, status, last to null)
-            repository.flush()
+            // El moviment ja és a Room; sense xarxa queda pendent, no fa caure l’app.
+            runCatching { repository.flush() }
+            ho.fem.app.widget.FemhoWidgets.updateAll(container.appContext)
         }
     }
 

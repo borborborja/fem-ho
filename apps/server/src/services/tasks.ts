@@ -440,6 +440,7 @@ export async function createTask(
   principal: Principal,
   input: CreateTaskInput,
   engine: 'sqlite' | 'postgres' = 'sqlite',
+  occurredAt = ctx.now,
 ): Promise<{ task: Task; created: boolean }> {
   if (!hasCapability(principal, 'tasks:write')) throw missingCapability('tasks:write');
 
@@ -637,7 +638,14 @@ export async function createTask(
     entityId: id,
     scopeId: input.scope_id,
     verb: 'created',
-    ...(status === 'doing' ? { changes: { status: { from: null, to: status } } } : {}),
+    ...(status === 'doing'
+      ? {
+          changes: {
+            status: { from: null, to: status },
+            occurred_at: { from: null, to: occurredAt },
+          },
+        }
+      : {}),
   });
 
   const created = await sql<TaskRow>`
@@ -645,7 +653,7 @@ export async function createTask(
   `.execute(ctx.tx);
   const [task] = await withAssignees(ctx.tx, created.rows);
   if (task === undefined) throw notFound('task', id);
-  if (task.status === 'doing') await openSession(ctx, principal.userId, task);
+  if (task.status === 'doing') await openSession(ctx, principal.userId, task, occurredAt);
   return { task, created: true };
 }
 
@@ -655,6 +663,9 @@ export interface CompletionTimeInput {
   ended_at: string;
 }
 export interface MoveTaskInput {
+  /** Hora del gest sincronitzat; el registre d’auditoria manté l’hora del servidor. */
+  occurred_at?: string | undefined;
+  from_status?: TaskStatus | undefined;
   time_entry?: CompletionTimeInput | undefined;
   expected_version?: number | undefined;
   status?: TaskStatus | undefined;
@@ -744,6 +755,38 @@ export async function moveTask(
   await assertWritable(ctx, principal, current, 'move');
 
   const status = input.status ?? current.status;
+  if (!TASK_STATUSES.includes(status))
+    throw new PolicyError('invalid-status', 'Invalid status', 422, 'Unknown task status.');
+  let occurredAt = ctx.now;
+  if (input.occurred_at !== undefined) {
+    const instant = Date.parse(input.occurred_at);
+    if (!Number.isFinite(instant) || instant > Date.parse(ctx.now) + 300_000)
+      throw new PolicyError(
+        'invalid-move-time',
+        'Invalid move time',
+        422,
+        'The device clock is ahead or the move time is invalid.',
+      );
+    occurredAt = new Date(Math.min(instant, Date.parse(ctx.now))).toISOString();
+    if (input.from_status !== undefined && input.from_status !== current.status)
+      throw new PolicyError(
+        'move-conflict',
+        'Move conflict',
+        409,
+        'The task changed on another device.',
+      );
+    const latest = await sql<{
+      at: string | null;
+    }>`SELECT MAX(COALESCE(ended_at, started_at)) AS at FROM task_sessions
+      WHERE task_id=${id} AND deleted_at IS NULL`.execute(ctx.tx);
+    if (latest.rows[0]?.at && instant < Date.parse(latest.rows[0].at))
+      throw new PolicyError(
+        'move-conflict',
+        'Move conflict',
+        409,
+        'The move predates recorded work.',
+      );
+  }
   const time = input.time_entry;
   const conflict = () =>
     new PolicyError(
@@ -817,7 +860,7 @@ export async function moveTask(
    */
   const entraAFet = status === 'done' && current.status !== 'done';
   const surtDeFet = status !== 'done' && current.status === 'done';
-  const completedAt = entraAFet ? ctx.now : surtDeFet ? null : current.completed_at;
+  const completedAt = entraAFet ? occurredAt : surtDeFet ? null : current.completed_at;
 
   let position = input.position;
   if (position === undefined) {
@@ -883,6 +926,7 @@ export async function moveTask(
     verb: entraAFet ? 'completed' : 'moved',
     changes: {
       status: { from: current.status, to: status },
+      occurred_at: { from: null, to: occurredAt },
       position: { from: current.position, to: position },
       ...(entraAFet || surtDeFet
         ? { completed_at: { from: current.completed_at, to: completedAt } }
@@ -899,9 +943,9 @@ export async function moveTask(
    * un dia en falti un.
    */
   if (status === 'doing' && current.status !== 'doing') {
-    await openSession(ctx, principal.userId, current);
+    await openSession(ctx, principal.userId, current, occurredAt);
   } else if (status !== 'doing' && current.status === 'doing') {
-    await closeSession(ctx, id);
+    await closeSession(ctx, id, occurredAt);
   }
 
   if (entraAFet) {

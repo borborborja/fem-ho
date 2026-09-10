@@ -349,10 +349,17 @@ interface FemhoDao {
      * la pantalla d'inici és un "Res per avui" que es queda fins al proper refresc.
      * Es va veure exactament així a l'emulador.
      */
+    @Query("SELECT * FROM tasks WHERE id IN (SELECT entity_id FROM outbox WHERE entity = 'task')")
+    suspend fun pendingTasks(): List<TaskEntity>
+
     @Transaction
     suspend fun replaceTasks(rows: List<TaskEntity>) {
+        // Un toc durant la petició de refresc encara no és al servidor. El pany de
+        // flush impedeix retirar-lo de la cua fins que s’ha aplicat la instantània.
+        val pending = pendingTasks()
+        val ids = pending.map { it.id }.toSet()
         clearTasks()
-        putTasks(rows)
+        putTasks(rows.filter { it.id !in ids } + pending)
     }
 
     @Query("DELETE FROM scopes")
@@ -364,12 +371,21 @@ interface FemhoDao {
     @Query("DELETE FROM people")
     suspend fun clearPeople()
 
+    @Transaction
+    suspend fun putTaskAndEnqueue(task: TaskEntity, operation: OutboxEntity) {
+        putTasks(listOf(task))
+        enqueue(operation)
+    }
+
+    @Query("SELECT * FROM tasks WHERE deleted=0 AND status=:status AND scope_id IN (:scopeIds) ORDER BY position, id LIMIT :limit")
+    suspend fun columnTasks(status: String, scopeIds: List<String>, limit: Int): List<TaskEntity>
+
     // ------------------------------------------------------------------- cua
 
-    @Query("SELECT * FROM outbox ORDER BY queued_at, op_id")
+    @Query("SELECT * FROM outbox ORDER BY queued_at, rowid")
     fun outboxFlow(): Flow<List<OutboxEntity>>
 
-    @Query("SELECT * FROM outbox ORDER BY queued_at, op_id")
+    @Query("SELECT * FROM outbox ORDER BY queued_at, rowid")
     suspend fun outbox(): List<OutboxEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)

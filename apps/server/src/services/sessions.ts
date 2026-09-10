@@ -52,6 +52,7 @@ export async function openSession(
   ctx: AuditContext,
   userId: string,
   task: { id: string; scope_id: string },
+  occurredAt = ctx.now,
 ): Promise<void> {
   if (!(await settingsOf(ctx.tx, task.scope_id)).time_tracking) return;
 
@@ -69,7 +70,7 @@ export async function openSession(
     INSERT INTO task_sessions
       (id, task_id, scope_id, user_id, started_at, ended_at, source, note,
        created_at, updated_at, version)
-    VALUES (${uuidv7()}, ${task.id}, ${task.scope_id}, ${userId}, ${ctx.now}, ${null},
+    VALUES (${uuidv7()}, ${task.id}, ${task.scope_id}, ${userId}, ${occurredAt}, ${null},
             'board', ${null}, ${ctx.now}, ${ctx.now}, 1)
   `.execute(ctx.tx);
 }
@@ -80,7 +81,11 @@ export async function openSession(
  * Cada sortida tanca el seu tram, també si dura menys d’un minut. Reobrir la tasca
  * conserva els trams tancats i n’obre un altre.
  */
-export async function closeSession(ctx: AuditContext, taskId: string): Promise<void> {
+export async function closeSession(
+  ctx: AuditContext,
+  taskId: string,
+  occurredAt = ctx.now,
+): Promise<void> {
   const obertes = await sql<{ id: string; started_at: string }>`
     SELECT id, started_at FROM task_sessions
     WHERE task_id = ${taskId} AND ended_at IS NULL AND deleted_at IS NULL
@@ -88,7 +93,7 @@ export async function closeSession(ctx: AuditContext, taskId: string): Promise<v
 
   for (const oberta of obertes.rows) {
     await sql`
-      UPDATE task_sessions SET ended_at = ${ctx.now}, updated_at = ${ctx.now},
+      UPDATE task_sessions SET ended_at = ${occurredAt}, updated_at = ${ctx.now},
                                version = version + 1
       WHERE id = ${oberta.id}
     `.execute(ctx.tx);
@@ -122,10 +127,15 @@ export async function backfillSessions(ctx: AuditContext, scopeId: string): Prom
   const canvis: StatusChange[] = [];
   for (const fila of files.rows) {
     let status: { from?: unknown; to?: unknown } | undefined;
+    let at = fila.created_at;
     try {
-      status = (
-        JSON.parse(fila.changes ?? '{}') as Record<string, { from?: unknown; to?: unknown }>
-      ).status;
+      const changes = JSON.parse(fila.changes ?? '{}') as Record<
+        string,
+        { from?: unknown; to?: unknown }
+      >;
+      status = changes.status;
+      const original = changes.occurred_at?.to;
+      if (typeof original === 'string' && Number.isFinite(Date.parse(original))) at = original;
     } catch {
       // Un `changes` malmès no ha de tombar la reconstrucció sencera: es deixa passar
       // aquella fila, que és el mateix que fa l'historial en pintar-se.
@@ -135,7 +145,7 @@ export async function backfillSessions(ctx: AuditContext, scopeId: string): Prom
 
     canvis.push({
       taskId: fila.entity_id,
-      at: fila.created_at,
+      at,
       from: typeof status.from === 'string' ? status.from : null,
       to: typeof status.to === 'string' ? status.to : null,
       userId: fila.actor_user_id,

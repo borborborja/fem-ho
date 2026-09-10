@@ -50,6 +50,12 @@ class OutboxTest {
     }
 
     @Test
+    fun `els moviments conserven tots els trams de feina`() {
+        val moves = listOf(op("a", "t1", op = "move", at = 1), op("b", "t1", op = "move", at = 2), op("c", "t1", op = "move", at = 3))
+        assertEquals(moves, prepareBatch(moves))
+    }
+
+    @Test
     fun `una creacio no es fusiona mai`() {
         val merged = mergeOperations(
             listOf(op("a", "t1", op = "create"), op("b", "t1", op = "create")),

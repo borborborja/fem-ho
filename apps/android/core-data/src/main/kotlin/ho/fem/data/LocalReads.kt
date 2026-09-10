@@ -14,8 +14,8 @@ import ho.fem.model.TaskStatus
  * xarxa. El que necessiten és **llegir la base i prou**.
  *
  * Per què no `Repository`: aquell demana una URL de servidor per construir-se, i pot
- * escriure. Un widget no ha de poder fer cap de les dues coses, i dir-ho al tipus és més
- * barat que confiar que ningú s'equivocarà.
+ * escriure. Les accions del widget passen pel Repository; pintar-lo només necessita
+ * aquesta porta de lectura.
  *
  * La invariant que això respecta és *"cap pantalla crida la xarxa"*, no *"ningú llegeix
  * Room"*: la base local **és** la font de veritat de la interfície (docs/03 §7).
@@ -60,6 +60,9 @@ class LocalReads internal constructor(private val dao: FemhoDao) {
         }
         return TaskStatus.entries.associateWith { found[it] ?: 0 }
     }
+
+    suspend fun column(status: TaskStatus, activeScopeIds: List<String>, limit: Int = 25): List<Task> =
+        dao.columnTasks(status.name.lowercase(), resolve(activeScopeIds), limit).map { it.toDomain() }
 
     suspend fun scopes(): List<Scope> = dao.scopesOnce().map { it.toDomain() }
 

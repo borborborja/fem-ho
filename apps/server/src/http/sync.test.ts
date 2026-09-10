@@ -744,3 +744,167 @@ describe("l'op_id", () => {
     expect(estats).toEqual(['rejected', 'ok']);
   });
 });
+
+describe('Android conserva el temps i les cascades en sincronitzar', () => {
+  it('dos trams offline de 23 i 19 minuts apareixen al registre sense duplicats', async () => {
+    await api('PATCH', `/api/v1/scopes/${scopeId}/settings`, { time_tracking: true });
+    const id = await novaTasca('Temps des d’Android');
+    const start = Date.now() - 90 * 60000;
+    const operations = [
+      ['inbox', 'doing', start],
+      ['doing', 'done', start + 23 * 60000],
+      ['done', 'doing', start + 30 * 60000],
+      ['doing', 'done', start + 49 * 60000],
+    ].map(([from, status, at]) => ({
+      op_id: uuidv7(),
+      entity: 'task',
+      op: 'move',
+      id,
+      data: { from_status: from, status, occurred_at: new Date(at as number).toISOString() },
+    }));
+    for (let retry = 0; retry < 2; retry++) {
+      const res = await api('POST', '/api/v1/sync/batch', { operations });
+      expect(
+        res.json<{ results: { status: string }[] }>().results.map((r) => r.status),
+        res.body,
+      ).toEqual(['ok', 'ok', 'ok', 'ok']);
+    }
+    const sessions = await sql<{
+      started_at: string;
+      ended_at: string;
+    }>`SELECT started_at,ended_at FROM task_sessions WHERE task_id=${id} ORDER BY started_at`.execute(
+      conn.db,
+    );
+    expect(
+      sessions.rows.map((row) => (Date.parse(row.ended_at) - Date.parse(row.started_at)) / 60000),
+    ).toEqual([23, 19]);
+    const task = (await api('GET', `/api/v1/tasks/${id}`)).json<{ completed_at: string }>();
+    expect(task.completed_at).toBe(new Date(start + 49 * 60000).toISOString());
+    const report = (await api('GET', `/api/v1/sessions?scope_ids=${scopeId}`)).json<{
+      data: { task_id: string; minutes: number }[];
+    }>();
+    expect(
+      report.data
+        .filter((row) => row.task_id === id)
+        .map((row) => row.minutes)
+        .sort(),
+    ).toEqual([19, 23]);
+    await api('PATCH', `/api/v1/scopes/${scopeId}/settings`, { time_tracking: false });
+    await api('PATCH', `/api/v1/scopes/${scopeId}/settings`, { time_tracking: true });
+    const again = await sql`SELECT id FROM task_sessions WHERE task_id=${id}`.execute(conn.db);
+    expect(again.rows).toHaveLength(2);
+  });
+  it('crear a Fent offline conserva l’inici i completar aplica la cascada', async () => {
+    const id = uuidv7(),
+      start = Date.now() - 40 * 60000;
+    const res = await api('POST', '/api/v1/sync/batch', {
+      operations: [
+        {
+          op_id: uuidv7(),
+          entity: 'task',
+          op: 'create',
+          id,
+          occurred_at: new Date(start).toISOString(),
+          data: { scope_id: scopeId, title: 'Creada en curs', status: 'doing' },
+        },
+        {
+          op_id: uuidv7(),
+          entity: 'subtask',
+          op: 'create',
+          id: uuidv7(),
+          data: { task_id: id, title: 'Un pas' },
+        },
+        {
+          op_id: uuidv7(),
+          entity: 'task',
+          op: 'move',
+          id,
+          data: {
+            status: 'done',
+            from_status: 'doing',
+            occurred_at: new Date(start + 19 * 60000).toISOString(),
+          },
+        },
+      ],
+    });
+    expect(
+      res.json<{ results: { status: string }[] }>().results.map((r) => r.status),
+      res.body,
+    ).toEqual(['ok', 'ok', 'ok']);
+    const sessions = await sql<{
+      started_at: string;
+      ended_at: string;
+    }>`SELECT started_at,ended_at FROM task_sessions WHERE task_id=${id}`.execute(conn.db);
+    expect(
+      (Date.parse(sessions.rows[0]!.ended_at) - Date.parse(sessions.rows[0]!.started_at)) / 60000,
+    ).toBe(19);
+    const subtask = await sql<{
+      done: number;
+    }>`SELECT done FROM subtasks WHERE task_id=${id}`.execute(conn.db);
+    expect(subtask.rows[0]?.done).toBe(1);
+  });
+  it('un canvi remot, un rellotge futur i camps interns no s’apliquen en silenci', async () => {
+    const id = await novaTasca('Conflictes del mòbil');
+    for (const data of [
+      { status: 'doing', from_status: 'todo', occurred_at: new Date().toISOString() },
+      { status: 'doing', occurred_at: new Date(Date.now() + 600000).toISOString() },
+      { scope_id: altreScopeId },
+      { status: 'inventat' },
+    ]) {
+      const res = await api('POST', '/api/v1/sync/batch', {
+        operations: [{ op_id: uuidv7(), entity: 'task', op: 'move', id, data }],
+      });
+      expect(res.json<{ results: { status: string }[] }>().results[0]?.status, res.body).toBe(
+        'rejected',
+      );
+    }
+    expect((await api('GET', `/api/v1/tasks/${id}`)).json<{ status: string }>().status).toBe(
+      'inbox',
+    );
+  });
+});
+
+it('un token de només lectura no pot moure, editar ni esborrar des del lot', async () => {
+  const { generateApiToken } = await import('../auth/tokens.js');
+  const { token, hash, prefix } = generateApiToken();
+  await sql`INSERT INTO api_tokens (id, user_id, name, token_prefix, token_hash, capabilities, scope_ids, created_at)
+    VALUES (${uuidv7()}, ${userId}, 'Read only', ${prefix}, ${hash}, ${JSON.stringify(['tasks:read', 'scopes:read'])}, ${JSON.stringify([scopeId])}, ${NOW})`.execute(
+    conn.db,
+  );
+  const id = await novaTasca('Read-only target');
+  const response = await api(
+    'POST',
+    '/api/v1/sync/batch',
+    {
+      operations: [
+        {
+          op_id: uuidv7(),
+          entity: 'task',
+          op: 'move',
+          id,
+          base_version: 1,
+          data: { status: 'doing' },
+        },
+        {
+          op_id: uuidv7(),
+          entity: 'task',
+          op: 'update',
+          id,
+          base_version: 1,
+          data: { title: 'Changed' },
+        },
+        { op_id: uuidv7(), entity: 'task', op: 'delete', id, base_version: 1 },
+      ],
+    },
+    { authorization: `Bearer ${token}` },
+  );
+  expect(response.json<{ results: { status: string }[] }>().results.map((r) => r.status)).toEqual([
+    'rejected',
+    'rejected',
+    'rejected',
+  ]);
+  expect((await api('GET', `/api/v1/tasks/${id}`)).json()).toMatchObject({
+    title: 'Read-only target',
+    status: 'inbox',
+  });
+});

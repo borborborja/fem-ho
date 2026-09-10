@@ -7,6 +7,23 @@ Data de l'última verificació completa: **2026-08-12**.
 
 ---
 
+## Auditoria d’Android i widget configurable · 2026-09-10
+
+El widget de tasques permet triar Inbox, Per fer o Fent per instància i avançar les
+tasques amb un toc. Els moviments Android conserven cada tram i l’hora offline; el
+servidor aplica les mateixes regles que als moviments de la web. S’han corregit
+la càrrega de l’accés al registre, filtres i hores del cronograma natiu, controls
+d’ajustos i el desbordament mòbil del registre web.
+
+Provat amb la cua i el client HTTP reals d’Android a la JVM contra un servidor aïllat,
+proves del servidor i captures del registre web amb dos trams de 23 i 19 minuts.
+El nou APK encara no té validació visual al llançador: l’emulador no disposa de KVM
+en aquesta sessió. Hi ha pendents d’aïllament entre comptes, política de sync d’altres
+entitats i presa de control de tasques delegades. Vegeu el [resultat detallat,
+les proves i els límits](auditoria-android-2026-09-10.md).
+
+---
+
 ## Dedicació per trams al tauler · 2026-09-10
 
 Entrar a Fent obre una sessió (també si la tasca es crea en aquest estat); sortir-ne

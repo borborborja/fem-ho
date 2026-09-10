@@ -721,8 +721,8 @@
   "welcome.single": "Per projectes d’una sola cosa",
   "welcome.single.body": "A dalt hi tens els projectes. Va bé si fas servir Fem-ho per a una sola cosa: la teva feina, la teva empresa, un projecte.",
   "welcome.title": "Com reparteixes la feina?",
-  "widget.board.description": "Els comptadors de les quatre columnes.",
-  "widget.board.name": "Fem-ho · Tauler",
+  "widget.board.description": "Tria Inbox, Per fer o Fent i toca una tasca per avançar-la.",
+  "widget.board.name": "Fem-ho · Tasques",
   "widget.more": "+{count} més",
   "widget.pending": "pendents",
   "widget.pinned.choose": "Tria quina llista vols veure",
@@ -848,5 +848,10 @@
   "tracking.total": "Dedicació: {duration}",
   "tracking.oneSegment": "1 tram",
   "tracking.segments": "{count} trams",
-  "tracking.seconds": "{count}s"
+  "tracking.seconds": "{count}s",
+  "widget.chooseColumn": "Què vols veure al widget?",
+  "widget.configure": "Configura",
+  "widget.columnEmpty": "No hi ha tasques en aquesta columna.",
+  "widget.advance": "→ {column}",
+  "widget.pendingSync": "Canvi desat al mòbil. Pendent de sincronitzar."
 }

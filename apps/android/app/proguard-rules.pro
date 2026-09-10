@@ -32,7 +32,7 @@
 # publica.
 -keep class * extends androidx.glance.appwidget.GlanceAppWidgetReceiver { <init>(); }
 -keep class * extends androidx.glance.appwidget.GlanceAppWidget { <init>(); }
--keep class * extends androidx.glance.appwidget.action.ActionCallback { <init>(); }
+-keep class * implements androidx.glance.appwidget.action.ActionCallback { <init>(); }
 -keep class * implements androidx.glance.state.GlanceStateDefinition { *; }
 
 # ---------------------------------------------------------------------------- Room

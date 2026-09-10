@@ -1608,7 +1608,13 @@ paths:
         **Cada operació es resol per separat**: una que falli no ha de tombar el lot.
 
         `op_id` és la clau d'idempotència. Reenviar un lot després d'una caiguda no
-        duplica res.
+        duplica res. La confirmació i els canvis es desen junts.
+        Les transicions de tasques executen la mateixa política, cascades i registre de temps
+        que `/tasks/{id}/move`. No s'han de fusionar moviments pendents.
+        En moviments de tasques, `data.occurred_at` (ISO UTC) conserva l'hora real del gest
+        i `data.from_status` detecta canvis d'estat des d'un altre dispositiu.
+        Un instant més de cinc minuts al futur es rebutja; els petits desajustos es limiten
+        a l'hora del servidor. Un gest anterior al temps ja registrat retorna conflicte.
       requestBody:
         required: true
         content:
@@ -5448,6 +5454,10 @@ components:
           type: string
           enum: [create, update, delete, move]
         id: { type: string }
+        occurred_at:
+          type: string
+          format: date-time
+          description: Hora de la creació offline; permet iniciar el tram real quan es crea a Fent.
         base_version:
           type: integer
           description: La versió sobre la qual s'edita.

@@ -830,10 +830,15 @@
     <string name="welcome_single">By projects of a single thing</string>
     <string name="welcome_single_body">The bar shows your projects. Good if you use Fem-ho for one thing: your job, your company, a project.</string>
     <string name="welcome_title">How do you split your work?</string>
-    <string name="widget_board_description">The counts for the four columns.</string>
-    <string name="widget_board_name">Fem-ho · Board</string>
+    <string name="widget_advance">→ {column}</string>
+    <string name="widget_board_description">Choose Inbox, To do or Doing and tap a task to advance it.</string>
+    <string name="widget_board_name">Fem-ho · Tasks</string>
+    <string name="widget_choosecolumn">What should this widget show?</string>
+    <string name="widget_columnempty">There are no tasks in this column.</string>
+    <string name="widget_configure">Configure</string>
     <string name="widget_more">+{count} more</string>
     <string name="widget_pending">pending</string>
+    <string name="widget_pendingsync">Saved on this device. Waiting to sync.</string>
     <string name="widget_pinned_choose">Choose which list to show</string>
     <string name="widget_pinned_description">A pinned list, to tick off from the home screen.</string>
     <string name="widget_pinned_name">Fem-ho · List</string>

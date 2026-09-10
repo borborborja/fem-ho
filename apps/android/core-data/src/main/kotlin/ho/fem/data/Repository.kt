@@ -31,6 +31,10 @@ import ho.fem.network.FemhoApi
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.flow.first
+import java.time.Instant
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.json.Json
@@ -53,8 +57,9 @@ import java.util.UUID
 class Repository(
     private val dao: FemhoDao,
     private val api: FemhoApi,
+    private val flushLock: Mutex = Mutex(),
+    private val moveLock: Mutex = Mutex(),
 ) {
-    private val flushLock = Mutex()
 
     val tasks: Flow<List<Task>> = dao.tasks().map { rows -> rows.map { it.toDomain() } }
     val scopes: Flow<List<Scope>> = dao.scopes().map { rows -> rows.map { it.toDomain() } }
@@ -69,8 +74,8 @@ class Repository(
      * perdria: el servidor encara no ho sap, tornaria l'estat antic i sobreescriuria el
      * local. És el mateix ordre que la web (docs/06 §4).
      */
-    suspend fun refresh(scopeIds: List<String>, projectId: String?) {
-        flush()
+    suspend fun refresh(scopeIds: List<String>, projectId: String?) = flushLock.withLock {
+        flushPending()
 
         val scopes = api.scopes()
         val projects = api.projects()
@@ -94,13 +99,15 @@ class Repository(
      * Llançar també impedeix que refresh sobreescrigui les tasques que no s'han pujat.
      * El pany evita que el refresc de pantalla i el de fons enviïn la mateixa cua alhora.
      */
-    suspend fun flush() = flushLock.withLock {
+    suspend fun flush() = flushLock.withLock { flushPending() }
+
+    private suspend fun flushPending() {
         for (operation in dao.outbox()) {
             val response = try {
                 api.syncBatch(
                     """{"operations":[{"op_id":"${operation.opId}","entity":"${operation.entity}",""" +
                         """"op":"${operation.op}","id":"${operation.entityId}",""" +
-                        """"base_version":${operation.baseVersion},"data":${operation.payload}}]}""",
+                        """"base_version":${operation.baseVersion},"occurred_at":"${Instant.ofEpochMilli(operation.queuedAt)}","data":${operation.payload}}]}""",
                 )
             } catch (cancelled: CancellationException) {
                 throw cancelled
@@ -137,8 +144,7 @@ class Repository(
         // Al final de la columna, com fa el servidor quan el client no dona posició.
         val position = generatePosition(dao.lastPosition(scopeId, wire), null)
 
-        dao.putTasks(
-            listOf(
+        dao.putTaskAndEnqueue(
                 TaskEntity(
                     id = id,
                     scopeId = scopeId,
@@ -154,10 +160,6 @@ class Repository(
                     assigneeIds = "",
                     version = 1,
                 ),
-            ),
-        )
-
-        dao.enqueue(
             OutboxEntity(
                 opId = UUID.randomUUID().toString(),
                 entity = "task",
@@ -177,21 +179,23 @@ class Repository(
         val position = generatePosition(neighbours.first, neighbours.second)
         val wire = status.name.lowercase()
 
-        dao.putTasks(listOf(task.copy(status = status, position = position).toEntity()))
-
-        // Fusió: moure la mateixa targeta tres vegades és UN moviment, no tres.
-        dao.collapse(task.id, "move")
-        dao.enqueue(
-            OutboxEntity(
-                opId = UUID.randomUUID().toString(),
-                entity = "task",
-                op = "move",
-                entityId = task.id,
-                baseVersion = task.version,
-                payload = """{"status":"$wire","position":"$position"}""",
-                queuedAt = System.currentTimeMillis(),
-            ),
-        )
+        moveLock.withLock {
+            val current = dao.task(task.id).first()?.toDomain() ?: return@withLock
+            // Un callback vell o dos clics seguits no avancen la mateixa targeta dues vegades.
+            if (current.status != task.status) return@withLock
+            val at = System.currentTimeMillis()
+            val payload = buildJsonObject {
+                put("status", wire)
+                put("position", position)
+                put("from_status", current.status.name.lowercase())
+                put("occurred_at", Instant.ofEpochMilli(at).toString())
+            }.toString()
+            dao.putTaskAndEnqueue(
+                current.copy(status = status, position = position,
+                    completedAt = if (status == TaskStatus.DONE) Instant.ofEpochMilli(at).toString() else null).toEntity(),
+                OutboxEntity(UUID.randomUUID().toString(), "task", "move", task.id, current.version, payload, at),
+            )
+        }
     }
 
     suspend fun renameTask(task: Task, title: String) {
