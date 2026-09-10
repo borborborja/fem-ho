@@ -1,3 +1,4 @@
+import { useTimeCompletion } from '../board/useTimeCompletion.js';
 /**
  * El modal d'edició completa. docs/02 §7.
  *
@@ -127,6 +128,7 @@ export function TaskModal({
 }: TaskModalProps) {
   const { scopes, projects, people } = useSessionData();
   const creating = create !== undefined;
+  const completion = useTimeCompletion();
 
   // Una tasca que encara no existeix no té res a demanar: cap crida fins que es desa.
   const task = useApi<Task>(creating ? null : `/api/v1/tasks/${taskId ?? ''}`);
@@ -306,6 +308,7 @@ export function TaskModal({
         overflowY: 'auto',
       }}
     >
+      {completion.dialog}
       <div
         style={{
           width: '100%',
@@ -432,12 +435,14 @@ export function TaskModal({
                         aria-pressed={actual}
                         onClick={() => {
                           if (actual) return;
-                          void api
-                            .post(`/api/v1/tasks/${taskId}/move`, { status: option })
-                            .then(() => {
-                              task.reload();
-                              onChanged();
+                          void completion.request(taskId!, option, async (extra) => {
+                            await api.post(`/api/v1/tasks/${taskId}/move`, {
+                              status: option,
+                              ...extra,
                             });
+                            task.reload();
+                            onChanged();
+                          });
                         }}
                         style={{
                           padding: '6px 12px',

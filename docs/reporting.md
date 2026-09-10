@@ -1,7 +1,9 @@
 # Informes web
 
-L'entrada **Informes** és visible a la barra principal, al menú del perfil i al cercador
-d'ordres. `/informes` ofereix Resum, Dedicació i Registre. Les adreces `/estadistiques`
+L'entrada **Informes** és configurable a Ajustos → General. Amb `show_reports=true`
+(per defecte) és a la barra principal; si es desactiva, queda només al menú del perfil.
+El cercador d'ordres i l'adreça directa continuen disponibles. La preferència és personal
+i es desa al servidor. `/informes` ofereix Resum i Registre de temps. Les adreces `/estadistiques`
 i `/registre` redirigeixen a les pestanyes corresponents conservant els filtres compatibles.
 La interfície d'Android no canvia.
 
@@ -66,7 +68,8 @@ context, filtres i data de generació, i s'oculten controls i llista paginada de
 - Les consultes de sessions admeten `project_ids`; és excloent amb `project_id`.
 - Estadístiques i exports inclouen totes les coincidències, també si superen 2.000 sessions.
 
-El contracte detallat és `packages/contracts/openapi.yaml`. No cal migració de base de dades.
+El contracte detallat és `packages/contracts/openapi.yaml`. La migració 021 afegeix
+`user_settings.show_reports`, amb valor inicial cert per conservar la navegació existent.
 
 ## Edició del cronograma
 
@@ -101,5 +104,57 @@ als canvis d'horari. Els blocs que travessen mitjanit continuen al dia d'inici.
 
 L'API amplia `POST /sessions` amb `id` i l'alternativa `new_task`, i `PATCH /sessions/{id}`
 amb `project_id` i `expected_version`. Ometre `ended_at` conserva també un final obert.
-No hi ha migració ni canvi de pantalles d'Android. L'edició del registre necessita connexió;
+L'edició del cronograma no requereix migració ni canvia pantalles d'Android. L'edició del registre necessita connexió;
 no s'encuen gestos per reproduir-los més tard sobre dades potencialment diferents.
+
+## Simplificació del 10 de setembre
+
+El Resum reuneix els recomptes de tasques i la dedicació en una sola vista. Les quatre
+xifres de tasques obren el detall corresponent; les taules i els desglossaments de temps
+queden plegats inicialment. L'evolució de tasques utilitza barres amb escala numèrica.
+L'antiga adreça `tab=time` porta al resum unificat conservant els filtres.
+
+El Registre de temps conserva la taula i el cronograma amb els mateixos gestos. La capçalera
+mostra un total compacte i explica que **tasques fetes i temps registrat són mesures diferents**.
+L'enllaç «Veure les tasques fetes» obre el detall de completades amb el període vigent;
+des del cronograma, utilitza el seu dia. No s'inventa dedicació per completar una tasca.
+Les sessions automàtiques es conserven també quan duren menys d'un minut. Els filtres
+d'àmbit, projecte, data i permisos poden reduir el registre visible.
+
+Només el període o el dia són visibles inicialment. Persona, tipologia, text i projectes
+queden a Filtres, amb un recompte dels filtres actius i una acció per netejar-los. Les dates
+manuals només apareixen en el període personalitzat. «Exporta o imprimeix» reuneix les
+sortides: al resum es pot triar entre el CSV de la mètrica de tasques i el del temps.
+Els filtres de persona assignada i de persona que registra temps continuen sent independents.
+
+Prova de diagnòstic: sis tasques completades i dues amb sessions produeixen sis completades
+al resum i dues tasques amb temps al registre. Això verifica la distinció, però no confirma
+el motiu d'una absència concreta en una instància que no s'ha consultat.
+
+
+## Temps des del tauler · 10 de setembre
+
+Amb Ajustos → Àmbits → Registre de dedicació activat, entrar a Fent (també en crear
+la tasca) obre un tram; sortir-ne el tanca. Tornar de Fet a Fent obre un altre tram
+sense alterar el primer. Els trams curts es conserven i la taula mostra segons quan
+no arriben a un minut. Els totals de l'informe mantenen l'arrodoniment a minuts per tram.
+
+Completar directament una tasca de Per fer o Inbox, des de la fitxa, el botó o arrossegant,
+obre un formulari de minuts si l'àmbit té el registre activat. Cancel·lar no canvia l'estat.
+Desar anota la durada exacta (sense arrodonir-la a cinc minuts) i completa la tasca en
+una sola transacció. Un error manté el formulari; un reintent no duplica el tram.
+Un canvi concurrent de la tasca retorna conflicte i cal cancel·lar i tornar-ho a intentar.
+Amb el registre desactivat, completar no pregunta la durada.
+
+Ajustos → General → Dedicació a les targetes controla el comptador de Fent i Fet.
+El temps de Fent s'actualitza cada segon i suma els trams anteriors; Fet mostra el total.
+El text accessible i l'ajuda en passar-hi el ratolí indiquen el nombre de trams.
+És una preferència personal persistent (`show_task_time`, migració 022, activa per defecte).
+L'agregat del tauler segueix els permisos de l'informe: temps propi per als membres,
+temps de l'àmbit per a propietaris i administradors.
+
+`POST /tasks/{id}/move` accepta `time_entry: {id, minutes, ended_at}` i `expected_version`.
+La durada admet enters d'1 a 10.080 minuts. Els clients existents continuen podent completar
+sense aquest camp; el formulari i l'ajust de visibilitat estan implementats a la web.
+Les pantalles natives d'Android no incorporen encara aquests controls. El comportament
+automàtic del servidor sí que és compartit amb Android i les integracions.

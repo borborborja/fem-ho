@@ -13,3 +13,8 @@ export function canEditSession(
     (userId === principal.userId || roleCan(role, 'reports'))
   );
 }
+
+/** El temps aliè té la mateixa visibilitat al registre i a les targetes. */
+export function canReadOthersSessions(role: ScopeRole | null): boolean {
+  return role !== null && roleCan(role, 'reports');
+}

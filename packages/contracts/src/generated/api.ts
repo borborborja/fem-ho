@@ -333,6 +333,10 @@ export interface paths {
          *
          *     S'accepta `position` directament —el camí normal, calculada al client (D3)— o
          *     `{before_id, after_id}` perquè el servidor la calculi, per a clients simples.
+         *     `time_entry` anota minuts exactes en completar des de Per fer o Inbox amb registre activat;
+         *     requereix `expected_version`. Completar i anotar formen una única transacció.
+         *     L’identificador del bloc fa els reintents idempotents; un canvi concurrent retorna 409.
+         *     Entrar a Fent obre un tram nou i sortir-ne el tanca, també per sota d’un minut.
          */
         post: operations["moveTask"];
         delete?: never;
@@ -3233,6 +3237,16 @@ export interface components {
              * @enum {string|null}
              */
             scope_mode?: "single" | "multi" | null;
+            /**
+             * @description Mostra la dedicació visible a les targetes Fent i Fet dels àmbits amb registre activat.
+             * @default true
+             */
+            show_task_time: boolean;
+            /**
+             * @description Mostra Informes al selector principal de la web; si és fals, queda només al menú de perfil.
+             * @default true
+             */
+            show_reports: boolean;
             show_calendar_widget?: boolean;
             show_overdue_section?: boolean;
             quiet_hours_start?: string | null;
@@ -3786,6 +3800,8 @@ export interface components {
             position?: string;
         };
         Task: {
+            /** @description Agregat del tauler; mateixos permisos de lectura que el registre de dedicació. */
+            time_summary?: components["schemas"]["TaskTimeSummary"];
             id: string;
             scope_id: string;
             project_id?: string | null;
@@ -4154,7 +4170,22 @@ export interface components {
                 recurrence_id?: string | null;
             };
         };
+        CompletionTime: {
+            /** Format: uuid */
+            id: string;
+            minutes: number;
+            /** Format: date-time */
+            ended_at: string;
+        };
+        TaskTimeSummary: {
+            /** @description Segons dels trams tancats visibles. */
+            seconds: number;
+            segments: number;
+            open_started_at: string[];
+        };
         MoveInput: {
+            time_entry?: components["schemas"]["CompletionTime"];
+            expected_version?: number;
             /** @enum {string} */
             status?: "inbox" | "todo" | "doing" | "done";
             /** @description El camí normal. La calcula el client (D3). */
@@ -4960,6 +4991,24 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            /** @description La tasca o el registre han canviat. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Durada o identificador invàlid. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     completeTask: {

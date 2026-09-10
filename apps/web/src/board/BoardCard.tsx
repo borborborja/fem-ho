@@ -15,6 +15,7 @@ import { dateTime, getLocale, relativeTime, t } from '@fem-ho/contracts';
 import { v7 as uuidv7 } from 'uuid';
 import { TaskCard, type CardList } from '@fem-ho/design-system/femho';
 import { DeleteTaskDialog } from './DeleteTaskDialog.js';
+import { TaskTimeBadge } from './TaskTimeBadge.js';
 import { SourceIcon } from './SourceIcon.js';
 import { api } from '../app/api.js';
 import { useApi } from '../app/useApi.js';
@@ -166,6 +167,11 @@ export function BoardCard({
         project={task.project}
         assigneeInitials={task.assigneeInitials}
         time={task.time}
+        timeSpent={
+          task.timeSummary && (task.status === 'doing' || task.status === 'done') ? (
+            <TaskTimeBadge summary={task.timeSummary} />
+          ) : undefined
+        }
         aiMode={task.aiMode ?? 'manual'}
         aiModeLabel={
           task.aiMode === 'delegated'

@@ -725,6 +725,8 @@ describe('el compte propi', () => {
   it('les preferències es guarden i es tornen a llegir', async () => {
     const res = await api('PATCH', '/api/v1/auth/settings', {
       inbox_position: 'below',
+      show_reports: false,
+      show_task_time: false,
       show_calendar_widget: false,
       collapsed_groups: [scopeIndividual],
     });
@@ -733,6 +735,8 @@ describe('el compte propi', () => {
     const llegit = await api('GET', '/api/v1/auth/settings');
     expect(llegit.json<{ settings: { inbox_position: string } }>().settings).toMatchObject({
       inbox_position: 'below',
+      show_reports: false,
+      show_task_time: false,
       show_calendar_widget: false,
       collapsed_groups: [scopeIndividual],
     });

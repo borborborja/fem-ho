@@ -149,6 +149,8 @@ CREATE TABLE user_settings (
   collapsed_groups    TEXT,               -- JSON: epígrafs d'àmbit plegats per columna
 
   -- Dashboard
+  show_task_time INTEGER NOT NULL DEFAULT 1, -- migració 022, temps a les targetes web
+  show_reports INTEGER NOT NULL DEFAULT 1, -- migració 021, preferència de navegació web
   show_calendar_widget INTEGER NOT NULL DEFAULT 1,
   show_overdue_section INTEGER NOT NULL DEFAULT 1,
 

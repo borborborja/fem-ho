@@ -160,6 +160,7 @@ test("l'exportació porta les columnes de sempre", async ({ page }) => {
   await page.goto(`/registre?scopes=${scope}`);
 
   const baixada = page.waitForEvent('download');
+  await page.getByTestId('reports-tools').locator('summary').click();
   await page.getByTestId('reports-export').click();
   const fitxer = await baixada;
   expect(fitxer.suggestedFilename()).toBe('registre.csv');
@@ -193,6 +194,7 @@ test('les Estadístiques diuen el mateix que la taula', async ({ page }) => {
   await expect(
     page.locator('.reports-metric').filter({ hasText: 'Tasques amb dedicació' }),
   ).toContainText('1');
+  await page.getByText('Desglossament del temps', { exact: true }).click();
   await expect(page.locator('.reports-metric').filter({ hasText: 'Mitjana' })).toContainText('2h');
 
   // I els desglossaments hi són, amb «Sense tipologia» com una fila més.

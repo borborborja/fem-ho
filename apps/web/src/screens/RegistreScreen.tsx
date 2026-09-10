@@ -485,7 +485,17 @@ export function Taula({
               : undefined
           }
         >
-          {entry.open ? `${fmtMinutes(entry.minutes)} ·` : fmtMinutes(entry.minutes)}
+          {entry.ended_at !== null &&
+          Date.parse(entry.ended_at) - Date.parse(entry.started_at) < 60_000
+            ? t('tracking.seconds', {
+                count: Math.max(
+                  0,
+                  Math.floor((Date.parse(entry.ended_at) - Date.parse(entry.started_at)) / 1000),
+                ),
+              })
+            : entry.open
+              ? `${fmtMinutes(entry.minutes)} ·`
+              : fmtMinutes(entry.minutes)}
           {/* Icona i text, mai el color sol (docs/04 §8). */}
           {entry.needs_review ? <span title={t('registre.review')}> ⚠</span> : null}
           {entry.open ? <span title={t('registre.open')}> ▶</span> : null}

@@ -67,8 +67,7 @@ async function blocs(
 /**
  * Envelleix un bloc obert perquè el tancament no doni zero.
  *
- * Les proves corren en mil·lisegons i el servei descarta el que dura menys d'un minut —passar
- * per Fent en un clic no és temps treballat—, o sigui que sense això no hi hauria res a mirar.
+ * Les proves corren en mil·lisegons; situem l'inici abans per comprovar una durada coneguda.
  */
 async function feQueFaciEstona(taskId: string, minuts: number): Promise<void> {
   const abans = new Date(Date.now() - minuts * 60_000).toISOString();
@@ -204,13 +203,13 @@ describe('a partir d’ara, s’anota sol', () => {
     expect(dos.every((bloc) => bloc.ended_at !== null)).toBe(true);
   });
 
-  it('passar-hi de llarg en un clic no deixa cap bloc', async () => {
-    // Arrossegar de Per fer a Fet travessant la columna del mig no és temps treballat, i una
-    // taula plena de línies de zero minuts deixa de ser llegible.
+  it('també conserva un tram inferior a un minut', async () => {
     const id = await novaTasca('De pas');
     await moure(id, 'doing');
     await moure(id, 'done');
-    expect(await blocs(id)).toEqual([]);
+    const sessions = await blocs(id);
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0]?.ended_at).not.toBeNull();
   });
 
   it('i completar-la pel commutador tanca igual que arrossegar-la', async () => {
@@ -222,5 +221,112 @@ describe('a partir d’ara, s’anota sol', () => {
     const fets = await blocs(id);
     expect(fets).toHaveLength(1);
     expect(fets[0]?.ended_at).not.toBeNull();
+  });
+});
+
+describe('completar directament amb una durada', () => {
+  async function prepared() {
+    const id = await novaTasca('Durada indicada');
+    await moure(id, 'todo');
+    const task = (await api('GET', `/api/v1/tasks/${id}`)).json<{ version: number }>();
+    return {
+      id,
+      body: {
+        status: 'done',
+        expected_version: task.version,
+        time_entry: { id: uuidv7(), minutes: 23, ended_at: new Date().toISOString() },
+      },
+    };
+  }
+  it('desa 23 minuts exactes amb la tasca i un reintent no duplica res', async () => {
+    const { id, body } = await prepared();
+    const response = await api('POST', `/api/v1/tasks/${id}/move`, body);
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json<{ status: string }>().status).toBe('done');
+    expect((await api('POST', `/api/v1/tasks/${id}/move`, body)).statusCode).toBe(200);
+    const sessions = await blocs(id);
+    expect(sessions).toHaveLength(1);
+    expect(Date.parse(sessions[0]!.ended_at!) - Date.parse(sessions[0]!.started_at)).toBe(
+      23 * 60000,
+    );
+    const audit = await sql<{ entity_type: string }>`SELECT entity_type FROM activity_log
+      WHERE entity_id=${id} AND verb='completed'`.execute(conn.db);
+    expect(audit.rows).toHaveLength(1);
+    const sessionAudit =
+      await sql`SELECT id FROM activity_log WHERE entity_id=${id} AND verb='logged'`.execute(
+        conn.db,
+      );
+    expect(sessionAudit.rows).toHaveLength(1);
+    await moure(id, 'doing');
+    await feQueFaciEstona(id, 0.25);
+    await moure(id, 'done');
+    expect(await blocs(id)).toHaveLength(2);
+    const board = (await api('GET', `/api/v1/board?scope_ids=${scopeId}`)).json<{
+      columns: {
+        groups: {
+          tasks: {
+            id: string;
+            time_summary: { seconds: number; segments: number; open_started_at: string[] };
+          }[];
+        }[];
+      }[];
+    }>();
+    const summary = board.columns
+      .flatMap((c) => c.groups.flatMap((g) => g.tasks))
+      .find((t) => t.id === id)!.time_summary;
+    expect(summary.segments).toBe(2);
+    expect(summary.seconds).toBeGreaterThanOrEqual(23 * 60 + 15);
+    expect(summary.open_started_at).toEqual([]);
+    const report = (await api('GET', `/api/v1/sessions?scope_ids=${scopeId}`)).json<{
+      data: { task_id: string }[];
+    }>();
+    expect(report.data.filter((row) => row.task_id === id)).toHaveLength(2);
+  });
+  it('un conflicte de versió no completa ni afegeix temps', async () => {
+    const { id, body } = await prepared();
+    await api('PATCH', `/api/v1/tasks/${id}`, { title: 'Canvi remot' });
+    expect((await api('POST', `/api/v1/tasks/${id}/move`, body)).statusCode).toBe(409);
+    expect((await api('GET', `/api/v1/tasks/${id}`)).json<{ status: string }>().status).toBe(
+      'todo',
+    );
+    expect(await blocs(id)).toEqual([]);
+  });
+  it('rebutja durades invàlides sense modificar la tasca', async () => {
+    const { id, body } = await prepared();
+    for (const minutes of [0, -1, 1.5, 10081]) {
+      expect(
+        (
+          await api('POST', `/api/v1/tasks/${id}/move`, {
+            ...body,
+            time_entry: { ...body.time_entry, minutes },
+          })
+        ).statusCode,
+      ).toBe(422);
+    }
+    expect((await api('GET', `/api/v1/tasks/${id}`)).json<{ status: string }>().status).toBe(
+      'todo',
+    );
+    expect(await blocs(id)).toEqual([]);
+  });
+  it('no admet el temps de compleció si l’àmbit ha desactivat el registre', async () => {
+    const { id, body } = await prepared();
+    await api('PATCH', `/api/v1/scopes/${scopeId}/settings`, { time_tracking: false });
+    expect((await api('POST', `/api/v1/tasks/${id}/move`, body)).statusCode).toBe(409);
+    expect(await blocs(id)).toEqual([]);
+    expect((await api('POST', `/api/v1/tasks/${id}/move`, { status: 'done' })).statusCode).toBe(
+      200,
+    );
+    await api('PATCH', `/api/v1/scopes/${scopeId}/settings`, { time_tracking: true });
+  });
+  it('una tasca creada a Fent també comença a registrar temps', async () => {
+    const created = await api('POST', '/api/v1/tasks', {
+      scope_id: scopeId,
+      title: 'Ja fent',
+      status: 'doing',
+    });
+    expect(created.statusCode, created.body).toBe(201);
+    const id = created.json<{ id: string }>().id;
+    expect(await blocs(id)).toHaveLength(1);
+    expect((await blocs(id))[0]?.ended_at).toBeNull();
   });
 });

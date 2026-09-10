@@ -15,7 +15,7 @@ import { REPORT_PERIODS, reportRange } from './report-range.js';
 type S = components['schemas'];
 type Metric = 'created' | 'completed' | 'pending' | 'overdue';
 const METRICS: Metric[] = ['pending', 'overdue', 'created', 'completed'];
-const TABS = ['summary', 'time', 'register'] as const;
+const TABS = ['summary', 'register'] as const;
 
 export function ReportsScreen({
   activeScopeIds,
@@ -50,7 +50,7 @@ export function ReportsScreen({
   const chrono = tab === 'register' && q.get('view') === 'chrono';
   const day = q.get('day') ?? reportRange('today', profile.timezone).from;
   const timezone = profile.timezone;
-  const valid = !(from && to && from > to);
+  const valid = chrono ? !!day : !(from && to && from > to);
   const activeProjects = projects.filter((project) => activeScopeIds.includes(project.scope_id));
   const validProjects = projectIds.filter(
     (id) => id === 'none' || activeProjects.some((project) => project.id === id),
@@ -62,6 +62,7 @@ export function ReportsScreen({
   );
   const [exportError, setExportError] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [exportKind, setExportKind] = useState('tasks');
   const [canConfigure, setCanConfigure] = useState(false);
 
   function change(patch: Record<string, string | null>) {
@@ -82,7 +83,7 @@ export function ReportsScreen({
       next.set('period', period);
       changed = true;
     }
-    if (!q.has('tab')) {
+    if (!q.has('tab') || rawTab === 'time') {
       next.set('tab', tab);
       changed = true;
     }
@@ -147,6 +148,10 @@ export function ReportsScreen({
     query.set('metric', metric);
     if (q.get('assignee')) query.set('assignee_id', q.get('assignee')!);
   } else if (q.get('person')) query.set('user_id', q.get('person')!);
+  const timeQuery = new URLSearchParams(query);
+  timeQuery.delete('metric');
+  timeQuery.delete('assignee_id');
+  if (q.get('person')) timeQuery.set('user_id', q.get('person')!);
   const baseQuery = query.toString();
   if (!chrono) query.set('limit', '100');
   const cursorKey = tab === 'summary' ? 'task_cursor' : 'session_cursor';
@@ -157,19 +162,22 @@ export function ReportsScreen({
     [reloadKey],
   );
   const stats = useApi<S['SessionStats']>(
-    ready && tracking && tab === 'time' ? `/api/v1/sessions/stats?${baseQuery}` : null,
+    ready && tracking && tab === 'summary' ? `/api/v1/sessions/stats?${timeQuery}` : null,
     [reloadKey],
   );
   const sessions = useApi<S['SessionReport']>(
     ready && tracking && tab === 'register' ? `/api/v1/sessions?${query.toString()}` : null,
     [reloadKey],
   );
-  const result = tab === 'summary' ? tasks : tab === 'time' ? stats : sessions;
+  const result = tab === 'summary' ? tasks : sessions;
   const taskData = tasks.data,
     timeData = stats.data,
     registerData = sessions.data;
   const generated = result.data?.generated_at;
   const busy = result.loading || result.revalidating;
+  const filterCount =
+    validProjects.length +
+    ['assignee', 'person', 'type', 'search'].filter((key) => q.get(key)).length;
   const title = (key: string) => t(projectNoun === 'client' ? `${key}.client` : key);
   const projectLabel = (key: string, label: string) =>
     key === 'none' ? t('registre.noProject') : label;
@@ -182,13 +190,15 @@ export function ReportsScreen({
     setExporting(true);
     setExportError(false);
     try {
-      const path =
-        tab === 'summary' ? '/api/v1/reports/tasks/export.csv' : '/api/v1/sessions/export.csv';
-      const csv = await api.text(`${path}?${baseQuery}`);
+      const taskExport = tab === 'summary' && exportKind === 'tasks';
+      const path = taskExport ? '/api/v1/reports/tasks/export.csv' : '/api/v1/sessions/export.csv';
+      const csv = await api.text(
+        `${path}?${taskExport || tab === 'register' ? baseQuery : timeQuery}`,
+      );
       const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
       const link = document.createElement('a');
       link.href = url;
-      link.download = tab === 'summary' ? 'tasques.csv' : 'registre.csv';
+      link.download = taskExport ? 'tasques.csv' : 'registre.csv';
       link.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch {
@@ -218,29 +228,41 @@ export function ReportsScreen({
           <h1>{t('reports.title')}</h1>
           <p>{t('reports.subtitle')}</p>
         </div>
-        <div className="reports-actions reports-no-print">
-          <button
-            type="button"
-            data-testid="reports-export"
-            className="plou-btn"
-            disabled={!ready || busy || exporting || (tab !== 'summary' && !tracking)}
-            onClick={() => void download()}
-          >
-            {t('registre.export')}
-          </button>
-          {tab !== 'register' && (
+        <details className="reports-no-print reports-tools" data-testid="reports-tools">
+          <summary>{t('reports.tools')}</summary>
+          <div className="reports-actions">
+            {tab === 'summary' && (
+              <label>
+                {t('reports.exportContent')}
+                <select value={exportKind} onChange={(e) => setExportKind(e.target.value)}>
+                  <option value="tasks">
+                    {t('reports.exportTasks', { metric: t(`reports.metric.${metric}`) })}
+                  </option>
+                  {tracking && <option value="time">{t('reports.registerTitle')}</option>}
+                </select>
+              </label>
+            )}
             <button
               type="button"
+              data-testid="reports-export"
               className="plou-btn"
-              disabled={
-                !ready || busy || !!result.error || !result.data || (tab === 'time' && !tracking)
-              }
-              onClick={() => window.print()}
+              disabled={!ready || busy || exporting || (tab !== 'summary' && !tracking)}
+              onClick={() => void download()}
             >
-              {t('reports.print')}
+              {t('registre.export')}
             </button>
-          )}
-        </div>
+            {tab !== 'register' && (
+              <button
+                type="button"
+                className="plou-btn"
+                disabled={!ready || busy || !!result.error || !result.data}
+                onClick={() => window.print()}
+              >
+                {t('reports.print')}
+              </button>
+            )}
+          </div>
+        </details>
       </header>
       <nav className="reports-no-print" aria-label={t('reports.title')}>
         <Chips
@@ -277,82 +299,133 @@ export function ReportsScreen({
                 ))}
               </select>
             </label>
-            {dateInput('reports.from', from, 'from')}
-            {dateInput('reports.to', to, 'to')}
+            {period === 'custom' && (
+              <>
+                {dateInput('reports.from', from, 'from')}
+                {dateInput('reports.to', to, 'to')}
+              </>
+            )}
           </>
         )}
-        <label>
-          {tab === 'summary' ? t('reports.assignee') : t('reports.person')}
-          <select
-            className="plou-input"
-            data-testid="reports-person"
-            value={q.get(tab === 'summary' ? 'assignee' : 'person') ?? ''}
-            onChange={(e) =>
-              change({ [tab === 'summary' ? 'assignee' : 'person']: e.target.value })
+        {chrono && (
+          <label>
+            {t('registre.day')}
+            <input
+              className="plou-input"
+              type="date"
+              value={day}
+              onChange={(e) => change({ day: e.target.value })}
+            />
+          </label>
+        )}
+      </div>
+      <details className="reports-no-print reports-filter-panel" data-testid="reports-filters">
+        <summary>
+          {t('reports.filters')}
+          {filterCount ? ` · ${filterCount}` : ''}
+        </summary>
+        <div className="reports-filters">
+          <label>
+            {tab === 'summary' ? t('reports.assignee') : t('reports.person')}
+            <select
+              className="plou-input"
+              data-testid="reports-person"
+              value={q.get(tab === 'summary' ? 'assignee' : 'person') ?? ''}
+              onChange={(e) =>
+                change({ [tab === 'summary' ? 'assignee' : 'person']: e.target.value })
+              }
+            >
+              <option value="">{t('registre.everyone')}</option>
+              {people.map((person) => (
+                <option key={person.id} value={person.id}>
+                  {person.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          {tab === 'summary' && tracking && (
+            <label>
+              {t('reports.person')}
+              <select
+                className="plou-input"
+                value={q.get('person') ?? ''}
+                onChange={(e) => change({ person: e.target.value })}
+              >
+                <option value="">{t('registre.everyone')}</option>
+                {people.map((person) => (
+                  <option key={person.id} value={person.id}>
+                    {person.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          <label>
+            {t('task.taskType')}
+            <select
+              className="plou-input"
+              data-testid="reports-type"
+              value={q.get('type') ?? ''}
+              onChange={(e) => change({ type: e.target.value })}
+            >
+              <option value="">{t('reports.allTypes')}</option>
+              <option value="none">{t('stats.noType')}</option>
+              {types.map((type) => (
+                <option key={type.id} value={type.id}>
+                  {type.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            {t('nav.search')}
+            <input
+              className="plou-input"
+              value={q.get('search') ?? ''}
+              onChange={(e) => change({ search: e.target.value })}
+            />
+          </label>
+        </div>
+        <details className="reports-no-print reports-project-filter" data-testid="reports-projects">
+          <summary>
+            {title('reports.projects')} · {validProjects.length || t('reports.allProjects')}
+          </summary>
+          <button
+            type="button"
+            className="plou-btn plou-btn-ghost"
+            onClick={() => change({ projects: null })}
+          >
+            {t('reports.allProjects')}
+          </button>
+          {[{ id: 'none', name: t('registre.noProject') }, ...activeProjects].map((project) => (
+            <label key={project.id}>
+              <input
+                type="checkbox"
+                checked={validProjects.includes(project.id)}
+                onChange={() =>
+                  change({
+                    projects: (validProjects.includes(project.id)
+                      ? validProjects.filter((id) => id !== project.id)
+                      : [...validProjects, project.id]
+                    ).join(','),
+                  })
+                }
+              />
+              {project.name}
+            </label>
+          ))}
+        </details>
+        {filterCount > 0 && (
+          <button
+            type="button"
+            className="plou-btn"
+            onClick={() =>
+              change({ projects: null, type: null, search: null, person: null, assignee: null })
             }
           >
-            <option value="">{t('registre.everyone')}</option>
-            {people.map((person) => (
-              <option key={person.id} value={person.id}>
-                {person.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          {t('task.taskType')}
-          <select
-            className="plou-input"
-            data-testid="reports-type"
-            value={q.get('type') ?? ''}
-            onChange={(e) => change({ type: e.target.value })}
-          >
-            <option value="">{t('reports.allTypes')}</option>
-            <option value="none">{t('stats.noType')}</option>
-            {types.map((type) => (
-              <option key={type.id} value={type.id}>
-                {type.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          {t('nav.search')}
-          <input
-            className="plou-input"
-            value={q.get('search') ?? ''}
-            onChange={(e) => change({ search: e.target.value })}
-          />
-        </label>
-      </div>
-      <details className="reports-no-print reports-project-filter" data-testid="reports-projects">
-        <summary>
-          {title('reports.projects')} · {validProjects.length || t('reports.allProjects')}
-        </summary>
-        <button
-          type="button"
-          className="plou-btn plou-btn-ghost"
-          onClick={() => change({ projects: null })}
-        >
-          {t('reports.allProjects')}
-        </button>
-        {[{ id: 'none', name: t('registre.noProject') }, ...activeProjects].map((project) => (
-          <label key={project.id}>
-            <input
-              type="checkbox"
-              checked={validProjects.includes(project.id)}
-              onChange={() =>
-                change({
-                  projects: (validProjects.includes(project.id)
-                    ? validProjects.filter((id) => id !== project.id)
-                    : [...validProjects, project.id]
-                  ).join(','),
-                })
-              }
-            />
-            {project.name}
-          </label>
-        ))}
+            {t('reports.clearFilters')}
+          </button>
+        )}
       </details>
       <p className="reports-context">
         {scopes
@@ -360,9 +433,8 @@ export function ReportsScreen({
           .map((scope) => scope.name)
           .join(' · ')}
         {names.length ? ` · ${names.join(', ')}` : ''}
-        <br />
-        {(chrono ? day : from) || t('reports.period.all')} —{' '}
-        {(chrono ? day : to) || t('reports.period.all')} · {timezone}
+        {!chrono &&
+          ` · ${from || to ? (from === to ? from : `${from || '…'} — ${to || '…'}`) : t('reports.period.all')}`}
         {q.get(tab === 'summary' ? 'assignee' : 'person')
           ? ` · ${tab === 'summary' ? t('reports.assignee') : t('reports.person')}: ${people.find((person) => person.id === q.get(tab === 'summary' ? 'assignee' : 'person'))?.name ?? ''}`
           : ''}
@@ -385,187 +457,228 @@ export function ReportsScreen({
           <div aria-busy={busy} style={{ opacity: busy ? 0.6 : 1 }}>
             {tab === 'summary' && taskData && (
               <>
-                <h2>{t('reports.current')}</h2>
                 <div className="reports-cards">
-                  {METRICS.slice(0, 2).map((key) => (
+                  {METRICS.map((key) => (
                     <MetricCard
                       key={key}
                       label={t(`reports.metric.${key}`)}
                       value={taskData.counts[key]}
-                      selected={metric === key}
+                      selected={q.has('metric') && metric === key}
                       onClick={() => change({ metric: key })}
                     />
                   ))}
                 </div>
-                <h2>{t('reports.activity')}</h2>
-                <p>{t('reports.completedHint')}</p>
-                <div className="reports-cards">
-                  {METRICS.slice(2).map((key) => (
-                    <MetricCard
-                      key={key}
-                      label={t(`reports.metric.${key}`)}
-                      value={taskData.counts[key]}
-                      selected={metric === key}
-                      onClick={() => change({ metric: key })}
-                    />
-                  ))}
+                <div className="reports-overview-grid">
+                  <section className="plou-card reports-panel">
+                    <h2>{t('reports.evolution')}</h2>
+                    <p>{t('reports.completedHint')}</p>
+                    <TaskEvolution points={taskData.evolution} />
+                    <details>
+                      <summary>{t('reports.values')}</summary>
+                      <div className="reports-table-scroll">
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>{t('reports.period')}</th>
+                              <th>{t('reports.metric.created')}</th>
+                              <th>{t('reports.metric.completed')}</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {taskData.evolution.map((point) => (
+                              <tr key={point.key}>
+                                <th>
+                                  {point.key}
+                                  {taskData.weekly ? ' · ' + t('reports.week') : ''}
+                                </th>
+                                <td>{point.created}</td>
+                                <td>{point.completed}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </details>
+                  </section>
+                  <section className="plou-card reports-panel" data-testid="estadistiques-screen">
+                    <h2>{t('reports.registerTitle')}</h2>
+                    <p>{t('reports.registerHint')}</p>
+                    {!tracking ? (
+                      <>
+                        <p>{t('reports.trackingDisabled')}</p>
+                        {canConfigure && (
+                          <a href="/settings?tab=scopes">{t('reports.configure')}</a>
+                        )}
+                      </>
+                    ) : stats.error ? (
+                      <ErrorBanner onRetry={stats.reload} />
+                    ) : stats.loading ? (
+                      <p role="status">{t('reports.loading')}</p>
+                    ) : (
+                      timeData && (
+                        <div aria-busy={stats.revalidating}>
+                          <div className="reports-cards">
+                            <MetricCard
+                              label={t('stats.total')}
+                              value={fmtMinutes(timeData.minutes)}
+                            />
+                            <MetricCard label={t('reports.trackedTasks')} value={timeData.tasks} />
+                          </div>
+                          {timeData.evolution.length > 1 && <Linia points={timeData.evolution} />}
+                          <button
+                            type="button"
+                            className="plou-btn"
+                            onClick={() => change({ tab: 'register' })}
+                          >
+                            {t('reports.openRegister')}
+                          </button>
+                          <details>
+                            <summary>{t('reports.timeDetails')}</summary>
+                            <MetricCard
+                              label={t('stats.average')}
+                              value={timeData.tasks ? fmtMinutes(timeData.average_minutes) : '—'}
+                            />
+                            <p>{t('reports.visibility')}</p>
+                            <div className="reports-charts">
+                              <Barres
+                                testId="stats-by-project"
+                                title={title('stats.byProject')}
+                                buckets={timeData.by_project}
+                                label={(b) => projectLabel(b.key, b.label)}
+                                onSelect={(b) => select('projects', b.key)}
+                              />
+                              <Barres
+                                testId="stats-by-type"
+                                title={t('stats.byType')}
+                                buckets={timeData.by_type}
+                                label={(b) => (b.key === 'none' ? t('stats.noType') : b.label)}
+                                onSelect={(b) => select('type', b.key)}
+                              />
+                              <Barres
+                                testId="stats-by-person"
+                                title={t('stats.byPerson')}
+                                buckets={timeData.by_user}
+                                label={(b) =>
+                                  people.find((person) => person.id === b.key)?.name ?? b.label
+                                }
+                                onSelect={(b) => select('person', b.key)}
+                              />
+                              {timeData.overtime_by_project.length > 0 && (
+                                <Barres
+                                  testId="stats-overtime"
+                                  title={title('stats.overtime')}
+                                  buckets={timeData.overtime_by_project}
+                                  label={(b) => projectLabel(b.key, b.label)}
+                                  value={(b) => b.overtime_minutes}
+                                  onSelect={(b) => select('projects', b.key)}
+                                />
+                              )}
+                            </div>
+                          </details>
+                        </div>
+                      )
+                    )}
+                  </section>
                 </div>
-                <h2>{t('reports.evolution')}</h2>
-                <TaskEvolution points={taskData.evolution} />
-                <details>
-                  <summary>{t('reports.values')}</summary>
-                  <div className="reports-table-scroll">
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>{t('reports.period')}</th>
-                          <th>{t('reports.metric.created')}</th>
-                          <th>{t('reports.metric.completed')}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {taskData.evolution.map((point) => (
-                          <tr key={point.key}>
-                            <th>
-                              {point.key}
-                              {taskData.weekly ? ' · ' + t('reports.week') : ''}
-                            </th>
-                            <td>{point.created}</td>
-                            <td>{point.completed}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </details>
-                <h2>{title('reports.projects')}</h2>
-                <p>{t(`reports.metric.${metric}`)}</p>
-                <div className="reports-table-scroll">
-                  <table>
-                    <tbody>
-                      {taskData.by_project.map((bucket) => (
-                        <tr key={bucket.key}>
-                          <th>
-                            <button
-                              type="button"
-                              className="plou-btn plou-btn-ghost"
-                              onClick={() => change({ projects: bucket.key })}
-                            >
-                              {projectLabel(bucket.key, bucket.label)}
-                            </button>
-                          </th>
-                          <td>{bucket[metric]}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                <div className="reports-no-print">
-                  <h2>{t(`reports.metric.${metric}`)}</h2>
-                  {taskData.data.length === 0 ? (
-                    <EmptyState>{t('reports.empty')}</EmptyState>
-                  ) : (
+                {q.has('metric') && (
+                  <section className="reports-task-details" data-testid="reports-task-details">
+                    <button
+                      type="button"
+                      className="plou-btn reports-no-print"
+                      onClick={() => change({ metric: null })}
+                    >
+                      {t('reports.closeDetails')}
+                    </button>
+                    <h2>{title('reports.projects')}</h2>
+                    <p>{t(`reports.metric.${metric}`)}</p>
                     <div className="reports-table-scroll">
                       <table>
-                        <thead>
-                          <tr>
-                            <th>{t('registre.col.task')}</th>
-                            <th>{title('registre.col.project')}</th>
-                            <th>{t('reports.assignee')}</th>
-                            <th>{t('reports.status')}</th>
-                          </tr>
-                        </thead>
                         <tbody>
-                          {taskData.data.map((task) => (
-                            <tr key={task.id}>
-                              <td>
+                          {taskData.by_project.map((bucket) => (
+                            <tr key={bucket.key}>
+                              <th>
                                 <button
                                   type="button"
                                   className="plou-btn plou-btn-ghost"
-                                  onClick={() => onOpenTask(task.id)}
+                                  onClick={() => change({ projects: bucket.key })}
                                 >
-                                  {task.title}
+                                  {projectLabel(bucket.key, bucket.label)}
                                 </button>
-                              </td>
-                              <td>
-                                {projectLabel(task.project_id ?? 'none', task.project_name ?? '')}
-                              </td>
-                              <td>{task.assignees.map((person) => person.name).join(', ')}</td>
-                              <td>{t(`board.column.${task.status}`)}</td>
+                              </th>
+                              <td>{bucket[metric]}</td>
                             </tr>
                           ))}
                         </tbody>
                       </table>
                     </div>
-                  )}
-                </div>
-              </>
-            )}
-            {tab === 'time' && timeData && (
-              <div className="reports-time" data-testid="estadistiques-screen">
-                <p>{t('reports.visibility')}</p>
-                <div className="reports-cards">
-                  <MetricCard label={t('reports.trackedTasks')} value={timeData.tasks} />
-                  <MetricCard label={t('stats.total')} value={fmtMinutes(timeData.minutes)} />
-                  <MetricCard label={title('reports.trackedProjects')} value={timeData.projects} />
-                  <MetricCard
-                    label={t('stats.average')}
-                    value={timeData.tasks ? fmtMinutes(timeData.average_minutes) : '—'}
-                  />
-                </div>
-                {timeData.minutes === 0 ? (
-                  <EmptyState>{t('reports.empty')}</EmptyState>
-                ) : (
-                  <>
-                    <h2>{timeData.weekly ? t('stats.evolutionWeekly') : t('stats.evolution')}</h2>
-                    <Linia points={timeData.evolution} />
-                    <div className="reports-charts">
-                      <Barres
-                        testId="stats-by-project"
-                        title={title('stats.byProject')}
-                        buckets={timeData.by_project}
-                        label={(b) => projectLabel(b.key, b.label)}
-                        onSelect={(b) => select('projects', b.key)}
-                      />
-                      <Barres
-                        testId="stats-by-type"
-                        title={t('stats.byType')}
-                        buckets={timeData.by_type}
-                        label={(b) => (b.key === 'none' ? t('stats.noType') : b.label)}
-                        onSelect={(b) => select('type', b.key)}
-                      />
-                      <Barres
-                        testId="stats-by-person"
-                        title={t('stats.byPerson')}
-                        buckets={timeData.by_user}
-                        label={(b) => people.find((person) => person.id === b.key)?.name ?? b.label}
-                        onSelect={(b) => select('person', b.key)}
-                      />
-                      {timeData.overtime_by_project.length > 0 && (
-                        <Barres
-                          testId="stats-overtime"
-                          title={title('stats.overtime')}
-                          buckets={timeData.overtime_by_project}
-                          label={(b) => projectLabel(b.key, b.label)}
-                          value={(b) => b.overtime_minutes}
-                          onSelect={(b) => select('projects', b.key)}
-                        />
+                    <div className="reports-no-print">
+                      <h2>{t(`reports.metric.${metric}`)}</h2>
+                      {taskData.data.length === 0 ? (
+                        <EmptyState>{t('reports.empty')}</EmptyState>
+                      ) : (
+                        <div className="reports-table-scroll">
+                          <table>
+                            <thead>
+                              <tr>
+                                <th>{t('registre.col.task')}</th>
+                                <th>{title('registre.col.project')}</th>
+                                <th>{t('reports.assignee')}</th>
+                                <th>{t('reports.status')}</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {taskData.data.map((task) => (
+                                <tr key={task.id}>
+                                  <td>
+                                    <button
+                                      type="button"
+                                      className="plou-btn plou-btn-ghost"
+                                      onClick={() => onOpenTask(task.id)}
+                                    >
+                                      {task.title}
+                                    </button>
+                                  </td>
+                                  <td>
+                                    {projectLabel(
+                                      task.project_id ?? 'none',
+                                      task.project_name ?? '',
+                                    )}
+                                  </td>
+                                  <td>{task.assignees.map((person) => person.name).join(', ')}</td>
+                                  <td>{t(`board.column.${task.status}`)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
                       )}
                     </div>
-                  </>
+                  </section>
                 )}
-              </div>
+              </>
             )}
             {tab === 'register' && registerData && (
               <div data-testid="registre-screen">
-                <p>{t('reports.visibility')}</p>
-                <div className="reports-cards" data-testid="registre-summary">
-                  <MetricCard
-                    label={t('stats.total')}
-                    value={fmtMinutes(registerData.totals.minutes)}
-                  />
-                  <MetricCard label={t('reports.trackedTasks')} value={registerData.totals.tasks} />
+                <div className="reports-register-summary" data-testid="registre-summary">
+                  <strong>{fmtMinutes(registerData.totals.minutes)}</strong>
+                  <span>{t('reports.recordedTasks', { count: registerData.totals.tasks })}</span>
                 </div>
+                <p className="reports-register-hint">
+                  {t('reports.registerHint')}{' '}
+                  <button
+                    type="button"
+                    className="plou-btn plou-btn-ghost"
+                    onClick={() =>
+                      change({
+                        tab: 'summary',
+                        metric: 'completed',
+                        ...(chrono ? { from: day, to: day, period: 'custom' } : {}),
+                      })
+                    }
+                  >
+                    {t('reports.seeCompleted')}
+                  </button>
+                </p>
                 <Chips
                   testId="registre-view"
                   value={chrono ? 'chrono' : 'table'}
@@ -577,15 +690,6 @@ export function ReportsScreen({
                 />
                 {chrono ? (
                   <>
-                    <label>
-                      {t('registre.day')}
-                      <input
-                        className="plou-input"
-                        type="date"
-                        value={day}
-                        onChange={(e) => change({ day: e.target.value })}
-                      />
-                    </label>
                     <Cronograma
                       entries={registerData.data}
                       day={day}
@@ -608,7 +712,7 @@ export function ReportsScreen({
                 {registerData.data.length === 0 && <EmptyState>{t('reports.empty')}</EmptyState>}
               </div>
             )}
-            {tab !== 'time' && !chrono && (
+            {!chrono && (q.get(cursorKey) || nextCursor) && (
               <div className="reports-actions reports-no-print">
                 <p>{t('reports.paginationHint')}</p>
                 {q.get(cursorKey) && (
@@ -636,24 +740,27 @@ export function ReportsScreen({
         )
       )}
       {generated && (
-        <p className="reports-context">
-          {t('reports.generated', {
-            at: new Intl.DateTimeFormat(getLocale(), {
-              timeZone: timezone,
-              dateStyle: 'short',
-              timeStyle: 'short',
-            }).format(new Date(generated)),
-          })}
-          {tab !== 'summary' && (
-            <>
-              <br />
-              {t('reports.openSessions', {
-                count:
-                  (tab === 'time' ? timeData?.open_sessions : registerData?.open_sessions) ?? 0,
-              })}
-            </>
-          )}
-        </p>
+        <details className="reports-metadata">
+          <summary>{t('reports.aboutData')}</summary>
+          <p className="reports-context">
+            {t('reports.visibility')}{' '}
+            {t('reports.generated', {
+              at: new Intl.DateTimeFormat(getLocale(), {
+                timeZone: timezone,
+                dateStyle: 'short',
+                timeStyle: 'short',
+              }).format(new Date(generated)),
+            })}
+            {tab !== 'summary' && (
+              <>
+                <br />
+                {t('reports.openSessions', {
+                  count: registerData?.open_sessions ?? 0,
+                })}
+              </>
+            )}
+          </p>
+        </details>
       )}
     </section>
   );
@@ -695,34 +802,52 @@ function TaskEvolution({ points }: { points: S['TaskReport']['evolution'] }) {
         <span className="reports-completed-key">{t('reports.metric.completed')}</span>
       </p>
       <svg role="img" aria-label={t('reports.evolution')} viewBox="0 0 720 180">
-        {(['created', 'completed'] as const).map((key) => (
-          <g
-            key={key}
-            stroke={key === 'created' ? 'var(--kicker)' : 'var(--ink)'}
-            fill="none"
-            strokeDasharray={key === 'completed' ? '6 4' : undefined}
-          >
-            <polyline
-              strokeWidth={2}
-              points={points
-                .map(
-                  (point, index) =>
-                    `${points.length === 1 ? 360 : 10 + (index / Math.max(1, points.length - 1)) * 700},${170 - (point[key] / max) * 150}`,
-                )
-                .join(' ')}
-            />
-            {points.map((point, index) => (
-              <circle
-                key={point.key}
-                cx={points.length === 1 ? 360 : 10 + (index / Math.max(1, points.length - 1)) * 700}
-                cy={170 - (point[key] / max) * 150}
-                r={3}
-                fill={key === 'created' ? 'var(--kicker)' : 'var(--ink)'}
-                strokeDasharray="none"
+        {[0, Math.ceil(max / 2), max]
+          .filter((value, index, all) => all.indexOf(value) === index)
+          .map((value) => (
+            <g key={value}>
+              <line
+                x1={32}
+                x2={710}
+                y1={160 - (value / max) * 140}
+                y2={160 - (value / max) * 140}
+                stroke="var(--divider-soft)"
               />
-            ))}
-          </g>
-        ))}
+              <text
+                x={25}
+                y={164 - (value / max) * 140}
+                textAnchor="end"
+                fill="var(--ink-soft)"
+                fontSize={11}
+              >
+                {value}
+              </text>
+            </g>
+          ))}
+        {points.map((point, index) => {
+          const slot = 670 / Math.max(1, points.length);
+          const bar = Math.min(36, slot * 0.34);
+          const center = 36 + slot * (index + 0.5);
+          return (
+            <g key={point.key}>
+              {(['created', 'completed'] as const).map((key, i) => (
+                <rect
+                  key={key}
+                  x={center + (i === 0 ? -bar - 1 : 1)}
+                  y={160 - (point[key] / max) * 140}
+                  width={bar}
+                  height={(point[key] / max) * 140}
+                  rx={Math.min(3, bar / 3)}
+                  fill={key === 'created' ? 'var(--kicker)' : 'var(--ink)'}
+                >
+                  <title>
+                    {point.key} · {t(`reports.metric.${key}`)}: {point[key]}
+                  </title>
+                </rect>
+              ))}
+            </g>
+          );
+        })}
       </svg>
       <p>
         {points[0]?.key} — {points.at(-1)?.key}

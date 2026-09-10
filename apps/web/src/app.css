@@ -558,3 +558,86 @@ button {
 .chrono-dialog select {
   box-sizing: border-box;
 }
+
+/* Els filtres i els detalls no competeixen amb el resum ni amb el cronograma. */
+.reports-filter-panel,
+.reports-metadata {
+  margin: 12px 0;
+}
+.reports-filter-panel > summary,
+.reports-tools > summary,
+.reports-metadata > summary {
+  cursor: pointer;
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+.reports-filter-panel[open] {
+  padding: 12px;
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+}
+.reports-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  margin-top: 20px;
+  align-items: start;
+}
+.reports-panel {
+  min-width: 0;
+  padding: 20px;
+}
+.reports-panel > h2 {
+  margin-top: 0;
+}
+.reports-panel p,
+.reports-register-hint {
+  font-size: 13px;
+  color: var(--ink-soft);
+  line-height: 1.5;
+}
+.reports-panel details {
+  margin-top: 16px;
+}
+.reports-panel .reports-charts {
+  grid-template-columns: 1fr;
+}
+.reports-register-summary {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 16px 0 0;
+}
+.reports-register-summary strong {
+  font-size: 28px;
+}
+.reports-register-summary span {
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+.reports-task-details {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--divider-soft);
+}
+.reports-tools .reports-actions {
+  padding: 12px 0;
+}
+@media (max-width: 760px) {
+  .reports-overview-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.task-time-badge {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-soft);
+  padding: 2px 5px;
+  border-radius: 5px;
+  background: var(--ghost-bg);
+}
+.task-time-badge[data-running='true'] {
+  color: var(--ink);
+}

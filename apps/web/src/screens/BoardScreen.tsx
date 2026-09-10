@@ -11,10 +11,11 @@
  * gent deixi d'arrossegar.
  */
 
+import { useTimeCompletion, type MoveExtra } from '../board/useTimeCompletion.js';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { generatePosition, t, type QuickAddContext, type TaskStatus } from '@fem-ho/contracts';
 import { v7 as uuidv7 } from 'uuid';
-import { api, failureText } from '../app/api.js';
+import { api } from '../app/api.js';
 import { useToasts } from '../app/toasts.js';
 import { Chips } from '../app/Chips.js';
 import { useRouter } from '../app/router.js';
@@ -294,6 +295,7 @@ export function BoardScreen({
     board.reload();
     inbox.reload();
   }, [board.reload, inbox.reload]);
+  const completion = useTimeCompletion();
   const [optimistic, setOptimistic] = useState<Record<string, TaskStatus>>({});
   const { notify } = useToasts();
 
@@ -423,12 +425,14 @@ export function BoardScreen({
             scopes.find((scope) => scope.id === task.scope_id)?.kind === 'collective',
             aiBoard,
           );
+          card.timeSummary = settings.show_task_time !== false ? task.time_summary : undefined;
           const moved = optimistic[task.id];
           return moved === undefined ? card : { ...card, status: moved };
         })
     );
   }, [
     board.data,
+    settings.show_task_time,
     optimistic,
     projectName,
     initialsOf,
@@ -484,6 +488,7 @@ export function BoardScreen({
             scopes.find((scope) => scope.id === task.scope_id)?.kind === 'collective',
             aiBoard,
           );
+          card.timeSummary = settings.show_task_time !== false ? task.time_summary : undefined;
           const moved = optimistic[task.id];
           return moved === undefined ? card : { ...card, status: moved };
         })
@@ -491,7 +496,17 @@ export function BoardScreen({
         // que el servidor torni a contestar.
         .filter((card) => card.status === 'inbox')
     );
-  }, [inbox.data, optimistic, projectName, initialsOf, profile.id, scopes, projectIds, projects]);
+  }, [
+    settings.show_task_time,
+    inbox.data,
+    optimistic,
+    projectName,
+    initialsOf,
+    profile.id,
+    scopes,
+    projectIds,
+    projects,
+  ]);
 
   const context = useMemo<QuickAddContext>(
     () => ({
@@ -511,7 +526,13 @@ export function BoardScreen({
     [activeScopes, projects, people, activeScopeIds, taskTypes.data],
   );
 
-  const move = async (taskId: string, status: TaskStatus): Promise<void> => {
+  const move = (taskId: string, status: TaskStatus) =>
+    completion.request(taskId, status, (extra) => performMove(taskId, status, extra));
+  const performMove = async (
+    taskId: string,
+    status: TaskStatus,
+    extra: MoveExtra,
+  ): Promise<void> => {
     const before = tasks.find((task) => task.id === taskId)?.status;
     setOptimistic((current) => ({ ...current, [taskId]: status }));
 
@@ -524,7 +545,9 @@ export function BoardScreen({
        * a la bústia des d'allà l'hi treu — sense això seria una porta d'un sol sentit i
        * una tasca delegada per error no es podria recuperar.
        */
-      if (aiBoard) {
+      // Completar amb temps és una acció humana atòmica: delegar abans canviaria
+      // la versió de la tasca i faria fallar el desament de la durada.
+      if (aiBoard && extra.time_entry === undefined) {
         const current = board.data?.columns
           .flatMap((column) => column.groups.flatMap((group) => group.tasks))
           .find((task) => task.id === taskId);
@@ -562,6 +585,7 @@ export function BoardScreen({
       await api.post(`/api/v1/tasks/${taskId}/move`, {
         status,
         position: generatePosition(lastPosition, null),
+        ...extra,
       });
       refresh();
     } catch (cause: unknown) {
@@ -578,7 +602,7 @@ export function BoardScreen({
        * fallat per atzar, l'ha frenat un agent que hi està treballant i el missatge diu
        * quanta estona queda.
        */
-      notify(failureText(cause), { tone: 'error', id: 'task-move' });
+      throw cause;
     }
   };
 
@@ -637,6 +661,7 @@ export function BoardScreen({
         opacity: board.revalidating || inbox.revalidating ? 0.6 : 1,
       }}
     >
+      {completion.dialog}
       {board.error !== undefined || inbox.error !== undefined ? (
         <ErrorBanner onRetry={refresh} />
       ) : null}
