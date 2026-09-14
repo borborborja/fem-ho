@@ -7,6 +7,65 @@ Data de l'última verificació completa: **2026-08-12**.
 
 ---
 
+## Consulta IMAP per compte i adjunts · 2026-09-14
+
+IMAP consulta cada 300 segons per defecte, sense IDLE. Web i Android exposen ara
+l'interval de cada compte als ajustos de correu (1, 2, 5, 10, 15, 30 o 60 minuts,
+o el valor per defecte). L'API valida entre 60 i 86400 segons; el planificador
+comprova cada 30 segons i manté la retirada progressiva quan hi ha errors.
+
+Corregida la conversió manual de correu: la consulta ometia `m.attachments`, tot
+i que el planificador ja havia desat els fitxers. Les respostes de fils existents
+també adjunten ara els fitxers a la tasca, amb el seu àmbit i auditoria. Les proves
+cobreixen adjunts en convertir, reintents sense duplicats, respostes del fil i
+persistència/validació de l'interval. La correcció actua en les conversions i
+respostes processades després d'actualitzar; no recupera retroactivament fitxers
+a tasques ja convertides ni fitxers que no es van descarregar.
+
+Verificació específica: 44 proves de correu i les 18 comprovacions permanents,
+TypeScript, ESLint i construcció web. La prova de regressió dels adjunts falla
+amb la consulta antiga i passa amb la correcció. Al navegador, s'ha desat un
+interval d'un minut, comprovat després de recarregar i restaurat el defecte.
+APK debug i release compilats; la validació visual Android continua pendent
+pel límit d'espai de l'emulador descrit a l'apartat OAuth.
+
+---
+
+## Correu amb Google OAuth · 2026-09-14
+
+Connexió i reconnexió Gmail/Workspace a la web i Android, mantenint IMAP amb
+contrasenya. Convertir un compte existent conserva identificador, regles,
+cursors i correus. El navegador obté el consentiment i el client Fem-ho
+autenticat confirma l'adreça abans d'activar-la. Els tokens es xifren al servidor,
+es renoven amb exclusió entre processos i s'esborren quan es desconnecta el compte.
+Els permisos revocats demanen reconnectar. Migracions SQLite/PostgreSQL i Room 3.
+
+Verificat: **1.221 proves de servidor/web correctes i 5 omeses**, les **18
+comprovacions permanents**, TypeScript, ESLint i construcció web. Proves del flux
+OAuth també sobre PostgreSQL 17, incloent renovació concurrent, permisos entre
+usuaris, cancel·lació, caducitat, conservació de cursors i desconnexió durant una
+renovació. **120 proves Android correctes i 1 omesa**; APK debug i release amb R8
+compilats. La generació dels tipus SQL també posa al dia camps de migracions
+anteriors que encara no apareixien al fitxer generat.
+
+Navegador real amb API i base aïllades, Google simulat: autorització, retorn,
+confirmació recuperada després de recarregar i desconnexió; revisió visual a
+1360 px i 390 px. Sense errors JavaScript. Els tests criptogràfics validen signatura,
+emissor, audiència, nonce, caducitat i correu verificat.
+
+**Límits:** no s'ha autoritzat cap compte real de Google ni provat la política
+Workspace de producció. Cal configurar el client OAuth de la instància i fer la
+prova descrita a la [guia de desplegament](mail-oauth.md). La instal·lació a
+l'emulador existent ha fallat per incompatibilitat de signatura; no s'han esborrat
+les seves dades. No hi havia prou espai de disc per crear un emulador net, de
+manera que **la pantalla Android no té validació visual ni de retorn del navegador**.
+Les proves locals no han modificat la configuració ni les dades de producció.
+
+El login de l'aplicació amb OIDC només s'ha estudiat: [proposta per instància i
+comptes existents vinculats](login-oidc-proposta.md). No està activat en aquesta entrega.
+
+---
+
 ## Widget Tauler amb tres columnes · 2026-09-10
 
 Nou widget independent «Fem-ho · Tauler»: Inbox, Per fer i Fent de costat,

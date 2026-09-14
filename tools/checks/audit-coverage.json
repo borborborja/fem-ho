@@ -11,6 +11,10 @@
     "          defensar; 'no cal' no es un motiu."
   ],
   "audited": {
+    "startGoogleMail": "apps/server/src/http/mail-oauth.test.ts",
+    "cancelMailOAuthAttempt": "apps/server/src/http/mail-oauth.test.ts",
+    "confirmGoogleMail": "apps/server/src/http/mail-oauth.test.ts",
+    "disconnectGoogleMail": "apps/server/src/http/mail-oauth.test.ts",
     "addAssignee": "apps/server/src/http/api-surface.test.ts · \"i qui sí, sí, amb rastre\"",
     "addComment": "apps/server/src/http/api-surface.test.ts · \"es poden escriure i llegir, i surten a l'historial\"",
     "addMember": "apps/server/src/http/api-surface.test.ts · \"s'hi pot afegir una persona a un de col·lectiu\"",

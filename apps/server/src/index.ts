@@ -108,6 +108,8 @@ async function main(): Promise<void> {
     baseUrl: config.baseUrl,
     dataDir: config.dataDir,
     mailAllowHosts: config.mailAllowHosts,
+    googleClientId: config.googleClientId,
+    googleClientSecret: config.googleClientSecret,
     mailRetentionDays: config.mailRetentionDays,
     log: (message, error) => {
       if (error === undefined) app.log.info(message);

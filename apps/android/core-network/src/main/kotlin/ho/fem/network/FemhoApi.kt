@@ -665,6 +665,15 @@ class FemhoApi(
     // ------------------------------------------------------------------ Correu
 
     suspend fun mailAccounts(): List<MailAccount> = get("/api/v1/mail/accounts")
+    suspend fun googleMailAvailability(): ho.fem.model.MailOAuthAvailability = get("/api/v1/mail/oauth/google")
+    suspend fun setMailPollInterval(id: String, seconds: Int?): MailAccount =
+        json.decodeFromString(raw("PATCH", "/api/v1/mail/accounts/$id", """{"poll_interval":${seconds ?: "null"}}""", authenticated = true))
+    suspend fun startGoogleMail(accountId: String, reconnect: Boolean): ho.fem.model.MailOAuthAttempt =
+        post("/api/v1/mail/oauth/google", mapOf("account_id" to accountId, "reconnect" to reconnect))
+    suspend fun mailOAuthAttempt(id: String): ho.fem.model.MailOAuthAttempt = get("/api/v1/mail/oauth/attempts/$id")
+    suspend fun confirmGoogleMail(id: String): MailAccount = post("/api/v1/mail/oauth/attempts/$id/confirm")
+    suspend fun cancelGoogleMail(id: String) { raw("DELETE", "/api/v1/mail/oauth/attempts/$id", null, authenticated = true) }
+    suspend fun disconnectGoogleMail(id: String) { raw("POST", "/api/v1/mail/accounts/$id/oauth/disconnect", "{}", authenticated = true) }
 
     suspend fun createMailAccount(name: String, host: String, username: String, password: String, security: String): MailAccount =
         post("/api/v1/mail/accounts", mapOf("name" to name, "host" to host, "username" to username, "password" to password, "security" to security))

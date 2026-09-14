@@ -25,8 +25,14 @@ export interface ActivityLog {
   verb: string;
 }
 
+export interface AgentScopes {
+  agent_id: string;
+  scope_id: string;
+}
+
 export interface AiAgents {
   actor_user_id: string;
+  all_scopes: Generated<number>;
   can_create_tasks: Generated<number>;
   created_at: string;
   enabled: Generated<number>;
@@ -137,6 +143,7 @@ export interface Checklists {
 }
 
 export interface Comments {
+  author_agent_id: string | null;
   author_id: string | null;
   body: string;
   created_at: string;
@@ -262,16 +269,21 @@ export interface Labels {
 }
 
 export interface MailAccounts {
+  auth_method: Generated<string>;
   consecutive_errors: Generated<number>;
   created_at: string;
   deleted_at: string | null;
   enabled: Generated<number>;
+  google_subject: string | null;
   host: string;
   id: string;
   last_error: string | null;
   last_error_at: string | null;
   last_polled_at: string | null;
   name: string;
+  oauth_lock: string | null;
+  oauth_lock_until: string | null;
+  oauth_status: string | null;
   poll_interval: number | null;
   port: Generated<number>;
   secret_enc: string | null;
@@ -284,6 +296,7 @@ export interface MailAccounts {
 
 export interface MailMessages {
   account_id: string;
+  attachments: string | null;
   body_text: string | null;
   created_at: string;
   deleted_at: string | null;
@@ -295,6 +308,7 @@ export interface MailMessages {
   has_html: Generated<number>;
   id: string;
   in_reply_to: string | null;
+  inbox_visible: number | null;
   internal_date: string | null;
   message_id: string | null;
   message_key: string;
@@ -313,9 +327,24 @@ export interface MailMessages {
   version: Generated<number>;
 }
 
+export interface MailOauthAttempts {
+  account_id: string;
+  email: string | null;
+  error_code: string | null;
+  expires_at: string;
+  id: string;
+  nonce: string;
+  reconnect: number;
+  result_enc: string | null;
+  source: string;
+  state_hash: string;
+  status: string;
+  user_id: string;
+  verifier_enc: string | null;
+}
+
 export interface MailRules {
   account_id: string;
-  action: string;
   attachments_to_task: Generated<number>;
   body_to_description: Generated<number>;
   created_at: string;
@@ -323,7 +352,7 @@ export interface MailRules {
   enabled: Generated<number>;
   folder: string;
   id: string;
-  inbox_visible: Generated<number>;
+  inbox_visible: number | null;
   last_error: string | null;
   last_error_at: string | null;
   last_seen_at: string | null;
@@ -427,6 +456,21 @@ export interface Scopes {
   version: Generated<number>;
 }
 
+export interface ScopeSettings {
+  created_at: string;
+  long_session_hours: Generated<number>;
+  overtime_visible: Generated<number>;
+  project_noun: Generated<string>;
+  scope_id: string;
+  task_type_required: Generated<number>;
+  task_types_enabled: Generated<number>;
+  time_tracking: Generated<number>;
+  updated_at: string;
+  work_days: Generated<string>;
+  work_end: Generated<string>;
+  work_start: Generated<string>;
+}
+
 export interface Sessions {
   created_at: string;
   expires_at: string;
@@ -506,7 +550,10 @@ export interface TaskLeases {
 
 export interface Tasks {
   ai_instructions: string | null;
+  ai_last_read_at: string | null;
+  ai_last_read_by: string | null;
   ai_mode: Generated<string>;
+  attention_asked_at: string | null;
   caldav_etag: string | null;
   caldav_uid: string | null;
   calendar_id: string | null;
@@ -523,9 +570,11 @@ export interface Tasks {
   event_recurrence_id: string | null;
   event_uid: string | null;
   id: string;
+  last_activity_at: string | null;
   mail_account_id: string | null;
   mail_message_key: string | null;
   mail_thread_key: string | null;
+  needs_attention: Generated<number>;
   origin: Generated<string>;
   position: string;
   project_id: string | null;
@@ -536,10 +585,37 @@ export interface Tasks {
   search_text: string | null;
   source_kind: string | null;
   status: Generated<string>;
+  task_type_id: string | null;
   title: string;
   updated_at: string;
   version: Generated<number>;
   view_mode: Generated<string>;
+}
+
+export interface TaskSessions {
+  created_at: string;
+  deleted_at: string | null;
+  ended_at: string | null;
+  id: string;
+  note: string | null;
+  scope_id: string;
+  source: string;
+  started_at: string;
+  task_id: string;
+  updated_at: string;
+  user_id: string;
+  version: Generated<number>;
+}
+
+export interface TaskTypes {
+  color: string;
+  created_at: string;
+  deleted_at: string | null;
+  id: string;
+  name: string;
+  position: string;
+  scope_id: string;
+  updated_at: string;
 }
 
 export interface UserInvites {
@@ -585,10 +661,11 @@ export interface UserSettings {
   notify_prefs: Generated<string>;
   quiet_hours_end: string | null;
   quiet_hours_start: string | null;
-  show_task_time: Generated<number>;
-  show_reports: Generated<number>;
+  scope_mode: string | null;
   show_calendar_widget: Generated<number>;
   show_overdue_section: Generated<number>;
+  show_reports: Generated<number>;
+  show_task_time: Generated<number>;
   updated_at: string;
   user_id: string;
   week_start: Generated<string>;
@@ -612,6 +689,7 @@ export interface Webhooks {
 
 export interface DB {
   activity_log: ActivityLog;
+  agent_scopes: AgentScopes;
   ai_agents: AiAgents;
   api_tokens: ApiTokens;
   attachments: Attachments;
@@ -630,6 +708,7 @@ export interface DB {
   labels: Labels;
   mail_accounts: MailAccounts;
   mail_messages: MailMessages;
+  mail_oauth_attempts: MailOauthAttempts;
   mail_rules: MailRules;
   mail_threads: MailThreads;
   projects: Projects;
@@ -638,6 +717,7 @@ export interface DB {
   schema_migrations: SchemaMigrations;
   scope_access_revocations: ScopeAccessRevocations;
   scope_members: ScopeMembers;
+  scope_settings: ScopeSettings;
   scopes: Scopes;
   sessions: Sessions;
   share_accesses: ShareAccesses;
@@ -647,6 +727,8 @@ export interface DB {
   task_assignees: TaskAssignees;
   task_labels: TaskLabels;
   task_leases: TaskLeases;
+  task_sessions: TaskSessions;
+  task_types: TaskTypes;
   tasks: Tasks;
   user_invites: UserInvites;
   user_settings: UserSettings;

@@ -167,6 +167,8 @@ data class MailAccountEntity(
     val host: String,
     val username: String,
     @ColumnInfo(name = "has_secret") val hasSecret: Boolean = false,
+    @ColumnInfo(name = "auth_method", defaultValue = "'password'") val authMethod: String = "password",
+    @ColumnInfo(name = "oauth_status") val oauthStatus: String? = null,
     val security: String = "tls",
     @ColumnInfo(name = "created_at") val createdAt: String?,
 )
@@ -582,7 +584,7 @@ interface FemhoDao {
         ScopeSettingsEntity::class,
         AgentEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = false,
 )
 abstract class FemhoDatabase : RoomDatabase() {
@@ -599,6 +601,12 @@ abstract class FemhoDatabase : RoomDatabase() {
      * directament a v2 sense passar per la migració.
      */
     companion object {
+        val MIGRATION_2_3 = object : androidx.room.migration.Migration(2, 3) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE mail_accounts ADD COLUMN auth_method TEXT NOT NULL DEFAULT 'password'")
+                db.execSQL("ALTER TABLE mail_accounts ADD COLUMN oauth_status TEXT")
+            }
+        }
         val MIGRATION_1_2 = object : androidx.room.migration.Migration(1, 2) {
             override fun migrate(database: androidx.sqlite.db.SupportSQLiteDatabase) {
                 // Etiquetes

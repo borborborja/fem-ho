@@ -758,6 +758,8 @@ internal fun MailAccountEntity.toDomain(): MailAccount =
         host = host,
         username = username,
         hasSecret = hasSecret,
+        authMethod = authMethod,
+        oauthStatus = oauthStatus,
         security = MailSecurity.entries.firstOrNull { it.name.equals(security, true) } ?: MailSecurity.TLS,
         createdAt = createdAt,
     )
@@ -768,7 +770,9 @@ internal fun MailAccount.toEntity(): MailAccountEntity =
         name = name,
         host = host,
         username = username,
-        hasSecret = true, // simplificació: sempre true quan ve del servidor
+        hasSecret = hasSecret,
+        authMethod = authMethod,
+        oauthStatus = oauthStatus,
         security = security.name.lowercase(),
         createdAt = createdAt,
     )

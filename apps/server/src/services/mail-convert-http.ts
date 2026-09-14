@@ -41,7 +41,7 @@ export async function convertOwnMail(
    */
   const found = await sql<Context>`
     SELECT m.id, m.account_id, m.thread_id, m.message_key, m.folder, m.subject, m.from_name,
-           m.from_address, m.body_text, m.internal_date, m.disposition, m.rule_id,
+           m.from_address, m.body_text, m.internal_date, m.disposition, m.rule_id, m.attachments,
            a.name AS account_name, r.scope_id, r.project_id, r.title_template,
            r.body_to_description, u.locale
     FROM mail_messages m

@@ -2354,6 +2354,93 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/mail/oauth/google": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Disponibilitat d'OAuth de Google per a correu */
+        get: operations["googleMailAvailability"];
+        put?: never;
+        /** Iniciar autorització per connectar o reconnectar un compte propi */
+        post: operations["startGoogleMail"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/mail/oauth/google/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Retorn de Google, validat amb state i PKCE */
+        get: operations["googleMailCallback"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/mail/oauth/attempts/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Llegir el resultat d'un intent propi */
+        get: operations["getMailOAuthAttempt"];
+        put?: never;
+        post?: never;
+        /** Cancel·lar un intent propi i eliminar-ne les credencials temporals */
+        delete: operations["cancelMailOAuthAttempt"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/mail/oauth/attempts/{id}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Confirmar la vinculació des del client autenticat original */
+        post: operations["confirmGoogleMail"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/mail/accounts/{id}/oauth/disconnect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Eliminar l'autorització local i aturar la lectura, conservant les regles */
+        post: operations["disconnectGoogleMail"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/mail/accounts": {
         parameters: {
             query?: never;
@@ -2643,8 +2730,25 @@ export interface components {
             /** @description Coses que no impedeixen arrencar i val la pena dir. */
             warnings: string[];
         };
+        MailOAuthAttempt: {
+            id: string;
+            account_id: string;
+            /** @enum {string} */
+            status: "pending" | "exchanging" | "ready" | "completed" | "cancelled" | "failed" | "expired";
+            /** Format: date-time */
+            expires_at: string;
+            email: string | null;
+            error_code: string | null;
+        };
         /** @description Un compte IMAP. **`secret_enc` no hi és i `password` tampoc**: la contrasenya es xifra en repòs i no torna a sortir del servidor en cap forma, ni emmascarada —una màscara filtra la longitud i el prefix—. */
         MailAccount: {
+            /**
+             * @default password
+             * @enum {string}
+             */
+            auth_method: "password" | "google";
+            /** @enum {string|null} */
+            oauth_status?: "connected" | "reconnect_required" | "disconnected" | null;
             id: string;
             /** @description Com l'anomenes tu. Surt a la variable de plantilla {{account}}. */
             name: string;
@@ -2661,7 +2765,7 @@ export interface components {
             has_secret: boolean;
             /** @default true */
             enabled: boolean;
-            /** @description Segons entre lectures. `null` fa servir el de la instància. */
+            /** @description Segons entre lectures (60–86400). `null` fa servir 300 segons. Consulta periòdica, sense IMAP IDLE; el planificador comprova cada 30 segons. */
             poll_interval?: number | null;
             /** Format: date-time */
             last_polled_at?: string | null;
@@ -9034,6 +9138,182 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
+        };
+    };
+    googleMailAvailability: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Configuració pública, sense secrets. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        enabled: boolean;
+                    };
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    startGoogleMail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: uuid */
+                    account_id: string;
+                    /** @default false */
+                    reconnect?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Intent temporal. El client original ha de confirmar el resultat. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MailOAuthAttempt"] & {
+                        /** Format: uri */
+                        authorization_url: string;
+                    };
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    googleMailCallback: {
+        parameters: {
+            query: {
+                state: string;
+                code?: string;
+                error?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Retorn fix a la pantalla de correu, sense tokens. */
+            303: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getMailOAuthAttempt: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Estat i identitat autoritzada; mai credencials. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MailOAuthAttempt"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    cancelMailOAuthAttempt: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cancel·lat. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    confirmGoogleMail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Compte connectat; regles i cursors conservats. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MailAccount"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            /** @description Intent caducat, identitat diferent o autorització incompleta. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    disconnectGoogleMail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Credencials eliminades. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
         };
     };
     listMailAccounts: {

@@ -213,6 +213,9 @@ export interface Config {
    * servir un proveïdor— i és `FEMHO_MAIL_ALLOW_HOSTS`, separada per comes.
    */
   mailAllowHosts: string[];
+  /** Credencials OAuth pròpies de la instància; mai es publiquen a /info. */
+  googleClientId?: string | undefined;
+  googleClientSecret?: string | undefined;
   /** Cada quant es llegeix un compte de correu, en segons. */
   mailPollSeconds: number;
   /** Un correu més gros que això no es baixa. */
@@ -283,6 +286,8 @@ export function loadConfig(version: string): Config {
       .split(',')
       .map((host) => host.trim().toLowerCase())
       .filter((host) => host !== ''),
+    googleClientId: env('GOOGLE_CLIENT_ID'),
+    googleClientSecret: env('GOOGLE_CLIENT_SECRET'),
     mailPollSeconds: envInt('MAIL_POLL_SECONDS', 300),
     mailMaxMessageBytes: envInt('MAIL_MAX_MESSAGE_MB', 25) * 1_048_576,
     mailRetentionDays: envInt('MAIL_RETENTION_DAYS', 0),

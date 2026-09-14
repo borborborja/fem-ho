@@ -598,9 +598,27 @@ data class MailAccount(
     val username: String,
     /** El servidor mai retorna la contrasenya; només diu si n'hi ha una de desada. */
     @SerialName("has_secret") val hasSecret: Boolean = false,
+    @SerialName("auth_method") val authMethod: String = "password",
+    @SerialName("oauth_status") val oauthStatus: String? = null,
+    @SerialName("poll_interval") val pollInterval: Int? = null,
     val security: MailSecurity = MailSecurity.TLS,
     @SerialName("created_at") val createdAt: String? = null,
 )
+
+/** Contracte MailOAuthAttempt d'OpenAPI; mai conté tokens Google. */
+@Serializable
+data class MailOAuthAttempt(
+    val id: String,
+    @SerialName("account_id") val accountId: String,
+    val status: String,
+    @SerialName("expires_at") val expiresAt: String,
+    val email: String? = null,
+    @SerialName("error_code") val errorCode: String? = null,
+    @SerialName("authorization_url") val authorizationUrl: String? = null,
+)
+
+@Serializable
+data class MailOAuthAvailability(val enabled: Boolean = false)
 
 @Serializable
 data class MailRule(

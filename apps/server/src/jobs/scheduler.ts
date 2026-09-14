@@ -23,8 +23,9 @@ import { FALLBACK, catalogOf, isLocale, type Locale } from '@fem-ho/contracts';
 import { isDue, refreshSubscription, type SubscriptionRow } from '../dav/client.js';
 import { pullFromLink, type InstanceLinkRow } from '../services/federation.js';
 import { pruneOps } from '../services/sync.js';
-import { open } from '../crypto/secret-box.js';
 import { openImapClient } from '../net/imap-mail-client.js';
+import { mailCredentials } from '../services/mail-credentials.js';
+import { pruneMailOAuth } from '../services/mail-oauth.js';
 import { pollMail, pruneMail } from './mail-poll.js';
 import type { Principal } from '../policy/principal.js';
 import {
@@ -46,6 +47,8 @@ export interface SchedulerOptions {
   dataDir?: string | undefined;
   /** `FEMHO_MAIL_ALLOW_HOSTS`, si la instància n'ha posat. */
   mailAllowHosts?: string[] | undefined;
+  googleClientId?: string | undefined;
+  googleClientSecret?: string | undefined;
   /** `FEMHO_MAIL_RETENTION_DAYS`. `0` vol dir per sempre. */
   mailRetentionDays?: number | undefined;
   /** Injectables per a les proves: així no cal esperar mig minut ni piconar cap servei. */
@@ -129,6 +132,7 @@ export async function tick(options: SchedulerOptions): Promise<TickResult> {
    * la seva retirada, i aquí només se li dona l'oportunitat cada 30 segons.
    */
   try {
+    await pruneMailOAuth(options.connection.db, now);
     const mail = await pollMail({
       db: options.connection.db,
       openClient: async (account) =>
@@ -140,7 +144,13 @@ export async function tick(options: SchedulerOptions): Promise<TickResult> {
             username: account.username,
             // El secret s'obre aquí, al planificador, que és qui el té. El client rep
             // text pla i el text pla mor amb la connexió.
-            password: open(options.secret, `mail_account:${account.id}`, account.secret_enc ?? ''),
+            ...(await mailCredentials(
+              options.connection.db,
+              options.secret,
+              options,
+              account.id,
+              account.user_id,
+            )),
           },
           { allowHosts: options.mailAllowHosts },
         ),

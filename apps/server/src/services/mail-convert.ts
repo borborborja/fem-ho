@@ -24,6 +24,7 @@
  */
 
 import { sql } from 'kysely';
+import { dbBool } from '../db/bool.js';
 import { v7 as uuidv7 } from 'uuid';
 import { renderMailTitle, type MailTemplateVars } from '@fem-ho/contracts';
 import type { AuditContext } from '../audit/audited-transaction.js';
@@ -125,8 +126,8 @@ export async function convertMailToTask(
    * correu obriria una segona tasca del mateix assumpte i acabaries amb el fil partit en
    * dues coses a fer.
    */
-  const delFil = await sql<{ id: string }>`
-    SELECT id FROM tasks
+  const delFil = await sql<{ id: string; scope_id: string }>`
+    SELECT id, scope_id FROM tasks
     WHERE mail_account_id = ${message.account_id}
       AND mail_thread_key = (SELECT thread_key FROM mail_threads WHERE id = ${message.thread_id})
       AND deleted_at IS NULL
@@ -136,6 +137,7 @@ export async function convertMailToTask(
   if (delFil.rows[0] !== undefined) {
     const taskId = delFil.rows[0].id;
     await addComment(ctx, principal, taskId, comentariDe(message));
+    await attachStored(ctx, message, taskId, delFil.rows[0].scope_id);
     await sql`
       UPDATE mail_messages SET disposition = 'comment', task_id = ${taskId},
              updated_at = ${ctx.now}
@@ -257,7 +259,7 @@ export async function dismissMail(
  * `is_ai_context = FALSE`: un adjunt d'un desconegut no entra al context d'un model pel sol
  * fet d'existir. Que hi entri és una decisió que pren una persona.
  */
-async function attachStored(
+export async function attachStored(
   ctx: AuditContext,
   message: MailMessageRow,
   taskId: string,
@@ -276,14 +278,16 @@ async function attachStored(
   }
 
   for (const adjunt of desats) {
+    const id = uuidv7();
     await sql`
       INSERT INTO attachments (id, task_id, scope_id, filename, mime_type, size_bytes,
                                storage_path, source, is_ai_context, created_at, updated_at,
                                version)
-      VALUES (${uuidv7()}, ${taskId}, ${scopeId}, ${adjunt.filename}, ${adjunt.mime_type},
-              ${adjunt.size_bytes}, ${adjunt.storage_path}, 'mail_attach', 0, ${ctx.now},
+      VALUES (${id}, ${taskId}, ${scopeId}, ${adjunt.filename}, ${adjunt.mime_type},
+              ${adjunt.size_bytes}, ${adjunt.storage_path}, 'mail_attach', ${dbBool(false)}, ${ctx.now},
               ${ctx.now}, 1)
     `.execute(ctx.tx);
+    ctx.record({ entityType: 'attachment', entityId: id, scopeId, verb: 'created' });
   }
 }
 

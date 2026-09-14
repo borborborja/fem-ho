@@ -29,6 +29,8 @@ import { registerSetupRoutes } from './http/setup.js';
 import { registerShareRoutes } from './http/shares.js';
 import { registerAiStatusRoutes } from './http/ai-status.js';
 import { registerMailRoutes } from './http/mail.js';
+import { registerMailOAuthRoutes } from './http/mail-oauth.js';
+import type { GoogleMailProvider } from './net/google-oauth.js';
 import { registerReportRoutes } from './http/reports.js';
 import { registerSessionRoutes } from './http/sessions.js';
 import { registerTokenRoutes } from './http/tokens.js';
@@ -46,12 +48,24 @@ export interface BuildOptions {
    * un sol cop al volum de dades i **no** a la base (`config/secret.ts`).
    */
   secret?: string;
+  googleMailProvider?: GoogleMailProvider;
 }
 
 export function buildApp(config: Config, options: BuildOptions = {}): FastifyInstance {
   const app = Fastify({
     // Registres estructurats en JSON a stdout, sense cap secret (docs/12 §8).
-    logger: { level: config.logLevel },
+    logger: {
+      level: config.logLevel,
+      serializers: {
+        req(request) {
+          const url = String(request.url ?? '');
+          return {
+            method: request.method,
+            url: url.startsWith('/api/v1/mail/oauth/google/callback') ? url.split('?')[0]! : url,
+          };
+        },
+      },
+    },
     // Darrere d'un proxy invers casolà; els rangs de confiança es fixaran amb
     // FEMHO_TRUSTED_PROXIES quan hi hagi límits de ritme i sessions (M3).
     trustProxy: false,
@@ -78,12 +92,15 @@ export function buildApp(config: Config, options: BuildOptions = {}): FastifyIns
    * d'un servidor de tercers sense que ningú se n'adonés.
    */
   app.addHook('onSend', async (request, reply) => {
+    if (request.url.startsWith('/api/v1/mail/oauth/')) reply.header('Cache-Control', 'no-store');
     reply.header('X-Content-Type-Options', 'nosniff');
     reply.header('X-Frame-Options', 'DENY');
     reply.header('Permissions-Policy', 'geolocation=(), camera=(), microphone=()');
     reply.header(
       'Referrer-Policy',
-      request.url.startsWith('/s/') ? 'no-referrer' : 'strict-origin-when-cross-origin',
+      request.url.startsWith('/s/') || request.url.startsWith('/api/v1/mail/oauth/')
+        ? 'no-referrer'
+        : 'strict-origin-when-cross-origin',
     );
   });
 
@@ -114,6 +131,7 @@ export function buildApp(config: Config, options: BuildOptions = {}): FastifyIns
   registerReportRoutes(app);
   registerTokenRoutes(app);
   registerMailRoutes(app, instanceSecret);
+  registerMailOAuthRoutes(app, instanceSecret, options.googleMailProvider);
   registerAiStatusRoutes(app);
   registerPushRoutes(app);
   registerSetupRoutes(app);

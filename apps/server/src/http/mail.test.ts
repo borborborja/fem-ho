@@ -145,6 +145,30 @@ afterAll(async () => {
 });
 
 describe('els comptes', () => {
+  it('desa l’interval per compte, valida els límits i permet tornar al defecte', async () => {
+    const account = await crearCompte({ poll_interval: 60 });
+    expect(
+      (await api('GET', '/api/v1/mail/accounts'))
+        .json<{ id: string; poll_interval: number | null }[]>()
+        .find((a) => a.id === account.id)?.poll_interval,
+    ).toBe(60);
+    for (const value of [0, -1, 59, 60.5, 86401, 'abc', '60', true]) {
+      expect(
+        (await api('PATCH', `/api/v1/mail/accounts/${account.id}`, { poll_interval: value }))
+          .statusCode,
+      ).toBe(422);
+    }
+    expect(
+      (await api('PATCH', `/api/v1/mail/accounts/${account.id}`, { poll_interval: 900 })).json<{
+        poll_interval: number;
+      }>().poll_interval,
+    ).toBe(900);
+    expect(
+      (await api('PATCH', `/api/v1/mail/accounts/${account.id}`, { poll_interval: null })).json<{
+        poll_interval: null;
+      }>().poll_interval,
+    ).toBeNull();
+  });
   it("un compte es dona d'alta i deixa rastre", async () => {
     const abans = await compta('mail_account');
     const compte = await crearCompte();
@@ -588,6 +612,17 @@ describe('convertir des de la bústia', () => {
 
   it('un correu de la bústia es fa tasca, i dues vegades dona la mateixa', async () => {
     const { id } = await correu('La factura de març', 'conv1');
+    const stored = [
+      {
+        filename: 'factura.pdf',
+        mime_type: 'application/pdf',
+        size_bytes: 25,
+        storage_path: '2026/08/factura.pdf',
+      },
+    ];
+    await sql`UPDATE mail_messages SET attachments = ${JSON.stringify(stored)} WHERE id = ${id}`.execute(
+      conn.db,
+    );
 
     const primera = await api('POST', `/api/v1/mail/messages/${id}/convert`);
     expect(primera.statusCode).toBe(200);
@@ -604,6 +639,16 @@ describe('convertir des de la bústia', () => {
      */
     const segona = await api('POST', `/api/v1/mail/messages/${id}/convert`);
     expect(segona.json<{ id: string }>().id).toBe(tasca.id);
+    const attachments = await sql<{
+      filename: string;
+      storage_path: string;
+      scope_id: string;
+    }>`SELECT filename,storage_path,scope_id FROM attachments WHERE task_id = ${tasca.id}`.execute(
+      conn.db,
+    );
+    expect(attachments.rows).toEqual([
+      { filename: 'factura.pdf', storage_path: '2026/08/factura.pdf', scope_id: scopeId },
+    ]);
 
     // I ja no surt a la bústia: ara és una tasca.
     const vista = await api('GET', '/api/v1/inbox?date=2026-08-11');

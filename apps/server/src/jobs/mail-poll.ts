@@ -43,7 +43,7 @@ import { safeFilename, sniffMime, storeAttachment } from '../services/attachment
 import { auditedTransaction } from '../audit/audited-transaction.js';
 import { capabilitiesForRole } from '../policy/capabilities.js';
 import type { Principal } from '../policy/principal.js';
-import type { MailMessageRow } from '../services/mail-convert.js';
+import { attachStored, type MailMessageRow } from '../services/mail-convert.js';
 import { addComment } from '../services/comments.js';
 
 /** Cada quant es llegeix un compte, per defecte. */
@@ -139,6 +139,7 @@ export async function pollMail(options: MailPollOptions): Promise<MailPollResult
            last_polled_at, consecutive_errors
     FROM mail_accounts
     WHERE deleted_at IS NULL AND enabled = ${dbBool(true)} AND secret_enc IS NOT NULL
+      AND (auth_method = 'password' OR oauth_status = 'connected')
   `.execute(options.db);
 
   for (const account of accounts.rows) {
@@ -506,7 +507,7 @@ async function applyThreadComments(
 ): Promise<void> {
   const pendents = await sql<MailMessageRow>`
     SELECT id, account_id, thread_id, message_key, folder, subject, from_name, from_address,
-           body_text, internal_date, disposition, rule_id
+           body_text, internal_date, disposition, rule_id, attachments
     FROM mail_messages
     WHERE account_id = ${account.id} AND disposition = 'pending' AND deleted_at IS NULL
     ORDER BY internal_date, id
@@ -516,8 +517,8 @@ async function applyThreadComments(
   const principal = ownerPrincipal(account.user_id);
 
   for (const message of pendents.rows) {
-    const tasca = await sql<{ id: string }>`
-      SELECT t.id FROM tasks t
+    const tasca = await sql<{ id: string; scope_id: string }>`
+      SELECT t.id, t.scope_id FROM tasks t
       JOIN mail_threads th ON th.thread_key = t.mail_thread_key
       WHERE th.id = ${message.thread_id} AND t.mail_account_id = ${account.id}
         AND t.deleted_at IS NULL
@@ -536,6 +537,7 @@ async function applyThreadComments(
 
     await auditedTransaction(options.db, principal, async (ctx) => {
       await addComment(ctx, principal, taskId, commentOf(message));
+      await attachStored(ctx, message, taskId, tasca.rows[0]!.scope_id);
       await sql`
         UPDATE mail_messages SET disposition = 'comment', task_id = ${taskId},
                updated_at = ${ctx.now}

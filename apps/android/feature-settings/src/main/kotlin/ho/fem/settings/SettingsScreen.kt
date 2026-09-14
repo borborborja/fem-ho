@@ -303,6 +303,8 @@ fun SettingsScreen(
     calendars: List<ho.fem.model.Calendar> = emptyList(),
     mailAccounts: List<ho.fem.model.MailAccount> = emptyList(),
     mailRules: List<ho.fem.model.MailRule> = emptyList(),
+    googleMailContent: @Composable () -> Unit = {},
+    mailPollingContent: @Composable (ho.fem.model.MailAccount) -> Unit = {},
     mcpUrl: String = "",
     tokens: List<ho.fem.model.ApiTokenSummary> = emptyList(),
     createdToken: String? = null,
@@ -502,6 +504,8 @@ fun SettingsScreen(
                     onCopyToClipboard = onCopyToClipboard,
                 )
                 "mail" -> MailTab(
+                    googleMailContent = googleMailContent,
+                    mailPollingContent = mailPollingContent,
                     labels = labels,
                     mailAccounts = mailAccounts,
                     mailRules = mailRules,
@@ -1534,6 +1538,8 @@ private fun CalendarsTab(
 
 @Composable
 private fun MailTab(
+    googleMailContent: @Composable () -> Unit,
+    mailPollingContent: @Composable (ho.fem.model.MailAccount) -> Unit,
     labels: SettingsLabels,
     mailAccounts: List<ho.fem.model.MailAccount>,
     mailRules: List<ho.fem.model.MailRule>,
@@ -1558,6 +1564,7 @@ private fun MailTab(
         )
 
         // Comptes
+        googleMailContent()
         Group(labels.mailAccounts) {
             var newName by remember { mutableStateOf("") }
             var newHost by remember { mutableStateOf("") }
@@ -1622,6 +1629,7 @@ private fun MailTab(
                                 .heightIn(min = FemhoSize.touch)
                                 .padding(vertical = 6.dp),
                         )
+                        mailPollingContent(account)
                         testResults.value[account.id]?.let { result ->
                             Text(
                                 text = if (result.ok) labels.mailTestOk.replace("{count}", "—") else labels.mailTestFail.replace("{error}", result.error.orEmpty()),
@@ -1629,7 +1637,7 @@ private fun MailTab(
                                 fontSize = FemhoText.meta,
                             )
                         }
-                        if (account.hasSecret) {
+                        if (account.hasSecret && account.authMethod != "google") {
                             Text(
                                 text = labels.mailPasswordKept,
                                 color = Femho.colors.inkFaint,

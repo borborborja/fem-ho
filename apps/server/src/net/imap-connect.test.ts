@@ -29,6 +29,21 @@ const TARGET: ImapTarget = {
   password: 'x',
 };
 
+it('OAuth passa el token a XOAUTH2 sense enviar una contrasenya', () => {
+  const options = imapOptions(
+    { ...TARGET, host: 'imap.gmail.com', accessToken: 'test-access-token' },
+    '93.184.216.34',
+    1000,
+  );
+  expect(options.auth).toEqual({
+    user: 'borja',
+    accessToken: 'test-access-token',
+    loginMethod: 'XOAUTH2',
+  });
+  expect(options.logger).toBe(false);
+  expect(options.secure).toBe(true);
+});
+
 describe('a on es pot anar', () => {
   it('una adreça pública passa', async () => {
     await expect(

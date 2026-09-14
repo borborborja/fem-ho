@@ -22,6 +22,8 @@ services:
       FEMHO_BASE_URL: https://femho.example.com
       FEMHO_DATABASE_URL: postgres://femho:${POSTGRES_PASSWORD:?cal posar POSTGRES_PASSWORD}@postgres:5432/femho
       FEMHO_REGISTRATION: disabled
+      FEMHO_GOOGLE_CLIENT_ID: ${FEMHO_GOOGLE_CLIENT_ID:-}
+      FEMHO_GOOGLE_CLIENT_SECRET: ${FEMHO_GOOGLE_CLIENT_SECRET:-}
     healthcheck:
       test:
         - CMD

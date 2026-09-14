@@ -2176,6 +2176,8 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
         scopeSettings = scopeSettings,
         calendars = calendars,
         mailAccounts = mailAccounts,
+        googleMailContent = { GoogleMailPanel(model, mailAccounts) },
+        mailPollingContent = { MailPollingControl(model, it) },
         mailRules = mailRules,
         theme = theme,
         accent = accent,

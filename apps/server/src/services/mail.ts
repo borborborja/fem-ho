@@ -45,6 +45,8 @@ export interface MailAccountSummary {
   security: 'tls' | 'starttls';
   username: string;
   has_secret: boolean;
+  auth_method: 'password' | 'google';
+  oauth_status: 'connected' | 'reconnect_required' | 'disconnected' | null;
   enabled: boolean;
   poll_interval: number | null;
   last_polled_at: string | null;
@@ -62,6 +64,8 @@ interface AccountRow {
   security: string;
   username: string;
   secret_enc: string | null;
+  auth_method: 'password' | 'google';
+  oauth_status: 'connected' | 'reconnect_required' | 'disconnected' | null;
   enabled: number;
   poll_interval: number | null;
   last_polled_at: string | null;
@@ -71,7 +75,7 @@ interface AccountRow {
 }
 
 const ACCOUNT_COLUMNS = sql`id, user_id, name, host, port, security, username, secret_enc,
-  enabled, poll_interval, last_polled_at, last_error, last_error_at, consecutive_errors`;
+  enabled, poll_interval, last_polled_at, last_error, last_error_at, consecutive_errors, auth_method, oauth_status`;
 
 function toAccount(row: AccountRow): MailAccountSummary {
   return {
@@ -83,6 +87,8 @@ function toAccount(row: AccountRow): MailAccountSummary {
     username: row.username,
     // El booleà, i no el valor. És l'única cosa que se'n pot dir.
     has_secret: row.secret_enc !== null && row.secret_enc !== '',
+    auth_method: row.auth_method,
+    oauth_status: row.oauth_status,
     enabled: Boolean(row.enabled),
     poll_interval: row.poll_interval === null ? null : Number(row.poll_interval),
     last_polled_at: row.last_polled_at,
@@ -239,6 +245,17 @@ function assertPort(port: number): void {
   }
 }
 
+function assertPollInterval(value: number | null | undefined): void {
+  if (value != null && (!Number.isInteger(value) || value < 60 || value > 86400)) {
+    throw new PolicyError(
+      'mail-poll-interval',
+      'Invalid interval',
+      422,
+      'Use an integer between 60 and 86400 seconds.',
+    );
+  }
+}
+
 export async function createMailAccount(
   ctx: AuditContext,
   principal: Principal,
@@ -247,6 +264,7 @@ export async function createMailAccount(
   if (!hasCapability(principal, 'mail:write')) throw missingCapability('mail:write');
 
   const name = (input.name ?? '').trim();
+  assertPollInterval(input.poll_interval);
   const host = (input.host ?? '').trim().toLowerCase();
   const username = (input.username ?? '').trim();
   if (name === '') throw requerit('name', 'El compte necessita un nom.');
@@ -302,6 +320,7 @@ export async function updateMailAccount(
 ): Promise<MailAccountSummary> {
   if (!hasCapability(principal, 'mail:write')) throw missingCapability('mail:write');
   const before = await assertOwnAccount(ctx.tx, principal, id);
+  assertPollInterval(input.poll_interval);
 
   const security = input.security ?? (before.security === 'starttls' ? 'starttls' : 'tls');
   const port = input.port ?? Number(before.port);
@@ -311,6 +330,22 @@ export async function updateMailAccount(
   if (name === '') throw requerit('name', 'El compte necessita un nom.');
   const host = input.host === undefined ? before.host : input.host.trim().toLowerCase();
   const username = input.username === undefined ? before.username : input.username.trim();
+  // Una petició antiga o un token API no pot canviar on s'envia un token Google.
+  if (
+    before.auth_method === 'google' &&
+    (host !== before.host ||
+      username !== before.username ||
+      port !== Number(before.port) ||
+      security !== before.security ||
+      input.secret_enc !== undefined)
+  ) {
+    throw new PolicyError(
+      'mail-oauth-managed',
+      'Google account',
+      422,
+      'Reconnect this account with Google.',
+    );
+  }
 
   /**
    * **Canviar d'amfitrió o d'usuari reinicia el comptador d'errors.**
@@ -361,8 +396,13 @@ export async function deleteMailAccount(
     WHERE account_id = ${id} AND deleted_at IS NULL
   `.execute(ctx.tx);
   await sql`
-    UPDATE mail_accounts SET deleted_at = ${ctx.now}, updated_at = ${ctx.now} WHERE id = ${id}
+    UPDATE mail_accounts SET deleted_at = ${ctx.now}, updated_at = ${ctx.now}, secret_enc = NULL,
+      oauth_lock = NULL, oauth_lock_until = NULL WHERE id = ${id}
   `.execute(ctx.tx);
+  await sql`UPDATE mail_oauth_attempts SET status = 'cancelled', result_enc = NULL, verifier_enc = NULL
+    WHERE account_id = ${id} AND user_id = ${principal.userId} AND status <> 'completed'`.execute(
+    ctx.tx,
+  );
 
   ctx.record({ entityType: 'mail_account', entityId: id, verb: 'deleted' });
 }

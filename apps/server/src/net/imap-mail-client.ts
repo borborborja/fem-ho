@@ -41,7 +41,8 @@ export interface ImapAccount {
   security: string;
   username: string;
   /** Ja oberta per qui té el secret de la instància. No es desxifra res aquí. */
-  password: string;
+  password?: string | undefined;
+  accessToken?: string | undefined;
 }
 
 const DEFAULT_TIMEOUT = 30_000;
@@ -106,7 +107,11 @@ export async function openImapClient(
     // El planificador desa aquest missatge al compte. ImapFlow posa sovint el motiu real
     // a `serverResponseCode` i deixa `message` en «Command failed»; desar només aquest
     // últim text faria que una credencial rebutjada semblés una avaria de xarxa.
-    throw new Error(readableError(error, account.host), { cause: error });
+    // Un error d'autenticació pot portar l'ordre SASL; amb OAuth no es conserva la causa.
+    throw new Error(
+      readableError(error, account.host),
+      account.accessToken ? undefined : { cause: error },
+    );
   }
 
   const llegirPart = async (uid: string, part: string): Promise<string | null> => {

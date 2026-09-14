@@ -3985,6 +3985,110 @@ paths:
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Forbidden' }
 
+  /mail/oauth/google:
+    get:
+      tags: [mail]
+      operationId: googleMailAvailability
+      summary: Disponibilitat d'OAuth de Google per a correu
+      responses:
+        '200':
+          description: Configuració pública, sense secrets.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [enabled]
+                properties:
+                  enabled: { type: boolean }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+    post:
+      tags: [mail]
+      operationId: startGoogleMail
+      summary: Iniciar autorització per connectar o reconnectar un compte propi
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [account_id]
+              properties:
+                account_id: { type: string, format: uuid }
+                reconnect: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Intent temporal. El client original ha de confirmar el resultat.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: '#/components/schemas/MailOAuthAttempt' }
+                  - type: object
+                    required: [authorization_url]
+                    properties:
+                      authorization_url: { type: string, format: uri }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+  /mail/oauth/google/callback:
+    get:
+      tags: [mail]
+      operationId: googleMailCallback
+      security: []
+      summary: Retorn de Google, validat amb state i PKCE
+      parameters:
+        - { name: state, in: query, required: true, schema: { type: string } }
+        - { name: code, in: query, schema: { type: string } }
+        - { name: error, in: query, schema: { type: string } }
+      responses:
+        '303': { description: 'Retorn fix a la pantalla de correu, sense tokens.' }
+  /mail/oauth/attempts/{id}:
+    get:
+      tags: [mail]
+      operationId: getMailOAuthAttempt
+      summary: Llegir el resultat d'un intent propi
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Estat i identitat autoritzada; mai credencials.
+          content:
+            { application/json: { schema: { $ref: '#/components/schemas/MailOAuthAttempt' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [mail]
+      operationId: cancelMailOAuthAttempt
+      summary: Cancel·lar un intent propi i eliminar-ne les credencials temporals
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '204': { description: Cancel·lat. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+  /mail/oauth/attempts/{id}/confirm:
+    post:
+      tags: [mail]
+      operationId: confirmGoogleMail
+      summary: Confirmar la vinculació des del client autenticat original
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Compte connectat; regles i cursors conservats.
+          content: { application/json: { schema: { $ref: '#/components/schemas/MailAccount' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '409': { description: 'Intent caducat, identitat diferent o autorització incompleta.' }
+  /mail/accounts/{id}/oauth/disconnect:
+    post:
+      tags: [mail]
+      operationId: disconnectGoogleMail
+      summary: Eliminar l'autorització local i aturar la lectura, conservant les regles
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '204': { description: Credencials eliminades. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   /mail/accounts:
     get:
       tags: [mail]
@@ -4336,6 +4440,21 @@ components:
           items: { type: string }
           description: Coses que no impedeixen arrencar i val la pena dir.
 
+    MailOAuthAttempt:
+      type: object
+      required: [id, account_id, status, expires_at, email, error_code]
+      properties:
+        id: { type: string }
+        account_id: { type: string }
+        status:
+          {
+            type: string,
+            enum: [pending, exchanging, ready, completed, cancelled, failed, expired],
+          }
+        expires_at: { type: string, format: date-time }
+        email: { type: [string, 'null'] }
+        error_code: { type: [string, 'null'] }
+
     MailAccount:
       type: object
       description: >-
@@ -4344,6 +4463,9 @@ components:
         màscara filtra la longitud i el prefix—.
       required: [id, name, host, port, security, username, enabled, has_secret]
       properties:
+        auth_method: { type: string, enum: [password, google], default: password }
+        oauth_status:
+          { type: [string, 'null'], enum: [connected, reconnect_required, disconnected, null] }
         id: { type: string }
         name:
           type: string
@@ -4366,7 +4488,9 @@ components:
         enabled: { type: boolean, default: true }
         poll_interval:
           type: [integer, 'null']
-          description: Segons entre lectures. `null` fa servir el de la instància.
+          minimum: 60
+          maximum: 86400
+          description: Segons entre lectures (60–86400). `null` fa servir 300 segons. Consulta periòdica, sense IMAP IDLE; el planificador comprova cada 30 segons.
         last_polled_at: { type: [string, 'null'], format: date-time }
         last_error:
           type: [string, 'null']
@@ -4400,7 +4524,7 @@ components:
             porta un espai o un salt de línia que el camp no dibuixa —i llavors el que
             llegeixes a la pantalla és exactament el que hauries d'haver escrit, i el
             servidor de correu la rebutja igualment.
-        poll_interval: { type: [integer, 'null'] }
+        poll_interval: { type: [integer, 'null'], minimum: 60, maximum: 86400 }
         enabled: { type: boolean }
 
     MailAccountPatch:
@@ -4417,7 +4541,7 @@ components:
           description: >-
             Absent vol dir **«no la toquis»**, no «esborra-la»: el formulari no la torna
             a ensenyar mai, i canviar el nom del compte no ha de perdre'n les credencials.
-        poll_interval: { type: [integer, 'null'] }
+        poll_interval: { type: [integer, 'null'], minimum: 60, maximum: 86400 }
         enabled: { type: boolean }
 
     MailTestInput:

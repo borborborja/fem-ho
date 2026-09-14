@@ -219,6 +219,19 @@ class SerializationTest {
         val account = json.decodeFromString<MailAccount>(accountJson)
         assertEquals("Antic", account.name)
         assertEquals(null, account.createdAt)
+        assertEquals("password", account.authMethod)
+        assertEquals(null, account.oauthStatus)
+    }
+
+    @Test
+    fun `Google conserva el tipus de connexio i l'estat de reconnexio`() {
+        val account = json.decodeFromString<MailAccount>("""{"id":"google-1","name":"Google","host":"imap.gmail.com","username":"me@example.test","has_secret":true,"auth_method":"google","oauth_status":"reconnect_required"}""")
+        assertEquals("google", account.authMethod)
+        assertEquals("reconnect_required", account.oauthStatus)
+        val attempt = json.decodeFromString<MailOAuthAttempt>("""{"id":"attempt-1","account_id":"google-1","status":"ready","expires_at":"2026-09-14T12:00:00.000Z","email":"me@example.test","error_code":null}""")
+        assertEquals("ready", attempt.status)
+        assertEquals("me@example.test", attempt.email)
+        assertEquals(null, attempt.authorizationUrl)
     }
 
     /* ----------------------------------------- MailRule ----------------------------------------- */

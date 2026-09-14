@@ -20,6 +20,8 @@ import { auditedTransaction } from '../audit/audited-transaction.js';
 import { open, seal } from '../crypto/secret-box.js';
 import { SsrfError } from '../dav/fetch-safe.js';
 import { probeImap } from '../net/imap-connect.js';
+import { mailCredentials } from '../services/mail-credentials.js';
+import { mailOAuthProblem } from './mail-oauth.js';
 import { PolicyError } from '../policy/errors.js';
 import type { Principal } from '../policy/principal.js';
 import { convertOwnMail } from '../services/mail-convert-http.js';
@@ -61,6 +63,19 @@ const inboxVisible = (input: Record<string, unknown>): boolean | null | undefine
 
 /** El propòsit del segell. Una constant perquè crear i obrir no puguin divergir. */
 const purpose = (id: string): string => `mail_account:${id}`;
+
+function pollInterval(input: Record<string, unknown>): number | null | undefined {
+  if (!('poll_interval' in input)) return undefined;
+  if (input.poll_interval === null) return null;
+  if (typeof input.poll_interval !== 'number')
+    throw new PolicyError(
+      'mail-poll-interval',
+      'Invalid interval',
+      422,
+      'Use an integer number of seconds.',
+    );
+  return input.poll_interval;
+}
 
 /**
  * La contrasenya que arriba, **sense els espais dels extrems**.
@@ -109,7 +124,7 @@ export function registerMailRoutes(app: FastifyInstance, secret: () => string): 
           username: str(input.username),
           secret_enc:
             clau !== undefined && clau !== '' ? seal(secret(), purpose(id), clau) : undefined,
-          poll_interval: 'poll_interval' in input ? (num(input.poll_interval) ?? null) : undefined,
+          poll_interval: pollInterval(input),
           enabled: bool(input.enabled),
         }),
       );
@@ -135,7 +150,7 @@ export function registerMailRoutes(app: FastifyInstance, secret: () => string): 
             clau !== undefined && clau !== ''
               ? seal(secret(), purpose(request.params.id), clau)
               : undefined,
-          poll_interval: 'poll_interval' in input ? (num(input.poll_interval) ?? null) : undefined,
+          poll_interval: pollInterval(input),
           enabled: bool(input.enabled),
         }),
       );
@@ -186,7 +201,7 @@ export function registerMailRoutes(app: FastifyInstance, secret: () => string): 
 
       const enviada = password(input);
       let clau = enviada ?? '';
-      if (clau === '') {
+      if (clau === '' && account.auth_method !== 'google') {
         if (!account.has_secret) {
           throw new PolicyError(
             'mail-secret-required',
@@ -205,7 +220,9 @@ export function registerMailRoutes(app: FastifyInstance, secret: () => string): 
             port: account.port,
             security: account.security,
             username: account.username,
-            password: clau,
+            ...(account.auth_method === 'google'
+              ? await mailCredentials(db().db, secret(), app.config, account.id, principal.userId)
+              : { password: clau }),
           },
           { allowHosts: app.config.mailAllowHosts },
         );
@@ -213,7 +230,7 @@ export function registerMailRoutes(app: FastifyInstance, secret: () => string): 
         if (error instanceof SsrfError) {
           throw new PolicyError('mail-host-not-allowed', 'Host not allowed', 422, error.message);
         }
-        throw error;
+        mailOAuthProblem(error);
       }
     }),
   );
@@ -318,7 +335,7 @@ export function registerMailRoutes(app: FastifyInstance, secret: () => string): 
             port: account.port,
             security: account.security,
             username: account.username,
-            password: await openStored(app, secret(), principal, account.id),
+            ...(await mailCredentials(db().db, secret(), app.config, account.id, principal.userId)),
           },
           { allowHosts: app.config.mailAllowHosts },
         );
@@ -327,7 +344,7 @@ export function registerMailRoutes(app: FastifyInstance, secret: () => string): 
         if (error instanceof SsrfError) {
           throw new PolicyError('mail-host-not-allowed', 'Host not allowed', 422, error.message);
         }
-        throw error;
+        mailOAuthProblem(error);
       }
     }),
   );

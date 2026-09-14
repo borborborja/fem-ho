@@ -56,6 +56,8 @@ fitxer, que és el que permet fer servir secrets de Docker.
 | `FEMHO_UPDATE_CHECK` | `true` | Preguntar a GitHub si hi ha una versió més nova. Veure l'avís de sota |
 | `FEMHO_MAX_UPLOAD_MB` | `25` | Mida màxima d'un adjunt |
 | `FEMHO_MAIL_ALLOW_HOSTS` | — | Els servidors IMAP permesos, separats per comes (`imap.gmail.com,imap.fastmail.com`). Buida vol dir qualsevol de públic; les adreces internes es rebutgen sempre, amb llista o sense |
+| `FEMHO_GOOGLE_CLIENT_ID` | — | Client OAuth Google de tipus web propi d'aquesta instància. Veure [configuració OAuth](mail-oauth.md) |
+| `FEMHO_GOOGLE_CLIENT_SECRET` | — | Secret del client Google. Només al servidor; juntament amb el client i una URL base HTTPS activa OAuth de correu |
 | `FEMHO_MAIL_POLL_SECONDS` | `300` | Cada quant es llegeix un compte de correu. Cinc minuts i no trenta segons: un `LOGIN` cada mig minut contra un proveïdor gros és com es bloqueja un compte |
 | `FEMHO_MAIL_MAX_MESSAGE_MB` | `25` | Un correu més gros que això no es baixa. Es desa igualment que hi era, perquè es pugui veure |
 | `FEMHO_MAIL_RETENTION_DAYS` | `0` | Dies que es guarda el cos d'un correu ingerit. `0` és per sempre. **Mai purga cap tasca**: la tasca és teva i la provinença hi sobreviu |

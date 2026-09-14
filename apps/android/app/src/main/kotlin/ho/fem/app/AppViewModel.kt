@@ -1313,6 +1313,23 @@ class AppViewModel(private val container: Container) : ViewModel() {
     }
 
     /** Carrega comptes i regles de correu per a Ajustos ▸ Correu. */
+    fun googleMailApi(): FemhoApi = container.api(checkNotNull(serverUrl))
+
+    private fun googleMailKey(): String? {
+        val base = serverUrl ?: return null
+        val user = profile.value?.id ?: return null
+        return "$base|$user"
+    }
+    fun pendingGoogleMail(): String? = googleMailKey()?.let {
+        container.appContext.getSharedPreferences("mail_oauth", android.content.Context.MODE_PRIVATE).getString(it, null)
+    }
+    fun savePendingGoogleMail(id: String?) {
+        val key = googleMailKey() ?: return
+        val editor = container.appContext.getSharedPreferences("mail_oauth", android.content.Context.MODE_PRIVATE).edit()
+        if (id == null) editor.remove(key) else editor.putString(key, id)
+        editor.apply()
+    }
+
     fun loadMailData() {
         val base = serverUrl ?: return
         viewModelScope.launch {

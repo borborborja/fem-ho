@@ -44,7 +44,8 @@ export interface ImapTarget {
   port: number;
   security: 'tls' | 'starttls';
   username: string;
-  password: string;
+  password?: string | undefined;
+  accessToken?: string | undefined;
 }
 
 export interface ImapConnectOptions {
@@ -143,7 +144,13 @@ export function imapOptions(
     secure: target.security === 'tls',
     // I el certificat es valida contra **el nom**, que és el que el servidor presenta.
     servername: target.host,
-    auth: { user: target.username, pass: normalizeImapPassword(target.host, target.password) },
+    auth:
+      target.accessToken !== undefined
+        ? { user: target.username, accessToken: target.accessToken, loginMethod: 'XOAUTH2' }
+        : {
+            user: target.username,
+            pass: normalizeImapPassword(target.host, target.password ?? ''),
+          },
     tls: {
       servername: target.host,
       // No hi ha cap camí de codi que ho posi a `false`. Explícit perquè es vegi.
@@ -240,8 +247,8 @@ export function readableError(error: unknown, host?: string): string {
     if (hostname === 'imap.gmail.com' || hostname === 'imap.googlemail.com') {
       return (
         'Google ha rebutjat l’accés. Fes servir l’adreça completa i una contrasenya ' +
-        'd’aplicació de 16 caràcters. Si és un compte Workspace que exigeix OAuth, ' +
-        'Fem-ho encara no el pot connectar.'
+        'd’aplicació de 16 caràcters, o connecta el compte amb Google (OAuth) als ajustos. ' +
+        'Si ja fas servir Google, torna’l a connectar i comprova que l’administrador permeti IMAP.'
       );
     }
     return "L'usuari o la contrasenya no són correctes.";

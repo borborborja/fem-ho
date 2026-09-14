@@ -361,6 +361,15 @@ describe('quan falla', () => {
 });
 
 describe('la corba de la retirada', () => {
+  it('respecta l’interval configurat i l’aplica als reintents', async () => {
+    await regla();
+    await sql`UPDATE mail_accounts SET poll_interval = 60, last_polled_at = ${NOW} WHERE id = ${accountId}`.execute(
+      conn.db,
+    );
+    expect((await córrer('2026-08-11T10:00:30.000Z')).polled).toBe(0);
+    expect((await córrer('2026-08-11T10:01:00.000Z')).polled).toBe(1);
+    expect(backoffSeconds(1, 60)).toBe(120);
+  });
   it('creix i para a sis hores', () => {
     expect(backoffSeconds(0)).toBe(300);
     expect(backoffSeconds(1)).toBe(600);
@@ -439,8 +448,36 @@ describe('el fil, quan ja hi ha tasca', () => {
         subject: 'Re: la factura',
       }),
     ];
-    servidor.bodies.set('1', { text: 'Doncs ja està pagada.', html: null, attachments: [] });
-    await córrer('2026-08-11T11:00:00.000Z');
+    servidor.bodies.set('1', {
+      text: 'Doncs ja està pagada.',
+      html: null,
+      attachments: [{ part: '2', filename: 'rebut.pdf', contentType: 'application/pdf', size: 4 }],
+    });
+    servidor.fitxers.set('1:2', new Uint8Array([37, 80, 68, 70]));
+    const dataDir = mkdtempSync(join(tmpdir(), 'femho-thread-attachment-'));
+    try {
+      await pollMail({
+        db: conn.db,
+        openClient: async () => servidor,
+        now: () => '2026-08-11T11:00:00.000Z',
+        dataDir,
+      });
+      await pollMail({
+        db: conn.db,
+        openClient: async () => servidor,
+        now: () => '2026-08-11T11:10:00.000Z',
+        dataDir,
+      });
+      expect(
+        (
+          await sql`SELECT filename,scope_id FROM attachments WHERE task_id = ${tasca}`.execute(
+            conn.db,
+          )
+        ).rows,
+      ).toEqual([{ filename: 'rebut.pdf', scope_id: scopeId }]);
+    } finally {
+      rmSync(dataDir, { recursive: true, force: true });
+    }
 
     const tasques = await sql<{ n: number }>`SELECT COUNT(*) AS n FROM tasks`.execute(conn.db);
     expect(Number(tasques.rows[0]?.n)).toBe(1);

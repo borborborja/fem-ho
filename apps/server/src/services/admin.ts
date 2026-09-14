@@ -347,6 +347,7 @@ export async function wipeInstance(
     'mail_messages',
     'mail_threads',
     'mail_rules',
+    'mail_oauth_attempts',
     'mail_accounts',
     // Compartits.
     'share_accesses',

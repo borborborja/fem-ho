@@ -48,6 +48,7 @@ import type {
   UpdateStatus,
 } from '../app/types.js';
 import { ErrorBanner } from './BoardScreen.js';
+import { GoogleMailPanel } from './GoogleMailPanel.js';
 
 /**
  * **El correu va en pestanya pròpia i no dins de «Calendaris».**
@@ -2680,6 +2681,7 @@ function MailTab() {
           ))
         )}
 
+        <GoogleMailPanel accounts={accounts.data ?? []} onDone={() => accounts.reload()} />
         <MailAccountForm onDone={() => accounts.reload()} />
       </Group>
 
@@ -2756,6 +2758,7 @@ function Camp({ label, children }: { label: string; children: React.ReactNode })
 /** Un compte, amb el seu estat i el botó de provar. */
 function MailAccountRow({ account, onDone }: { account: MailAccount; onDone: () => void }) {
   const [password, setPassword] = useState('');
+  const [pollInterval, setPollInterval] = useState(String(account.poll_interval ?? ''));
   const [result, setResult] = useState<MailTestResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -2781,6 +2784,7 @@ function MailAccountRow({ account, onDone }: { account: MailAccount; onDone: () 
         // Buida vol dir «no la toquis».
         password: password === '' ? undefined : password,
         enabled: account.enabled,
+        poll_interval: pollInterval === '' ? null : Number(pollInterval),
       });
       setPassword('');
       onDone();
@@ -2835,27 +2839,62 @@ function MailAccountRow({ account, onDone }: { account: MailAccount; onDone: () 
       </span>
 
       <div style={{ display: 'flex', gap: 8, alignItems: 'end', flexWrap: 'wrap' }}>
-        <Camp label={t('settings.mail.password')}>
-          <input
-            type="password"
+        <Camp label={t('settings.mail.pollInterval')}>
+          <select
             className="plou-input"
-            data-testid={`mail-password-${account.id}`}
-            value={password}
-            /*
+            value={pollInterval}
+            onChange={(event) => setPollInterval(event.target.value)}
+          >
+            <option value="">{t('settings.mail.pollDefault')}</option>
+            {[
+              60,
+              120,
+              300,
+              600,
+              900,
+              1800,
+              3600,
+              ...(![60, 120, 300, 600, 900, 1800, 3600].includes(Number(pollInterval)) &&
+              pollInterval !== ''
+                ? [Number(pollInterval)]
+                : []),
+            ].map((seconds) => (
+              <option key={seconds} value={seconds}>
+                {t('settings.mail.pollMinutes', { count: seconds / 60 })}
+              </option>
+            ))}
+          </select>
+        </Camp>
+        {account.auth_method === 'google' ? (
+          <span>{t(`settings.mail.oauth.${account.oauth_status ?? 'disconnected'}`)}</span>
+        ) : (
+          <Camp label={t('settings.mail.password')}>
+            <input
+              type="password"
+              className="plou-input"
+              data-testid={`mail-password-${account.id}`}
+              value={password}
+              /*
               Curt perquè **hi càpiga**: el text llarg es tallava a «Deixa-ho buit per r»,
               i un camp que et parla a mitges és el que et fa pensar que això va malament
               abans de fer-lo servir. La frase sencera va al `title`.
             */
-            placeholder={account.has_secret ? t('settings.mail.passwordKept') : ''}
-            title={account.has_secret ? t('settings.mail.passwordKept.long') : undefined}
-            style={{ minWidth: 190 }}
-            onChange={(event) => setPassword(event.target.value)}
-          />
-        </Camp>
+              placeholder={account.has_secret ? t('settings.mail.passwordKept') : ''}
+              title={account.has_secret ? t('settings.mail.passwordKept.long') : undefined}
+              style={{ minWidth: 190 }}
+              onChange={(event) => setPassword(event.target.value)}
+            />
+          </Camp>
+        )}
         <button type="button" className="plou-btn" onClick={() => void test.run()}>
           {test.busy ? t('settings.mail.testing') : t('settings.mail.test')}
         </button>
-        <button type="button" className="plou-btn" onClick={() => void save.run()}>
+        <button
+          type="button"
+          className="plou-btn"
+          disabled={save.busy}
+          onClick={() => void save.run()}
+        >
           {t('settings.mail.save')}
         </button>
         <button
@@ -2878,6 +2917,9 @@ function MailAccountRow({ account, onDone }: { account: MailAccount; onDone: () 
             : t('settings.mail.testFail', { error: result.error ?? '' })}
         </span>
       ) : null}
+      <span style={{ fontSize: 11.5, color: 'var(--ink-soft)' }}>
+        {t('settings.mail.pollHelp')}
+      </span>
 
       {/*
         **La pista que hauria estalviat una tarda.** «L'usuari o la contrasenya no són
@@ -2885,7 +2927,7 @@ function MailAccountRow({ account, onDone }: { account: MailAccount; onDone: () 
         pantalla és la bona: el que falla és que el proveïdor no accepta la del compte, o
         que el que vas enganxar portava un espai que el camp no dibuixa.
       */}
-      {result !== null && !result.ok ? (
+      {result !== null && !result.ok && account.auth_method !== 'google' ? (
         <span
           data-testid={`mail-hint-${account.id}`}
           style={{ fontSize: 11, color: 'var(--ink-soft)' }}
