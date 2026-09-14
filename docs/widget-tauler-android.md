@@ -8,11 +8,17 @@ selector de widgets del llançador, sense configuració prèvia. Conviu amb «Ta
 - Cada columna es desplaça independentment i mostra el recompte complet. Carrega un
   màxim de 25 tasques; «Veure totes», al final, obre aquella columna dins l’app.
 - Tocar una targeta avança Inbox → Per fer → Fent → Fet. La tasca feta desapareix.
-  «Obre» porta al tauler de l’app.
+  La icona d’obrir, a la capçalera de Fent, porta al tauler de l’app.
 - Respecta els àmbits actius, l’idioma i el tema/accent de l’app. Els projectes no
   són un filtre propi del widget. Les targetes mostren el color de l’àmbit i tenen
-  títol de dues línies, descripció accessible de l’acció i una zona tàctil de 72 dp
-  d’alçada que creix amb la mida de la font. Els accessos tenen almenys 48 dp.
+  títol de dues línies, descripció accessible de l’acció i una zona tàctil de 64 dp
+  d’alçada que creix amb la mida de la font. L’accés al tauler té 40 dp.
+
+La capçalera general no ocupa espai dins del widget: cada columna integra en una
+sola fila el punt d’estat, el nom i el recompte. Els fons de superfície i targeta
+usen drawables amb variants `values` i `values-night`; no es tenyeixen amb un
+`ColorProvider`, perquè alguns llançadors componen aquell tint com a negre en mode
+clar.
 
 ## Dades i sincronització
 

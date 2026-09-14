@@ -850,7 +850,6 @@
     <string name="widget_taskboard_empty">No tasks.</string>
     <string name="widget_taskboard_name">Fem-ho · Board</string>
     <string name="widget_taskboard_open">Open</string>
-    <string name="widget_taskboard_title">Board</string>
     <string name="widget_taskboard_viewall">View all</string>
     <string name="widget_today_description">What is due today, with quick add.</string>
     <string name="widget_today_name">Fem-ho · Today</string>

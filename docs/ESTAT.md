@@ -30,6 +30,15 @@ redimensionament, desplaçament, toc i coexistència dels widgets. No hi ha cap
 dispositiu connectat i aquesta sessió no té accés a KVM; no s’ha instal·lat l’APK.
 Vegeu [comportament, arquitectura i comprovacions manuals](widget-tauler-android.md).
 
+**Correcció del 2026-09-14 després de la prova en un llançador real:** el tint de
+Glance sobre els drawables translúcids feia aparèixer les targetes negres en mode
+clar. Ara les superfícies resolen directament els recursos `values/values-night` i
+una comprovació permanent impedeix recuperar aquell patró. S’ha eliminat la fila
+«Tauler / Obre»: l’accés és una icona a la capçalera de Fent, el recompte comparteix
+fila amb el nom de columna i les targetes baixen de 72 a 64 dp. Les 18 comprovacions,
+l’APK release amb R8 i el lint Android passen; falta instal·lar aquest APK per validar
+visualment la correcció al mateix llançador.
+
 ---
 
 ## Auditoria d’Android i widget configurable · 2026-09-10

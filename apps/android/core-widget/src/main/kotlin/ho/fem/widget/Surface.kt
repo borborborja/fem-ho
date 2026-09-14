@@ -2,6 +2,7 @@ package ho.fem.widget
 
 import android.os.Build
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.ColorFilter
@@ -69,6 +70,7 @@ object WidgetText {
 @Composable
 fun WidgetSurface(
     modifier: GlanceModifier = GlanceModifier,
+    contentPadding: Dp = WidgetSize.padding,
     content: @Composable () -> Unit,
 ) {
     var shell = GlanceModifier
@@ -79,7 +81,7 @@ fun WidgetSurface(
         shell = shell.cornerRadius(WidgetSize.surfaceRadius)
     }
 
-    Box(modifier = shell.then(modifier).padding(WidgetSize.padding)) { content() }
+    Box(modifier = shell.then(modifier).padding(contentPadding)) { content() }
 }
 
 /** Una icona monocroma tenyida amb un color del tema. Cap vector porta color propi. */

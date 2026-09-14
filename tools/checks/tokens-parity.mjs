@@ -14,9 +14,31 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { ROOT } from './lib/scan.mjs';
+import { ROOT, walk } from './lib/scan.mjs';
 
 const ANDROID = join(ROOT, 'apps', 'android');
+
+/**
+ * Un ColorProvider aplicat com a tint d'un drawable de fons no és portable entre
+ * llançadors: alguns el componen com a negre en mode clar. Els vectors monocroms sí que
+ * es tenyeixen; les superfícies han de resoldre `values/values-night` des del recurs.
+ */
+const tintedWidgetBackground =
+  /\.background\s*\(\s*ImageProvider\([\s\S]{0,200}?\)\s*,\s*colorFilter\s*=/u;
+
+if (process.argv.includes('--self-test')) {
+  const bad = `.background(
+    ImageProvider(R.drawable.surface),
+    colorFilter = ColorFilter.tint(palette.color { cardBg }),
+  )`;
+  const good = '.background(ImageProvider(R.drawable.surface))';
+  if (!tintedWidgetBackground.test(bad) || tintedWidgetBackground.test(good)) {
+    console.error('tokens-parity · l’autoprova del fons tenyit ha fallat');
+    process.exit(1);
+  }
+  console.log('tokens-parity --self-test · detecta fons de widget tenyits');
+  process.exit(0);
+}
 
 if (!existsSync(ANDROID)) {
   console.log('tokens-parity · encara no hi ha apps/android; res a comprovar');
@@ -31,4 +53,19 @@ const result = spawnSync(
 
 process.stdout.write(result.stdout ?? '');
 process.stderr.write(result.stderr ?? '');
-process.exit(result.status ?? 1);
+if (result.status !== 0) process.exit(result.status ?? 1);
+
+const violations = [];
+for (const file of walk(ANDROID, ['.kt'])) {
+  if (!file.rel.includes('/widget/')) continue;
+  if (tintedWidgetBackground.test(file.text)) violations.push(file.rel);
+}
+if (violations.length > 0) {
+  console.error(
+    'tokens-parity · un fons de widget usa ColorFilter amb un ColorProvider; ' +
+      'fes servir un drawable amb recursos values/values-night:',
+  );
+  for (const file of violations) console.error(`  ${file}`);
+  process.exit(1);
+}
+console.log('tokens-parity · cap superfície de widget depèn d’un tint de llançador');
