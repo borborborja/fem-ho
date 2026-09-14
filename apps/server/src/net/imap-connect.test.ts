@@ -8,7 +8,13 @@
 
 import { describe, expect, it } from 'vitest';
 import { SsrfError } from '../dav/fetch-safe.js';
-import { imapOptions, resolveImapHost, readableError, type ImapTarget } from './imap-connect.js';
+import {
+  imapOptions,
+  normalizeImapPassword,
+  resolveImapHost,
+  readableError,
+  type ImapTarget,
+} from './imap-connect.js';
 
 const resol =
   (...addresses: string[]) =>
@@ -100,6 +106,21 @@ describe('amb quines opcions', () => {
       expect(options.secure).toBe(security === 'tls');
     }
   });
+
+  it("Gmail accepta una contrasenya d'aplicació enganxada amb els espais visuals", () => {
+    expect(normalizeImapPassword('imap.gmail.com', 'abcd efgh\nijkl\tmnop')).toBe(
+      'abcdefghijklmnop',
+    );
+    // En un servidor qualsevol els espais interiors poden ser deliberats.
+    expect(normalizeImapPassword('imap.example.test', 'abcd efgh')).toBe('abcd efgh');
+
+    const options = imapOptions(
+      { ...TARGET, host: 'imap.gmail.com', password: 'abcd efgh ijkl mnop' },
+      '74.125.71.108',
+      1000,
+    );
+    expect(options.auth?.pass).toBe('abcdefghijklmnop');
+  });
 });
 
 describe('el que es diu quan falla', () => {
@@ -107,6 +128,19 @@ describe('el que es diu quan falla', () => {
     expect(readableError(new Error('Command failed: AUTHENTICATIONFAILED'))).toContain(
       'contrasenya',
     );
+  });
+
+  it("reconeix l'error d'autenticació als camps que retorna ImapFlow", () => {
+    const error = Object.assign(new Error('Command failed'), {
+      responseText: 'Invalid credentials (Failure)',
+      serverResponseCode: 'AUTHENTICATIONFAILED',
+      authenticationFailed: true,
+    });
+
+    const message = readableError(error, 'imap.gmail.com');
+    expect(message).toContain('contrasenya d’aplicació');
+    expect(message).toContain('OAuth');
+    expect(message).not.toContain('Command failed');
   });
 
   it('i la resposta crua del servidor no surt mai', () => {

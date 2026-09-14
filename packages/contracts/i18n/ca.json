@@ -397,7 +397,7 @@
   "settings.mail.accounts": "Comptes",
   "settings.mail.add": "Afegeix el compte",
   "settings.mail.addRule": "Mapa la carpeta",
-  "settings.mail.appPassword": "Amb Fastmail, Gmail o iCloud cal una contrasenya d’aplicació, no la del teu compte. Els espais dels extrems es treuen sols.",
+  "settings.mail.appPassword": "Fastmail i iCloud necessiten una contrasenya d’aplicació. A Gmail personal, activa la verificació en dos passos i usa la contrasenya d’aplicació de 16 caràcters; pots enganxar-la amb espais. Si l’administrador de Google Workspace exigeix OAuth, Fem-ho encara no pot connectar el compte.",
   "settings.mail.attachmentsToTask": "Els adjunts del correu, a la tasca",
   "settings.mail.bodyToDescription": "El cos del correu, a la descripció",
   "settings.mail.empty": "Encara no hi ha cap compte de correu.",

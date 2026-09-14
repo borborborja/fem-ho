@@ -56,6 +56,18 @@ export interface ImapConnectOptions {
 }
 
 /**
+ * Google mostra les contrasenyes d'aplicació en quatre grups de quatre caràcters.
+ * Enganxar-les tal com es veuen no ha de convertir una credencial correcta en una de
+ * diferent. Es fa només per als servidors de Gmail: en un IMAP qualsevol, un espai al
+ * mig pot formar part de la contrasenya i no tenim dret a canviar-lo.
+ */
+export function normalizeImapPassword(host: string, password: string): string {
+  const hostname = host.trim().toLowerCase();
+  if (hostname !== 'imap.gmail.com' && hostname !== 'imap.googlemail.com') return password;
+  return password.replace(/\p{White_Space}/gu, '');
+}
+
+/**
  * A quina adreça es pot connectar aquest amfitrió, si és que se'n pot.
  *
  * Exportada perquè la prova pugui exercitar-la sense obrir cap connexió: la part que ha de
@@ -131,7 +143,7 @@ export function imapOptions(
     secure: target.security === 'tls',
     // I el certificat es valida contra **el nom**, que és el que el servidor presenta.
     servername: target.host,
-    auth: { user: target.username, pass: target.password },
+    auth: { user: target.username, pass: normalizeImapPassword(target.host, target.password) },
     tls: {
       servername: target.host,
       // No hi ha cap camí de codi que ho posi a `false`. Explícit perquè es vegi.
@@ -183,7 +195,7 @@ export async function probeImap(
       delimiter: boxes[0]?.delimiter ?? null,
     };
   } catch (error) {
-    return { ok: false, error: readableError(error), folders: [], delimiter: null };
+    return { ok: false, error: readableError(error, target.host), folders: [], delimiter: null };
   } finally {
     // `logout` és el tancament net; si ja ha petat abans, no ha de tapar l'error de dalt.
     try {
@@ -202,16 +214,49 @@ export async function probeImap(
  * xat de suport. El que es dona és de quina mena és el problema, que és el que serveix per
  * arreglar-lo.
  */
-export function readableError(error: unknown): string {
-  const raw = error instanceof Error ? error.message : String(error);
-  const code = (error as { code?: string } | null)?.code ?? '';
+export function readableError(error: unknown, host?: string): string {
+  const detail = error as {
+    code?: string;
+    message?: string;
+    responseText?: string;
+    serverResponseCode?: string;
+    authenticationFailed?: boolean;
+  } | null;
+  const raw = [
+    typeof error === 'string' ? error : undefined,
+    detail?.message,
+    detail?.responseText,
+    detail?.serverResponseCode,
+  ]
+    .filter((part): part is string => typeof part === 'string')
+    .join(' ');
+  const code = detail?.code ?? '';
 
-  if (/AUTHENTICATIONFAILED|Invalid credentials|LOGIN failed|auth/iu.test(raw)) {
+  if (
+    detail?.authenticationFailed === true ||
+    /AUTHENTICATIONFAILED|Invalid credentials|LOGIN failed|auth/iu.test(raw)
+  ) {
+    const hostname = host?.trim().toLowerCase();
+    if (hostname === 'imap.gmail.com' || hostname === 'imap.googlemail.com') {
+      return (
+        'Google ha rebutjat l’accés. Fes servir l’adreça completa i una contrasenya ' +
+        'd’aplicació de 16 caràcters. Si és un compte Workspace que exigeix OAuth, ' +
+        'Fem-ho encara no el pot connectar.'
+      );
+    }
     return "L'usuari o la contrasenya no són correctes.";
   }
   if (code === 'ENOTFOUND' || /getaddrinfo/iu.test(raw)) return "No s'ha trobat el servidor.";
   if (code === 'ECONNREFUSED') return 'El servidor ha refusat la connexió en aquest port.';
-  if (code === 'ETIMEDOUT' || /timeout/iu.test(raw)) return 'El servidor no ha contestat a temps.';
+  if (
+    code === 'ETIMEDOUT' ||
+    code === 'CONNECT_TIMEOUT' ||
+    code === 'GREETING_TIMEOUT' ||
+    code === 'SOCKET_TIMEOUT' ||
+    /timeout/iu.test(raw)
+  ) {
+    return 'El servidor no ha contestat a temps.';
+  }
   if (/certificate|self.signed|CERT_/iu.test(raw)) {
     // I es diu la sortida bona, que no és desactivar la verificació.
     return 'El certificat del servidor no es pot verificar. Cal afegir-ne la CA a la instància.';

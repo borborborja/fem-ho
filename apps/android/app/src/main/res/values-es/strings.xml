@@ -495,7 +495,7 @@
     <string name="settings_mail_accounts">Cuentas</string>
     <string name="settings_mail_add">Añadir la cuenta</string>
     <string name="settings_mail_addrule">Mapear la carpeta</string>
-    <string name="settings_mail_apppassword">Con Fastmail, Gmail o iCloud hace falta una contraseña de aplicación, no la de tu cuenta. Los espacios de los extremos se quitan solos.</string>
+    <string name="settings_mail_apppassword">Fastmail e iCloud necesitan una contraseña de aplicación. En Gmail personal, activa la verificación en dos pasos y usa la contraseña de aplicación de 16 caracteres; puedes pegarla con espacios. Si el administrador de Google Workspace exige OAuth, Fem-ho todavía no puede conectar la cuenta.</string>
     <string name="settings_mail_attachmentstotask">Los adjuntos del correo, en la tarea</string>
     <string name="settings_mail_bodytodescription">El cuerpo del correo, en la descripción</string>
     <string name="settings_mail_empty">Todavía no hay ninguna cuenta de correo.</string>

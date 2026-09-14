@@ -20,7 +20,12 @@
  */
 
 import { ImapFlow, type MessageStructureObject } from 'imapflow';
-import { imapOptions, resolveImapHost, type ImapConnectOptions } from './imap-connect.js';
+import {
+  imapOptions,
+  readableError,
+  resolveImapHost,
+  type ImapConnectOptions,
+} from './imap-connect.js';
 import type {
   MailAttachmentMeta,
   MailBody,
@@ -94,7 +99,15 @@ export async function openImapClient(
       options.timeoutMs ?? DEFAULT_TIMEOUT,
     ),
   );
-  await client.connect();
+  try {
+    await client.connect();
+  } catch (error) {
+    client.close();
+    // El planificador desa aquest missatge al compte. ImapFlow posa sovint el motiu real
+    // a `serverResponseCode` i deixa `message` en «Command failed»; desar només aquest
+    // últim text faria que una credencial rebutjada semblés una avaria de xarxa.
+    throw new Error(readableError(error, account.host), { cause: error });
+  }
 
   const llegirPart = async (uid: string, part: string): Promise<string | null> => {
     const { content } = await client.download(uid, part, { uid: true });

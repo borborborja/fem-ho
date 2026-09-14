@@ -495,7 +495,7 @@
     <string name="settings_mail_accounts">Accounts</string>
     <string name="settings_mail_add">Add the account</string>
     <string name="settings_mail_addrule">Map the folder</string>
-    <string name="settings_mail_apppassword">With Fastmail, Gmail or iCloud you need an app password, not your account one. Spaces at either end are stripped.</string>
+    <string name="settings_mail_apppassword">Fastmail and iCloud require an app password. For personal Gmail, enable 2-Step Verification and use the 16-character app password; you may paste it with spaces. If the Google Workspace admin requires OAuth, Fem-ho cannot connect the account yet.</string>
     <string name="settings_mail_attachmentstotask">The mail attachments, onto the task</string>
     <string name="settings_mail_bodytodescription">The mail body, into the description</string>
     <string name="settings_mail_empty">No mail account yet.</string>
