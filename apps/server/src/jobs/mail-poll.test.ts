@@ -451,7 +451,15 @@ describe('el fil, quan ja hi ha tasca', () => {
     servidor.bodies.set('1', {
       text: 'Doncs ja està pagada.',
       html: null,
-      attachments: [{ part: '2', filename: 'rebut.pdf', contentType: 'application/pdf', size: 4 }],
+      attachments: [
+        {
+          part: '2',
+          filename: 'rebut.pdf',
+          contentType: 'application/pdf',
+          size: 4,
+          inline: false,
+        },
+      ],
     });
     servidor.fitxers.set('1:2', new Uint8Array([37, 80, 68, 70]));
     const dataDir = mkdtempSync(join(tmpdir(), 'femho-thread-attachment-'));
