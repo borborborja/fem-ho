@@ -818,6 +818,9 @@
     <string name="task_subtasks">Subtasques</string>
     <string name="task_tasktype">Tipologia</string>
     <string name="task_title">Títol</string>
+    <string name="task_titleedithint">Mantén premut el títol i deixa anar per editar-lo · F2 amb teclat</string>
+    <string name="task_titleeditkeys">Enter per desar · Escape per cancel·lar</string>
+    <string name="task_titlerequired">El títol no pot quedar buit.</string>
     <string name="tokens_aiowned">Credencial d\'IA de «{name}»</string>
     <string name="tokens_aiownedgo">Anar a l\'agent</string>
     <string name="tokens_aiownedhelp">Les credencials d\'IA es creen i es revoquen a Usuari IA, on també es diu quins àmbits porta cada agent.</string>

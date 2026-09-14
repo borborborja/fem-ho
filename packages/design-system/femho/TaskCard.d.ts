@@ -35,6 +35,10 @@ export interface CardAddForm {
 
 export interface TaskCardProps extends React.HTMLAttributes<HTMLDivElement> {
   title: string;
+  /** Camp d'edició en lloc del títol, fora de qualsevol botó. */
+  titleEditor?: React.ReactNode;
+  onTitleEdit?: (() => void) | undefined;
+  titleEditHint?: string | undefined;
   /** Pastilla de projecte. Absent si la tasca és a l'espai general de l'àmbit. */
   project?: string | undefined;
   /** La icona de provinença, ja feta. `undefined` si la tasca l'ha escrita una persona. */

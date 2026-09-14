@@ -17,6 +17,7 @@ import { TaskCard, type CardList } from '@fem-ho/design-system/femho';
 import { DeleteTaskDialog } from './DeleteTaskDialog.js';
 import { TaskTimeBadge } from './TaskTimeBadge.js';
 import { SourceIcon } from './SourceIcon.js';
+import { useInlineTaskTitle } from './useInlineTaskTitle.js';
 import { api } from '../app/api.js';
 import { useApi } from '../app/useApi.js';
 import type { Checklist, Subtask } from '../app/types.js';
@@ -51,6 +52,7 @@ export function BoardCard({
   const [addOpen, setAddOpen] = useState(false);
   const [draft, setDraft] = useState('');
   const [deleting, setDeleting] = useState(false);
+  const inlineTitle = useInlineTaskTitle(task.id, task.title, onChanged);
 
   /**
    * `null` mentre no calgui: `useApi` no demana res amb un camí nul.
@@ -162,7 +164,10 @@ export function BoardCard({
         data-status={task.status}
         // Les d'algú altre, atenuades: es veuen, però es veu que no són teves.
         style={task.assignedToOther === true ? { opacity: 0.55 } : undefined}
-        title={task.title}
+        title={inlineTitle.title}
+        titleEditor={inlineTitle.editor}
+        onTitleEdit={dragging ? undefined : inlineTitle.start}
+        titleEditHint={t('task.titleEditHint')}
         sourceIcon={<SourceIcon kind={task.sourceKind} />}
         project={task.project}
         assigneeInitials={task.assigneeInitials}

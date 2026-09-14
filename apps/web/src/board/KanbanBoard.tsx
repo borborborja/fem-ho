@@ -106,6 +106,8 @@ export interface KanbanBoardProps {
    * el mateix als dos llocs per P4.
    */
   inboxHeader?: ReactNode;
+  /** Controls secundaris de l'Inbox, situats sota la seva capçalera. */
+  inboxHeaderExtra?: ReactNode;
   /**
    * La bústia, ja resolta pel servidor.
    *
@@ -205,6 +207,7 @@ export function KanbanBoard({
   tasks,
   scopes,
   inboxHeader,
+  inboxHeaderExtra,
   inbox,
   inboxEvents,
   onEventToggle,
@@ -491,6 +494,7 @@ export function KanbanBoard({
                 onEventToggle={onEventToggle}
                 onEventToTask={onEventToTask}
                 header={inboxHeader}
+                headerExtra={inboxHeaderExtra}
                 wrapCard={(task, card) => (
                   <DraggableCard key={task.id} id={task.id} testId={`task-${task.id}`}>
                     {card}

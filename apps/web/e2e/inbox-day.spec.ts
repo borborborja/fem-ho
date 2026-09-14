@@ -60,6 +60,23 @@ async function escenari(page: Page): Promise<string> {
   return scope;
 }
 
+test('les quatre capçaleres i el navegador de l’Inbox comparteixen línia', async ({ page }) => {
+  await enterAsNew(page, MEU);
+  const scope = await escenari(page);
+  await page.goto(`/board?scopes=${scope}`);
+
+  const inboxTitle = page.getByTestId('inbox-rail').getByRole('heading', { name: 'Inbox' });
+  const inboxDay = page.getByTestId('inbox-day-pick');
+  const inboxTop = (await inboxTitle.boundingBox())!.y;
+  const dayTop = (await inboxDay.boundingBox())!.y;
+  expect(Math.abs(inboxTop - dayTop)).toBeLessThanOrEqual(1);
+
+  for (const status of ['todo', 'doing', 'done']) {
+    const title = page.getByTestId(`column-${status}`).getByRole('heading');
+    expect(Math.abs((await title.boundingBox())!.y - inboxTop)).toBeLessThanOrEqual(1);
+  }
+});
+
 test('navegar a demà canvia què hi ha, i el que no té dia es queda', async ({ page }) => {
   await enterAsNew(page, MEU);
   const scope = await escenari(page);

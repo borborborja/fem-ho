@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ChecklistRow } from './ChecklistRow.jsx';
 import { useIsMobile } from './MentionPopover.jsx';
 
@@ -142,6 +142,9 @@ function CardAction({ label, onClick, revealed, testId, color, children }) {
  */
 export function TaskCard({
   title,
+  titleEditor,
+  onTitleEdit,
+  titleEditHint,
   project,
   sourceIcon,
   assigneeInitials,
@@ -207,6 +210,16 @@ export function TaskCard({
   const revealed = mobile || active;
   const actionCount =
     Number(onEdit !== undefined) + Number(addForm !== undefined) + Number(onDelete !== undefined);
+  const titlePress = useRef(null);
+  const suppressTitleClick = useRef(false);
+  const Body = titleEditor ? 'div' : 'button';
+  const bodyRef = useRef(null);
+  const wasEditing = useRef(false);
+  useEffect(() => {
+    if (wasEditing.current && !titleEditor && document.activeElement === document.body)
+      bodyRef.current?.focus();
+    wasEditing.current = !!titleEditor;
+  }, [titleEditor]);
 
   return (
     <div
@@ -281,7 +294,7 @@ export function TaskCard({
             position: 'absolute',
             top: 10,
             right: 10,
-            display: 'flex',
+            display: titleEditor ? 'none' : 'flex',
             alignItems: 'center',
             gap: 4,
             zIndex: 1,
@@ -321,12 +334,30 @@ export function TaskCard({
             gap: 9,
             alignItems: 'flex-start',
             // Espai per les icones de 20px, la separació i el marge fins al títol.
-            paddingRight: actionCount === 0 ? 0 : actionCount * 24 + 18,
+            paddingRight: titleEditor || actionCount === 0 ? 0 : actionCount * 24 + 18,
           }}
         >
-          <button
-            type="button"
-            onClick={onOpen}
+          <Body
+            ref={bodyRef}
+            type={titleEditor ? undefined : 'button'}
+            onClick={
+              titleEditor
+                ? undefined
+                : () => {
+                    if (suppressTitleClick.current) {
+                      suppressTitleClick.current = false;
+                      return;
+                    }
+                    onOpen?.();
+                  }
+            }
+            onKeyDown={(event) => {
+              if (!titleEditor && onTitleEdit && event.key === 'F2') {
+                event.preventDefault();
+                event.stopPropagation();
+                onTitleEdit();
+              }
+            }}
             style={{
               flex: 1,
               minWidth: 0,
@@ -342,25 +373,73 @@ export function TaskCard({
               fontFamily: 'var(--font-sans)',
             }}
           >
-            <span
-              style={{
-                fontSize: 13.5,
-                fontWeight: 600,
-                lineHeight: 1.3,
-                color: 'var(--ink)',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-              }}
-            >
-              {/*
+            {titleEditor ?? (
+              <span
+                data-testid="card-title"
+                title={titleEditHint}
+                onPointerDown={(event) => {
+                  suppressTitleClick.current = false;
+                  titlePress.current =
+                    onTitleEdit && event.button === 0 && event.isPrimary
+                      ? {
+                          id: event.pointerId,
+                          x: event.clientX,
+                          y: event.clientY,
+                          at: performance.now(),
+                        }
+                      : null;
+                }}
+                onPointerMove={(event) => {
+                  const press = titlePress.current;
+                  if (press && Math.hypot(event.clientX - press.x, event.clientY - press.y) > 6)
+                    titlePress.current = null;
+                }}
+                onPointerLeave={() => {
+                  titlePress.current = null;
+                }}
+                onPointerCancel={() => {
+                  titlePress.current = null;
+                }}
+                onContextMenu={(event) => {
+                  if (onTitleEdit) event.preventDefault();
+                }}
+                onPointerUp={(event) => {
+                  const press = titlePress.current;
+                  titlePress.current = null;
+                  // Esperem a deixar anar: el sensor del tauler acaba el seu gest abans
+                  // que aparegui el camp, i mai arrossega una targeta mentre s'hi escriu.
+                  if (
+                    press &&
+                    press.id === event.pointerId &&
+                    performance.now() - press.at >= 550 &&
+                    Math.hypot(event.clientX - press.x, event.clientY - press.y) <= 6
+                  ) {
+                    event.preventDefault();
+                    suppressTitleClick.current = true;
+                    onTitleEdit?.();
+                  }
+                }}
+                style={{
+                  fontSize: 13.5,
+                  fontWeight: 600,
+                  lineHeight: 1.3,
+                  color: 'var(--ink)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  userSelect: onTitleEdit ? 'none' : undefined,
+                  WebkitTouchCallout: onTitleEdit ? 'none' : undefined,
+                }}
+              >
+                {/*
                 D'on ve, si ve d'algun lloc. Arriba **ja feta**: un component del design
                 system no sap ni de menes de font ni de catàlegs, igual que no sap
                 d'idiomes.
               */}
-              {sourceIcon}
-              {title}
-            </span>
+                {sourceIcon}
+                {title}
+              </span>
+            )}
 
             <span
               style={{
@@ -523,7 +602,7 @@ export function TaskCard({
                 </span>
               ) : null}
             </span>
-          </button>
+          </Body>
         </div>
 
         {/*

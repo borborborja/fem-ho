@@ -433,6 +433,26 @@ button {
   font-size: 10px;
   top: 7px;
 }
+.card-title-editor {
+  width: 100%;
+  min-width: 0;
+}
+.card-title-editor .plou-input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 4px 6px;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink);
+  border-radius: 6px;
+  resize: vertical;
+}
+.card-title-editor [role='alert'] {
+  font-size: 11px;
+  color: var(--danger-text);
+}
 .chrono-track {
   position: relative;
   flex-shrink: 0;

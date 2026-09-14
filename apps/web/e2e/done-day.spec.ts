@@ -79,6 +79,31 @@ test('ensenya el dia que mires i no tot l’històric', async ({ page }) => {
   await expect(fet).toContainText('Cap tasca feta');
 });
 
+test('netejar amaga la vista d’avui i «Tot avui» la recupera', async ({ page }) => {
+  await enterAsNew(page, MEU);
+  const scope = await escenari(page);
+  await page.goto(`/board?scopes=${scope}`);
+
+  const fet = page.locator('[data-column-status="done"]');
+  await expect(fet).toContainText("D'avui", { timeout: 10_000 });
+  await expect(fet).toContainText('De fa tres dies');
+
+  await page.getByTestId('done-clear').click();
+  await expect(fet).not.toContainText("D'avui");
+  await expect(fet).not.toContainText('De fa tres dies');
+  await expect(fet).toContainText('Encara no has acabat res avui');
+  await expect(page.getByTestId('done-show-all')).toBeVisible();
+
+  // La preferència es desa: tornar a carregar no ha de desfer la vista neta.
+  await page.reload();
+  await expect(fet).not.toContainText("D'avui");
+
+  await page.getByTestId('done-show-all').click();
+  await expect(fet).toContainText("D'avui");
+  await expect(fet).toContainText('De fa tres dies');
+  await expect(page.getByTestId('done-show-all')).toHaveCount(0);
+});
+
 test('i des d’un altre dia es pot tornar a avui', async ({ page }) => {
   await enterAsNew(page, MEU);
   const scope = await escenari(page);

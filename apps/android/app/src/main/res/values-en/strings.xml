@@ -818,6 +818,9 @@
     <string name="task_subtasks">Subtasks</string>
     <string name="task_tasktype">Type</string>
     <string name="task_title">Title</string>
+    <string name="task_titleedithint">Hold the title and release to edit · F2 with the keyboard</string>
+    <string name="task_titleeditkeys">Enter to save · Escape to cancel</string>
+    <string name="task_titlerequired">The title cannot be empty.</string>
     <string name="tokens_aiowned">AI credential for “{name}”</string>
     <string name="tokens_aiownedgo">Go to the agent</string>
     <string name="tokens_aiownedhelp">AI credentials are created and revoked in AI user, which also says which scopes each agent handles.</string>

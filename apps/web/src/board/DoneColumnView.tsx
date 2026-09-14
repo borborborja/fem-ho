@@ -33,10 +33,14 @@ export interface DoneHeaderProps {
   onBackToToday?: (() => void) | undefined;
 }
 
+function localDate(at: Date): string {
+  return `${String(at.getFullYear())}-${String(at.getMonth() + 1).padStart(2, '0')}-${String(
+    at.getDate(),
+  ).padStart(2, '0')}`;
+}
+
 function isToday(iso: string | null): boolean {
-  if (iso === null) return false;
-  const today = new Date().toISOString().slice(0, 10);
-  return iso.slice(0, 10) === today;
+  return iso !== null && localDate(new Date(iso)) === localDate(new Date());
 }
 
 export function DoneHeader({
@@ -47,7 +51,7 @@ export function DoneHeader({
   day,
   onBackToToday,
 }: DoneHeaderProps) {
-  const avui = new Date().toISOString().slice(0, 10);
+  const avui = localDate(new Date());
   const mirantUnAltreDia = day != null && day !== avui;
   // El mini-calendari segueix la mateixa regla que el gran: idioma i preferència.
   const weekStart = resolveWeekStart(useSessionData().settings.week_start, getLocale());

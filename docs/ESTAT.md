@@ -7,6 +7,46 @@ Data de l'última verificació completa: **2026-08-12**.
 
 ---
 
+## Netejar la columna Fet · 2026-09-14
+
+«Netejar» ara aplica el llindar `done_cleared_at` a la vista d'avui: amaga les
+tasques que ja s'havien acabat, però no n'esborra cap ni amaga les que es completin
+després. «Tot avui» el treu i recupera la llista sencera. La preferència es desa per
+usuari i continua aplicada després de recarregar.
+
+La prova de navegador cobreix netejar, estat buit, persistència en recarregar i
+recuperar totes les tasques amb «Tot avui».
+
+## Capçaleres del tauler alineades · 2026-09-14
+
+El contenidor de «Per fer», «Fent» i «Fet» repetia el marge superior que ja
+posa el grup de tres columnes. Ara les quatre capçaleres comencen a la mateixa
+alçada. El navegador del dia de l'Inbox (calendari, fletxes i «Avui») viu a la
+mateixa fila que «Inbox»; el filtre del calaix queda sota la capçalera.
+
+La prova de navegador mesura les coordenades verticals de les quatre capçaleres
+i del botó de calendari, a més dels sis recorreguts ja existents del navegador
+de dia.
+
+## Edició del títol al tauler web · 2026-09-14
+
+Mantenir premut el títol durant almenys 550 ms i deixar anar obre un camp a la
+mateixa targeta. F2 també l'obre amb teclat. Enter o sortir del camp desa; Escape
+cancel·la. El camp ocupa l'amplada de la targeta i conserva el text si falla la
+petició. Un títol buit no es desa. El clic curt obre la fitxa i moure el punter
+cancel·la l'edició llarga per permetre l'arrossegament habitual.
+
+Verificat amb la web construïda i servidor real: cinc proves noves de navegador
+(persistència, teclat/validació, errors/reintent, clic/arrossegament i gest tàctil)
+i les quatre de paperera. Tipus web, format, lint dels fitxers TypeScript i les
+18 comprovacions permanents passen; aquestes últimes sobre una còpia neta dels
+fonts per evitar l'enllaç local inaccessible `.codegraph`. Captura del camp revisada.
+El gest tàctil s'ha provat amb Chromium emulat; aquesta funcionalitat és de la
+web, no s'ha afegit a l'app Android nativa.
+
+La [proposta de millora del cronograma](cronograma-proposta.md) queda documentada
+i pendent d'implementació.
+
 ## Consulta IMAP per compte i adjunts · 2026-09-14
 
 IMAP consulta cada 300 segons per defecte, sense IDLE. Web i Android exposen ara

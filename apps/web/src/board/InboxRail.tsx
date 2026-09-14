@@ -65,6 +65,8 @@ export interface InboxRailProps {
   placement?: 'column' | 'rail' | undefined;
   /** El navegador de dia `‹ 5 d'agost ›`, que la columna del kanban també té. */
   header?: ReactNode | undefined;
+  /** Controls secundaris sota la capçalera, com el filtre del calaix. */
+  headerExtra?: ReactNode | undefined;
   footer?: ReactNode | undefined;
   /**
    * L'afegida ràpida **de cada secció**, al calendari.
@@ -103,6 +105,7 @@ export function InboxRail({
   scopes,
   placement = 'column',
   header,
+  headerExtra,
   footer,
   dayFooter,
   undatedFooter,
@@ -192,7 +195,8 @@ export function InboxRail({
       label={t('board.column.inbox')}
       count={tasks.length + (undated?.length ?? 0) + (events?.length ?? 0) + (mail?.length ?? 0)}
       variant="inbox"
-      headerExtra={header}
+      headerActions={header}
+      headerExtra={headerExtra}
       footer={footer}
     >
       {section(dayLabel, body)}

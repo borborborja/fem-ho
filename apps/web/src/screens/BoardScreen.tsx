@@ -59,6 +59,22 @@ function todayISO(): string {
   ).padStart(2, '0')}`;
 }
 
+/**
+ * «Netejar» només amaga el que ja havies acabat avui. No és una acció sobre les tasques:
+ * les que s'acabin després del clic han de continuar entrant a la columna.
+ */
+function isDoneHiddenByClear(
+  task: Task,
+  doneDay: string,
+  clearedAt: string | null | undefined,
+): boolean {
+  if (task.status !== 'done' || task.completed_at == null || clearedAt == null) return false;
+  const cleared = Date.parse(clearedAt);
+  const completed = Date.parse(task.completed_at);
+  if (Number.isNaN(cleared) || Number.isNaN(completed)) return false;
+  return doneDay === todayISO() && localDate(new Date(cleared)) === doneDay && completed <= cleared;
+}
+
 /** La targeta tal com la vol el component, des de la tasca tal com la dona l'API. */
 function toBoardTask(
   task: Task,
@@ -413,7 +429,10 @@ export function BoardScreen({
         .filter((task) => {
           if (task.status !== 'done') return true;
           if (task.completed_at == null) return false;
-          return localDate(new Date(task.completed_at)) === doneDay;
+          return (
+            localDate(new Date(task.completed_at)) === doneDay &&
+            !isDoneHiddenByClear(task, doneDay, settings.done_cleared_at)
+          );
         })
         .map((task) => {
           const assignees = task.assignee_ids ?? [];
@@ -442,6 +461,7 @@ export function BoardScreen({
     projectIds,
     projects,
     doneDay,
+    settings.done_cleared_at,
   ]);
 
   /**
@@ -794,15 +814,13 @@ export function BoardScreen({
             .post('/api/v1/inbox/mail', { message_id: mail.id, visible: !mail.in_inbox })
             .then(() => refresh());
         }}
-        inboxHeader={
-          /*
-            Dos controls a la mateixa capçalera, en dues files: el navegador de dia hi és
-            sempre i el commutador de calaix només quan hi ha àmbits de les dues menes.
-          */
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
-            <DayNavigator value={day} onChange={setDay} today={todayISO()} />
-            {potFiltrar ? <MailboxSwitch activeScopes={activeScopes} tasks={tasks} /> : null}
-          </div>
+        inboxHeader={<DayNavigator value={day} onChange={setDay} today={todayISO()} />}
+        inboxHeaderExtra={
+          potFiltrar ? (
+            <div style={{ display: 'flex', justifyContent: 'flex-end', paddingBottom: 6 }}>
+              <MailboxSwitch activeScopes={activeScopes} tasks={tasks} />
+            </div>
+          ) : undefined
         }
         mailbox={mailbox}
         renderFooter={(status) =>

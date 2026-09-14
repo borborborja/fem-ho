@@ -62,7 +62,9 @@ export function KanbanColumn({
          *
          * Als costats sí que hi és: separa el contingut del separador vertical.
          */
-        padding: isGrouped ? '14px 14px 0' : 14,
+        // El contenidor compartit ja posa els 14px de dalt i de baix. Afegir-los una
+        // segona vegada aquí feia baixar les tres capçaleres respecte de l'Inbox.
+        padding: isGrouped ? '0 14px' : 14,
         minWidth: 0,
         background: isInbox
           ? 'var(--gradient-wash-warm)'
