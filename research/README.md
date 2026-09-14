@@ -1,6 +1,8 @@
 # research/ — dossiers de recerca
 
-15 dossiers, ~36.000 línies, en **anglès** (com les fonts). Es van produir abans d'escriure `docs/`, i són la base d'evidència de cada decisió normativa.
+16 dossiers, ~36.000 línies. Els 15 dossiers fundacionals són en **anglès** (com les
+fonts); el dossier 16 és una actualització de producte en català. Són context i base
+d’evidència, no especificació normativa.
 
 ## Com fer-los servir
 
@@ -33,6 +35,7 @@ Regles per a qui programi:
 | 13 | `13-caldav-server-in-node.md` | **Tanca el forat que el 08 donava per insalvable.** Node accepta tots els verbs DAV; `caldav-adapter` com a referència; stack XML; paranys de Fastify/Express/Hono; sidecar descartat amb el mecanisme; conformance testing | 07 |
 | 14 | `14-calendar-events-vevent.md` | VEVENT com a entitat separada, recurrència amb `RECURRENCE-ID`, estratègies d'expansió, subscripcions `.ics`, JSCalendar (RFC 8984) com a forma REST | 01, 07 |
 | 15 | `15-notification-delivery.md` | Web Push (RFC 8030/8291/8292), VAPID com a infraestructura permanent, matriu de suport real, UnifiedPush, SMTP via smarthost, canal webhook genèric | 11 |
+| 16 | `16-ticktick-low-cost-opportunities.md` | Revisió actualitzada de TickTick, senyals d’usuaris i una cartera de millores de baix cost per connectar captura, planificació, focus i informes | evolució de producte |
 
 ## Procedència
 
