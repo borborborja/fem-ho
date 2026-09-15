@@ -26,6 +26,11 @@ noves cobreixen creació de token, lectura MCP, consentiment i bescanvi del codi
 clar i fosc. Captures d'escriptori i mòbil revisades. No s'ha provat amb sessions
 reals de ChatGPT, Claude o Hermes ni s'ha actualitzat la instància de producció.
 
+La suite final amb PostgreSQL passa 1.265 proves (6 omeses); les 18 comprovacions
+permanents i el format passen en una còpia neta dels fonts. Imatge 0.19.0 construïda
+i arrencada en un contenidor aïllat: el client oficial de l'SDK completa descobriment,
+registre dinàmic, consentiment, PKCE, lectura MCP i renovació OAuth contra la imatge.
+
 La gestió nova és a la web; no s'ha afegit una pantalla equivalent a Android.
 La migració 024 conserva els comptes existents actius, congela l'abast dels tokens
 personals antics i crea els comptes nous amb l'accés extern apagat.
