@@ -24,6 +24,7 @@ import { claim, leaseOf, nextTask, release } from '../services/leases.js';
 import { getProfile } from '../services/users.js';
 import { AGENT_SKILL } from '../ai/skill.generated.js';
 import { body, handle, query, str } from './handle.js';
+import { credentialCapabilities } from '../services/tokens.js';
 
 export function registerAgentRoutes(app: FastifyInstance): void {
   const db = (): NonNullable<FastifyInstance['connection']> => app.connection!;
@@ -118,23 +119,11 @@ export function registerAgentRoutes(app: FastifyInstance): void {
         const result = await auditedTransaction(db().db, principal, (ctx) =>
           createToken(ctx, principal, {
             name: str(input.name) ?? `${agent.name}`,
-            capabilities: [
-              'tasks:read',
-              'tasks:write',
-              // Les instruccions de l'àmbit i del projecte manen sobre el seu criteri, i
-              // per llegir-les cal poder llegir els àmbits: sense això `get_briefing` —la
-              // segona crida que fa un agent— responia «no tens la capacitat».
-              'scopes:read',
-              'projects:read',
-              'checklists:read',
-              'checklists:write',
-              'comments:read',
-              'comments:write',
-              'attachments:read',
-              'events:read',
-            ],
+            capabilities: credentialCapabilities(input.capabilities),
             ai_agent_id: agent.id,
-            expires_at: typeof input.expires_at === 'string' ? input.expires_at : null,
+            scope_ids: input.scope_ids as string[] | undefined,
+            channels: input.channels as string[] | undefined,
+            expires_at: input.expires_at as string | null | undefined,
           }),
         );
 

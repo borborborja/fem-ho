@@ -35,6 +35,7 @@ import {
   updateTask,
 } from '../services/tasks.js';
 import { assertCatalogue, TOOLS, type ToolSpec } from './tools.js';
+import type { Capability } from '../policy/capabilities.js';
 
 export interface McpDeps {
   connection: Connection;
@@ -72,6 +73,32 @@ export function buildMcpServer(deps: McpDeps): McpServer {
   const handlers = buildHandlers(deps);
 
   for (const spec of TOOLS) {
+    const required: Record<string, Capability[]> = {
+      whoami: [],
+      list_scopes: ['scopes:read'],
+      list_projects: ['projects:read'],
+      list_events: ['events:read'],
+      list_tasks: ['tasks:read'],
+      get_task: ['tasks:read'],
+      search_tasks: ['tasks:read'],
+      get_briefing: ['scopes:read', 'projects:read', 'tasks:read'],
+      create_task: ['tasks:write'],
+      update_task: ['tasks:write'],
+      move_task: ['tasks:write'],
+      complete_task: ['tasks:write'],
+      add_comment: ['comments:write'],
+      ask_user: ['comments:write', 'tasks:write'],
+      resume_task: ['comments:write', 'tasks:write'],
+      update_checklist_item: ['checklists:write'],
+      next_task: ['tasks:read', 'tasks:write'],
+      release_task: ['tasks:write'],
+    };
+    if (!(required[spec.name] ?? []).every((c) => deps.principal.capabilities.has(c))) continue;
+    if (
+      ['next_task', 'release_task', 'ask_user', 'resume_task'].includes(spec.name) &&
+      deps.principal.kind !== 'agent'
+    )
+      continue;
     const handler = handlers[spec.name];
     if (handler === undefined) {
       throw new Error(`La tool "${spec.name}" és al catàleg però no té implementació.`);

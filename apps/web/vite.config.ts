@@ -55,6 +55,9 @@ const PROXY = {
     mateix desacord entre les dues disposicions que P22, per l'altra banda.
   */
   '/brand': API,
+  '/mcp': API,
+  '/oauth/': API,
+  '/.well-known/': API,
   // `/s/{token}` és pàgina i endpoint, com `/setup` i `/invite`: el `GET` ha de pintar
   // l'app —és l'enllaç que s'envia a algú de fora— i el `POST` ha d'arribar al servidor.
   '/s/': pageOrApi,
@@ -88,7 +91,13 @@ export default defineConfig({
         // L'API NO es guarda a la memòria cau del servei de treball: l'estat offline el
         // porta Dexie (docs/06 §1), i dues memòries cau del mateix contingut acaben
         // discrepant. `/stream` i `/mcp` no s'hi acosten mai.
-        navigateFallbackDenylist: [/^\/api/, /^\/mcp/],
+        navigateFallbackDenylist: [
+          /^\/api/,
+          /^\/mcp/,
+          /^\/oauth\//,
+          /^\/\.well-known\//,
+          /^\/connect\/mcp/,
+        ],
         runtimeCaching: [],
       },
     }),

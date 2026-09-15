@@ -115,6 +115,7 @@ describe('crear un token', () => {
     const creat = await api('POST', '/api/v1/tokens', {
       name: 'Un altre',
       capabilities: ['tasks:read'],
+      scope_ids: [scopeId],
     });
     const { token } = creat.json<{ token: string }>();
 
@@ -136,28 +137,28 @@ describe('crear un token', () => {
     expect(res.statusCode).toBe(422);
   });
 
-  it('les capacitats inventades es descarten', async () => {
+  it('les capacitats inventades es rebutgen', async () => {
     const res = await api('POST', '/api/v1/tokens', {
       name: 'Amb invents',
       capabilities: ['tasks:read', 'esborra:tot', 'instance:destroy'],
     });
 
-    const capabilities = res.json<{ summary: { capabilities: string[] } }>().summary.capabilities;
-    expect(capabilities).toEqual(['tasks:read']);
+    expect(res.statusCode).toBe(422);
   });
 
-  it('un token sense àmbits vol dir tots els del propietari', async () => {
+  it('un token sense àmbits es rebutja', async () => {
     const res = await api('POST', '/api/v1/tokens', {
       name: 'Sense abast',
       capabilities: ['tasks:read'],
     });
-    expect(res.json<{ summary: { scope_ids: string[] } }>().summary.scope_ids).toEqual([]);
+    expect(res.statusCode).toBe(422);
   });
 
   it('la creació queda a activity_log sense el token a dins', async () => {
     const creat = await api('POST', '/api/v1/tokens', {
       name: 'Amb rastre',
       capabilities: ['tasks:read'],
+      scope_ids: [scopeId],
     });
     const { token } = creat.json<{ token: string }>();
 
@@ -176,6 +177,7 @@ describe('revocar', () => {
     const creat = await api('POST', '/api/v1/tokens', {
       name: 'Per revocar',
       capabilities: ['tasks:read', 'scopes:read'],
+      scope_ids: [scopeId],
     });
     const cos = creat.json<{ token: string; summary: { id: string } }>();
 
@@ -206,6 +208,7 @@ describe('revocar', () => {
     const creat = await api('POST', '/api/v1/tokens', {
       name: 'Dos cops',
       capabilities: ['tasks:read'],
+      scope_ids: [scopeId],
     });
     const { id } = creat.json<{ summary: { id: string } }>().summary;
 

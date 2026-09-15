@@ -4,6 +4,117 @@
  */
 
 export interface paths {
+    "/.well-known/oauth-protected-resource": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Descobriment del recurs MCP protegit */
+        get: operations["getMcpResourceMetadata"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/.well-known/oauth-authorization-server": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Metadades OAuth amb PKCE S256 i registre de clients */
+        get: operations["getMcpAuthorizationMetadata"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/oauth/authorize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Inicia el consentiment de Fem-ho sense concedir accés encara */
+        get: operations["startMcpAuthorization"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/oauth/register": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Registre dinàmic RFC 7591 d'un client MCP
+         * @description Límit de 10 registres per minut i procés. El registre no concedeix accés a cap usuari.
+         */
+        post: operations["registerMcpClient"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/oauth/token": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bescanvia un codi PKCE o renova la credencial MCP
+         * @description Codi d'un sol ús de 2 minuts, accés de 15 minuts i refresc rotatori de 30 dies.
+         *     `resource` ha de ser la URL canònica de /mcp. Autenticació del client segons
+         *     el registre (none, client_secret_post o client_secret_basic via Authorization).
+         *     Reutilitzar un refresc gastat revoca la sessió. No amplia el consentiment.
+         */
+        post: operations["exchangeMcpOAuthToken"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/oauth/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Revoca la sessió OAuth del client segons RFC 7009 */
+        post: operations["revokeMcpOAuthToken"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/info": {
         parameters: {
             query?: never;
@@ -601,6 +712,44 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/external-access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Consultar l'accés extern propi */
+        get: operations["getExternalAccess"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Activar o pausar canals externs */
+        patch: operations["updateExternalAccess"];
+        trace?: never;
+    };
+    "/mcp/authorization/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** Consultar un consentiment pendent */
+        get: operations["getMcpAuthorization"];
+        put?: never;
+        /** Autoritzar o denegar un client MCP */
+        post: operations["consentMcpAuthorization"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/tokens": {
         parameters: {
             query?: never;
@@ -644,7 +793,8 @@ export interface paths {
         delete: operations["revokeApiToken"];
         options?: never;
         head?: never;
-        patch?: never;
+        /** Editar una credencial manual */
+        patch: operations["updateApiToken"];
         trace?: never;
     };
     "/shares": {
@@ -2718,6 +2868,30 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        McpOAuthClient: {
+            client_name?: string;
+            redirect_uris: string[];
+            /**
+             * @default none
+             * @enum {string}
+             */
+            token_endpoint_auth_method: "none" | "client_secret_post" | "client_secret_basic";
+            grant_types?: ("authorization_code" | "refresh_token")[];
+            response_types?: "code"[];
+        };
+        McpOAuthExchange: {
+            /** @enum {string} */
+            grant_type: "authorization_code" | "refresh_token";
+            /** Format: uri */
+            resource: string;
+            client_id?: string;
+            client_secret?: string;
+            code?: string;
+            /** Format: uri */
+            redirect_uri?: string;
+            code_verifier?: string;
+            refresh_token?: string;
+        };
         AiStatus: {
             /** @description Hi ha credencials. **No vol dir que res les faci servir**: avui no hi ha cap camí de codi que truqui a cap model. */
             configured: boolean;
@@ -3507,7 +3681,21 @@ export interface components {
             /** Format: date-time */
             revoked_at?: string | null;
         };
+        ExternalAccessSwitches: {
+            api_enabled: boolean;
+            mcp_enabled: boolean;
+        };
+        ExternalAccess: components["schemas"]["ExternalAccessSwitches"] & {
+            mcp_url: string;
+            presets: {
+                read_only: string[];
+                read_write: string[];
+            };
+        };
         ApiTokenSummary: {
+            channels?: ("api" | "mcp")[];
+            /** @enum {string} */
+            credential_type?: "pat" | "oauth";
             id: string;
             name: string;
             /** @description Els primers caràcters, per poder-lo reconèixer a la llista. */
@@ -3522,9 +3710,9 @@ export interface components {
              */
             ai_agent_id: string | null;
             /**
-             * @description Va **buida a les credencials d'agent**: els àmbits els hereten de l'agent, i
-             *     copiar-los aquí voldria dir que el dia que se li canviïn a l'agent la
-             *     credencial es quedaria apuntant als d'abans.
+             * @description Àmbits explícits. En agents, una llista buida representa herència dels
+             *     àmbits de l'agent; una llista explícita només els pot restringir.
+             *     En tokens personals mai incorpora àmbits futurs.
              */
             scope_ids: string[];
             /** Format: date-time */
@@ -3546,6 +3734,8 @@ export interface components {
             actor_type: "user" | "ai_agent" | "guest" | "system" | "caldav";
             actor_user_id?: string | null;
             actor_agent_id?: string | null;
+            /** @description Identificador de la credencial que ha fet el canvi. */
+            credential_id?: string | null;
             /** @description "Borja", "IA · Claude", "Extern · Marta". */
             actor_label?: string | null;
             source: string;
@@ -4488,6 +4678,18 @@ export interface components {
         };
     };
     responses: {
+        /** @description Error OAuth sense credencials ni redireccions no validades. */
+        OAuthError: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": {
+                    error: string;
+                    error_description?: string;
+                };
+            };
+        };
         /** @description Cal autenticar-se. */
         Unauthenticated: {
             headers: {
@@ -4526,6 +4728,199 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    getMcpResourceMetadata: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description URL canònica i servidor d'autorització. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: uri */
+                        resource: string;
+                        authorization_servers: string[];
+                        scopes_supported: string[];
+                    };
+                };
+            };
+        };
+    };
+    getMcpAuthorizationMetadata: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Descobriment RFC 8414. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: uri */
+                        issuer: string;
+                        /** Format: uri */
+                        authorization_endpoint: string;
+                        /** Format: uri */
+                        token_endpoint: string;
+                        /** Format: uri */
+                        registration_endpoint: string;
+                        /** Format: uri */
+                        revocation_endpoint: string;
+                        response_types_supported?: string[];
+                        grant_types_supported?: string[];
+                        code_challenge_methods_supported?: string[];
+                        token_endpoint_auth_methods_supported?: string[];
+                        scopes_supported?: string[];
+                        authorization_response_iss_parameter_supported?: boolean;
+                    };
+                };
+            };
+        };
+    };
+    startMcpAuthorization: {
+        parameters: {
+            query: {
+                client_id: string;
+                redirect_uri: string;
+                response_type: "code";
+                resource: string;
+                state: string;
+                code_challenge: string;
+                code_challenge_method: "S256";
+                scope?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Continua a la pantalla de consentiment, amb login si cal. */
+            302: {
+                headers: {
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["OAuthError"];
+        };
+    };
+    registerMcpClient: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["McpOAuthClient"];
+            };
+        };
+        responses: {
+            /** @description Client registrat. Si és confidencial, el secret només es mostra ara. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["McpOAuthClient"] & {
+                        client_id: string;
+                        client_secret?: string;
+                        client_secret_expires_at?: number;
+                    };
+                };
+            };
+            400: components["responses"]["OAuthError"];
+            429: components["responses"]["OAuthError"];
+        };
+    };
+    exchangeMcpOAuthToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/x-www-form-urlencoded": components["schemas"]["McpOAuthExchange"];
+                "application/json": components["schemas"]["McpOAuthExchange"];
+            };
+        };
+        responses: {
+            /** @description Tokens nous. Cache-Control no-store. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        access_token: string;
+                        /** @enum {string} */
+                        token_type: "Bearer";
+                        expires_in: number;
+                        refresh_token: string;
+                        scope: string;
+                    };
+                };
+            };
+            400: components["responses"]["OAuthError"];
+            401: components["responses"]["OAuthError"];
+            403: components["responses"]["OAuthError"];
+            429: components["responses"]["OAuthError"];
+        };
+    };
+    revokeMcpOAuthToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/x-www-form-urlencoded": {
+                    token: string;
+                    client_id?: string;
+                    client_secret?: string;
+                    token_type_hint?: string;
+                };
+                "application/json": {
+                    token: string;
+                    client_id?: string;
+                    client_secret?: string;
+                    token_type_hint?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Revocat o ja inexistent, sense revelar tokens aliens. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["OAuthError"];
+            401: components["responses"]["OAuthError"];
+            429: components["responses"]["OAuthError"];
+        };
+    };
     getInfo: {
         parameters: {
             query?: never;
@@ -5690,6 +6085,113 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
         };
     };
+    getExternalAccess: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Interruptors i configuració per connectar clients externs. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExternalAccess"];
+                };
+            };
+        };
+    };
+    updateExternalAccess: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    api_enabled?: boolean;
+                    mcp_enabled?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Accés actualitzat. Requereix sessió humana. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExternalAccessSwitches"];
+                };
+            };
+        };
+    };
+    getMcpAuthorization: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Client i permisos demanats, sense cap secret. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        client_name: string;
+                        client_id: string;
+                        redirect_uri: string;
+                        write_requested: boolean;
+                    };
+                };
+            };
+        };
+    };
+    consentMcpAuthorization: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    approve: boolean;
+                    scope_ids?: string[];
+                    /** @enum {string} */
+                    permission?: "read_only" | "read_write";
+                };
+            };
+        };
+        responses: {
+            /** @description Redirecció validada amb codi efímer o denegació. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        redirect_url: string;
+                    };
+                };
+            };
+        };
+    };
     listApiTokens: {
         parameters: {
             query?: never;
@@ -5725,8 +6227,9 @@ export interface operations {
                 "application/json": {
                     name: string;
                     capabilities: string[];
-                    /** @description Buit vol dir tots els àmbits del propietari. */
-                    scope_ids?: string[];
+                    /** @description Selecció explícita dels àmbits actuals. Els futurs no s'hi afegeixen. */
+                    scope_ids: string[];
+                    channels?: ("api" | "mcp")[];
                     /** Format: date-time */
                     expires_at?: string | null;
                 };
@@ -5770,6 +6273,39 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    updateApiToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    name?: string;
+                    capabilities?: string[];
+                    scope_ids?: string[];
+                    channels?: ("api" | "mcp")[];
+                    /** Format: date-time */
+                    expires_at?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Token manual actualitzat; OAuth requereix un nou consentiment. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiTokenSummary"];
+                };
+            };
         };
     };
     listShares: {
@@ -8195,6 +8731,10 @@ export interface operations {
             content: {
                 "application/json": {
                     name?: string;
+                    capabilities?: string[];
+                    /** @description Subconjunt dels àmbits de l'agent; si s'omet, els hereta. */
+                    scope_ids?: string[];
+                    channels?: ("api" | "mcp")[];
                     /** Format: date-time */
                     expires_at?: string | null;
                 };

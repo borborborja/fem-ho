@@ -209,13 +209,17 @@ describe('AQUEST és el detall que decideix si el servidor sembla trencat', () =
 });
 
 describe('tools/list', () => {
-  it('les serveix totes divuit i en aquest ordre', async () => {
+  it('serveix només les eines personals autoritzades, en ordre', async () => {
     const response = await rpc('tools/list');
     expect(response.status).toBe(200);
 
     const tools = (result(response.body).tools ?? []) as { name: string }[];
-    expect(tools).toHaveLength(18);
-    expect(tools.map((tool) => tool.name)).toEqual(TOOLS.map((tool) => tool.name));
+    expect(tools).toHaveLength(14);
+    expect(tools.map((tool) => tool.name)).toEqual(
+      TOOLS.filter(
+        (tool) => !['next_task', 'release_task', 'ask_user', 'resume_task'].includes(tool.name),
+      ).map((tool) => tool.name),
+    );
   });
 
   it('cada tool porta les seves anotacions', async () => {

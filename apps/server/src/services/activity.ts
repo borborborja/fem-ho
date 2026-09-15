@@ -33,6 +33,7 @@ export interface ActivityEntry {
   actor_agent_id: string | null;
   actor_label: string | null;
   source: string;
+  credential_id: string | null;
   changes: Record<string, { from: unknown; to: unknown }> | null;
   created_at: string;
   /** Un canvi autònom d'IA que encara es pot desfer. */
@@ -49,6 +50,7 @@ interface Row {
   actor_agent_id: string | null;
   actor_label: string | null;
   source: string;
+  credential_id: string | null;
   changes: string | null;
   created_at: string;
   user_name: string | null;
@@ -87,7 +89,7 @@ export async function listActivity(
 
   const found = await sql<Row>`
     SELECT a.id, a.entity_type, a.entity_id, a.verb, a.actor_type, a.actor_user_id,
-           a.actor_agent_id, a.actor_label, a.source, a.changes, a.created_at,
+           a.actor_agent_id, a.actor_label, a.source, a.credential_id, a.changes, a.created_at,
            u.name AS user_name, g.name AS agent_name
     FROM activity_log a
     LEFT JOIN users u ON u.id = a.actor_user_id
@@ -121,6 +123,7 @@ function toEntry(row: Row): ActivityEntry {
     actor_agent_id: row.actor_agent_id,
     actor_label: labelOf(row),
     source: row.source,
+    credential_id: row.credential_id,
     changes,
     created_at: row.created_at,
     // Només els autònoms: un canvi que ha fet una persona no porta "Desfés" perquè ja
@@ -160,7 +163,7 @@ export async function undo(
 
   const found = await sql<Row>`
     SELECT a.id, a.entity_type, a.entity_id, a.verb, a.actor_type, a.actor_user_id,
-           a.actor_agent_id, a.actor_label, a.source, a.changes, a.created_at,
+           a.actor_agent_id, a.actor_label, a.source, a.credential_id, a.changes, a.created_at,
            NULL AS user_name, NULL AS agent_name
     FROM activity_log a WHERE a.id = ${entryId}
   `.execute(ctx.tx);

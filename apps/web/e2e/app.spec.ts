@@ -235,6 +235,8 @@ test('un token es mostra un sol cop', async ({ page }) => {
   await page.goto('/settings');
   await page.locator('[data-testid="settings-tab-mcp"]').click();
 
+  await page.getByRole('button', { name: 'Crea un token', exact: true }).click();
+  await page.getByRole('button', { name: 'Seleccionar tots els actuals' }).click();
   await page.locator('[data-testid="token-name"]').fill('Claude');
   await page.locator('[data-testid="token-create"]').click();
 

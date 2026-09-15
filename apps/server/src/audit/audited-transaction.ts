@@ -217,12 +217,12 @@ async function writeEntry(
   await sql`
     INSERT INTO activity_log
       (id, entity_type, entity_id, scope_id, actor_type, actor_user_id, actor_agent_id,
-       actor_label, source, verb, changes, created_at)
+       actor_label, source, verb, changes, created_at, credential_id)
     VALUES
       (${uuidv7()}, ${entry.entityType}, ${entry.entityId}, ${entry.scopeId ?? null},
        ${actorType}, ${actorUserId}, ${principal.agentId ?? null},
        ${principal.label ?? null}, ${principal.source}, ${entry.verb},
-       ${entry.changes === undefined ? null : JSON.stringify(entry.changes)}, ${now})
+       ${entry.changes === undefined ? null : JSON.stringify(entry.changes)}, ${now}, ${principal.credentialId ?? null})
   `.execute(tx);
 
   /**

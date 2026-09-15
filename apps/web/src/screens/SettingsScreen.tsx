@@ -49,6 +49,7 @@ import type {
 } from '../app/types.js';
 import { ErrorBanner } from './BoardScreen.js';
 import { GoogleMailPanel } from './GoogleMailPanel.js';
+import { ExternalAccessPanel, AgentTokenEditor } from './ExternalAccessPanel.js';
 
 /**
  * **El correu va en pestanya pròpia i no dins de «Calendaris».**
@@ -210,7 +211,7 @@ export function SettingsScreen() {
           {tab === 'scopes' ? <ScopesTab /> : null}
           {tab === 'calendars' ? <CalendarsTab /> : null}
           {tab === 'mail' ? <MailTab /> : null}
-          {tab === 'mcp' ? <McpTab onGoToAgent={() => setTab('ai')} /> : null}
+          {tab === 'mcp' ? <ExternalAccessPanel onGoToAgent={() => setTab('ai')} /> : null}
           {tab === 'ai' ? <AiTab /> : null}
           {tab === 'shares' ? <SharesTab /> : null}
           {tab === 'profile' ? <ProfileTab /> : null}
@@ -1704,176 +1705,6 @@ function SourcesForScope({
   );
 }
 
-function McpTab({ onGoToAgent }: { onGoToAgent: () => void }) {
-  const tokens = useApi<{ data: ApiTokenSummary[] }>('/api/v1/tokens');
-  /**
-   * **Els agents, per poder dir de qui és cada credencial d'IA.** Una credencial que surt
-   * a la llista sense dir a què pertany i que no es deixa revocar aquí seria un misteri;
-   * amb el nom de l'agent i un botó, és un camí.
-   */
-  const agents = useApi<Agent[]>('/api/v1/ai/agents');
-  const [name, setName] = useState('');
-  const [created, setCreated] = useState<string | null>(null);
-
-  const create = useMutation(async () => {
-    if (name.trim() === '') return;
-    const result = await api.post<{ token: string }>('/api/v1/tokens', {
-      name: name.trim(),
-      capabilities: ['tasks:read', 'tasks:write', 'checklists:read', 'checklists:write'],
-    });
-    setCreated(result.token);
-    setName('');
-    tokens.reload();
-  });
-
-  return (
-    <>
-      <Group title={t('settings.tab.mcp')}>
-        <p style={{ margin: 0, fontSize: 12.5, color: 'var(--ink-soft)', lineHeight: 1.5 }}>
-          {t('settings.mcpInstructions')}
-        </p>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <input
-            readOnly
-            data-testid="mcp-url"
-            value={`${window.location.origin}/mcp`}
-            onFocus={(event) => event.currentTarget.select()}
-            className="plou-input"
-            style={{ fontSize: 12 }}
-          />
-          <CopyButton value={`${window.location.origin}/mcp`} />
-        </div>
-      </Group>
-
-      <Group title={t('tokens.title')}>
-        {created !== null ? (
-          <div style={{ display: 'grid', gap: 6 }}>
-            {/*
-              **Aquest és el que més falta feia.** Un token que només es veu una vegada, amb
-              un avís que del hash no se'n pot treure, i copiar-lo era seleccionar-lo a mà:
-              si t'equivoques d'un caràcter no ho saps fins que el client falla, i llavors
-              ja no el pots tornar a veure.
-            */}
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <input
-                readOnly
-                data-testid="token-value"
-                value={created}
-                onFocus={(event) => event.currentTarget.select()}
-                className="plou-input"
-                style={{ fontSize: 12, flex: 1 }}
-              />
-              <CopyButton value={created} />
-            </div>
-            {/* Un sol cop: del hash no se'n pot treure el token (docs/08 §5). */}
-            <p style={{ margin: 0, fontSize: 11.5, color: 'var(--danger-text)' }}>
-              {t('tokens.onceWarning')}
-            </p>
-          </div>
-        ) : null}
-
-        {(tokens.data?.data ?? []).map((token) => {
-          /**
-           * Una credencial d'IA es veu aquí —és on la gent busca els tokens— però **no es
-           * toca aquí**: els seus àmbits els hereta de l'agent, i revocar-la sense veure de
-           * qui era deixaria un agent aturat sense saber per què.
-           */
-          const agent =
-            token.ai_agent_id === null
-              ? undefined
-              : (agents.data ?? []).find((row) => row.id === token.ai_agent_id);
-
-          return (
-            <div
-              key={token.id}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                fontSize: 12.5,
-                color: 'var(--ink-soft)',
-              }}
-            >
-              <span style={{ fontWeight: 600, color: 'var(--ink)' }}>{token.name}</span>
-              <span style={{ fontFamily: 'monospace' }}>{token.token_prefix}</span>
-              <span>{token.last_used_at ?? t('tokens.never')}</span>
-              {token.ai_agent_id === null ? (
-                <button
-                  type="button"
-                  data-testid={`token-revoke-${token.id}`}
-                  onClick={() => {
-                    void api.delete(`/api/v1/tokens/${token.id}`).then(() => {
-                      tokens.reload();
-                    });
-                  }}
-                  style={{
-                    border: 'none',
-                    background: 'transparent',
-                    font: 'inherit',
-                    fontSize: 12,
-                    cursor: 'pointer',
-                    color: 'var(--danger-text)',
-                  }}
-                >
-                  {t('tokens.revoke')}
-                </button>
-              ) : (
-                <>
-                  {/* Icona i text, mai el color sol (docs/04 §8). */}
-                  <span className="plou-tag plou-tag-accent" data-testid={`token-ai-${token.id}`}>
-                    🤖 {t('tokens.aiOwned', { name: agent?.name ?? '…' })}
-                  </span>
-                  <button
-                    type="button"
-                    data-testid={`token-ai-go-${token.id}`}
-                    onClick={onGoToAgent}
-                    style={{
-                      border: 'none',
-                      background: 'transparent',
-                      font: 'inherit',
-                      fontSize: 12,
-                      cursor: 'pointer',
-                      color: 'var(--kicker)',
-                      fontWeight: 600,
-                    }}
-                  >
-                    {t('tokens.aiOwnedGo')}
-                  </button>
-                </>
-              )}
-            </div>
-          );
-        })}
-
-        {(tokens.data?.data ?? []).some((token) => token.ai_agent_id !== null) ? (
-          <p style={{ margin: 0, fontSize: 11.5, color: 'var(--ink-faint)', lineHeight: 1.45 }}>
-            {t('tokens.aiOwnedHelp')}
-          </p>
-        ) : null}
-
-        <div style={{ display: 'flex', gap: 8 }}>
-          <input
-            className="plou-input"
-            data-testid="token-name"
-            value={name}
-            placeholder={t('tokens.name')}
-            onChange={(event) => setName(event.target.value)}
-          />
-          <button
-            type="button"
-            className="plou-btn plou-btn-primary"
-            data-testid="token-create"
-            disabled={create.busy}
-            onClick={() => void create.run()}
-          >
-            {t('tokens.create')}
-          </button>
-        </div>
-      </Group>
-    </>
-  );
-}
-
 function AiTab() {
   const agents = useApi<Agent[]>('/api/v1/ai/agents');
   const [name, setName] = useState('');
@@ -1987,6 +1818,7 @@ function AgentRow({
     `/api/v1/ai/agents/${agent.id}/credentials`,
   );
   const [nova, setNova] = useState<string | null>(null);
+  const [newCredential, setNewCredential] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const presa = (scopeId: string): string | null =>
@@ -2206,21 +2038,24 @@ function AgentRow({
           type="button"
           className="plou-btn plou-btn-ghost"
           data-testid={`agent-credential-new-${agent.id}`}
-          onClick={() => {
-            void api
-              .post<{ token: string }>(`/api/v1/ai/agents/${agent.id}/credentials`, {
-                name: agent.name,
-              })
-              .then((result) => {
-                setNova(result.token);
-                credencials.reload();
-              })
-              .catch((cause: unknown) => setError(failureText(cause)));
-          }}
+          onClick={() => setNewCredential(true)}
           style={{ fontSize: 12, width: 'fit-content' }}
         >
           {t('settings.agentNewCredential')}
         </button>
+        {newCredential ? (
+          <AgentTokenEditor
+            agentId={agent.id}
+            scopeIds={agent.scope_ids}
+            allScopes={agent.all_scopes}
+            onCancel={() => setNewCredential(false)}
+            onSaved={(result) => {
+              setNova(result.token ?? null);
+              setNewCredential(false);
+              credencials.reload();
+            }}
+          />
+        ) : null}
       </div>
     </div>
   );

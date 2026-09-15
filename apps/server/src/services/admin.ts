@@ -104,6 +104,8 @@ export async function inviteUser(
     VALUES (${userId}, ${email}, ${name}, NULL, 'human', ${role}, ${ctx.now}, ${ctx.now}, 1)
   `.execute(ctx.tx);
 
+  await sql`INSERT INTO external_access (user_id) VALUES (${userId})`.execute(ctx.tx);
+
   const token = randomBytes(32).toString('base64url');
   const expiresAt = new Date(
     new Date(ctx.now).getTime() + INVITE_DAYS * 24 * 60 * 60 * 1000,

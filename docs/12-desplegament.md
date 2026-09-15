@@ -244,3 +244,11 @@ I **s'apaga sola** si `FEMHO_SOURCE_URL` no apunta a un repositori de GitHub. Aq
 variable existeix perquè l'AGPL §13 dona dret al codi *de la versió que t'estan servint*, i
 qui en publiqui una de modificada hi ha de posar la seva; avisar-lo de les versions d'un
 altre projecte seria dir-li que actualitzi a una cosa que no és la seva.
+
+
+## MCP amb OAuth i accés per usuari · 0.19.0
+
+El MCP viu al mateix port HTTP que la web. No cal cap servei addicional. Configura
+`FEMHO_BASE_URL` amb la URL pública HTTPS i reenvia els camins MCP, descobriment i
+OAuth sense memòria cau ni un login del proxy. La migració 024 i els passos de
+connexió, revocació i diagnòstic es documenten a [mcp-access.md](mcp-access.md).

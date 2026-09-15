@@ -23,11 +23,14 @@ L'especificació va canviar de forma substancial. Val la pena saber-ho abans de 
 
 ## 2 · Autenticació
 
-L'especificació demana OAuth 2.1 amb el servidor com a *resource server*, metadades de recurs protegit, registre dinàmic de client i indicadors de recurs.
+OAuth amb consentiment de Fem-ho i tokens personals són compatibles. La guia vigent
+és [MCP i API: permisos, clients i desplegament](mcp-access.md). Cada usuari controla
+els dos canals i cada credencial selecciona explícitament àmbits i lectura/escriptura.
+Els tokens personals veuen també Inbox; els agents conserven la seva política pròpia.
 
-Per a una instal·lació casolana això és desproporcionat. **Claude accepta capçaleres estàtiques** — una clau d'API que l'usuari enganxa — i això és el que Fem-ho fa servir per defecte.
-
-El token és un `femho_pat_…` normal, amb les mateixes capacitats i el mateix abast d'àmbits que qualsevol altre ([`05-api-rest.md`](05-api-rest.md) §2).
+El servidor publica metadades RFC 9728 i RFC 8414, registre dinàmic, PKCE S256,
+indicador de recurs, renovació rotatòria i revocació. El token manual `femho_pat_…`
+continua disponible. Les credencials OAuth són només MCP i no serveixen per a l'API.
 
 ### El detall d'HTTP que decideix si funciona
 

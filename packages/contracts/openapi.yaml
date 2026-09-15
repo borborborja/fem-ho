@@ -55,6 +55,186 @@ tags:
       de nou i invalida l'anterior, i reutilitzar-ne un de gastat revoca la família.
 
 paths:
+  /.well-known/oauth-protected-resource:
+    servers: [{ url: / }]
+    get:
+      tags: [auth]
+      operationId: getMcpResourceMetadata
+      summary: Descobriment del recurs MCP protegit
+      security: []
+      responses:
+        '200':
+          description: URL canònica i servidor d'autorització.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [resource, authorization_servers, scopes_supported]
+                properties:
+                  resource: { type: string, format: uri }
+                  authorization_servers: { type: array, items: { type: string, format: uri } }
+                  scopes_supported: { type: array, items: { type: string } }
+  /.well-known/oauth-authorization-server:
+    servers: [{ url: / }]
+    get:
+      tags: [auth]
+      operationId: getMcpAuthorizationMetadata
+      summary: Metadades OAuth amb PKCE S256 i registre de clients
+      security: []
+      responses:
+        '200':
+          description: Descobriment RFC 8414.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  [
+                    issuer,
+                    authorization_endpoint,
+                    token_endpoint,
+                    registration_endpoint,
+                    revocation_endpoint,
+                  ]
+                properties:
+                  issuer: { type: string, format: uri }
+                  authorization_endpoint: { type: string, format: uri }
+                  token_endpoint: { type: string, format: uri }
+                  registration_endpoint: { type: string, format: uri }
+                  revocation_endpoint: { type: string, format: uri }
+                  response_types_supported: { type: array, items: { type: string } }
+                  grant_types_supported: { type: array, items: { type: string } }
+                  code_challenge_methods_supported: { type: array, items: { type: string } }
+                  token_endpoint_auth_methods_supported: { type: array, items: { type: string } }
+                  scopes_supported: { type: array, items: { type: string } }
+                  authorization_response_iss_parameter_supported: { type: boolean }
+  /oauth/authorize:
+    servers: [{ url: / }]
+    get:
+      tags: [auth]
+      operationId: startMcpAuthorization
+      summary: Inicia el consentiment de Fem-ho sense concedir accés encara
+      security: []
+      parameters:
+        - { name: client_id, in: query, required: true, schema: { type: string } }
+        - { name: redirect_uri, in: query, required: true, schema: { type: string, format: uri } }
+        - { name: response_type, in: query, required: true, schema: { type: string, enum: [code] } }
+        - { name: resource, in: query, required: true, schema: { type: string, format: uri } }
+        - { name: state, in: query, required: true, schema: { type: string, maxLength: 2048 } }
+        - { name: code_challenge, in: query, required: true, schema: { type: string } }
+        - {
+            name: code_challenge_method,
+            in: query,
+            required: true,
+            schema: { type: string, enum: [S256] },
+          }
+        - { name: scope, in: query, schema: { type: string, default: 'femho:read' } }
+      responses:
+        '302':
+          description: Continua a la pantalla de consentiment, amb login si cal.
+          headers:
+            Location: { schema: { type: string, format: uri } }
+        '400': { $ref: '#/components/responses/OAuthError' }
+  /oauth/register:
+    servers: [{ url: / }]
+    post:
+      tags: [auth]
+      operationId: registerMcpClient
+      summary: Registre dinàmic RFC 7591 d'un client MCP
+      security: []
+      description: Límit de 10 registres per minut i procés. El registre no concedeix accés a cap usuari.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/McpOAuthClient'
+      responses:
+        '201':
+          description: Client registrat. Si és confidencial, el secret només es mostra ara.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: '#/components/schemas/McpOAuthClient' }
+                  - type: object
+                    required: [client_id]
+                    properties:
+                      client_id: { type: string }
+                      client_secret: { type: string }
+                      client_secret_expires_at: { type: integer }
+        '400': { $ref: '#/components/responses/OAuthError' }
+        '429': { $ref: '#/components/responses/OAuthError' }
+  /oauth/token:
+    servers: [{ url: / }]
+    post:
+      tags: [auth]
+      operationId: exchangeMcpOAuthToken
+      summary: Bescanvia un codi PKCE o renova la credencial MCP
+      security: []
+      description: |
+        Codi d'un sol ús de 2 minuts, accés de 15 minuts i refresc rotatori de 30 dies.
+        `resource` ha de ser la URL canònica de /mcp. Autenticació del client segons
+        el registre (none, client_secret_post o client_secret_basic via Authorization).
+        Reutilitzar un refresc gastat revoca la sessió. No amplia el consentiment.
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema: { $ref: '#/components/schemas/McpOAuthExchange' }
+          application/json:
+            schema: { $ref: '#/components/schemas/McpOAuthExchange' }
+      responses:
+        '200':
+          description: Tokens nous. Cache-Control no-store.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [access_token, token_type, expires_in, refresh_token, scope]
+                properties:
+                  access_token: { type: string }
+                  token_type: { type: string, enum: [Bearer] }
+                  expires_in: { type: integer }
+                  refresh_token: { type: string }
+                  scope: { type: string }
+        '400': { $ref: '#/components/responses/OAuthError' }
+        '401': { $ref: '#/components/responses/OAuthError' }
+        '403': { $ref: '#/components/responses/OAuthError' }
+        '429': { $ref: '#/components/responses/OAuthError' }
+  /oauth/revoke:
+    servers: [{ url: / }]
+    post:
+      tags: [auth]
+      operationId: revokeMcpOAuthToken
+      summary: Revoca la sessió OAuth del client segons RFC 7009
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token: { type: string }
+                client_id: { type: string }
+                client_secret: { type: string }
+                token_type_hint: { type: string }
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token: { type: string }
+                client_id: { type: string }
+                client_secret: { type: string }
+                token_type_hint: { type: string }
+      responses:
+        '200': { description: 'Revocat o ja inexistent, sense revelar tokens aliens.' }
+        '400': { $ref: '#/components/responses/OAuthError' }
+        '401': { $ref: '#/components/responses/OAuthError' }
+        '429': { $ref: '#/components/responses/OAuthError' }
   /info:
     servers:
       - url: /
@@ -1145,6 +1325,79 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthenticated'
 
+  /external-access:
+    get:
+      operationId: getExternalAccess
+      summary: Consultar l'accés extern propi
+      responses:
+        '200':
+          description: Interruptors i configuració per connectar clients externs.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExternalAccess' }
+    patch:
+      operationId: updateExternalAccess
+      summary: Activar o pausar canals externs
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                api_enabled: { type: boolean }
+                mcp_enabled: { type: boolean }
+      responses:
+        '200':
+          description: Accés actualitzat. Requereix sessió humana.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExternalAccessSwitches' }
+
+  /mcp/authorization/{id}:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    get:
+      operationId: getMcpAuthorization
+      summary: Consultar un consentiment pendent
+      responses:
+        '200':
+          description: Client i permisos demanats, sense cap secret.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [client_name, client_id, redirect_uri, write_requested]
+                properties:
+                  client_name: { type: string }
+                  client_id: { type: string }
+                  redirect_uri: { type: string }
+                  write_requested: { type: boolean }
+    post:
+      operationId: consentMcpAuthorization
+      summary: Autoritzar o denegar un client MCP
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [approve]
+              properties:
+                approve: { type: boolean }
+                scope_ids: { type: array, items: { type: string } }
+                permission: { type: string, enum: [read_only, read_write] }
+      responses:
+        '200':
+          description: Redirecció validada amb codi efímer o denegació.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [redirect_url]
+                properties:
+                  redirect_url: { type: string }
+
   /tokens:
     get:
       tags: [tokens]
@@ -1183,7 +1436,7 @@ paths:
           application/json:
             schema:
               type: object
-              required: [name, capabilities]
+              required: [name, capabilities, scope_ids]
               properties:
                 name: { type: string }
                 capabilities:
@@ -1192,7 +1445,12 @@ paths:
                 scope_ids:
                   type: array
                   items: { type: string }
-                  description: Buit vol dir tots els àmbits del propietari.
+                  minItems: 1
+                  description: Selecció explícita dels àmbits actuals. Els futurs no s'hi afegeixen.
+                channels:
+                  type: array
+                  minItems: 1
+                  items: { type: string, enum: [api, mcp] }
                 expires_at: { type: [string, 'null'], format: date-time }
       responses:
         '201':
@@ -1213,6 +1471,29 @@ paths:
           $ref: '#/components/responses/Forbidden'
 
   /tokens/{id}:
+    patch:
+      operationId: updateApiToken
+      summary: Editar una credencial manual
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                name: { type: string }
+                capabilities: { type: array, minItems: 1, items: { type: string } }
+                scope_ids: { type: array, minItems: 1, items: { type: string } }
+                channels: { type: array, minItems: 1, items: { type: string, enum: [api, mcp] } }
+                expires_at: { type: [string, 'null'], format: date-time }
+      responses:
+        '200':
+          description: Token manual actualitzat; OAuth requereix un nou consentiment.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiTokenSummary' }
     delete:
       tags: [tokens]
       operationId: revokeApiToken
@@ -3226,6 +3507,13 @@ paths:
               additionalProperties: false
               properties:
                 name: { type: string }
+                capabilities: { type: array, minItems: 1, items: { type: string } }
+                scope_ids:
+                  type: array
+                  minItems: 1
+                  items: { type: string }
+                  description: Subconjunt dels àmbits de l'agent; si s'omet, els hereta.
+                channels: { type: array, minItems: 1, items: { type: string, enum: [api, mcp] } }
                 expires_at: { type: [string, 'null'], format: date-time }
       responses:
         '201':
@@ -4417,6 +4705,30 @@ paths:
 
 components:
   schemas:
+    McpOAuthClient:
+      type: object
+      required: [redirect_uris]
+      properties:
+        client_name: { type: string, maxLength: 100 }
+        redirect_uris:
+          { type: array, minItems: 1, maxItems: 10, items: { type: string, format: uri } }
+        token_endpoint_auth_method:
+          { type: string, enum: [none, client_secret_post, client_secret_basic], default: none }
+        grant_types:
+          { type: array, items: { type: string, enum: [authorization_code, refresh_token] } }
+        response_types: { type: array, items: { type: string, enum: [code] } }
+    McpOAuthExchange:
+      type: object
+      required: [grant_type, resource]
+      properties:
+        grant_type: { type: string, enum: [authorization_code, refresh_token] }
+        resource: { type: string, format: uri }
+        client_id: { type: string }
+        client_secret: { type: string }
+        code: { type: string }
+        redirect_uri: { type: string, format: uri }
+        code_verifier: { type: string }
+        refresh_token: { type: string }
     AiStatus:
       type: object
       additionalProperties: false
@@ -5450,10 +5762,31 @@ components:
         created_at: { type: string, format: date-time }
         revoked_at: { type: [string, 'null'], format: date-time }
 
+    ExternalAccessSwitches:
+      type: object
+      required: [api_enabled, mcp_enabled]
+      properties:
+        api_enabled: { type: boolean }
+        mcp_enabled: { type: boolean }
+    ExternalAccess:
+      allOf:
+        - { $ref: '#/components/schemas/ExternalAccessSwitches' }
+        - type: object
+          required: [mcp_url, presets]
+          properties:
+            mcp_url: { type: string }
+            presets:
+              type: object
+              required: [read_only, read_write]
+              properties:
+                read_only: { type: array, items: { type: string } }
+                read_write: { type: array, items: { type: string } }
     ApiTokenSummary:
       type: object
       required: [id, name, token_prefix, capabilities, ai_agent_id, scope_ids, created_at]
       properties:
+        channels: { type: array, items: { type: string, enum: [api, mcp] } }
+        credential_type: { type: string, enum: [pat, oauth] }
         id: { type: string }
         name: { type: string }
         token_prefix:
@@ -5474,9 +5807,9 @@ components:
           type: array
           items: { type: string }
           description: |
-            Va **buida a les credencials d'agent**: els àmbits els hereten de l'agent, i
-            copiar-los aquí voldria dir que el dia que se li canviïn a l'agent la
-            credencial es quedaria apuntant als d'abans.
+            Àmbits explícits. En agents, una llista buida representa herència dels
+            àmbits de l'agent; una llista explícita només els pot restringir.
+            En tokens personals mai incorpora àmbits futurs.
         created_at: { type: string, format: date-time }
         expires_at: { type: [string, 'null'], format: date-time }
         last_used_at: { type: [string, 'null'], format: date-time }
@@ -5497,6 +5830,11 @@ components:
           enum: [user, ai_agent, guest, system, caldav]
         actor_user_id: { type: [string, 'null'] }
         actor_agent_id: { type: [string, 'null'] }
+        credential_id:
+          {
+            type: [string, 'null'],
+            description: Identificador de la credencial que ha fet el canvi.,
+          }
         actor_label:
           type: [string, 'null']
           description: '"Borja", "IA · Claude", "Extern · Marta".'
@@ -6825,6 +7163,16 @@ components:
           type: string
 
   responses:
+    OAuthError:
+      description: Error OAuth sense credencials ni redireccions no validades.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error]
+            properties:
+              error: { type: string }
+              error_description: { type: string }
     Unauthenticated:
       description: Cal autenticar-se.
       content:

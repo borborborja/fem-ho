@@ -8,7 +8,13 @@ import { PolicyError, unauthenticated } from '../policy/errors.js';
 import type { Principal } from '../policy/principal.js';
 import { listActivity, undo, type ActorFilter } from '../services/activity.js';
 import { updateTask } from '../services/tasks.js';
-import { createToken, listTokens, revokeToken } from '../services/tokens.js';
+import { createToken, listTokens, revokeToken, updateToken } from '../services/tokens.js';
+import {
+  readExternalAccess,
+  requireHumanSession,
+  updateExternalAccess,
+} from '../services/external-access.js';
+import { MCP_READ, MCP_WRITE } from '../services/mcp-oauth.js';
 import { principalOf } from './auth.js';
 
 async function handle<T>(
@@ -33,6 +39,35 @@ async function handle<T>(
 }
 
 export function registerTokenRoutes(app: FastifyInstance): void {
+  app.get('/api/v1/external-access', async (request, reply) =>
+    handle(app, request, reply, async (principal) => {
+      requireHumanSession(principal);
+      return {
+        ...(await readExternalAccess(app.connection!.db, principal.userId)),
+        mcp_url: `${(app.config.baseUrl ?? `http://localhost:${app.config.port}`).replace(/\/$/, '')}/mcp`,
+        presets: { read_only: MCP_READ, read_write: MCP_WRITE },
+      };
+    }),
+  );
+  app.patch('/api/v1/external-access', async (request, reply) =>
+    handle(app, request, reply, (principal) =>
+      auditedTransaction(app.connection!.db, principal, (ctx) =>
+        updateExternalAccess(ctx, principal, (request.body ?? {}) as Record<string, unknown>),
+      ),
+    ),
+  );
+  app.patch<{ Params: { id: string } }>('/api/v1/tokens/:id', async (request, reply) =>
+    handle(app, request, reply, (principal) =>
+      auditedTransaction(app.connection!.db, principal, (ctx) =>
+        updateToken(
+          ctx,
+          principal,
+          request.params.id,
+          (request.body ?? {}) as Parameters<typeof updateToken>[3],
+        ),
+      ),
+    ),
+  );
   app.get('/api/v1/tokens', async (request, reply) =>
     handle(app, request, reply, async (principal) => ({
       data: await listTokens(app.connection!.db, principal),
@@ -48,9 +83,10 @@ export function registerTokenRoutes(app: FastifyInstance): void {
         (ctx) =>
           createToken(ctx, principal, {
             name: String(body.name ?? ''),
+            channels: body.channels as string[] | undefined,
             capabilities: Array.isArray(body.capabilities) ? (body.capabilities as string[]) : [],
-            scope_ids: Array.isArray(body.scope_ids) ? (body.scope_ids as string[]) : undefined,
-            expires_at: typeof body.expires_at === 'string' ? body.expires_at : null,
+            scope_ids: body.scope_ids as string[] | undefined,
+            expires_at: body.expires_at as string | null | undefined,
           }),
         { engine: app.connection!.engine },
       );

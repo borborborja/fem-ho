@@ -20,6 +20,8 @@ import { PolicyError, unauthenticated } from '../policy/errors.js';
 import { bearerFrom, resolveApiToken, resolveSession, scopeIdsOwnedBy } from '../policy/resolve.js';
 import type { Source } from '@fem-ho/contracts';
 import type { Principal } from '../policy/principal.js';
+import { assertExternalRequest } from '../policy/external-request.js';
+import { resolveOAuth } from '../services/mcp-oauth.js';
 
 type LoginRequest = components['schemas']['LoginRequest'];
 type RefreshRequest = components['schemas']['RefreshRequest'];
@@ -83,8 +85,18 @@ export async function principalOf(
 
   // Un token d'API es reconeix pel prefix llegible, que és per a què hi és.
   if (isApiToken(bearer)) {
-    return resolveApiToken(conn.db, bearer, channel ?? 'api', now);
+    const principal = await resolveApiToken(conn.db, bearer, channel ?? 'api', now);
+    assertExternalRequest(principal, request.method, request.url.split('?')[0]!);
+    return principal;
   }
+  if (bearer.startsWith('femho_oauth_'))
+    return resolveOAuth(
+      conn.db,
+      bearer,
+      channel ?? 'api',
+      `${(app.config.baseUrl ?? `http://localhost:${app.config.port}`).replace(/\/$/, '')}/mcp`,
+    );
+  if (channel === 'mcp') throw unauthenticated('Use an MCP credential, not an app session.');
 
   const sessionId = sessionIdOfAccessToken(bearer, Date.now());
   if (sessionId === null) throw unauthenticated('Invalid or expired access token.');

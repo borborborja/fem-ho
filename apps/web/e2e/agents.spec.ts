@@ -94,6 +94,15 @@ test('la credencial de l’agent surt una sola vegada, i es veu a MCP i API amb 
   const idHermes = (await hermes.getAttribute('data-testid'))!.replace('agent-', '');
 
   await page.locator(`[data-testid="agent-credential-new-${idHermes}"]`).click();
+  await page.getByTestId('token-name').fill('Hermes');
+  await page.getByRole('button', { name: 'Seleccionar tots els actuals' }).click();
+  await page.getByLabel('API', { exact: true }).check();
+  await page.getByLabel('Permisos', { exact: true }).selectOption('read_write');
+  await page.getByTestId('token-create').click();
+  await page.request.patch('/api/v1/external-access', {
+    headers: { authorization: `Bearer ${await token(page)}` },
+    data: { api_enabled: true, mcp_enabled: true },
+  });
 
   const camp = page.locator(`[data-testid="agent-credential-value-${idHermes}"]`);
   await expect(camp).toBeVisible();
@@ -131,12 +140,12 @@ test('la credencial de l’agent surt una sola vegada, i es veu a MCP i API amb 
 
   // A MCP i API hi surt —és on la gent busca els tokens— però no s'hi toca.
   await page.locator('[data-testid="settings-tab-mcp"]').click();
-  const marca = page.locator('[data-testid^="token-ai-"]').first();
+  const marca = page.locator('[data-testid^="credential-"]').first();
   await expect(marca).toContainText('Hermes');
-  await expect(page.locator('[data-testid^="token-revoke-"]')).toHaveCount(0);
+  await expect(page.locator('[data-testid^="token-revoke-"]').first()).toBeVisible();
 
   // I el botó porta a l'agent, que és on sí que s'hi toca.
-  await page.locator('[data-testid^="token-ai-go-"]').first().click();
+  await page.getByRole('button', { name: "Anar a l'agent" }).first().click();
   await expect(page.locator(`[data-testid="agent-credential-new-${idHermes}"]`)).toBeVisible();
 });
 
@@ -149,6 +158,15 @@ test("l'agent pregunta, es veu sense entrar-hi, i la marca marxa quan respons", 
   const hermes = page.locator('[data-testid^="agent-"]', { hasText: 'Hermes' }).first();
   const idHermes = (await hermes.getAttribute('data-testid'))!.replace('agent-', '');
   await page.locator(`[data-testid="agent-credential-new-${idHermes}"]`).click();
+  await page.getByTestId('token-name').fill('Hermes');
+  await page.getByRole('button', { name: 'Seleccionar tots els actuals' }).click();
+  await page.getByLabel('API', { exact: true }).check();
+  await page.getByLabel('Permisos', { exact: true }).selectOption('read_write');
+  await page.getByTestId('token-create').click();
+  await page.request.patch('/api/v1/external-access', {
+    headers: { authorization: `Bearer ${await token(page)}` },
+    data: { api_enabled: true, mcp_enabled: true },
+  });
   const credencial = await page
     .locator(`[data-testid="agent-credential-value-${idHermes}"]`)
     .inputValue();
@@ -212,6 +230,15 @@ test("una tasca que l'agent té a les mans no es toca, i quan la deixa te la pot
   const hermes = page.locator('[data-testid^="agent-"]', { hasText: 'Hermes' }).first();
   const idHermes = (await hermes.getAttribute('data-testid'))!.replace('agent-', '');
   await page.locator(`[data-testid="agent-credential-new-${idHermes}"]`).click();
+  await page.getByTestId('token-name').fill('Hermes');
+  await page.getByRole('button', { name: 'Seleccionar tots els actuals' }).click();
+  await page.getByLabel('API', { exact: true }).check();
+  await page.getByLabel('Permisos', { exact: true }).selectOption('read_write');
+  await page.getByTestId('token-create').click();
+  await page.request.patch('/api/v1/external-access', {
+    headers: { authorization: `Bearer ${await token(page)}` },
+    data: { api_enabled: true, mcp_enabled: true },
+  });
   const credencial = await page
     .locator(`[data-testid="agent-credential-value-${idHermes}"]`)
     .inputValue();

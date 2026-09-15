@@ -165,6 +165,8 @@ export async function registerUser(
     changes: { email: { from: null, to: email }, role: { from: null, to: 'member' } },
   });
 
+  await sql`INSERT INTO external_access (user_id) VALUES (${userId})`.execute(ctx.tx);
+
   /**
    * Un àmbit propi per començar.
    *

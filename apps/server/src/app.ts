@@ -15,6 +15,7 @@ import { ensureInstanceSecret } from './config/secret.js';
 import { registerAuthRoutes } from './http/auth.js';
 import { registerInstanceRoutes } from './http/instance.js';
 import { registerMcpRoutes } from './http/mcp.js';
+import { registerMcpOAuthRoutes } from './http/mcp-oauth.js';
 import { registerSyncRoutes } from './http/sync.js';
 import { registerPushRoutes } from './http/push.js';
 import { registerAdminRoutes } from './http/admin.js';
@@ -61,7 +62,7 @@ export function buildApp(config: Config, options: BuildOptions = {}): FastifyIns
           const url = String(request.url ?? '');
           return {
             method: request.method,
-            url: url.startsWith('/api/v1/mail/oauth/google/callback') ? url.split('?')[0]! : url,
+            url: /oauth|\/connect\/mcp|\/mcp\/authorization/.test(url) ? url.split('?')[0]! : url,
           };
         },
       },
@@ -92,13 +93,22 @@ export function buildApp(config: Config, options: BuildOptions = {}): FastifyIns
    * d'un servidor de tercers sense que ningú se n'adonés.
    */
   app.addHook('onSend', async (request, reply) => {
-    if (request.url.startsWith('/api/v1/mail/oauth/')) reply.header('Cache-Control', 'no-store');
+    if (/oauth|\/connect\/mcp|\/mcp\/authorization/.test(request.url)) {
+      reply.header('Cache-Control', 'no-store');
+    }
+    if (
+      /^\/api\/v1\/(tokens|external-access|ai\/agents\/[^/]+\/credentials)(?:[/?]|$)/.test(
+        request.url,
+      )
+    ) {
+      reply.header('Cache-Control', 'no-store');
+    }
     reply.header('X-Content-Type-Options', 'nosniff');
     reply.header('X-Frame-Options', 'DENY');
     reply.header('Permissions-Policy', 'geolocation=(), camera=(), microphone=()');
     reply.header(
       'Referrer-Policy',
-      request.url.startsWith('/s/') || request.url.startsWith('/api/v1/mail/oauth/')
+      request.url.startsWith('/s/') || /oauth|\/connect\/mcp|\/mcp\/authorization/.test(request.url)
         ? 'no-referrer'
         : 'strict-origin-when-cross-origin',
     );
@@ -106,6 +116,7 @@ export function buildApp(config: Config, options: BuildOptions = {}): FastifyIns
 
   registerInstanceRoutes(app);
   registerAuthRoutes(app);
+  registerMcpOAuthRoutes(app);
   registerMeRoutes(app);
   registerAgentRoutes(app);
   /**

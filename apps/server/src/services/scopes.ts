@@ -91,7 +91,7 @@ export async function assertScopeAccess(
   `.execute(db);
 
   if (Number(isMember.rows[0]?.n ?? 0) === 0 || !canSeeScope(principal, scopeId)) {
-    throw scopeForbidden(visible, scope.name, entity);
+    throw scopeForbidden(visible, undefined, entity);
   }
 
   return scope;

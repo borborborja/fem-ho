@@ -1,3 +1,7 @@
+> Per connectar ChatGPT, Claude o Hermes amb OAuth i permisos per àmbit, segueix
+> la [guia actual de MCP i API](../mcp-access.md). Aquesta pàgina descriu les
+> credencials d'agents, que continuen limitades a la seva assignació de tasques.
+
 # Connectar-hi un agent
 
 Quatre coses i ja treballa: **un agent**, **els seus àmbits**, **una credencial** i **una

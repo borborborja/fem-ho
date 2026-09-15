@@ -135,6 +135,8 @@ export async function createFirstAdmin(ctx: AuditContext, input: SetupInput): Pr
     changes: { email: { from: null, to: email }, role: { from: null, to: 'admin' } },
   });
 
+  await sql`INSERT INTO external_access (user_id) VALUES (${userId})`.execute(ctx.tx);
+
   const scopeIds: string[] = [];
   let previous: string | null = null;
 

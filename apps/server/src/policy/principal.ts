@@ -13,6 +13,8 @@ import type { Capability } from './capabilities.js';
 export type PrincipalKind = 'user' | 'agent' | 'guest';
 
 export interface Principal {
+  credentialType?: 'session' | 'pat' | 'oauth' | 'federation';
+  credentialId?: string;
   kind: PrincipalKind;
   /** Identitat efectiva. Per a un agent, la persona en nom de qui actua. */
   userId: string;

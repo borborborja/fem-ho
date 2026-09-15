@@ -7,6 +7,29 @@ Data de l'última verificació completa: **2026-08-12**.
 
 ---
 
+## MCP i API per usuari amb OAuth · 2026-09-15
+
+Implementats interruptors independents d'API i MCP, tokens amb canals, àmbits
+explícits, lectura/escriptura, caducitat, edició i revocació. Els tokens personals
+veuen Inbox i les altres tasques dels àmbits concedits; els d'agent conserven la
+política IA i poden restringir-la encara més. Les sessions web/Android segueixen
+funcionant amb tots dos canals externs apagats.
+
+OAuth propi amb descobriment, registre dinàmic, consentiment a la web, PKCE S256,
+recurs canònic, codis d'un sol ús, refresc rotatori i revocació. Secrets emmagatzemats
+com a hash i canvis d'autorització auditats. Guies i configuració per a ChatGPT,
+Claude i Hermes dins l'app i a [mcp-access.md](mcp-access.md).
+
+Verificat amb client oficial de l'SDK MCP, HTTP OAuth real i les suites de SQLite i
+PostgreSQL. Les 24 proves de navegador de l'app, agents i accés extern passen; les
+noves cobreixen creació de token, lectura MCP, consentiment i bescanvi del codi, en
+clar i fosc. Captures d'escriptori i mòbil revisades. No s'ha provat amb sessions
+reals de ChatGPT, Claude o Hermes ni s'ha actualitzat la instància de producció.
+
+La gestió nova és a la web; no s'ha afegit una pantalla equivalent a Android.
+La migració 024 conserva els comptes existents actius, congela l'abast dels tokens
+personals antics i crea els comptes nous amb l'accés extern apagat.
+
 ## Netejar la columna Fet · 2026-09-14
 
 «Netejar» ara aplica el llindar `done_cleared_at` a la vista d'avui: amaga les

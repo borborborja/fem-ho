@@ -37,6 +37,7 @@ import { WelcomeScreen } from '../screens/WelcomeScreen.js';
 import { TaskModal } from '../screens/TaskModal.js';
 import { ShareTaskDialog } from '../screens/ShareTaskDialog.js';
 import { ProofRoute } from '../proof/ProofRoute.js';
+import { McpConsentScreen } from '../screens/ExternalAccessPanel.js';
 
 export function App() {
   const { route } = useRouter();
@@ -96,6 +97,8 @@ export function App() {
   }
 
   if (state.status === 'anonymous') return <LoginScreen />;
+  if (route.path === '/connect/mcp')
+    return <McpConsentScreen requestId={route.query.get('request') ?? ''} />;
   return (
     <ToastProvider>
       <AppShell />

@@ -31,6 +31,10 @@ export function registerMcpRoutes(app: FastifyInstance): void {
    * independents.
    */
   app.post('/mcp', async (request, reply) => {
+    const issuer = app.config.baseUrl ?? `http://localhost:${app.config.port}`;
+    if (request.headers.origin && request.headers.origin !== new URL(issuer).origin) {
+      return reply.code(403).send({ error: 'Invalid origin.' });
+    }
     const principal = await authenticate(app, request, reply);
     if (principal === undefined) return;
 
@@ -60,18 +64,16 @@ export function registerMcpRoutes(app: FastifyInstance): void {
 
     // Fastify ja ha llegit i parsejat el cos; el transport el vol com a tercer argument
     // perquè no el pugui tornar a llegir del flux.
+    reply.raw.setHeader('Cache-Control', 'no-store');
     reply.hijack();
-    try {
-      await server.connect(transport as never);
-      await transport.handleRequest(request.raw, reply.raw, request.body);
-    } finally {
-      // El transport i el servidor són d'aquesta petició i prou: tancar-los és el que fa
-      // que "sense estat" ho sigui de debò i no una fuita d'objectes per petició.
-      reply.raw.on('close', () => {
-        void transport.close();
-        void server.close();
-      });
-    }
+    // Cal registrar el tancament abans de respondre: una resposta curta ja pot haver
+    // acabat quan handleRequest retorna.
+    reply.raw.once('close', () => {
+      void transport.close();
+      void server.close();
+    });
+    await server.connect(transport as never);
+    await transport.handleRequest(request.raw, reply.raw, request.body);
   });
 
   /**
@@ -117,7 +119,10 @@ async function authenticate(
     if (error instanceof PolicyError && error.status === 401) {
       void reply
         .code(401)
-        .header('WWW-Authenticate', `Bearer realm="${REALM}"`)
+        .header(
+          'WWW-Authenticate',
+          `Bearer realm="${REALM}", resource_metadata="${(app.config.baseUrl ?? `http://localhost:${app.config.port}`).replace(/\/$/, '')}/.well-known/oauth-protected-resource", scope="femho:read"`,
+        )
         .type('application/problem+json')
         .send(error.toProblem(request.url));
       return undefined;

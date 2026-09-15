@@ -20,6 +20,7 @@ import { hashToken, isApiToken } from '../auth/tokens.js';
 import { capabilitiesForRole, isCapability, type Capability } from './capabilities.js';
 import { unauthenticated } from './errors.js';
 import type { Principal } from './principal.js';
+import { assertExternalChannel } from '../services/external-access.js';
 
 interface UserRow {
   id: string;
@@ -30,6 +31,9 @@ interface UserRow {
 }
 
 interface TokenRow {
+  name: string;
+  channels: string;
+  credential_type: 'pat' | 'oauth';
   id: string;
   user_id: string;
   ai_agent_id: string | null;
@@ -72,11 +76,34 @@ export async function resolveApiToken(
 ): Promise<Principal> {
   const hash = hashToken(token);
   const found = await sql<TokenRow>`
-    SELECT id, user_id, ai_agent_id, capabilities, scope_ids, expires_at, revoked_at
+    SELECT id, name, user_id, ai_agent_id, capabilities, scope_ids, expires_at, revoked_at, channels, credential_type
     FROM api_tokens WHERE token_hash = ${hash}
   `.execute(tx);
 
   const row = found.rows[0];
+  if (row?.credential_type === 'oauth') throw unauthenticated('Use an OAuth access token.');
+  return resolveTokenRow(tx, row, source, now);
+}
+
+export async function resolveTokenId(
+  tx: MigrationDb,
+  id: string,
+  source: Source,
+  now: string,
+): Promise<Principal> {
+  const found =
+    await sql<TokenRow>`SELECT id, name, user_id, ai_agent_id, capabilities, scope_ids, expires_at, revoked_at, channels, credential_type FROM api_tokens WHERE id = ${id}`.execute(
+      tx,
+    );
+  return resolveTokenRow(tx, found.rows[0], source, now);
+}
+
+async function resolveTokenRow(
+  tx: MigrationDb,
+  row: TokenRow | undefined,
+  source: Source,
+  now: string,
+): Promise<Principal> {
   // Un token inexistent i un de revocat donen exactament la mateixa resposta: si no,
   // es poden enumerar tokens (el mateix principi que docs/10 §4 per als compartits).
   if (row === undefined || row.revoked_at !== null) throw unauthenticated('Token no vàlid.');
@@ -86,6 +113,8 @@ export async function resolveApiToken(
 
   const owner = await loadUser(tx, row.user_id);
   if (owner === null) throw unauthenticated('Token no vàlid.');
+  if (owner.kind !== 'remote')
+    await assertExternalChannel(tx, owner.id, source, JSON.parse(row.channels) as string[]);
 
   const declared = parseCapabilities(row.capabilities);
   // El token no pot superar el seu propietari: s'interseca amb el que el rol permet.
@@ -108,7 +137,8 @@ export async function resolveApiToken(
       FROM ai_agents WHERE id = ${row.ai_agent_id}
     `.execute(tx);
     const a = agent.rows[0];
-    if (a === undefined || a.enabled === 0) throw unauthenticated("L'agent no està actiu.");
+    if (a === undefined || !isTrue(a.enabled) || a.on_behalf_of_user_id !== owner.id)
+      throw unauthenticated("L'agent no està actiu.");
 
     /**
      * **L'agent no arriba més enllà dels seus àmbits, i es decideix aquí.**
@@ -133,6 +163,8 @@ export async function resolveApiToken(
     }
 
     return {
+      credentialType: row.credential_type,
+      credentialId: row.id,
       kind: 'agent',
       // L'agent actua SEMPRE en nom d'una persona (D5). La responsabilitat es queda
       // amb ella, i és el seu identificador el que va a l'historial.
@@ -145,7 +177,18 @@ export async function resolveApiToken(
     };
   }
 
-  return { kind: 'user', userId: owner.id, capabilities, scopeIds, source };
+  return {
+    kind: 'user',
+    userId: owner.id,
+    capabilities,
+    scopeIds,
+    source,
+    ...(owner.kind === 'remote'
+      ? {}
+      : { label: `${source === 'mcp' ? 'MCP' : 'API'} · ${row.name}` }),
+    credentialType: owner.kind === 'remote' ? 'federation' : row.credential_type,
+    credentialId: row.id,
+  };
 }
 
 /** Resol una sessió activa a un principal d'usuari amb totes les seves capacitats. */
@@ -170,6 +213,8 @@ export async function resolveSession(
   // pot fer tot el que el seu rol li permet, a tots els seus àmbits.
   return {
     kind: 'user',
+    credentialType: 'session',
+    credentialId: sessionId,
     userId: user.id,
     capabilities: new Set(capabilitiesForRole(user.role)),
     scopeIds: null,
