@@ -92,6 +92,7 @@ import ho.fem.tasks.CardExtras
 import ho.fem.tasks.QuickAddField
 import ho.fem.tasks.TaskDetail
 import ho.fem.tasks.TaskDetailLabels
+import ho.fem.tasks.TaskMenuLabels
 import ho.fem.model.AiMode
 import ho.fem.model.Dates
 import ho.fem.model.QuickAddContext
@@ -259,6 +260,13 @@ private fun Root(model: AppViewModel, pending: MutableState<Intent?>) {
     Box(Modifier.fillMaxSize()) {
         when (val state = session) {
             is AppViewModel.Session.Checking -> Loading()
+            AppViewModel.Session.RestoreFailed -> SessionRecovery(onRetry = model::retrySessionRestore)
+            is AppViewModel.Session.RecoverLegacy -> SessionRecovery(
+                onRetry = { model.resolveLegacySession(recover = true) },
+                serverUrl = state.serverUrl,
+                failed = state.failed,
+                onSignIn = { model.resolveLegacySession(recover = false) },
+            )
             is AppViewModel.Session.NeedsServer -> ServerScreen(model, state.message)
             is AppViewModel.Session.NeedsLogin -> LoginScreen(
                 model, state.instanceName, false, state.registration, state.expired,
@@ -329,6 +337,41 @@ private fun Root(model: AppViewModel, pending: MutableState<Intent?>) {
 private fun Loading() {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Text(stringResource(R.string.state_loading), color = Femho.colors.inkFaint)
+    }
+}
+
+@Composable
+private fun SessionRecovery(
+    onRetry: () -> Unit,
+    serverUrl: String? = null,
+    failed: Boolean = true,
+    onSignIn: (() -> Unit)? = null,
+) {
+    Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            if (serverUrl != null) {
+                Text(
+                    stringResource(R.string.login_recoversessionprompt),
+                    color = Femho.colors.ink,
+                    textAlign = TextAlign.Center,
+                )
+                Text(serverUrl, color = Femho.colors.inkSoft, textAlign = TextAlign.Center)
+            }
+            if (failed) Text(
+                stringResource(R.string.login_sessionrestorefailed),
+                color = Femho.colors.ink,
+                textAlign = TextAlign.Center,
+            )
+            androidx.compose.material3.Button(onClick = onRetry, modifier = Modifier.testTag("session-recover")) {
+                Text(stringResource(if (failed) R.string.nav_retry else R.string.login_recoversession))
+            }
+            if (onSignIn != null) androidx.compose.material3.TextButton(onClick = onSignIn) {
+                Text(stringResource(R.string.login_signinwithpassword))
+            }
+        }
     }
 }
 
@@ -1063,6 +1106,15 @@ private fun BoardHost(
                 claim = stringResource(R.string.ai_takeover_action),
             ),
             onOpen = model::open,
+            taskMenuLabels = TaskMenuLabels(
+                openActions = stringResource(R.string.task_actions),
+                edit = editLabel,
+                move = stringResource(R.string.task_move),
+                delete = stringResource(R.string.nav_delete),
+                deleteConfirm = stringResource(R.string.task_deleteconfirm),
+                cancel = stringResource(R.string.nav_cancel),
+            ),
+            onDelete = model::deleteTask,
             onMove = { task, status -> model.move(task, status) },
             onToggle = { task ->
                 model.move(task, if (task.status == TaskStatus.DONE) TaskStatus.TODO else TaskStatus.DONE)

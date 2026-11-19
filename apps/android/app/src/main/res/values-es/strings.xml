@@ -338,12 +338,16 @@
     <string name="login_forgot">¿Has olvidado la contraseña?</string>
     <string name="login_insecure">Esta dirección no va cifrada. Cualquiera de la red puede leer lo que pase por ella.</string>
     <string name="login_password">Contraseña</string>
+    <string name="login_recoversession">Recuperar sesión</string>
+    <string name="login_recoversessionprompt">Hemos encontrado una sesión guardada. Recupérala si reconoces este servidor.</string>
     <string name="login_register">Crear una cuenta</string>
     <string name="login_server">Servidor</string>
     <string name="login_serverhint">La dirección de tu servidor de Fem-ho</string>
     <string name="login_servernewer">El servidor es más nuevo que esta app. Actualízala.</string>
     <string name="login_serverunreachable">No hay ningún Fem-ho en esta dirección.</string>
     <string name="login_sessionexpired">La sesión ha caducado. Vuelve a entrar en Fem-ho.</string>
+    <string name="login_sessionrestorefailed">No se ha podido recuperar la sesión guardada. Revisa la conexión y vuelve a intentarlo.</string>
+    <string name="login_signinwithpassword">Entrar con contraseña</string>
     <string name="login_submit">Entrar</string>
     <string name="login_subtitle">El gestor de tareas para ti y la familia</string>
     <string name="nav_add">Añadir</string>
@@ -862,6 +866,7 @@
     <string name="sync_synced">Sincronizado</string>
     <string name="sync_title">Sincronización</string>
     <string name="sync_unknownoperation">Cambio pendiente</string>
+    <string name="task_actions">Acciones de la tarea</string>
     <string name="task_activity">Historial</string>
     <string name="task_addattachment">Adjuntar un archivo</string>
     <string name="task_aiconversation">Conversación con la IA</string>
@@ -893,6 +898,7 @@
     <string name="task_label_add">Poner esta etiqueta</string>
     <string name="task_label_remove">Quitar esta etiqueta</string>
     <string name="task_labels">Etiquetas</string>
+    <string name="task_move">Mover a…</string>
     <string name="task_new">Nueva tarea</string>
     <string name="task_newchecklist">+ Nueva lista</string>
     <string name="task_newcomment">Escribe un comentario…</string>

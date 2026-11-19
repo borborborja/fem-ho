@@ -65,6 +65,8 @@ class AppViewModel(private val container: Container) : ViewModel() {
 
     sealed interface Session {
         data object Checking : Session
+        data object RestoreFailed : Session
+        data class RecoverLegacy(val serverUrl: String, val failed: Boolean = false) : Session
         data class NeedsServer(val message: String? = null) : Session
         data class NeedsLogin(
             val serverUrl: String,
@@ -564,23 +566,64 @@ class AppViewModel(private val container: Container) : ViewModel() {
                 if (activeAccount == account) endSession(expired = true)
             }
         }
-        viewModelScope.launch {
-            _theme.value = container.settings.theme.first()
-            _accent.value = container.settings.accent.first()
+        restoreSession()
+    }
 
-            val saved = container.settings.serverUrl.first()
-            if (saved == null) {
-                _session.value = Session.NeedsServer()
+    fun retrySessionRestore() {
+        if (_session.value == Session.RestoreFailed) restoreSession()
+    }
+
+    fun resolveLegacySession(recover: Boolean) {
+        val saved = _session.value as? Session.RecoverLegacy ?: return
+        _session.value = Session.Checking
+        viewModelScope.launch {
+            val account = try {
+                if (recover) container.recoverLegacySession(saved.serverUrl)
+                else {
+                    container.discardLegacySession()
+                    null
+                }
+            } catch (failure: Exception) {
+                if (failure is CancellationException) throw failure
+                _session.value = saved.copy(failed = true)
+                return@launch
+            }
+            if (account == null) {
+                _session.value = Session.NeedsLogin(saved.serverUrl, "", expired = recover)
+            } else {
+                startSession(account)
+            }
+        }
+    }
+
+    private fun restoreSession() {
+        _session.value = Session.Checking
+        viewModelScope.launch {
+            val (account, base, legacy) = try {
+                _theme.value = container.settings.theme.first()
+                _accent.value = container.settings.accent.first()
+                val saved = container.settings.serverUrl.first()
+                val account = container.restoreAccount()
+                // La sessió xifrada vincula el servidor al compte. La preferència només
+                // suggereix on entrar quan no hi ha sessió i es pot reparar des d'aquesta.
+                val base = account?.identity?.serverUrl ?: saved
+                base?.let { url -> java.net.URI(url).host?.let { container.settings.trustedCert(it) } }
+                if (account != null && saved != account.identity.serverUrl) {
+                    container.settings.setServerUrl(account.identity.serverUrl)
+                }
+                Triple(account, base, account == null && base != null && container.hasLegacySession())
+            } catch (failure: Exception) {
+                if (failure is CancellationException) throw failure
+                _session.value = Session.RestoreFailed
                 return@launch
             }
 
-            serverUrl = saved
-            java.net.URI(saved).host?.let { container.settings.trustedCert(it) }
-            val account = withContext(Dispatchers.IO) { container.account(saved) }
-            if (account == null) {
-                _session.value = Session.NeedsLogin(saved, "")
-            } else {
-                startSession(account)
+            serverUrl = base
+            when {
+                account != null -> startSession(account)
+                base != null && legacy -> _session.value = Session.RecoverLegacy(base)
+                base != null -> _session.value = Session.NeedsLogin(base, "")
+                else -> _session.value = Session.NeedsServer()
             }
         }
     }
@@ -634,6 +677,7 @@ class AppViewModel(private val container: Container) : ViewModel() {
                 }
 
                 if (candidate.startsWith("http://")) onInsecure(candidate)
+                container.discardLegacySession()
                 container.settings.setServerUrl(candidate)
                 serverUrl = candidate
                 // La versió de l'app (BuildConfig.VERSION_NAME) es compara amb la del
@@ -660,6 +704,7 @@ class AppViewModel(private val container: Container) : ViewModel() {
             val current = _session.value as? Session.NeedsCertConfirm ?: return@launch
             val info = runCatching { container.api(current.serverUrl).info() }.getOrNull()
             _session.value = if (info != null) {
+                container.discardLegacySession()
                 container.settings.setServerUrl(current.serverUrl)
                 serverUrl = current.serverUrl
                 val appVersion = ho.fem.app.BuildConfig.VERSION_NAME

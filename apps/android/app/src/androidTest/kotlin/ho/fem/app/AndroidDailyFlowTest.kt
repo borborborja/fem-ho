@@ -26,6 +26,8 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.net.HttpURLConnection
 import java.net.URL
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assume.assumeTrue
@@ -58,8 +60,7 @@ class AndroidDailyFlowTest {
 
         tag("server-input").performTextReplacement(base)
         tag("server-check").performClick()
-        signIn(email, password)
-        awaitLocale("en")
+        signIn(email, password, language = "en")
         compose.onAllNodes(
             hasAnyAncestor(hasTestTag("primary-view-tabs")) and hasClickAction(),
             useUnmergedTree = true,
@@ -68,6 +69,7 @@ class AndroidDailyFlowTest {
         tag("task-deadline").assertTextContains(date, substring = true)
         tag("task-close").performClick()
         verifyProjectFilter(task, scope)
+        verifyOfflineSessionRestore(base, task)
 
         tag("view-calendar").performClick()
         tag("calendar-date-$date").performClick()
@@ -150,8 +152,7 @@ class AndroidDailyFlowTest {
 
         tag("settings-tab-general").performScrollTo().performClick()
         tag("settings-logout").performScrollTo().performClick()
-        signIn(argument("otherEmail"), password)
-        awaitLocale("es")
+        signIn(argument("otherEmail"), password, language = "es")
         waitForText("Secondary account fixture")
         compose.onNodeWithTag("board-task-$task").assertDoesNotExist()
         compose.activityRule.scenario.onActivity { activity ->
@@ -168,11 +169,27 @@ class AndroidDailyFlowTest {
         }
     }
 
-    private fun signIn(email: String, password: String) {
+    private fun signIn(email: String, password: String, language: String) {
         tag("login-email").performTextReplacement(email)
         tag("login-password").performTextReplacement(password)
         tag("login-submit").performScrollTo().performClick()
+        awaitLocale(language)
         tag("board-column-inbox")
+    }
+
+    private fun verifyOfflineSessionRestore(base: String, task: String) {
+        val settings = (target.applicationContext as FemhoApplication).container.settings
+        runBlocking { settings.setServerUrl("https://other-instance.invalid") }
+        try {
+            setOffline(true)
+            // Una recreació normal conserva el ViewModel. El buidem per tornar a llegir la sessió.
+            compose.activityRule.scenario.onActivity { it.viewModelStore.clear() }
+            compose.activityRule.scenario.recreate()
+            tag("board-task-$task")
+            assertEquals(base, runBlocking { settings.serverUrl.first() })
+        } finally {
+            setOffline(false)
+        }
     }
 
     private fun verifyProjectFilter(task: String, personalScope: String) {

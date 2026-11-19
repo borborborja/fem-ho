@@ -338,12 +338,16 @@
     <string name="login_forgot">Forgotten your password?</string>
     <string name="login_insecure">This address is not encrypted. Anyone on the network can read what goes through it.</string>
     <string name="login_password">Password</string>
+    <string name="login_recoversession">Restore session</string>
+    <string name="login_recoversessionprompt">We found a saved session. Restore it if you recognize this server.</string>
     <string name="login_register">Create an account</string>
     <string name="login_server">Server</string>
     <string name="login_serverhint">The address of your Fem-ho server</string>
     <string name="login_servernewer">The server is newer than this app. Update it.</string>
     <string name="login_serverunreachable">There is no Fem-ho at this address.</string>
     <string name="login_sessionexpired">Your session has expired. Sign in to Fem-ho again.</string>
+    <string name="login_sessionrestorefailed">The saved session couldn’t be restored. Check your connection and try again.</string>
+    <string name="login_signinwithpassword">Sign in with password</string>
     <string name="login_submit">Sign in</string>
     <string name="login_subtitle">The task manager for you and the family</string>
     <string name="nav_add">Add</string>
@@ -862,6 +866,7 @@
     <string name="sync_synced">Synced</string>
     <string name="sync_title">Sync</string>
     <string name="sync_unknownoperation">Pending change</string>
+    <string name="task_actions">Task actions</string>
     <string name="task_activity">History</string>
     <string name="task_addattachment">Attach a file</string>
     <string name="task_aiconversation">Conversation with the AI</string>
@@ -893,6 +898,7 @@
     <string name="task_label_add">Add this label</string>
     <string name="task_label_remove">Remove this label</string>
     <string name="task_labels">Labels</string>
+    <string name="task_move">Move to…</string>
     <string name="task_new">New task</string>
     <string name="task_newchecklist">+ New list</string>
     <string name="task_newcomment">Write a comment…</string>

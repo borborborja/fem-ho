@@ -4,6 +4,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -173,7 +174,19 @@ fun TaskCard(
     listsToggleLabel: String? = null,
     onToggleLists: () -> Unit = {},
     addForm: CardAddForm? = null,
+    onLongPress: (() -> Unit)? = null,
+    longPressLabel: String? = null,
 ) {
+    val openAction = if (onLongPress == null) {
+        Modifier.clickable(onClick = onOpen)
+    } else {
+        Modifier.combinedClickable(
+            role = Role.Button,
+            onLongClickLabel = longPressLabel,
+            onLongClick = onLongPress,
+            onClick = onOpen,
+        )
+    }
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -186,7 +199,7 @@ fun TaskCard(
     Column(
         modifier = Modifier
             .weight(1f)
-            .clickable(onClick = onOpen)
+            .then(openAction)
             .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(FemhoSize.cardGap),
     ) {
