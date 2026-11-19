@@ -10,6 +10,7 @@ import { expect, test } from '@playwright/test';
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/proof/ai');
+  await expect(page.getByTestId('mode-manual')).toBeVisible();
 });
 
 test('AQUESTA és la de docs/09 §3: manual no pinta cap pastilla', async ({ page }) => {

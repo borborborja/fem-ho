@@ -19,10 +19,13 @@
  * de lectura ja té les seves proves, contra un client fals.
  */
 
-import Database from 'better-sqlite3';
+import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import { enter } from './entrar.js';
+
+const serverRequire = createRequire(new URL('../../server/package.json', import.meta.url));
+const Database: typeof import('better-sqlite3') = serverRequire('better-sqlite3');
 
 test.describe.configure({ mode: 'serial' });
 

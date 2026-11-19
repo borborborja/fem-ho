@@ -42,18 +42,40 @@ test('el gradient de marca és diferent a cada accent', async ({ page }) => {
   );
 });
 
-test("--on-brand passa a fosc a l'accent soft", async ({ page }) => {
+test('el text del botó primari té contrast AA als vuit temes', async ({ page }) => {
   await page.goto('/proof/tokens');
 
-  const colorOf = async (accent: string) =>
-    page
-      .locator(`${cell('light', accent)} button`)
-      .first()
-      .evaluate((el) => getComputedStyle(el).color);
-
-  // docs/04 §4 regla 6: "Amb soft, --on-brand passa a fosc". És el parell amb menys
-  // marge de contrast de tot el sistema.
-  expect(await colorOf('soft')).not.toBe(await colorOf('default'));
+  for (const theme of THEMES) {
+    for (const accent of ACCENTS) {
+      const ratio = await page
+        .locator(`${cell(theme, accent)} button`)
+        .first()
+        .evaluate((el) => {
+          const luminance = (rgb: string) => {
+            const channels = (rgb.match(/\d+(?:\.\d+)?/g) ?? []).map((part) => {
+              const value = Number(part) / 255;
+              return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+            });
+            return 0.2126 * channels[0]! + 0.7152 * channels[1]! + 0.0722 * channels[2]!;
+          };
+          const style = getComputedStyle(el);
+          const foreground = luminance(style.color);
+          const stops = style.backgroundImage.match(/rgb\([^)]+\)/g) ?? [];
+          return stops.length === 0
+            ? 0
+            : Math.min(
+                ...stops.map((stop) => {
+                  const background = luminance(stop);
+                  return (
+                    (Math.max(foreground, background) + 0.05) /
+                    (Math.min(foreground, background) + 0.05)
+                  );
+                }),
+              );
+        });
+      expect(ratio, `${theme} · ${accent}`).toBeGreaterThanOrEqual(4.5);
+    }
+  }
 });
 
 test('el fons de columna es veu als dos temes', async ({ page }) => {

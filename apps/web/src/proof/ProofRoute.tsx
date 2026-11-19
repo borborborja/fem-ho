@@ -17,13 +17,24 @@ import { CalendarProof } from '../CalendarProof.js';
 import { OfflineProof } from '../OfflineProof.js';
 import { QuickAddProof } from '../QuickAddProof.js';
 import { TokenProof } from '../TokenProof.js';
+import { ToastProvider } from '../app/toasts.js';
 
 export function ProofRoute({ path }: { path: string }) {
   const which = path.replace('/proof/', '');
   if (which.startsWith('ai')) return <AiModeProof />;
   if (which.startsWith('offline')) return <OfflineProof />;
-  if (which.startsWith('calendar')) return <CalendarProof />;
+  if (which.startsWith('calendar'))
+    return (
+      <ToastProvider>
+        <CalendarProof />
+      </ToastProvider>
+    );
   if (which.startsWith('quickadd')) return <QuickAddProof />;
-  if (which.startsWith('board')) return <BoardProof />;
+  if (which.startsWith('board'))
+    return (
+      <ToastProvider>
+        <BoardProof />
+      </ToastProvider>
+    );
   return <TokenProof />;
 }

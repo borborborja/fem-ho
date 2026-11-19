@@ -23,7 +23,13 @@ async function quickAdd(page: Page, status: string, title: string): Promise<stri
   await field.fill(`#${scope} ${title}`);
   // El desplegable d'autocompletat tapa el camp; Escape el tanca sense esborrar res.
   await field.press('Escape');
+  const saved = page.waitForResponse(
+    (response) =>
+      response.request().method() === 'POST' &&
+      new URL(response.url()).pathname === '/api/v1/tasks',
+  );
   await field.press('Enter');
+  expect((await saved).status()).toBe(201);
   return title;
 }
 
@@ -171,7 +177,8 @@ test('desplegar ensenya els ítems, i marcar-ne un mou el recompte', async ({ pa
 test('el camp de persones no surt a un àmbit individual', async ({ page }) => {
   await enter(page);
 
-  await page.locator('[data-testid="inbox-rail"]').getByText('Mirar el pressupost').first().click();
+  const title = await quickAdd(page, 'inbox', 'Revisar la factura personal');
+  await page.getByTestId('inbox-rail').getByText(title, { exact: true }).click();
   await expect(page.locator('[data-testid="task-modal"]')).toBeVisible();
   await expect(page.locator('[data-testid="task-assignees"]')).toHaveCount(0);
   await page.locator('[data-testid="task-cancel"]').click();

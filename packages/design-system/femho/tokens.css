@@ -12,6 +12,10 @@
 
 :root,
 [data-theme='light'] {
+  --on-brand: #14151a;
+  --ink-soft: rgba(20, 22, 30, 0.62);
+  --danger-text: #a53239;
+
   /**
    * Fons de la pastilla de recompte de l'Inbox.
    *
@@ -70,6 +74,10 @@
 }
 
 [data-theme='dark'] {
+  --on-brand: #14151a;
+  --ink-soft: rgba(245, 246, 250, 0.62);
+  --danger-text: #ff9ba3;
+
   /* Sobre superfície fosca, la pastilla ha de ser un vel clar molt tènue, com la
      resta de `--tag-bg` del tema, i no un blanc al 50%. */
   --inbox-pill-bg: rgba(255, 255, 255, 0.12);
@@ -90,4 +98,18 @@
 
   /* Sobre un fons ja fosc, el mateix vel no es notaria: se n'hi posa més. */
   --scrim: rgba(0, 0, 0, 0.55);
+}
+
+[data-accent='mono-warm'] {
+  --on-brand: #14151a;
+}
+
+[data-accent='mono-cool'] {
+  --on-brand: #14151a;
+  /* El blau més saturat queda per al text de marca, fora dels fons amb etiqueta. */
+  --plou-pink: #4b81e4;
+  --gradient-brand: linear-gradient(135deg, #8fc0ff 0%, #5a93f0 55%, #4b81e4 100%);
+  --gradient-brand-alt: linear-gradient(135deg, #8fc0ff, #5a93f0 60%, #4b81e4);
+  --gradient-brand-2stop: linear-gradient(135deg, #8fc0ff, #4b81e4);
+  --gradient-toggle: linear-gradient(135deg, #8fc0ff, #4b81e4);
 }

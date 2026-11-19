@@ -53,12 +53,13 @@ function parseBlocks(css) {
   return blocks;
 }
 
-export function loadTokenBlocks(tokensDir) {
+export function loadTokenBlocks(tokensDir, overrides) {
   const all = [];
   for (const file of TOKEN_FILES) {
     const css = readFileSync(join(tokensDir, file), 'utf8');
     for (const block of parseBlocks(css)) all.push({ ...block, file });
   }
+  if (overrides !== undefined) all.push(...parseBlocks(readFileSync(overrides, 'utf8')));
   return all;
 }
 
@@ -67,8 +68,8 @@ function selectorApplies(selector, theme, accent) {
   return selector.split(',').some((part) => {
     const s = part.trim();
     if (s === ':root') return true;
-    const themeMatch = s.match(/\[data-theme="([^"]+)"\]/);
-    const accentMatch = s.match(/\[data-accent="([^"]+)"\]/);
+    const themeMatch = s.match(/\[data-theme=["']([^"']+)["']\]/);
+    const accentMatch = s.match(/\[data-accent=["']([^"']+)["']\]/);
     if (themeMatch !== null && themeMatch[1] !== theme) return false;
     if (accentMatch !== null && accentMatch[1] !== accent) return false;
     // Un selector amb data-accent no aplica mai a l'accent `default`, que és l'absència

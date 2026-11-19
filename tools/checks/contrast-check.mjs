@@ -5,11 +5,9 @@
  * "Contrast insuficient als 8 temes (2 modes × 4 accents)."
  *
  * docs/04 §8 fixa el llistó: text normal 4.5:1, text gran 3:1, als dos temes i als
- * quatre accents. L'accent `soft` és el que menys marge té, i és per això que hi
- * --on-brand passa a fosc: és exactament el parell que aquesta comprovació vigila.
+ * quatre accents. Es mesuren els valors efectius després dels ajustos de Fem-ho.
  */
 
-import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import {
   ACCENTS,
@@ -120,7 +118,10 @@ function flattenStack(tokens, stack) {
   return { color: acc, missing: null };
 }
 
-const blocks = loadTokenBlocks(TOKENS_DIR);
+const blocks = loadTokenBlocks(
+  TOKENS_DIR,
+  new URL('../../packages/design-system/femho/tokens.css', import.meta.url),
+);
 const failures = [];
 const skipped = [];
 let checked = 0;
@@ -186,43 +187,6 @@ console.log(
 );
 for (const s of skipped) console.warn(`  omès: ${s}`);
 
-/**
- * Línia base de deute conegut.
- *
- * Plou tal com ve NO compleix el llistó que docs/04 §8 exigeix, i docs/04 §1 diu que
- * Plou no es reescriu. Les dues regles xoquen de veritat, i qui ho ha de resoldre és
- * qui és propietari de la marca, no aquest script.
- *
- * Mentre no es resolgui, la comprovació fa dues coses útils:
- *   - Falla amb qualsevol violació NOVA. El deute no creix.
- *   - Falla també si una violació de la línia base ja no hi és, per obligar a treure-la
- *     de la llista. Una línia base que no minva deixa de significar res.
- */
-const baseline = new Set(
-  JSON.parse(readFileSync(new URL('./contrast-baseline.json', import.meta.url), 'utf8')).known,
-);
-
-const nova = failures.filter((f) => !baseline.has(f));
-const resolta = [...baseline].filter((b) => !failures.includes(b));
-
-if (failures.length > 0) {
-  console.warn(`\n  ${failures.length} parells per sota del llindar (deute conegut de Plou):`);
-  for (const f of failures) console.warn(`    ${f}`);
-}
-
-if (nova.length > 0) {
-  console.error(`\n${nova.length} violacions NOVES, no són a la línia base:`);
-  for (const f of nova) console.error(`  ${f}`);
-}
-if (resolta.length > 0) {
-  console.error(`\n${resolta.length} entrades de la línia base ja no fallen. Treu-les del fitxer:`);
-  for (const f of resolta) console.error(`  ${f}`);
-}
-
-if (nova.length > 0 || resolta.length > 0) process.exit(1);
-
-console.log(
-  failures.length === 0
-    ? '  cap parell per sota del llindar.'
-    : '  cap violació nova. El deute conegut no ha crescut.',
-);
+for (const failure of failures) console.error(`  ${failure}`);
+if (failures.length > 0 || skipped.length > 0) process.exit(1);
+console.log('  cap parell per sota del llindar.');

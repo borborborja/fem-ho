@@ -377,7 +377,7 @@ Les dotze seccions de `docs/02`:
 | §10 Responsive | fet; el kanban del mòbil es va **arreglar** en ajustar-se al disseny, i a P19 la pàgina va deixar de moure's de costat i Ajustos va passar a ser usable al telèfon |
 | §11 Dreceres de teclat | fet, amb la paleta d'ordres |
 | §13 La primera pregunta | fet: surt un cop a qui no ho ha dit mai, i no si `FEMHO_SCOPE_MODE` ja ho decideix |
-| §12 Estats buits, càrrega i error | fet. **La cua de sortida (`sync/outbox.ts`) no la fa servir cap pantalla de debò**, només la de prova: el tauler no enqueua res sense xarxa. El que sí que està tancat és que no es perdi el que escrius (P21) |
+| §12 Estats buits, càrrega i error | fet. El tauler web desa les captures ràpides i els moviments en una cua IndexedDB separada per compte, conserva els esborranys i reenvia les operacions quan torna la connexió. Les vistes del tauler visitades es poden reobrir sense xarxa. L'edició completa i el registre manual de temps continuen fent servir l'API en línia. |
 
 ### Els adjunts (§7), que abans hi faltaven
 
@@ -775,10 +775,6 @@ Res de cara a l'usuari. Queden els registres del servidor i els missatges d'arre
 
 ## Decisions obertes
 
-- **El deute de contrast heretat de Plou.** Blanc sobre el gradient de marca dona
-  1,88–2,61:1 en tres dels quatre accents, i `docs/04` §8 en demana 4,5:1. `docs/04` §1
-  diu que Plou no es reescriu, o sigui que està registrat a `contrast-baseline.json`
-  per bloquejar violacions noves sense tocar les heretades. **És una decisió teva.**
 - **El formulari de tasca nova a Android.** El disseny mòbil posa un botó rodó al costat
   de cada afegida ràpida que obre l'edició completa. A Android el detall de tasca només
   edita una que ja existeix, i el botó necessitaria un formulari de creació que ara no hi

@@ -82,3 +82,9 @@ jobs:
       # actualitzar el contracte (regla 5).
       - name: Comprovacions permanents
         run: npm run check
+
+      - name: Instal·lar Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Proves de navegador
+        run: npm run e2e -- --workers=2
