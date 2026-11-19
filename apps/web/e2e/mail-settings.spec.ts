@@ -14,14 +14,22 @@
  */
 
 import { expect, test } from '@playwright/test';
-import { enter } from './entrar.js';
+import { enterAsNew } from './entrar.js';
 
 test.describe.configure({ mode: 'serial' });
 
-test('un compte de correu es dona d’alta des d’Ajustos', async ({ page }) => {
-  await enter(page);
-  await page.goto('/settings?tab=mail');
+const MAIL = {
+  name: 'Correu de proves',
+  email: 'mail-settings@example.com',
+  password: 'la-contrasenya-de-prova',
+};
 
+test.beforeEach(async ({ page }) => {
+  await enterAsNew(page, MAIL);
+  await page.goto('/settings?tab=mail');
+});
+
+test('un compte de correu es dona d’alta des d’Ajustos', async ({ page }) => {
   await expect(page.getByTestId('settings-tab-mail')).toBeVisible();
   await expect(page.getByTestId('mail-account-form')).toBeVisible();
 
@@ -31,8 +39,9 @@ test('un compte de correu es dona d’alta des d’Ajustos', async ({ page }) =>
   await page.getByTestId('mail-new-password').fill('la-contrasenya-del-correu');
   await page.getByTestId('mail-add-account').click();
 
-  const fila = page.locator('[data-testid^="mail-account-"]').first();
-  await expect(fila).toContainText('Personal');
+  const fila = page
+    .locator('[data-testid^="mail-account-"]')
+    .filter({ has: page.getByText('Personal', { exact: true }) });
   await expect(fila).toContainText('imap.example.test');
 
   /**
@@ -42,14 +51,12 @@ test('un compte de correu es dona d’alta des d’Ajustos', async ({ page }) =>
    * pestanya oberta.
    */
   await page.reload();
+  await expect(fila).toBeVisible();
   const html = await page.content();
   expect(html).not.toContain('la-contrasenya-del-correu');
 });
 
 test('una carpeta es mapa, i el títol es veu mentre s’escriu', async ({ page }) => {
-  await enter(page);
-  await page.goto('/settings?tab=mail');
-
   await page.getByTestId('mail-rule-folder').fill('INBOX/Escola');
 
   // El defecte és només l'assumpte.
@@ -66,9 +73,6 @@ test('una carpeta es mapa, i el títol es veu mentre s’escriu', async ({ page 
 });
 
 test('i la carpeta neix apagada, amb l’interruptor per encendre-la', async ({ page }) => {
-  await enter(page);
-  await page.goto('/settings?tab=mail');
-
   const regla = page.locator('[data-testid^="mail-rule-"]').filter({ hasText: 'INBOX/Escola' });
   await expect(regla.first()).toBeVisible();
 
@@ -100,9 +104,6 @@ test('i la carpeta neix apagada, amb l’interruptor per encendre-la', async ({ 
 });
 
 test('una variable que no existeix es diu, i no es rebutja', async ({ page }) => {
-  await enter(page);
-  await page.goto('/settings?tab=mail');
-
   await page.getByTestId('mail-rule-template').fill('{{remitent}} - {{subject}}');
 
   /**
