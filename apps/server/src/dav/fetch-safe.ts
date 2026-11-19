@@ -30,6 +30,12 @@ export class SsrfError extends Error {
   }
 }
 
+export class ResponseTooLargeError extends SsrfError {
+  constructor() {
+    super('La resposta passa de la mida màxima.');
+  }
+}
+
 export interface SafeFetchOptions {
   method?: string;
   headers?: Record<string, string>;
@@ -384,7 +390,7 @@ async function readCapped(
   const declared = Number(response.headers['content-length'] ?? '0');
   if (hasBody && declared > maxBytes) {
     response.destroy();
-    throw new SsrfError('La resposta passa de la mida màxima.');
+    throw new ResponseTooLargeError();
   }
 
   const chunks: Buffer[] = [];
@@ -395,7 +401,7 @@ async function readCapped(
     size += bytes.length;
     if (size > maxBytes) {
       response.destroy();
-      throw new SsrfError('La resposta passa de la mida màxima.');
+      throw new ResponseTooLargeError();
     }
     chunks.push(bytes);
   }

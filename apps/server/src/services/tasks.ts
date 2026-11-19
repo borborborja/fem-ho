@@ -9,8 +9,10 @@
 
 import { sql } from 'kysely';
 import { v7 as uuidv7, validate as validUuid } from 'uuid';
+import { z } from 'zod';
 import {
   TASK_STATUSES,
+  InvalidPositionError,
   generatePosition,
   type SourceKind,
   type TaskStatus,
@@ -19,9 +21,10 @@ import { dbBool, isTrue } from '../db/bool.js';
 import type { AuditContext } from '../audit/audited-transaction.js';
 import type { MigrationDb } from '../db/migration-db.js';
 import { PolicyError, missingCapability, notFound } from '../policy/errors.js';
-import { hasCapability, type Principal } from '../policy/principal.js';
+import { canSeeScope, hasCapability, type Principal } from '../policy/principal.js';
 import type { Mailbox } from '../policy/mailbox.js';
-import { visibleScopesPredicate } from '../policy/scope-visibility.js';
+import { visibleScopeIds, visibleScopesPredicate } from '../policy/scope-visibility.js';
+import { visibleCalendarIds } from '../policy/calendar-visibility.js';
 import { normalizeForSearch, normalizeQuery } from '../text/search-text.js';
 import { clampInt } from '../util/clamp.js';
 import { localDayBounds } from '../time/local-day.js';
@@ -34,7 +37,9 @@ import { assertTypeInScope } from './task-types.js';
 import { closeSession, openSession, createSession } from './sessions.js';
 import { taskTimeSummaries, type TaskTimeSummary } from './task-time.js';
 import { leaseOf, releaseIfHeld } from './leases.js';
-import { assertScopeAccess, listScopes } from './scopes.js';
+import { setTaskLabelInScope } from './labels.js';
+import { assertScopeAccess, assertScopeRole, listScopes, type ScopeRow } from './scopes.js';
+import { getProfile } from './users.js';
 
 export interface TaskRow {
   id: string;
@@ -98,6 +103,7 @@ export interface TaskRow {
 export interface Task extends TaskRow {
   time_summary?: TaskTimeSummary;
   assignee_ids: string[];
+  label_ids: string[];
   /**
    * Subtasques i ítems de llista, comptats junts.
    *
@@ -235,6 +241,11 @@ async function withAssignees(db: MigrationDb, rows: TaskRow[]): Promise<Task[]> 
   }));
 }
 
+/** Recalcula els agregats després d'afegir les relacions d'una tasca ja autoritzada. */
+export async function refreshTaskReferences(db: MigrationDb, task: Task): Promise<Task> {
+  return (await withAssignees(db, [task]))[0]!;
+}
+
 export async function getTask(db: MigrationDb, principal: Principal, id: string): Promise<Task> {
   if (!hasCapability(principal, 'tasks:read')) throw missingCapability('tasks:read');
 
@@ -314,14 +325,14 @@ export async function listTasks(
 ): Promise<TaskPage> {
   if (!hasCapability(principal, 'tasks:read')) throw missingCapability('tasks:read');
 
-  const scopes = await listScopes(db, principal);
-  const allowed = scopes
-    .map((s) => s.id)
-    .filter(
-      (id) =>
-        (filters.scopeId === undefined || id === filters.scopeId) &&
-        (filters.scopeIds === undefined || filters.scopeIds.includes(id)),
-    );
+  // Poder llegir tasques d'un àmbit no ha d'exigir accés al seu catàleg.
+  const scopes = await visibleScopeIds(db, principal.userId);
+  const allowed = [...scopes].filter(
+    (id) =>
+      canSeeScope(principal, id) &&
+      (filters.scopeId === undefined || id === filters.scopeId) &&
+      (filters.scopeIds === undefined || filters.scopeIds.includes(id)),
+  );
   if (allowed.length === 0) return { data: [], next_cursor: null, has_more: false };
 
   const statuses = filters.statuses ?? [...TASK_STATUSES];
@@ -411,13 +422,14 @@ function searchFilter(search: string | undefined): ReturnType<typeof sql> {
 export interface CreateTaskInput {
   id?: string | undefined;
   scope_id?: string | undefined;
-  project_id?: string | undefined;
+  project_id?: string | null | undefined;
   title?: string | undefined;
   description?: string | undefined;
   status?: TaskStatus | undefined;
   position?: string | undefined;
   due_date?: string | undefined;
   due_time?: string | undefined;
+  completed_at?: string | undefined;
   deadline?: string | undefined;
   rrule?: string | undefined;
   recurrence_mode?: 'schedule' | 'completion' | undefined;
@@ -435,7 +447,8 @@ export interface CreateTaskInput {
    * Serveix per saber d'on ve —i per decidir què passa amb la cita quan s'esborri la
    * tasca—, no per obeir-lo.
    */
-  source_event?: { calendar_id: string; uid: string; recurrence_id?: string | null } | undefined;
+  source_event?:
+    { calendar_id: string; uid: string; recurrence_id?: string | null | undefined } | undefined;
 }
 
 /**
@@ -456,6 +469,64 @@ function deadlineInstant(value: string | null): string | null {
   return new Date(time).toISOString();
 }
 
+async function initialCompletion(
+  ctx: AuditContext,
+  principal: Principal,
+  status: TaskStatus,
+  value: string | undefined,
+  occurredAt: string,
+): Promise<string | null> {
+  if (value === undefined) return status === 'done' ? occurredAt : null;
+  const invalidDate = () =>
+    new PolicyError(
+      'invalid-completion-date',
+      'Invalid completion date',
+      422,
+      'A completion date must be in the past or present and requires status done.',
+    );
+  if (status !== 'done') throw invalidDate();
+  let instant: string;
+  if (z.iso.date().safeParse(value).success) {
+    const { timezone } = await getProfile(ctx.tx, principal.userId);
+    instant = localDayBounds(timezone, value).startUTC;
+  } else if (z.iso.datetime({ offset: true }).safeParse(value).success) {
+    instant = new Date(value).toISOString();
+  } else throw invalidDate();
+  if (Date.parse(instant) > Date.parse(ctx.now)) throw invalidDate();
+  return instant;
+}
+
+async function assertTaskProject(db: MigrationDb, scopeId: string, projectId: string) {
+  const project = await sql<{ scope_id: string }>`
+    SELECT scope_id FROM projects WHERE id = ${projectId} AND deleted_at IS NULL
+  `.execute(db);
+  const found = project.rows[0];
+  if (found === undefined) throw notFound('project', projectId);
+  if (found.scope_id !== scopeId) {
+    throw new PolicyError(
+      'project-other-scope',
+      'Project from another scope',
+      422,
+      'A project from another scope cannot be assigned to the task.',
+    );
+  }
+}
+
+async function assertTaskAssignee(db: MigrationDb, scope: ScopeRow, userId: string) {
+  const eligible = await sql<{ id: string }>`
+    SELECT id FROM users WHERE id = ${userId} AND deleted_at IS NULL
+      AND EXISTS (SELECT 1 FROM scopes s WHERE s.id = ${scope.id} AND ${visibleScopesPredicate(userId)})
+  `.execute(db);
+  if (eligible.rows.length === 0 || (scope.kind === 'individual' && userId !== scope.owner_id)) {
+    throw new PolicyError(
+      'not-a-member',
+      'Not a member',
+      422,
+      'Only people with access to this scope can be assigned.',
+    );
+  }
+}
+
 export async function createTask(
   ctx: AuditContext,
   principal: Principal,
@@ -463,7 +534,7 @@ export async function createTask(
   engine: 'sqlite' | 'postgres' = 'sqlite',
   occurredAt = ctx.now,
 ): Promise<{ task: Task; created: boolean }> {
-  if (!hasCapability(principal, 'tasks:write')) throw missingCapability('tasks:write');
+  if (!hasCapability(principal, 'tasks:create')) throw missingCapability('tasks:create');
 
   // La invariant central. L'error ho diu amb paraules perquè el 422 d'un NOT NULL de la
   // base no li serveix de res a ningú.
@@ -479,7 +550,41 @@ export async function createTask(
     throw new PolicyError('title-required', 'Title required', 422, 'La tasca necessita un títol.');
   }
 
-  const scope = await assertScopeAccess(ctx.tx, principal, input.scope_id);
+  const scope = await assertScopeRole(ctx.tx, principal, input.scope_id, 'content');
+  if (principal.kind === 'agent') {
+    const { rows } = await sql<{ can_create_tasks: unknown }>`
+      SELECT can_create_tasks FROM ai_agents WHERE id = ${principal.agentId ?? ''}
+    `.execute(ctx.tx);
+    if (!isTrue(rows[0]?.can_create_tasks)) {
+      throw new PolicyError(
+        'agent-cannot-create-tasks',
+        'Task creation disabled for agent',
+        403,
+        'This agent is not allowed to create tasks.',
+      );
+    }
+  }
+
+  const id = input.id ?? uuidv7();
+  const sameTask = async (existing: TaskRow & { deleted_at: string | null }) => {
+    await assertScopeAccess(ctx.tx, principal, existing.scope_id, { type: 'La tasca', id });
+    if (existing.scope_id !== input.scope_id || existing.deleted_at !== null) {
+      throw new PolicyError(
+        'task-id-conflict',
+        'Task identifier already used',
+        409,
+        'Use an unused task identifier.',
+      );
+    }
+    ctx.noChange();
+    const { deleted_at: _deletedAt, ...row } = existing;
+    const [task] = await withAssignees(ctx.tx, [row]);
+    return { task: task!, created: false };
+  };
+  const existing = await sql<TaskRow & { deleted_at: string | null }>`
+    SELECT ${TASK_COLUMNS}, deleted_at FROM tasks WHERE id = ${id}
+  `.execute(ctx.tx);
+  if (existing.rows[0] !== undefined) return sameTask(existing.rows[0]);
 
   /**
    * **La tipologia, quan l'àmbit l'exigeix.**
@@ -504,19 +609,10 @@ export async function createTask(
     );
   }
 
-  const id = input.id ?? uuidv7();
-
-  const existing = await sql<TaskRow>`
-    SELECT ${TASK_COLUMNS} FROM tasks WHERE id = ${id}
-  `.execute(ctx.tx);
-  const already = existing.rows[0];
-  if (already !== undefined) {
-    // L'id del client no concedeix accés a la fila que ja existia.
-    await assertScopeAccess(ctx.tx, principal, already.scope_id, { type: 'La tasca', id });
-    ctx.noChange();
-    const [task] = await withAssignees(ctx.tx, [already]);
-    return { task: task!, created: false };
-  }
+  if (input.project_id != null) await assertTaskProject(ctx.tx, scope.id, input.project_id);
+  const assignees = [...new Set(input.assignee_ids)];
+  if (assignees.length === 0 && scope.kind === 'individual') assignees.push(scope.owner_id);
+  for (const userId of assignees) await assertTaskAssignee(ctx.tx, scope, userId);
 
   /**
    * Si ve d'un esdeveniment, dues invariants abans de res.
@@ -529,6 +625,9 @@ export async function createTask(
    */
   let sourceKind: SourceKind | null = null;
   if (input.source_event !== undefined) {
+    if (!hasCapability(principal, 'events:read')) throw missingCapability('events:read');
+    if (!(await visibleCalendarIds(ctx.tx, principal.userId)).has(input.source_event.calendar_id))
+      throw notFound('calendar', input.source_event.calendar_id);
     const cal = await sql<{ scope_id: string; source_kind: SourceKind | null }>`
       SELECT scope_id, source_kind FROM calendars
       WHERE id = ${input.source_event.calendar_id} AND deleted_at IS NULL
@@ -567,6 +666,13 @@ export async function createTask(
   }
 
   const status = input.status ?? 'inbox';
+  const completedAt = await initialCompletion(
+    ctx,
+    principal,
+    status,
+    input.completed_at,
+    occurredAt,
+  );
   const mode = input.ai_mode ?? 'manual';
   const deadline = deadlineInstant(input.deadline ?? null);
 
@@ -601,13 +707,13 @@ export async function createTask(
 
   const inserted = await sql`
     INSERT INTO tasks (id, scope_id, project_id, title, description, status, position,
-                       due_date, due_time, deadline, rrule, recurrence_mode,
+                       due_date, due_time, deadline, completed_at, rrule, recurrence_mode,
                        view_mode, ai_mode, ai_instructions, origin, search_text,
                        event_calendar_id, event_uid, event_recurrence_id, source_kind,
                        task_type_id, created_by, created_at, updated_at, version)
     VALUES (${id}, ${input.scope_id}, ${input.project_id ?? null}, ${input.title.trim()},
             ${input.description ?? null}, ${status}, ${position}, ${input.due_date ?? null},
-            ${input.due_time ?? null}, ${deadline}, ${input.rrule ?? null},
+            ${input.due_time ?? null}, ${deadline}, ${completedAt}, ${input.rrule ?? null},
             ${input.recurrence_mode ?? 'schedule'}, 'card', ${mode}, ${input.ai_instructions ?? null}, 'native',
             ${normalizeForSearch(input.title, input.description)},
             ${input.source_event?.calendar_id ?? null}, ${input.source_event?.uid ?? null},
@@ -629,28 +735,18 @@ export async function createTask(
    * funciona igual als dos motors.
    */
   if (Number(inserted.numAffectedRows ?? 0n) === 0) {
-    const race = await sql<TaskRow>`
-      SELECT ${TASK_COLUMNS} FROM tasks WHERE id = ${id}
+    const race = await sql<TaskRow & { deleted_at: string | null }>`
+      SELECT ${TASK_COLUMNS}, deleted_at FROM tasks WHERE id = ${id}
     `.execute(ctx.tx);
     const winner = race.rows[0];
-    if (winner !== undefined) {
-      ctx.noChange();
-      const [task] = await withAssignees(ctx.tx, [winner]);
-      return { task: task!, created: false };
-    }
+    if (winner !== undefined) return sameTask(winner);
+    throw notFound('task', id);
   }
 
   /**
    * "A un àmbit `individual` totes les tasques s'assignen automàticament al propietari.
    * No es demana." (docs/01 §4)
    */
-  const assignees =
-    input.assignee_ids !== undefined && input.assignee_ids.length > 0
-      ? input.assignee_ids
-      : scope.kind === 'individual'
-        ? [scope.owner_id]
-        : [];
-
   for (const userId of assignees) {
     await sql`
       INSERT INTO task_assignees (task_id, user_id, assigned_at)
@@ -663,11 +759,12 @@ export async function createTask(
     entityId: id,
     scopeId: input.scope_id,
     verb: 'created',
-    ...(status === 'doing'
+    ...(status === 'doing' || status === 'done'
       ? {
           changes: {
             status: { from: null, to: status },
             occurred_at: { from: null, to: occurredAt },
+            ...(completedAt === null ? {} : { completed_at: { from: null, to: completedAt } }),
           },
         }
       : {}),
@@ -781,14 +878,16 @@ export async function moveTask(
   id: string,
   input: MoveTaskInput,
 ): Promise<Task> {
-  if (!hasCapability(principal, 'tasks:write')) throw missingCapability('tasks:write');
+  if (!hasCapability(principal, 'tasks:move')) throw missingCapability('tasks:move');
+  if (input.time_entry !== undefined && !hasCapability(principal, 'tasks:write'))
+    throw missingCapability('tasks:write');
 
   const found = await sql<TaskRow>`
     SELECT ${TASK_COLUMNS} FROM tasks WHERE id = ${id} AND deleted_at IS NULL
   `.execute(ctx.tx);
   const current = found.rows[0];
   if (current === undefined) throw notFound('task', id);
-  await assertScopeAccess(ctx.tx, principal, current.scope_id, { type: 'La tasca', id });
+  await assertScopeRole(ctx.tx, principal, current.scope_id, 'content', { type: 'La tasca', id });
   await assertWritable(ctx, principal, current, 'move');
 
   const status = input.status ?? current.status;
@@ -904,9 +1003,18 @@ export async function moveTask(
     const neighbour = async (neighbourId: string | null | undefined): Promise<string | null> => {
       if (neighbourId === null || neighbourId === undefined) return null;
       const row = await sql<{ position: string }>`
-        SELECT position FROM tasks WHERE id = ${neighbourId} AND deleted_at IS NULL
+        SELECT position FROM tasks WHERE id = ${neighbourId} AND id <> ${id}
+          AND scope_id = ${current.scope_id} AND status = ${status} AND deleted_at IS NULL
       `.execute(ctx.tx);
-      return row.rows[0]?.position ?? null;
+      if (row.rows[0] === undefined) {
+        throw new PolicyError(
+          'invalid-task-neighbour',
+          'Invalid task neighbour',
+          422,
+          'Choose a different task in the destination column and scope.',
+        );
+      }
+      return row.rows[0].position;
     };
 
     const before = await neighbour(input.before_id);
@@ -928,7 +1036,17 @@ export async function moveTask(
       `.execute(ctx.tx);
       position = generatePosition(last.rows[0]?.position ?? null, null);
     } else {
-      position = generatePosition(before, after);
+      try {
+        position = generatePosition(before, after);
+      } catch (error) {
+        if (!(error instanceof InvalidPositionError)) throw error;
+        throw new PolicyError(
+          'invalid-task-neighbours',
+          'Invalid task neighbours',
+          422,
+          'The previous task must come before the next one.',
+        );
+      }
     }
   }
 
@@ -1076,7 +1194,7 @@ export async function completeTask(
   id: string,
   options: { cascade?: boolean } = {},
 ): Promise<Task> {
-  const capability = options.cascade === true ? 'checklists:write' : 'tasks:write';
+  const capability = options.cascade === true ? 'checklists:write' : 'tasks:move';
   if (!hasCapability(principal, capability)) throw missingCapability(capability);
 
   const found = await sql<TaskRow>`
@@ -1084,7 +1202,7 @@ export async function completeTask(
   `.execute(ctx.tx);
   const current = found.rows[0];
   if (current === undefined) throw notFound('task', id);
-  await assertScopeAccess(ctx.tx, principal, current.scope_id, { type: 'La tasca', id });
+  await assertScopeRole(ctx.tx, principal, current.scope_id, 'content', { type: 'La tasca', id });
   await assertWritable(ctx, principal, current, 'move');
   if (current.status === 'done') {
     ctx.noChange();
@@ -1345,6 +1463,8 @@ export interface UpdateTaskInput {
   recurrence_mode?: 'schedule' | 'completion' | undefined;
   ai_mode?: 'manual' | 'assisted' | 'delegated' | undefined;
   ai_instructions?: string | null | undefined;
+  assignee_ids?: string[] | undefined;
+  label_ids?: string[] | undefined;
 }
 
 /**
@@ -1360,7 +1480,7 @@ export async function updateTask(
   id: string,
   input: UpdateTaskInput,
 ): Promise<Task> {
-  if (!hasCapability(principal, 'tasks:write')) throw missingCapability('tasks:write');
+  if (!hasCapability(principal, 'tasks:update')) throw missingCapability('tasks:update');
 
   const found = await sql<TaskRow>`
     SELECT ${TASK_COLUMNS} FROM tasks WHERE id = ${id} AND deleted_at IS NULL
@@ -1368,7 +1488,10 @@ export async function updateTask(
   const before = found.rows[0];
   if (before === undefined) throw notFound('task', id);
 
-  await assertScopeAccess(ctx.tx, principal, before.scope_id);
+  const scope = await assertScopeRole(ctx.tx, principal, before.scope_id, 'content', {
+    type: 'La tasca',
+    id,
+  });
   await assertWritable(ctx, principal, before, 'edit');
 
   const fields: Record<string, unknown> = {};
@@ -1411,26 +1534,37 @@ export async function updateTask(
    * l'assignació automàtica dels àmbits individuals. Es fa creant-la on toca.
    */
   if (input.project_id !== undefined) {
-    if (input.project_id !== null) {
-      const project = await sql<{ scope_id: string; name: string }>`
-        SELECT scope_id, name FROM projects WHERE id = ${input.project_id} AND deleted_at IS NULL
-      `.execute(ctx.tx);
-      const found = project.rows[0];
-      if (found === undefined) throw notFound('project', input.project_id);
-      if (found.scope_id !== before.scope_id) {
-        throw new PolicyError(
-          'project-other-scope',
-          'Project from another scope',
-          422,
-          `The ${found.name} project belongs to another scope. A task does not change scope by editing it.`,
-          { name: found.name },
-        );
-      }
-    }
+    if (input.project_id !== null)
+      await assertTaskProject(ctx.tx, before.scope_id, input.project_id);
     fields.project_id = input.project_id;
   }
 
-  if (Object.keys(fields).length === 0) {
+  const relations: {
+    assignee_ids?: { from: string[]; to: string[] };
+    label_ids?: { from: string[]; to: string[] };
+  } = {};
+  const different = (from: string[], to: string[]) =>
+    from.length !== to.length || to.some((value) => !from.includes(value));
+  if (input.assignee_ids !== undefined) {
+    const to = [...new Set(input.assignee_ids)];
+    if (to.length === 0 && scope.kind === 'individual') to.push(scope.owner_id);
+    for (const userId of to) await assertTaskAssignee(ctx.tx, scope, userId);
+    const existing = await sql<{ user_id: string }>`
+      SELECT user_id FROM task_assignees WHERE task_id = ${id}
+    `.execute(ctx.tx);
+    const from = existing.rows.map((row) => row.user_id);
+    if (different(from, to)) relations.assignee_ids = { from, to };
+  }
+  if (input.label_ids !== undefined) {
+    const to = [...new Set(input.label_ids)];
+    const existing = await sql<{ label_id: string }>`
+      SELECT label_id FROM task_labels WHERE task_id = ${id}
+    `.execute(ctx.tx);
+    const from = existing.rows.map((row) => row.label_id);
+    if (different(from, to)) relations.label_ids = { from, to };
+  }
+
+  if (Object.keys(fields).length === 0 && Object.keys(relations).length === 0) {
     // Res a canviar: es declara explícitament perquè l'embolcall d'auditoria no es
     // queixi que una transacció d'escriptura no ha deixat rastre.
     ctx.noChange();
@@ -1447,24 +1581,55 @@ export async function updateTask(
   const assignments = Object.entries(fields).map(
     ([field, value]) => sql`${sql.raw(field)} = ${value}`,
   );
-  await sql`
+  const updated = await sql`
     UPDATE tasks SET ${sql.join(assignments)}, updated_at = ${ctx.now}, version = version + 1
     WHERE id = ${id}
+      ${Object.keys(relations).length > 0 ? sql`AND version = ${before.version}` : sql``}
   `.execute(ctx.tx);
+  if (Number(updated.numAffectedRows ?? 0) === 0) {
+    throw new PolicyError(
+      'task-edit-conflict',
+      'Task changed',
+      409,
+      'The task changed while its labels or assignees were being edited. Reload and retry.',
+    );
+  }
+  if (relations.assignee_ids !== undefined) {
+    const { from, to } = relations.assignee_ids;
+    for (const userId of from.filter((value) => !to.includes(value))) {
+      await sql`DELETE FROM task_assignees WHERE task_id = ${id} AND user_id = ${userId}`.execute(
+        ctx.tx,
+      );
+    }
+    for (const userId of to.filter((value) => !from.includes(value))) {
+      await sql`INSERT INTO task_assignees (task_id, user_id, assigned_at)
+        VALUES (${id}, ${userId}, ${ctx.now})`.execute(ctx.tx);
+    }
+  }
+  if (relations.label_ids !== undefined) {
+    const { from, to } = relations.label_ids;
+    for (const labelId of to.filter((value) => !from.includes(value)))
+      await setTaskLabelInScope(ctx, id, scope.id, labelId, true);
+    for (const labelId of from.filter((value) => !to.includes(value)))
+      await setTaskLabelInScope(ctx, id, scope.id, labelId, false);
+  }
 
   ctx.record({
     entityType: 'task',
     entityId: id,
     scopeId: before.scope_id,
     verb: 'updated',
-    changes: Object.fromEntries(
-      Object.keys(fields)
-        .filter((field) => field !== 'search_text')
-        .map((field) => [
-          field,
-          { from: (before as unknown as Record<string, unknown>)[field], to: fields[field] },
-        ]),
-    ),
+    changes: {
+      ...Object.fromEntries(
+        Object.keys(fields)
+          .filter((field) => field !== 'search_text')
+          .map((field) => [
+            field,
+            { from: (before as unknown as Record<string, unknown>)[field], to: fields[field] },
+          ]),
+      ),
+      ...relations,
+    },
   });
 
   const after = await sql<TaskRow>`

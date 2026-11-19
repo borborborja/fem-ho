@@ -142,3 +142,34 @@ test('no es pot anar a un dia futur', async ({ page }) => {
   // I avui sí que es pot triar: el límit és inclusiu.
   await expect(page.locator(`[data-testid="day-${iso(0)}"]`)).toBeEnabled();
 });
+
+test('una tasca importada a Fet apareix en el seu dia de finalització', async ({ page }) => {
+  await enterAsNew(page, {
+    ...MEU,
+    email: 'fetes-importades@example.com',
+  });
+  const headers = { authorization: `Bearer ${await token(page)}` };
+  const context = await page.request.get('/api/v1/task-context', { headers });
+  expect(context.ok()).toBe(true);
+  const { scopes } = (await context.json()) as { scopes: { id: string }[] };
+  const scopeId = scopes[0]!.id;
+  const profile = await page.request.patch('/api/v1/auth/me', {
+    headers,
+    data: { timezone: 'UTC' },
+  });
+  expect(profile.ok()).toBe(true);
+  const previous = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+  const imported = await page.request.post('/api/v1/tasks', {
+    headers,
+    data: { scope_id: scopeId, title: 'Dossier importat', status: 'done', completed_at: previous },
+  });
+  expect(imported.status()).toBe(201);
+
+  await page.goto(`/board?scopes=${scopeId}`);
+  const done = page.getByTestId('column-done');
+  await expect(done).toBeVisible();
+  await expect(done).not.toContainText('Dossier importat');
+  await page.getByTestId('done-calendar').click();
+  await page.getByTestId(`day-${previous}`).click();
+  await expect(done).toContainText('Dossier importat');
+});

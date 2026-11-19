@@ -31,7 +31,10 @@ import type { ScopeRole } from './scope-roles.js';
  *
  * `alias` és el nom de la taula `scopes` a la consulta que l'incrusta.
  */
-export function visibleScopesPredicate(userId: string, alias = 's'): RawBuilder<unknown> {
+export function visibleScopesPredicate(
+  userId: string | RawBuilder<string>,
+  alias = 's',
+): RawBuilder<unknown> {
   const a = sql.raw(alias);
   return sql`(${a}.owner_id = ${userId}
               OR EXISTS (SELECT 1 FROM scope_members m

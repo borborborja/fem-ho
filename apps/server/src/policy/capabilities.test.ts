@@ -13,6 +13,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { CAPABILITIES, CAPABILITY_PRESETS, capabilitiesForRole } from './capabilities.js';
+import { hasCapability, type Principal } from './principal.js';
 
 describe('els predefinits de tokens', () => {
   it('cap dels dos dona accés al correu', () => {
@@ -41,4 +42,24 @@ describe('els predefinits de tokens', () => {
   it('i el vocabulari no té duplicats', () => {
     expect(new Set(CAPABILITIES).size).toBe(CAPABILITIES.length);
   });
+});
+
+it('l’escriptura de tasques antiga autoritza les operacions de la fitxa', () => {
+  const principal: Principal = {
+    kind: 'user',
+    userId: 'owner',
+    source: 'api',
+    scopeIds: new Set(['own']),
+    capabilities: new Set(['tasks:write']),
+  };
+  expect(hasCapability(principal, 'tasks:create')).toBe(true);
+  expect(hasCapability(principal, 'tasks:move')).toBe(true);
+  expect(hasCapability(principal, 'tasks:update')).toBe(true);
+  expect(hasCapability(principal, 'tasks:attach')).toBe(false);
+  expect(hasCapability(principal, 'tasks:delete')).toBe(false);
+
+  const narrow: Principal = { ...principal, capabilities: new Set(['tasks:move']) };
+  expect(hasCapability(narrow, 'tasks:move')).toBe(true);
+  expect(hasCapability(narrow, 'tasks:write')).toBe(false);
+  expect(hasCapability(narrow, 'tasks:create')).toBe(false);
 });

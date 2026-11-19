@@ -94,7 +94,21 @@ export async function createSubtask(
   if (!hasCapability(principal, 'tasks:write')) throw missingCapability('tasks:write');
   const scopeId = await scopeOfTask(ctx.tx, taskId);
   await assertScopeAccess(ctx.tx, principal, scopeId);
+  return insertSubtask(ctx, taskId, scopeId, input);
+}
 
+/** El cridant ja ha autoritzat l'escriptura a la tasca i n'ha resolt l'àmbit. */
+export async function insertSubtask(
+  ctx: AuditContext,
+  taskId: string,
+  scopeId: string,
+  input: {
+    id?: string | undefined;
+    title?: string | undefined;
+    position?: string | undefined;
+    done?: boolean | undefined;
+  },
+): Promise<SubtaskView> {
   if (input.title === undefined || input.title.trim() === '') {
     throw new PolicyError('title-required', 'Title required', 422, 'The subtask needs a title.');
   }
@@ -117,7 +131,7 @@ export async function createSubtask(
 
   await sql`
     INSERT INTO subtasks (id, task_id, title, done, position, created_at, updated_at, version)
-    VALUES (${id}, ${taskId}, ${input.title.trim()}, ${dbBool(false)},
+    VALUES (${id}, ${taskId}, ${input.title.trim()}, ${dbBool(input.done === true)},
             ${input.position ?? generatePosition(last.rows[0]?.position ?? null, null)},
             ${ctx.now}, ${ctx.now}, 1)
   `.execute(ctx.tx);

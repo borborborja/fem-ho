@@ -158,7 +158,17 @@ export async function setTaskLabel(
   const scopeId = task.rows[0]?.scope_id;
   if (scopeId === undefined) throw notFound('task', taskId);
   await assertScopeAccess(ctx.tx, principal, scopeId);
+  return setTaskLabelInScope(ctx, taskId, scopeId, labelId, attached);
+}
 
+/** El cridant ja ha comprovat el permís d'editar aquesta tasca. */
+export async function setTaskLabelInScope(
+  ctx: AuditContext,
+  taskId: string,
+  scopeId: string,
+  labelId: string,
+  attached: boolean,
+): Promise<void> {
   const label = await sql<{ scope_id: string; name: string }>`
     SELECT scope_id, name FROM labels WHERE id = ${labelId} AND deleted_at IS NULL
   `.execute(ctx.tx);
@@ -172,8 +182,7 @@ export async function setTaskLabel(
       'label-other-scope',
       'Label from another scope',
       422,
-      `The ${found.name} label belongs to another scope. Create it in this one too.`,
-      { name: found.name },
+      'A label from another scope cannot be assigned to the task.',
     );
   }
 

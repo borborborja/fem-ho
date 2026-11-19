@@ -16,7 +16,7 @@ import { usePublicInfo } from '../app/usePublicInfo.js';
 import { useSession } from '../app/session.js';
 import { useMutation } from '../app/useApi.js';
 
-export function LoginScreen() {
+export function LoginScreen({ mcpConnection = false }: { mcpConnection?: boolean }) {
   const { login } = useSession();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -66,7 +66,12 @@ export function LoginScreen() {
         <h1 style={{ margin: 0 }}>
           <BrandMark name={info?.name ?? 'Fem-ho'} logoUrl={info?.logo_url ?? null} size={30} />
         </h1>
-        <p style={{ margin: 0, fontSize: 13.5, color: 'var(--ink-soft)' }}>{t('login.subtitle')}</p>
+        <p
+          data-testid={mcpConnection ? 'mcp-login-context' : undefined}
+          style={{ margin: 0, fontSize: 13.5, color: 'var(--ink-soft)' }}
+        >
+          {t(mcpConnection ? 'external.loginContext' : 'login.subtitle')}
+        </p>
 
         <label style={{ display: 'grid', gap: 5 }}>
           <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--ink-soft)' }}>

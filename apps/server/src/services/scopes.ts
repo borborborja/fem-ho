@@ -144,8 +144,9 @@ export async function assertScopeRole(
   principal: Principal,
   scopeId: string,
   action: ScopeAction,
+  entity?: { type: string; id: string },
 ): Promise<ScopeRow> {
-  const scope = await assertScopeAccess(db, principal, scopeId);
+  const scope = await assertScopeAccess(db, principal, scopeId, entity);
   const role = await roleOf(db, principal.userId, scopeId);
 
   if (role === null || !roleCan(role, action)) {

@@ -7,6 +7,20 @@ Data de l'última verificació completa: **2026-11-19**.
 
 ---
 
+## Lliurament de tasques i connexions MCP · 0.20.0
+
+L'API i MCP permeten crear tasques a qualsevol columna, inclosa la bústia, i
+moure-les. Es poden enviar subtasques, llistes, comentaris i adjunts. Els clients
+poden consultar els àmbits i les dades necessàries per emplenar una tasca.
+
+El consentiment OAuth de Fem-ho marca les operacions de tasques demanades pel
+client. La persona inicia sessió quan cal i tria els àmbits que vol compartir.
+Ajustos mostra l'estat de les connexions, permet restringir o revocar l'accés OAuth
+i conserva l'edició dels tokens manuals. El canvi s'aplica a la petició següent.
+
+Verificat amb l'SDK oficial de MCP, 273 proves de Chromium i les suites de SQLite i
+PostgreSQL. Consulta la [guia de connexió](mcp-access.md) per configurar un client.
+
 ## Integritat, sincronització i treball fora de línia · 0.19.1
 
 La sincronització comprova els permisos vigents de cada operació i del seu àmbit.
@@ -371,7 +385,7 @@ que no tenir-ne cap.
 
 Complet respecte de `docs/05` §4: **més de 120 rutes**. Autenticació amb refresc rotatiu,
 capa de política única, `activity_log` dins de la mateixa transacció que el canvi,
-sincronització amb cursor, CalDAV en port propi, MCP amb 18 tools, compartits,
+sincronització amb cursor, CalDAV en port propi, MCP amb 20 eines, compartits,
 notificacions i administració.
 
 Els dos motors es proven: la suite `dual-engine` recorre els camins d'escriptura a
@@ -767,7 +781,7 @@ que el producte no és teu.
 Els llegeixen agents d'MCP, DAVx⁵, Thunderbird i qui programi contra l'API — cap d'ells té
 catàleg ni idioma:
 
-- Les 18 tools d'MCP: títols, descripcions i tots els `.describe()`. Traduir-les per
+- Les 20 eines d'MCP: títols, descripcions i tots els `.describe()`. Traduir-les per
   idioma d'usuari no tindria on mirar-se —un token no és una persona— i faria que el
   mateix servidor descrivís les seves eines diferent segons qui preguntés.
 - Els ~20 missatges `text/plain` del camí DAV.

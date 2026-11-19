@@ -10,8 +10,16 @@
  * esborra. Van al registre del token.
  */
 
-export const CAPABILITIES = [
+export const TASK_OPERATIONS = [
   'tasks:read',
+  'tasks:create',
+  'tasks:move',
+  'tasks:update',
+  'tasks:attach',
+] as const;
+
+export const CAPABILITIES = [
+  ...TASK_OPERATIONS,
   'tasks:write',
   'tasks:delete',
   'events:read',

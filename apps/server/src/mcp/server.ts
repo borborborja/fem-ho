@@ -19,21 +19,22 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { auditedTransaction } from '../audit/audited-transaction.js';
 import type { Connection } from '../db/connection.js';
 import { PolicyError } from '../policy/errors.js';
-import type { Principal } from '../policy/principal.js';
+import { hasCapability, type Principal } from '../policy/principal.js';
 import { claim, leaseOf, nextTask, release } from '../services/leases.js';
 import { recentTakeOvers } from '../services/activity.js';
 import { addComment, askUser, resumeTask } from '../services/comments.js';
 import { listEventOccurrences } from '../services/events.js';
 import { updateChecklistItem } from '../services/checklists.js';
 import { listProjects, listScopes } from '../services/scopes.js';
+import { deliverTaskAttachment } from '../services/attachments.js';
+import { getTaskContext, hasTaskContext } from '../services/task-context.js';
 import {
-  completeTask,
-  createTask,
-  getTask,
-  listTasks,
-  moveTask,
-  updateTask,
-} from '../services/tasks.js';
+  createDeliveredTask,
+  moveDeliveredTask,
+  taskMutationReceipt,
+  updateDeliveredTask,
+} from '../services/task-delivery.js';
+import { completeTask, getTask, listTasks } from '../services/tasks.js';
 import { assertCatalogue, TOOLS, type ToolSpec } from './tools.js';
 import type { Capability } from '../policy/capabilities.js';
 
@@ -41,6 +42,9 @@ export interface McpDeps {
   connection: Connection;
   principal: Principal;
   version: string;
+  dataDir: string;
+  maxUploadBytes: number;
+  reauthorize: () => Promise<Principal>;
 }
 
 type ToolResult = { content: { type: 'text'; text: string }[]; isError?: boolean };
@@ -60,7 +64,7 @@ function fail(message: string): ToolResult {
 }
 
 /**
- * Construeix el servidor amb les 18 tools registrades.
+ * Construeix el servidor amb les eines que permet la credencial.
  *
  * El principal es fixa aquí i no per crida: cada petició HTTP construeix el seu servidor
  * amb el seu token resolt, que és el que fa que el mode sense estat funcioni sense cap
@@ -71,29 +75,37 @@ export function buildMcpServer(deps: McpDeps): McpServer {
 
   const server = new McpServer({ name: 'fem-ho', version: deps.version });
   const handlers = buildHandlers(deps);
+  const required: Record<string, Capability[]> = {
+    whoami: [],
+    list_scopes: ['scopes:read'],
+    list_projects: ['projects:read'],
+    list_events: ['events:read'],
+    list_tasks: ['tasks:read'],
+    get_task: ['tasks:read'],
+    search_tasks: ['tasks:read'],
+    get_briefing: ['scopes:read', 'projects:read', 'tasks:read'],
+    create_task: ['tasks:create'],
+    update_task: ['tasks:update'],
+    move_task: ['tasks:move'],
+    complete_task: ['tasks:move'],
+    add_comment: ['comments:write'],
+    ask_user: ['comments:write', 'tasks:write'],
+    resume_task: ['comments:write', 'tasks:write'],
+    update_checklist_item: ['checklists:write'],
+    next_task: ['tasks:read', 'tasks:write'],
+    release_task: ['tasks:write'],
+  };
 
   for (const spec of TOOLS) {
-    const required: Record<string, Capability[]> = {
-      whoami: [],
-      list_scopes: ['scopes:read'],
-      list_projects: ['projects:read'],
-      list_events: ['events:read'],
-      list_tasks: ['tasks:read'],
-      get_task: ['tasks:read'],
-      search_tasks: ['tasks:read'],
-      get_briefing: ['scopes:read', 'projects:read', 'tasks:read'],
-      create_task: ['tasks:write'],
-      update_task: ['tasks:write'],
-      move_task: ['tasks:write'],
-      complete_task: ['tasks:write'],
-      add_comment: ['comments:write'],
-      ask_user: ['comments:write', 'tasks:write'],
-      resume_task: ['comments:write', 'tasks:write'],
-      update_checklist_item: ['checklists:write'],
-      next_task: ['tasks:read', 'tasks:write'],
-      release_task: ['tasks:write'],
-    };
-    if (!(required[spec.name] ?? []).every((c) => deps.principal.capabilities.has(c))) continue;
+    const requiredCapabilities = required[spec.name];
+    const allowed =
+      spec.name === 'add_task_attachment'
+        ? hasCapability(deps.principal, 'tasks:attach') ||
+          hasCapability(deps.principal, 'attachments:write')
+        : spec.name === 'get_task_context'
+          ? hasTaskContext(deps.principal)
+          : requiredCapabilities?.every((c) => hasCapability(deps.principal, c)) === true;
+    if (!allowed) continue;
     if (
       ['next_task', 'release_task', 'ask_user', 'resume_task'].includes(spec.name) &&
       deps.principal.kind !== 'agent'
@@ -214,6 +226,15 @@ function buildHandlers(
       ),
     get_task: async (args) => ok(await getTask(db, principal, String(args.task_id))),
 
+    get_task_context: async (args) =>
+      ok(
+        await getTaskContext(
+          db,
+          principal,
+          typeof args.scope_id === 'string' ? args.scope_id : undefined,
+        ),
+      ),
+
     search_tasks: async (args) => {
       const query = String(args.query ?? '').trim();
       if (query === '') return fail('La cerca necessita un text.');
@@ -242,34 +263,29 @@ function buildHandlers(
       );
     },
 
-    create_task: async (args) =>
-      ok(await write(async (ctx) => createTask(ctx, principal, args as never, engine))),
+    create_task: async (args) => {
+      const { task, created } = await write((ctx) =>
+        createDeliveredTask(ctx, principal, args, engine),
+      );
+      return ok({ task: taskMutationReceipt(principal, task), created });
+    },
 
-    update_task: async (args) =>
-      ok(
-        await write(async (ctx) =>
-          updateTask(ctx, principal, String(args.task_id), {
-            ...(typeof args.title === 'string' ? { title: args.title } : {}),
-            ...(args.description === undefined
-              ? {}
-              : { description: args.description as string | null }),
-            ...(args.due_date === undefined ? {} : { due_date: args.due_date as string | null }),
-          }),
-        ),
-      ),
+    update_task: async ({ task_id, ...input }) => {
+      const task = await write((ctx) =>
+        updateDeliveredTask(ctx, principal, String(task_id), input),
+      );
+      return ok(taskMutationReceipt(principal, task));
+    },
 
-    move_task: async (args) =>
-      ok(
-        await write(async (ctx) =>
-          moveTask(ctx, principal, String(args.task_id), {
-            status: args.status as never,
-            ...(typeof args.position === 'string' ? { position: args.position } : {}),
-          }),
-        ),
-      ),
+    move_task: async ({ task_id, ...input }) => {
+      const task = await write((ctx) => moveDeliveredTask(ctx, principal, String(task_id), input));
+      return ok(taskMutationReceipt(principal, task));
+    },
 
-    complete_task: async (args) =>
-      ok(await write(async (ctx) => completeTask(ctx, principal, String(args.task_id)))),
+    complete_task: async (args) => {
+      const task = await write((ctx) => completeTask(ctx, principal, String(args.task_id)));
+      return ok(taskMutationReceipt(principal, task));
+    },
 
     add_comment: async (args) =>
       ok(
@@ -277,6 +293,31 @@ function buildHandlers(
           addComment(ctx, principal, String(args.task_id), String(args.body)),
         ),
       ),
+
+    add_task_attachment: async (args) => {
+      const { url, content_base64: contentBase64 } = args;
+      if ((typeof url === 'string') === (typeof contentBase64 === 'string')) {
+        return fail('Provide exactly one of url or content_base64.');
+      }
+      return ok(
+        await deliverTaskAttachment(
+          deps.connection,
+          principal,
+          {
+            taskId: String(args.task_id),
+            id: String(args.id),
+            filename: String(args.filename),
+            isAiContext: args.ai_context === true,
+            ...(typeof url === 'string' ? { url } : { contentBase64: String(contentBase64) }),
+          },
+          {
+            dataDir: deps.dataDir,
+            maxUploadBytes: deps.maxUploadBytes,
+            reauthorize: deps.reauthorize,
+          },
+        ),
+      );
+    },
 
     ask_user: async (args) =>
       ok(

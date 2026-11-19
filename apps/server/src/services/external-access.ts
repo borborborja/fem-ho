@@ -45,20 +45,34 @@ export async function updateExternalAccess(
         'Use boolean API and MCP switches.',
       );
   }
+  const apiEnabled = typeof input.api_enabled === 'boolean' ? Number(input.api_enabled) : null;
+  const mcpEnabled = typeof input.mcp_enabled === 'boolean' ? Number(input.mcp_enabled) : null;
+  // El consentiment MCP pot coincidir amb un canvi d'API fet des d'Ajustos.
+  // Conservem el valor actual dels camps absents quan la base aplica el canvi.
+  const { rows } = await sql<{ api_enabled: number; mcp_enabled: number }>`
+    INSERT INTO external_access (user_id, api_enabled, mcp_enabled)
+    VALUES (${principal.userId}, ${apiEnabled ?? Number(before.api_enabled)}, ${mcpEnabled ?? Number(before.mcp_enabled)})
+    ON CONFLICT (user_id) DO UPDATE SET
+      api_enabled = COALESCE(${apiEnabled}, external_access.api_enabled),
+      mcp_enabled = COALESCE(${mcpEnabled}, external_access.mcp_enabled)
+    RETURNING api_enabled, mcp_enabled`.execute(ctx.tx);
   const next = {
-    api_enabled: (input.api_enabled as boolean | undefined) ?? before.api_enabled,
-    mcp_enabled: (input.mcp_enabled as boolean | undefined) ?? before.mcp_enabled,
+    api_enabled: Number(rows[0]!.api_enabled) === 1,
+    mcp_enabled: Number(rows[0]!.mcp_enabled) === 1,
   };
-  await sql`INSERT INTO external_access (user_id, api_enabled, mcp_enabled)
-    VALUES (${principal.userId}, ${Number(next.api_enabled)}, ${Number(next.mcp_enabled)})
-    ON CONFLICT (user_id) DO UPDATE SET api_enabled = ${Number(next.api_enabled)}, mcp_enabled = ${Number(next.mcp_enabled)}`.execute(
-    ctx.tx,
-  );
   ctx.record({
     entityType: 'external_access',
     entityId: principal.userId,
     verb: 'updated',
-    changes: { access: { from: before, to: next } },
+    changes: {
+      access: {
+        from: {
+          api_enabled: apiEnabled === null ? next.api_enabled : before.api_enabled,
+          mcp_enabled: mcpEnabled === null ? next.mcp_enabled : before.mcp_enabled,
+        },
+        to: next,
+      },
+    },
   });
   return next;
 }
