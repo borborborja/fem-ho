@@ -17,6 +17,7 @@ export interface ActivityLog {
   actor_user_id: string | null;
   changes: string | null;
   created_at: string;
+  credential_id: string | null;
   entity_id: string;
   entity_type: string;
   id: string;
@@ -46,7 +47,9 @@ export interface AiAgents {
 export interface ApiTokens {
   ai_agent_id: string | null;
   capabilities: string;
+  channels: Generated<string>;
   created_at: string;
+  credential_type: Generated<string>;
   expires_at: string | null;
   id: string;
   last_used_at: string | null;
@@ -105,10 +108,12 @@ export interface Calendars {
 }
 
 export interface ChangeLog {
+  changed_fields: string | null;
   created_at: string;
   entity_id: string;
   entity_type: string;
   operation: string;
+  origin_link_id: string | null;
   scope_id: string | null;
   seq: Generated<number | null>;
 }
@@ -215,6 +220,12 @@ export interface Events {
   version: Generated<number>;
 }
 
+export interface ExternalAccess {
+  api_enabled: Generated<number>;
+  mcp_enabled: Generated<number>;
+  user_id: string | null;
+}
+
 export interface Grants {
   capabilities: string | null;
   created_at: string;
@@ -246,6 +257,7 @@ export interface InstanceLinks {
   last_sync_at: string | null;
   local_seq: Generated<number>;
   name: string | null;
+  remote_role: string | null;
   remote_scope_id: string | null;
   scope_id: string;
   token_enc: string;
@@ -379,6 +391,52 @@ export interface MailThreads {
   thread_key: string;
   updated_at: string;
   version: Generated<number>;
+}
+
+export interface McpOauthClients {
+  auth_method: string;
+  created_at: string;
+  id: string | null;
+  name: string;
+  redirect_uris: string;
+  secret_hash: string | null;
+}
+
+export interface McpOauthCodes {
+  expires_at: string;
+  hash: string | null;
+  request_id: string;
+  token_id: string;
+  used: Generated<number>;
+}
+
+export interface McpOauthRequests {
+  challenge: string;
+  client_id: string;
+  consumed: Generated<number>;
+  expires_at: string;
+  id: string | null;
+  redirect_uri: string;
+  resource: string;
+  scope: string;
+  state: string;
+}
+
+export interface McpOauthSessions {
+  access_expires_at: string;
+  access_hash: string;
+  client_id: string;
+  id: string | null;
+  refresh_expires_at: string;
+  refresh_hash: string;
+  resource: string;
+  revoked_at: string | null;
+  token_id: string;
+}
+
+export interface McpOauthUsedRefresh {
+  hash: string | null;
+  session_id: string;
 }
 
 export interface Projects {
@@ -702,6 +760,7 @@ export interface DB {
   event_inbox_marks: EventInboxMarks;
   event_occurrences: EventOccurrences;
   events: Events;
+  external_access: ExternalAccess;
   grants: Grants;
   instance_links: InstanceLinks;
   instance_settings: InstanceSettings;
@@ -711,6 +770,11 @@ export interface DB {
   mail_oauth_attempts: MailOauthAttempts;
   mail_rules: MailRules;
   mail_threads: MailThreads;
+  mcp_oauth_clients: McpOauthClients;
+  mcp_oauth_codes: McpOauthCodes;
+  mcp_oauth_requests: McpOauthRequests;
+  mcp_oauth_sessions: McpOauthSessions;
+  mcp_oauth_used_refresh: McpOauthUsedRefresh;
   projects: Projects;
   push_subscriptions: PushSubscriptions;
   reminders: Reminders;

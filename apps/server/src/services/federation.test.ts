@@ -31,13 +31,14 @@ import { hashPassword } from '../auth/password.js';
 import { auditedTransaction } from '../audit/audited-transaction.js';
 import { connect, type Connection } from '../db/connection.js';
 import { migrateToLatest } from '../db/migrator.js';
+import { connectTestSchema, postgresUrl, type TestSchema } from '../db/test-postgres.js';
 import { seal } from '../crypto/secret-box.js';
 import { isBlockedAddress, SsrfError } from '../dav/fetch-safe.js';
 import { capabilitiesForRole } from '../policy/capabilities.js';
 import type { Principal } from '../policy/principal.js';
 import { issueGrant } from './grants.js';
 import {
-  forgetTableColumns,
+  type InstanceLinkRow,
   linkInstance,
   normalizeBaseUrl,
   pullFromLink,
@@ -50,6 +51,7 @@ const NOW = '2026-08-07T10:00:00.000Z';
 const PASSWORD = 'la-contrasenya-de-prova';
 const SECRET_A = 'a'.repeat(40);
 const SECRET_B = 'b'.repeat(40);
+const pg = postgresUrl();
 
 /** Igual d'estricta que la de debò, menys per al servidor de proves a loopback. */
 const permetLoopback = {
@@ -64,6 +66,8 @@ const permetLoopback = {
 
 let connA: Connection;
 let connB: Connection;
+let schemaA: TestSchema | undefined;
+let schemaB: TestSchema | undefined;
 let appA: FastifyInstance;
 let appB: FastifyInstance;
 let httpB: Server;
@@ -74,6 +78,8 @@ let userB = '';
 let scopeB = '';
 let scopeMirall = '';
 let scopeAltreB = '';
+let scopeEnllacB = '';
+let scopePujadaB = '';
 let authB: Record<string, string>;
 
 /** El propietari de la casa A, per cridar-hi serveis directament. */
@@ -99,19 +105,25 @@ function ownerB(): Principal {
 }
 
 async function emetConvit(kind: 'scope_federation' | 'scope_invite', scopeId: string) {
-  return auditedTransaction(connB.db, ownerB(), (ctx) =>
-    issueGrant(ctx, ownerB(), { kind, scopeId }, SECRET_B),
+  return auditedTransaction(
+    connB.db,
+    ownerB(),
+    (ctx) => issueGrant(ctx, ownerB(), { kind, scopeId }, SECRET_B),
+    { engine: connB.engine },
   );
 }
 
 beforeAll(async () => {
   for (const k of Object.keys(process.env)) if (k.startsWith('FEMHO_')) delete process.env[k];
-  forgetTableColumns();
 
-  connA = connect(`sqlite://${join(tmpA, 'a.db')}`);
-  connB = connect(`sqlite://${join(tmpB, 'b.db')}`);
-  await migrateToLatest(connA.db, { engine: 'sqlite' });
-  await migrateToLatest(connB.db, { engine: 'sqlite' });
+  if (pg !== undefined) {
+    schemaA = await connectTestSchema(pg, 'federation_a');
+    schemaB = await connectTestSchema(pg, 'federation_b');
+  }
+  connA = schemaA ?? connect(`sqlite://${join(tmpA, 'a.db')}`);
+  connB = schemaB ?? connect(`sqlite://${join(tmpB, 'b.db')}`);
+  await migrateToLatest(connA.db, { engine: connA.engine });
+  await migrateToLatest(connB.db, { engine: connB.engine });
 
   // --- La casa B: qui comparteix.
   userB = uuidv7();
@@ -124,6 +136,8 @@ beforeAll(async () => {
   for (const [id, name] of [
     ['compartit', 'Casa'],
     ['reservat', 'Feina'],
+    ['enllac', 'Casa'],
+    ['pujada', 'Pujada'],
   ] as const) {
     const scopeId = uuidv7();
     await sql`
@@ -131,6 +145,8 @@ beforeAll(async () => {
       VALUES (${scopeId}, ${name}, 'collective', '--femho-scope-1', ${userB}, ${id}, ${NOW}, ${NOW})
     `.execute(connB.db);
     if (id === 'compartit') scopeB = scopeId;
+    else if (id === 'enllac') scopeEnllacB = scopeId;
+    else if (id === 'pujada') scopePujadaB = scopeId;
     else scopeAltreB = scopeId;
   }
 
@@ -177,15 +193,11 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await new Promise<void>((resolve) =>
-    httpB.close(() => {
-      resolve();
-    }),
-  );
-  await appA.close();
-  await appB.close();
-  await connA.close();
-  await connB.close();
+  await new Promise<void>((resolve) => (httpB ? httpB.close(() => resolve()) : resolve()));
+  await appA?.close();
+  await appB?.close();
+  await (schemaA === undefined ? connA?.close() : schemaA.drop());
+  await (schemaB === undefined ? connB?.close() : schemaB.drop());
   rmSync(tmpA, { recursive: true, force: true });
   rmSync(tmpB, { recursive: true, force: true });
 });
@@ -382,6 +394,7 @@ describe('la rèplica', () => {
       SECRET_A,
       NOW,
       permetLoopback,
+      connA.engine,
     );
     expect(result.applied).toBeGreaterThan(0);
 
@@ -417,10 +430,13 @@ describe("enllaçar-se amb l'altra casa", () => {
   let linkId = '';
 
   it('crea un àmbit espill i deixa rastre', async () => {
-    const { token } = await emetConvit('scope_federation', scopeB);
+    const { token } = await emetConvit('scope_federation', scopeEnllacB);
 
-    const result = await auditedTransaction(connA.db, ownerA(), (ctx) =>
-      linkInstance(ctx, ownerA(), { base_url: baseB, token }, SECRET_A, permetLoopback),
+    const result = await auditedTransaction(
+      connA.db,
+      ownerA(),
+      (ctx) => linkInstance(ctx, ownerA(), { base_url: baseB, token }, SECRET_A, permetLoopback),
+      { engine: connA.engine },
     );
     linkId = result.link.id;
 
@@ -446,13 +462,20 @@ describe("enllaçar-se amb l'altra casa", () => {
       method: 'POST',
       url: '/api/v1/tasks',
       headers: authB,
-      payload: { scope_id: scopeB, title: 'Regar les plantes' },
+      payload: { scope_id: scopeEnllacB, title: 'Regar les plantes' },
     });
 
     const link = await sql<never>`SELECT * FROM instance_links WHERE id = ${linkId}`.execute(
       connA.db,
     );
-    await pullFromLink(connA.db, link.rows[0] as never, SECRET_A, NOW, permetLoopback);
+    await pullFromLink(
+      connA.db,
+      link.rows[0] as never,
+      SECRET_A,
+      NOW,
+      permetLoopback,
+      connA.engine,
+    );
 
     const aqui = await sql<{ title: string }>`SELECT title FROM tasks`.execute(connA.db);
     expect(aqui.rows.map((r) => r.title)).toContain('Regar les plantes');
@@ -476,7 +499,9 @@ describe("enllaçar-se amb l'altra casa", () => {
     `.execute(connA.db);
     const scopeEspill = abans.rows[0]!.scope_id;
 
-    await auditedTransaction(connA.db, ownerA(), (ctx) => unlinkInstance(ctx, ownerA(), linkId));
+    await auditedTransaction(connA.db, ownerA(), (ctx) => unlinkInstance(ctx, ownerA(), linkId), {
+      engine: connA.engine,
+    });
 
     const enllacos = await sql<{ id: string }>`
       SELECT id FROM instance_links WHERE id = ${linkId}
@@ -503,46 +528,55 @@ describe("enllaçar-se amb l'altra casa", () => {
  * que se sincronitzi tot: qui rep un àmbit hi ha de poder col·laborar.
  */
 describe('la pujada', () => {
-  it("porta cap a l'altra casa el que s'escriu a l'àmbit espill", async () => {
-    const { token } = await emetConvit('scope_federation', scopeB);
-    const enllac = await auditedTransaction(connA.db, ownerA(), (ctx) =>
-      linkInstance(ctx, ownerA(), { base_url: baseB, token }, SECRET_A, permetLoopback),
-    );
+  let linkId: string;
+  let localScopeId: string;
+  let authA: Record<string, string>;
 
-    // Una tasca escrita a la casa A, dins de l'àmbit espill.
+  const sincronitza = async () => {
+    const link = await sql<InstanceLinkRow & { token_enc: string }>`
+      SELECT * FROM instance_links WHERE id = ${linkId}
+    `.execute(connA.db);
+    return pullFromLink(connA.db, link.rows[0]!, SECRET_A, NOW, permetLoopback, connA.engine);
+  };
+
+  beforeAll(async () => {
+    const { token } = await emetConvit('scope_federation', scopePujadaB);
+    const enllac = await auditedTransaction(
+      connA.db,
+      ownerA(),
+      (ctx) => linkInstance(ctx, ownerA(), { base_url: baseB, token }, SECRET_A, permetLoopback),
+      { engine: connA.engine },
+    );
+    linkId = enllac.link.id;
+    localScopeId = enllac.scope_id;
+
     const meva = await appA.inject({
       method: 'POST',
       url: '/api/v1/auth/login',
       payload: { email: 'a@e.com', password: PASSWORD },
     });
-    const authA = {
+    authA = {
       authorization: `Bearer ${meva.json<{ access_token: string }>().access_token}`,
     };
+  });
+
+  it("porta cap a l'altra casa el que s'escriu a l'àmbit espill", async () => {
     const creada = await appA.inject({
       method: 'POST',
       url: '/api/v1/tasks',
       headers: authA,
-      payload: { scope_id: enllac.scope_id, title: 'Portar el cotxe al taller' },
+      payload: { scope_id: localScopeId, title: 'Portar el cotxe al taller' },
     });
     expect(creada.statusCode, creada.body).toBe(201);
 
-    const link = await sql<never>`
-      SELECT * FROM instance_links WHERE id = ${enllac.link.id}
-    `.execute(connA.db);
-    const result = await pullFromLink(
-      connA.db,
-      link.rows[0] as never,
-      SECRET_A,
-      NOW,
-      permetLoopback,
-    );
+    const result = await sincronitza();
     expect(result.pushed).toBeGreaterThan(0);
 
     // I ha arribat a l'àmbit de l'altra banda, no a cap altre.
     const alla = await sql<{ title: string; scope_id: string }>`
       SELECT title, scope_id FROM tasks WHERE title = 'Portar el cotxe al taller'
     `.execute(connB.db);
-    expect(alla.rows[0]?.scope_id).toBe(scopeB);
+    expect(alla.rows[0]?.scope_id).toBe(scopePujadaB);
   });
 
   /**
@@ -551,23 +585,119 @@ describe('la pujada', () => {
    * mateixa tasca per sempre.
    */
   it('i el que ha arribat de fora no hi torna, que seria un bucle', async () => {
-    const enllacos = await sql<{ id: string; local_seq: number }>`
-      SELECT id, local_seq FROM instance_links ORDER BY created_at DESC
-    `.execute(connA.db);
-    const linkId = enllacos.rows[0]!.id;
-
-    const link = await sql<never>`SELECT * FROM instance_links WHERE id = ${linkId}`.execute(
-      connA.db,
-    );
-    const segon = await pullFromLink(
-      connA.db,
-      link.rows[0] as never,
-      SECRET_A,
-      NOW,
-      permetLoopback,
-    );
-
+    const segon = await sincronitza();
     // Res de nou per pujar: el que hi ha a l'espill o ja ha pujat, o ve d'ells.
     expect(segon.pushed).toBe(0);
+  });
+
+  it('edita la tasca a l’origen i conserva els camps modificats a distància', async () => {
+    const created = await appB.inject({
+      method: 'POST',
+      url: '/api/v1/tasks',
+      headers: authB,
+      payload: { scope_id: scopePujadaB, title: 'Obrir el garatge', description: 'Anotació' },
+    });
+    expect(created.statusCode, created.body).toBe(201);
+    const { id } = created.json<{ id: string }>();
+    const url = `/api/v1/tasks/${id}`;
+    await sincronitza();
+
+    const local = await appA.inject({
+      method: 'PATCH',
+      url,
+      headers: authA,
+      payload: { title: 'Tancar el garatge' },
+    });
+    expect(local.statusCode, local.body).toBe(200);
+    const remote = await appB.inject({
+      method: 'PATCH',
+      url,
+      headers: authB,
+      payload: { description: 'Anotació nova' },
+    });
+    expect(remote.statusCode, remote.body).toBe(200);
+    expect((await sincronitza()).pushed).toBe(1);
+
+    for (const [app, headers] of [
+      [appA, authA],
+      [appB, authB],
+    ] as const) {
+      const read = await app.inject({ method: 'GET', url, headers });
+      expect(read.json()).toMatchObject({
+        title: 'Tancar el garatge',
+        description: 'Anotació nova',
+      });
+    }
+    expect((await sincronitza()).pushed).toBe(0);
+  });
+
+  it('buida la cua local abans d’aplicar una pàgina remota', async () => {
+    const created = await appB.inject({
+      method: 'POST',
+      url: '/api/v1/tasks',
+      headers: authB,
+      payload: { scope_id: scopePujadaB, title: 'Revisar el calendari' },
+    });
+    expect(created.statusCode, created.body).toBe(201);
+    const { id } = created.json<{ id: string }>();
+    const url = `/api/v1/tasks/${id}`;
+    const first = await sincronitza();
+
+    // Els canvis locals d'àmbit també ocupen la pàgina de change_log.
+    await sql`
+      WITH RECURSIVE pending(n) AS (
+        SELECT 1 UNION ALL SELECT n + 1 FROM pending WHERE n < 200
+      )
+      INSERT INTO change_log (entity_type, entity_id, scope_id, operation, created_at)
+      SELECT 'scope', ${localScopeId}, ${localScopeId}, 'upsert', ${NOW} FROM pending
+    `.execute(connA.db);
+    const local = await appA.inject({
+      method: 'PATCH',
+      url,
+      headers: authA,
+      payload: { title: 'Revisar el calendari familiar' },
+    });
+    const remote = await appB.inject({
+      method: 'PATCH',
+      url,
+      headers: authB,
+      payload: { description: 'Confirmar la data' },
+    });
+    expect(local.statusCode, local.body).toBe(200);
+    expect(remote.statusCode, remote.body).toBe(200);
+
+    expect(await sincronitza()).toEqual({ applied: 0, pushed: 0, cursor: first.cursor });
+    expect((await sincronitza()).pushed).toBe(1);
+    const read = await appA.inject({ method: 'GET', url, headers: authA });
+    expect(read.json()).toMatchObject({
+      title: 'Revisar el calendari familiar',
+      description: 'Confirmar la data',
+    });
+  });
+
+  it('aplica un esborrat remot i desa el cursor i l’historial plegats', async () => {
+    const created = await appB.inject({
+      method: 'POST',
+      url: '/api/v1/tasks',
+      headers: authB,
+      payload: { scope_id: scopePujadaB, title: 'Una tasca per esborrar' },
+    });
+    const { id } = created.json<{ id: string }>();
+    const url = `/api/v1/tasks/${id}`;
+    const before = await sincronitza();
+    expect((await appA.inject({ method: 'GET', url, headers: authA })).statusCode).toBe(200);
+    const removed = await appB.inject({ method: 'DELETE', url, headers: authB });
+    expect(removed.statusCode, removed.body).toBe(204);
+
+    const after = await sincronitza();
+    expect(after.applied).toBe(1);
+    expect(after.cursor).not.toBe(before.cursor);
+    expect((await appA.inject({ method: 'GET', url, headers: authA })).statusCode).toBe(404);
+    const history = await sql<{ verb: string }>`
+      SELECT verb FROM activity_log WHERE entity_id = ${id} AND scope_id = ${localScopeId}
+      ORDER BY id
+    `.execute(connA.db);
+    expect(history.rows.map(({ verb }) => verb)).toEqual(['refreshed', 'deleted']);
+    expect(await sincronitza()).toMatchObject({ applied: 0, pushed: 0, cursor: after.cursor });
   });
 });

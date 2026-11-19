@@ -71,6 +71,8 @@ export interface AuditEntry {
   verb: AuditVerb;
   /** `{camp: {from, to}}`. És el que fa possible desfer un canvi autònom de la IA. */
   changes?: Record<string, { from: unknown; to: unknown }>;
+  /** L'enllaç que ha lliurat un canvi no se l'ha de tornar a rebre. */
+  originLinkId?: string;
 }
 
 export interface AuditContext {
@@ -250,8 +252,11 @@ async function writeEntry(
  */
 async function writeChangeLog(tx: MigrationDb, entry: AuditEntry, now: string): Promise<void> {
   const operation = entry.verb === 'deleted' ? 'delete' : 'upsert';
+  const fields = entry.changes === undefined ? null : JSON.stringify(Object.keys(entry.changes));
   await sql`
-    INSERT INTO change_log (entity_type, entity_id, scope_id, operation, created_at)
-    VALUES (${entry.entityType}, ${entry.entityId}, ${entry.scopeId ?? null}, ${operation}, ${now})
+    INSERT INTO change_log (entity_type, entity_id, scope_id, operation, created_at, origin_link_id,
+                            changed_fields)
+    VALUES (${entry.entityType}, ${entry.entityId}, ${entry.scopeId ?? null}, ${operation}, ${now},
+            ${entry.originLinkId ?? null}, ${fields})
   `.execute(tx);
 }

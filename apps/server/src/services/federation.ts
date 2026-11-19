@@ -35,16 +35,20 @@
 
 import { sql } from 'kysely';
 import { v7 as uuidv7 } from 'uuid';
-import type { AuditContext } from '../audit/audited-transaction.js';
+import { auditedTransaction, type AuditContext } from '../audit/audited-transaction.js';
+import { dbBool, isTrue } from '../db/bool.js';
 import type { MigrationDb } from '../db/migration-db.js';
+import type { Engine } from '../db/dialect.js';
 import { generateApiToken } from '../auth/tokens.js';
 import { open, seal } from '../crypto/secret-box.js';
 import { safeFetch, type SafeFetchOptions } from '../dav/fetch-safe.js';
 import { PolicyError, missingCapability, notFound } from '../policy/errors.js';
 import { hasCapability, type Principal } from '../policy/principal.js';
+import { normalizeForSearch } from '../text/search-text.js';
 import { tokenHmac } from '../util/opaque-token.js';
 import { isOpen, invalidGrant, type GrantRow } from './grants.js';
 import { joinScope } from './scopes.js';
+import { softDelete } from './sync.js';
 
 /**
  * Les capacitats d'un usuari ombra: **contingut, i res més**.
@@ -76,6 +80,7 @@ export interface InstanceLinkRow {
   name: string | null;
   /** L'àmbit a l'altra banda. El de l'espill no vol dir res allà. */
   remote_scope_id: string | null;
+  remote_role?: string | null;
   cursor: string | null;
   /** Per on anàvem del NOSTRE `change_log`: què hem escrit aquí i encara no hem enviat. */
   local_seq: number;
@@ -365,10 +370,10 @@ export async function linkInstance(
 
   const id = uuidv7();
   await sql`
-    INSERT INTO instance_links (id, scope_id, base_url, name, remote_scope_id, token_enc,
+    INSERT INTO instance_links (id, scope_id, base_url, name, remote_scope_id, remote_role, token_enc,
                                 cursor, created_by, created_at, updated_at)
     VALUES (${id}, ${scopeId}, ${baseUrl}, ${manifest.name}, ${redeemed.scope_id},
-            ${seal(masterSecret, `link:${id}`, redeemed.token)}, ${null},
+            ${redeemed.role}, ${seal(masterSecret, `link:${id}`, redeemed.token)}, ${null},
             ${principal.userId}, ${ctx.now}, ${ctx.now})
   `.execute(ctx.tx);
 
@@ -451,10 +456,15 @@ export async function pullFromLink(
   masterSecret: string,
   now: string,
   fetchOptions: SafeFetchOptions = {},
+  engine: Engine = 'sqlite',
 ): Promise<PullResult> {
   const token = open(masterSecret, `link:${link.id}`, link.token_enc);
   const cursor = link.cursor ?? '';
 
+  // Primer pugem les edicions locals. Aplicar abans la instantània remota podria esborrar
+  // allò que la cua encara ha d'enviar.
+  const { pushed, hasMore } = await pushToLink(db, link, token, now, fetchOptions);
+  if (hasMore) return { applied: 0, pushed, cursor: link.cursor };
   const response = await safeFetch(
     `${link.base_url}/api/v1/sync?cursor=${encodeURIComponent(cursor)}`,
     { ...fetchOptions, headers: { authorization: `Bearer ${token}` } },
@@ -464,252 +474,340 @@ export async function pullFromLink(
   }
 
   const delta = JSON.parse(response.body) as {
-    changes: { entity: string; id: string; op: string; data?: Record<string, unknown> }[];
+    changes: { entity: string; id: string; op: string; data?: Row }[];
     next_cursor: string;
   };
-
-  const remoteFace = await ensureRemoteFace(db, link, now);
-
-  let applied = 0;
-  for (const change of delta.changes) {
-    const table = REPLICATED[change.entity];
-    if (table === undefined) continue;
-
-    if (change.op === 'delete') {
-      await sql
-        .raw(`UPDATE ${table} SET deleted_at = '${now}' WHERE id = ?`)
-        .execute(db)
-        .catch(() => undefined);
-      continue;
-    }
-    if (change.data === undefined) continue;
-
-    applied += await replicateRow(
-      db,
-      table,
-      change.entity,
-      change.data,
-      link.scope_id,
-      now,
-      remoteFace,
-    );
+  if (!Array.isArray(delta.changes) || typeof delta.next_cursor !== 'string') {
+    throw new Error('La rèplica ha rebut un delta sense cursor o sense canvis.');
   }
 
-  const pushed = await pushToLink(db, link, token, now, fetchOptions);
+  const principal: Principal = {
+    kind: 'user',
+    userId: '',
+    capabilities: new Set(),
+    scopeIds: new Set([link.scope_id]),
+    source: 'api',
+  };
+  return auditedTransaction(
+    db,
+    principal,
+    async (ctx) => {
+      // La fila i el cursor es confirmen en el mateix compromís. Si un altre tic ja ha
+      // passat per aquí, aquest no pot aplicar una pàgina antiga ni recular el cursor.
+      const moved = await sql`
+      UPDATE instance_links SET cursor = ${delta.next_cursor}, last_sync_at = ${now},
+        last_error = NULL, last_error_at = NULL, updated_at = ${now}
+      WHERE id = ${link.id} AND COALESCE(cursor, '') = ${cursor}
+    `.execute(ctx.tx);
+      if (Number(moved.numAffectedRows ?? 0) === 0) {
+        ctx.noChange();
+        const latest = await sql<{ cursor: string | null }>`
+        SELECT cursor FROM instance_links WHERE id = ${link.id}
+      `.execute(ctx.tx);
+        return { applied: 0, pushed, cursor: latest.rows[0]?.cursor ?? null };
+      }
 
-  await sql`
-    UPDATE instance_links
-    SET cursor = ${delta.next_cursor}, last_sync_at = ${now}, last_error = NULL,
-        last_error_at = NULL, updated_at = ${now}
-    WHERE id = ${link.id}
-  `.execute(db);
-
-  return { applied, pushed, cursor: delta.next_cursor };
+      principal.userId = await ensureRemoteFace(ctx.tx, link, now);
+      const remote: AuditContext = {
+        ...ctx,
+        record: (entry) => ctx.record({ ...entry, originLinkId: link.id }),
+      };
+      let applied = 0;
+      for (const change of delta.changes) {
+        if (!isReplicated(change.entity)) continue;
+        if (typeof change.id !== 'string' || !['delete', 'upsert'].includes(change.op)) {
+          throw new Error('La rèplica ha rebut un canvi invàlid.');
+        }
+        applied += await applyRemoteChange(remote, link, change.entity, change, principal.userId);
+      }
+      if (applied === 0) ctx.noChange();
+      return { applied, pushed, cursor: delta.next_cursor };
+    },
+    { engine, now },
+  );
 }
 
-/**
- * Puja el que s'ha escrit aquí cap a l'altra instància.
- *
- * **Sense això la federació seria de només lectura**, i el que es va demanar és que se
- * sincronitzi tot: qui rep un àmbit hi ha de poder col·laborar de debò, no mirar-lo.
- *
- * S'aprofita el lot que ja hi és (`POST /api/v1/sync/batch`) i, amb ell, la seva
- * idempotència: l'`op_id` es deriva del `seq` local, o sigui que **reenviar el mateix
- * canvi després d'una caiguda no el duplica** encara que el cursor no s'hagi desat. I
- * l'`scope_id` es reescriu al de l'altra banda, que és l'únic que allà vol dir alguna
- * cosa.
- *
- * El que arriba de fora **no torna a sortir**: les files replicades porten l'autoria de
- * l'usuari ombra, i enviar-les faria un bucle entre les dues cases.
- */
+type Row = Record<string, unknown>;
+
+const REPLICATED = {
+  task: 'tasks',
+  subtask: 'subtasks',
+  checklist: 'checklists',
+  checklist_item: 'checklist_items',
+  comment: 'comments',
+} as const;
+type Replicated = keyof typeof REPLICATED;
+
+function isReplicated(entity: string): entity is Replicated {
+  return Object.hasOwn(REPLICATED, entity);
+}
+
+const CONTENT_FIELDS: Record<Replicated, readonly string[]> = {
+  task: [
+    'title',
+    'description',
+    'due_date',
+    'due_time',
+    'deadline',
+    'rrule',
+    'recurrence_mode',
+    'ai_mode',
+    'ai_instructions',
+    'status',
+    'position',
+  ],
+  subtask: ['title', 'position', 'done'],
+  checklist: ['name', 'position', 'subtask_id', 'show_completed_inline'],
+  checklist_item: ['text', 'position', 'done'],
+  comment: ['body'],
+};
+
+function selectFields(row: Row, fields: readonly string[]): Row {
+  return Object.fromEntries(
+    fields.filter((field) => Object.hasOwn(row, field)).map((field) => [field, row[field]]),
+  );
+}
+
+async function findReplica(
+  db: MigrationDb,
+  entity: Replicated,
+  id: string,
+): Promise<Row | undefined> {
+  const found =
+    await sql<Row>`SELECT * FROM ${sql.ref(REPLICATED[entity])} WHERE id = ${id}`.execute(db);
+  return found.rows[0];
+}
+
+async function rootOf(db: MigrationDb, entity: Replicated, row: Row): Promise<Row | undefined> {
+  if (entity === 'task') return row;
+  if (entity === 'checklist_item') {
+    const found = await sql<Row>`
+      SELECT t.* FROM checklists c JOIN tasks t ON t.id = c.task_id WHERE c.id = ${row.checklist_id}
+    `.execute(db);
+    return found.rows[0];
+  }
+  return typeof row.task_id === 'string' ? findReplica(db, 'task', row.task_id) : undefined;
+}
+
+interface BatchOperation {
+  op_id: string;
+  entity: Replicated;
+  op: 'create' | 'update' | 'delete';
+  id: string;
+  data?: Row;
+}
+
+const PUSH_PAGE_SIZE = 200;
+
+/** Les operacions del lot només porten els camps que el servei remot pot desar. */
 async function pushToLink(
   db: MigrationDb,
-  link: InstanceLinkRow & { token_enc: string },
+  link: InstanceLinkRow,
   token: string,
   now: string,
   fetchOptions: SafeFetchOptions,
-): Promise<number> {
-  if (link.remote_scope_id === null) return 0;
-
-  const face = await sql<{ id: string }>`
-    SELECT id FROM users WHERE kind = 'remote' AND instance_link_id = ${link.id}
-  `.execute(db);
-  const faceId = face.rows[0]?.id ?? '';
+): Promise<{ pushed: number; hasMore: boolean }> {
+  if (link.remote_scope_id === null || link.remote_role === 'viewer') {
+    return { pushed: 0, hasMore: false };
+  }
 
   const pending = await sql<{
     seq: number;
     entity_type: string;
     entity_id: string;
     operation: string;
-    is_first: number;
+    changed_fields: string | null;
+    first_seq: number;
+    created_here: number;
   }>`
-    SELECT c.seq, c.entity_type, c.entity_id, c.operation,
-           CASE WHEN c.seq = (
-             SELECT MIN(seq) FROM change_log WHERE entity_id = c.entity_id
-           ) THEN 1 ELSE 0 END AS is_first
+    SELECT c.seq, c.entity_type, c.entity_id, c.operation, c.changed_fields,
+           (SELECT MIN(seq) FROM change_log
+            WHERE entity_id = c.entity_id AND entity_type = c.entity_type AND scope_id = c.scope_id) AS first_seq,
+           CASE WHEN EXISTS (
+             SELECT 1 FROM activity_log a WHERE a.entity_id = c.entity_id AND a.entity_type = c.entity_type
+               AND a.scope_id = c.scope_id AND a.verb = 'created'
+           ) THEN 1 ELSE 0 END AS created_here
     FROM change_log c
     WHERE c.scope_id = ${link.scope_id} AND c.seq > ${link.local_seq}
-    ORDER BY c.seq ASC
-    LIMIT 200
+      AND (c.origin_link_id IS NULL OR c.origin_link_id <> ${link.id})
+    ORDER BY c.seq ASC LIMIT ${PUSH_PAGE_SIZE + 1}
   `.execute(db);
-  if (pending.rows.length === 0) return 0;
+  const page = pending.rows.slice(0, PUSH_PAGE_SIZE);
+  if (page.length === 0) return { pushed: 0, hasMore: false };
 
   const operations: BatchOperation[] = [];
-  let lastSeq = link.local_seq;
-
-  for (const row of pending.rows) {
-    lastSeq = row.seq;
-    const table = REPLICATED[row.entity_type];
-    if (table === undefined) continue;
-
-    const found = await sql
-      .raw(`SELECT * FROM ${table} WHERE id = '${row.entity_id.replace(/'/gu, '')}'`)
-      .execute(db);
-    const data = found.rows[0] as Record<string, unknown> | undefined;
+  for (const row of page) {
+    const entity = row.entity_type;
+    if (!isReplicated(entity)) continue;
+    const data = await findReplica(db, entity, row.entity_id);
     if (data === undefined) continue;
-    // El que ve de fora no torna a sortir: seria un bucle entre les dues cases.
-    if (faceId !== '' && data.created_by === faceId) continue;
+    const root = await rootOf(db, entity, data);
+    if (root?.scope_id !== link.scope_id) continue;
 
-    const payload = { ...data };
-    delete payload.version;
-    if (row.entity_type === 'task') payload.scope_id = link.remote_scope_id;
-
+    const localCreate = Number(row.created_here) === 1;
+    const opId = `link:${link.id}:v2:${String(row.seq)}`;
+    if (row.operation === 'delete') {
+      // El propietari de l'origen conserva el dret exclusiu d'esborrar tasques. Tampoc
+      // hi enviem les seves cascades ni l'esborrat d'una fila que no ens va arribar a sortir.
+      if (root.deleted_at != null || (localCreate && Number(row.first_seq) > link.local_seq))
+        continue;
+      operations.push({ op_id: opId, id: row.entity_id, entity, op: 'delete' });
+      continue;
+    }
+    if (data.deleted_at != null || root.deleted_at != null) continue;
+    const create = localCreate && Number(row.first_seq) === Number(row.seq);
+    const changed =
+      row.changed_fields === null ? null : (JSON.parse(row.changed_fields) as string[]);
+    const fields = selectFields(
+      data,
+      CONTENT_FIELDS[entity].filter(
+        (field) => create || changed === null || changed.includes(field),
+      ),
+    );
+    if (create) {
+      if (entity === 'task') fields.scope_id = link.remote_scope_id;
+      else if (entity === 'checklist_item') fields.checklist_id = data.checklist_id;
+      else fields.task_id = data.task_id;
+    }
+    if (Object.keys(fields).length === 0) continue;
     operations.push({
-      op_id: `link:${link.id}:${String(row.seq)}`,
-      entity: row.entity_type,
-      /**
-       * **Crear i actualitzar no són el mateix a l'altra banda.** El lot resol una
-       * actualització buscant la fila, i una que allà encara no existeix la rebutja: la
-       * tasca es donava per pujada i no hi arribava mai.
-       *
-       * El `change_log` no ho diu —només distingeix `upsert` de `delete`— però sí que ho
-       * diu la posició: **la creació és la primera fila d'aquella entitat**.
-       */
-      op: data.deleted_at != null ? 'delete' : Number(row.is_first) === 1 ? 'create' : 'update',
+      op_id: opId,
       id: row.entity_id,
-      data: payload,
+      entity,
+      op: create ? 'create' : 'update',
+      data: fields,
     });
   }
 
   if (operations.length > 0) {
-    /**
-     * **El 200 del lot no vol dir que hagi anat bé.** Cada operació es resol per separat
-     * (`docs/06` §4) i el cos porta el veredicte de cadascuna; quedar-se amb el codi
-     * d'estat és donar per pujat el que l'altra banda ha rebutjat. El que falli es queda
-     * al registre de l'enllaç, que és on l'usuari el pot llegir.
-     */
-    const answer = await postJson<{ results: { op_id: string; status: string }[] }>(
+    const answer = await postJson<{
+      results: { op_id: string; status: string; error?: { status?: number } }[];
+    }>(
       `${link.base_url}/api/v1/sync/batch`,
       { operations },
       { authorization: `Bearer ${token}` },
       fetchOptions,
     );
-    const refused = answer.results.filter((r) => r.status === 'rejected');
-    if (refused.length > 0) {
+    const results = new Map(answer.results.map((result) => [result.op_id, result]));
+    const unconfirmed = operations.filter((operation) => {
+      const result = results.get(operation.op_id);
+      return (
+        result?.status !== 'ok' && !(operation.op === 'delete' && result?.error?.status === 404)
+      );
+    });
+    if (unconfirmed.length > 0) {
       throw new Error(
-        `L'altra instància ha rebutjat ${String(refused.length)} de ${String(operations.length)} operacions: ` +
-          JSON.stringify(refused[0]),
+        `L'altra instància no ha confirmat ${String(unconfirmed.length)} de ${String(operations.length)} operacions.`,
       );
     }
   }
 
+  const lastSeq = page.at(-1)!.seq;
   await sql`
-    UPDATE instance_links SET local_seq = ${lastSeq}, updated_at = ${now} WHERE id = ${link.id}
+    UPDATE instance_links SET local_seq = ${lastSeq}, updated_at = ${now}
+    WHERE id = ${link.id} AND local_seq < ${lastSeq}
   `.execute(db);
-
-  return operations.length;
+  return { pushed: operations.length, hasMore: pending.rows.length > PUSH_PAGE_SIZE };
 }
 
-/** La forma d'una operació del lot, tal com l'espera `POST /sync/batch`. */
-interface BatchOperation {
-  op_id: string;
-  entity: string;
-  op: 'create' | 'update' | 'delete';
-  id: string;
-  data?: Record<string, unknown> | undefined;
-}
-
-/**
- * Què es replica, i on.
- *
- * **Els àmbits no.** L'àmbit remot ja té el seu espill local, i copiar-ne la fila
- * duplicaria el tauler. La resta són les entitats de contingut, que és el que la persona
- * de l'altra casa vol veure.
- */
-const REPLICATED: Record<string, string> = {
-  task: 'tasks',
-  subtask: 'subtasks',
-  checklist: 'checklists',
-  checklist_item: 'checklist_items',
-  comment: 'comments',
-};
-
-/**
- * Escriu una fila replicada, amb l'`scope_id` reescrit al de l'espill.
- *
- * És un `INSERT ... ON CONFLICT DO UPDATE` a mà perquè les columnes varien per taula i el
- * que arriba és el que l'altra instància hagi decidit enviar. **Les columnes que aquí no
- * existeixen s'ignoren** en comptes de fer petar la rèplica sencera: dues instàncies
- * poden anar per versions diferents, i una columna nova a l'altra banda no ha de deixar
- * un àmbit compartit congelat fins que algú actualitzi.
- */
-async function replicateRow(
-  db: MigrationDb,
-  table: string,
-  entity: string,
-  data: Record<string, unknown>,
-  scopeId: string,
-  now: string,
-  fallbackUser: string,
+async function applyRemoteChange(
+  ctx: AuditContext,
+  link: InstanceLinkRow,
+  entity: Replicated,
+  change: { id: string; op: string; data?: Row },
+  remoteFace: string,
 ): Promise<number> {
-  const existing = await sql
-    .raw(`SELECT 1 AS hi FROM ${table} WHERE id = '${String(data.id).replace(/'/gu, '')}'`)
-    .execute(db);
-
-  const row: Record<string, unknown> = { ...data, updated_at: now };
-  // Només les entitats que en tenen de propi: una subtasca el treu de la seva tasca.
-  if (entity === 'task') row.scope_id = scopeId;
-  delete row.version;
-
-  /**
-   * **Les persones de l'altra casa no existeixen aquí.**
-   *
-   * Una tasca replicada porta `created_by`, `assignee_id`, `completed_by`… apuntant a
-   * usuaris de la instància d'origen, i aquestes columnes són claus foranes dures a
-   * `users`. Escriure-les tal qual peta amb un `FOREIGN KEY constraint failed` i deixa la
-   * rèplica sencera aturada, que és com es va veure.
-   *
-   * Buidar-les no serveix: `tasks.created_by` és `NOT NULL`. I atribuir-ho a qui va muntar
-   * l'enllaç seria mentir —posaria el teu nom a la feina d'algú altre—. El que es fa és
-   * **una sola cara per instància remota**: un usuari ombra que es diu com l'altra casa.
-   * És menys precís que un usuari per persona, i és tot el que aquesta banda pot afirmar
-   * amb honestedat; el nom de qui ho va fer de debò viu a l'historial de la instància
-   * d'origen, que és on aquella informació és certa.
-   */
-  for (const field of USER_REFERENCES) {
-    if (row[field] == null) continue;
-    if (!(await userExists(db, String(row[field])))) row[field] = fallbackUser;
-  }
-
-  const columns = await tableColumns(db, table);
-  const usable = Object.entries(row).filter(([key]) => columns.has(key));
-  if (usable.length === 0) return 0;
-
-  if (existing.rows.length > 0) {
-    const sets = usable
-      .filter(([key]) => key !== 'id')
-      .map(([key, value]) => sql`${sql.raw(key)} = ${value as string}`);
-    if (sets.length === 0) return 0;
-    await sql`
-      UPDATE ${sql.raw(table)} SET ${sql.join(sets)} WHERE id = ${String(data.id)}
-    `.execute(db);
+  const existing = await findReplica(ctx.tx, entity, change.id);
+  if (change.op === 'delete') {
+    if (existing === undefined || existing.deleted_at != null) return 0;
+    const root = await rootOf(ctx.tx, entity, existing);
+    if (root?.scope_id !== link.scope_id)
+      throw new Error('La fila replicada pertany a un altre àmbit.');
+    await softDelete(ctx, entity, change.id, link.scope_id);
     return 1;
   }
 
-  await sql`
-    INSERT INTO ${sql.raw(table)} (${sql.raw(usable.map(([key]) => key).join(', '))})
-    VALUES (${sql.join(usable.map(([, value]) => sql`${value as string}`))})
-  `.execute(db);
+  const data = change.data;
+  if (data === undefined || data.id !== change.id)
+    throw new Error('El delta no porta la fila esperada.');
+  // Fins i tot quan l'altra casa autentica la petició, els seus identificadors no donen
+  // permís d'escriptura sobre un registre d'aquí que coincideixi amb un d'allà.
+  const root = await rootOf(ctx.tx, entity, existing ?? data);
+  if ((existing !== undefined || entity !== 'task') && root?.scope_id !== link.scope_id) {
+    throw new Error('La fila replicada pertany a un altre àmbit.');
+  }
+  if (entity !== 'task' && root?.deleted_at != null) return 0;
+  if (existing?.deleted_at != null) {
+    const removed = await sql<{ origin_link_id: string | null }>`
+      SELECT origin_link_id FROM change_log WHERE scope_id = ${link.scope_id}
+        AND entity_type = ${entity} AND entity_id = ${change.id} AND operation = 'delete'
+      ORDER BY seq DESC LIMIT 1
+    `.execute(ctx.tx);
+    if (removed.rows[0]?.origin_link_id !== link.id) return 0;
+  }
+
+  const row = selectFields(data, CONTENT_FIELDS[entity]);
+  if (entity === 'task') {
+    Object.assign(row, selectFields(data, ['completed_at']));
+    row.search_text = normalizeForSearch(
+      String(row.title ?? existing?.title ?? ''),
+      (row.description as string | null | undefined) ?? null,
+    );
+  }
+  if (entity === 'checklist_item' && Object.hasOwn(data, 'done_at')) {
+    row.done_at = data.done_at;
+    if (existing?.done_at !== data.done_at) row.done_by = data.done_at == null ? null : remoteFace;
+  }
+  for (const field of ['done', 'show_completed_inline']) {
+    if (Object.hasOwn(row, field)) row[field] = dbBool(isTrue(row[field]));
+  }
+  if (entity === 'checklist' && typeof row.subtask_id === 'string') {
+    const anchor = await findReplica(ctx.tx, 'subtask', row.subtask_id);
+    if (anchor?.task_id !== (existing ?? data).task_id)
+      throw new Error('La subtasca de la llista és d’una altra tasca.');
+  }
+
+  const table = sql.ref(REPLICATED[entity]);
+  if (existing === undefined) {
+    // Les referències que només tenen sentit a l'altra instància es queden a l'origen.
+    const identity: Row = {
+      id: change.id,
+      created_at: data.created_at ?? ctx.now,
+      updated_at: ctx.now,
+    };
+    if (entity === 'task')
+      Object.assign(identity, { scope_id: link.scope_id, created_by: remoteFace });
+    else if (entity === 'checklist_item') identity.checklist_id = data.checklist_id;
+    else identity.task_id = data.task_id;
+    if (entity === 'comment')
+      Object.assign(identity, { author_id: remoteFace, guest_name: data.guest_name ?? null });
+    const fields = Object.entries({ ...identity, ...row });
+    await sql`INSERT INTO ${table} (${sql.join(fields.map(([field]) => sql.ref(field)))})
+              VALUES (${sql.join(fields.map(([, value]) => sql.val(value)))})`.execute(ctx.tx);
+    ctx.record({
+      entityType: entity,
+      entityId: change.id,
+      scopeId: link.scope_id,
+      verb: 'refreshed',
+    });
+    return 1;
+  }
+
+  if (existing.deleted_at != null) row.deleted_at = null;
+  const fields = Object.entries(row).filter(([field, value]) => existing[field] !== value);
+  if (fields.length === 0) return 0;
+  const updates = fields.map(([field, value]) => sql`${sql.ref(field)} = ${value}`);
+  await sql`UPDATE ${table} SET ${sql.join(updates)}, updated_at = ${ctx.now}, version = version + 1
+            WHERE id = ${change.id}`.execute(ctx.tx);
+  ctx.record({
+    entityType: entity,
+    entityId: change.id,
+    scopeId: link.scope_id,
+    verb: 'refreshed',
+    changes: Object.fromEntries(
+      fields.map(([field, value]) => [field, { from: existing[field], to: value }]),
+    ),
+  });
   return 1;
 }
 
@@ -740,48 +838,6 @@ async function ensureRemoteFace(
             'member', ${link.id}, ${now}, ${now})
   `.execute(db);
   return id;
-}
-
-/** Les columnes que apunten a `users` a les taules que es repliquen. */
-const USER_REFERENCES = ['created_by', 'assignee_id', 'completed_by', 'author_id'];
-
-async function userExists(db: MigrationDb, id: string): Promise<boolean> {
-  const found = await sql<{ id: string }>`SELECT id FROM users WHERE id = ${id}`.execute(db);
-  return found.rows.length > 0;
-}
-
-/** Les columnes que aquesta base té de debò, per no escriure'n cap d'inventada. */
-const columnCache = new Map<string, Set<string>>();
-
-async function tableColumns(db: MigrationDb, table: string): Promise<Set<string>> {
-  const cached = columnCache.get(table);
-  if (cached !== undefined) return cached;
-
-  const found = await sql.raw(`SELECT * FROM ${table} LIMIT 1`).execute(db);
-  const names = new Set<string>(
-    // Amb la taula buida no hi ha fila d'on treure els noms: es demana al catàleg.
-    found.rows.length > 0 ? Object.keys(found.rows[0] as object) : await catalogColumns(db, table),
-  );
-  columnCache.set(table, names);
-  return names;
-}
-
-async function catalogColumns(db: MigrationDb, table: string): Promise<string[]> {
-  try {
-    const found = await sql<{ name: string }>`
-      SELECT column_name AS name FROM information_schema.columns WHERE table_name = ${table}
-    `.execute(db);
-    if (found.rows.length > 0) return found.rows.map((r) => r.name);
-  } catch {
-    // No és Postgres.
-  }
-  const found = await sql.raw(`PRAGMA table_info(${table})`).execute(db);
-  return (found.rows as { name: string }[]).map((r) => r.name);
-}
-
-/** Buida la memòria de columnes. Les proves canvien de base entre fitxers. */
-export function forgetTableColumns(): void {
-  columnCache.clear();
 }
 
 async function postJson<T>(

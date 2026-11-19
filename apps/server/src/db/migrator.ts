@@ -45,6 +45,7 @@ import * as reportsNavigation from './migrations/021-reports-navigation.js';
 import * as taskTimeBadges from './migrations/022-task-time-badges.js';
 import * as mailOAuth from './migrations/023-mail-oauth.js';
 import * as externalAccess from './migrations/024-external-access.js';
+import * as federationOrigin from './migrations/025-federation-origin.js';
 
 export interface Migration {
   name: string;
@@ -126,6 +127,7 @@ export const MIGRATIONS: Migration[] = [
   { name: '022-task-time-badges', up: taskTimeBadges.up, down: taskTimeBadges.down },
   { name: '023-mail-oauth', up: mailOAuth.up, down: mailOAuth.down },
   { name: '024-external-access', up: externalAccess.up, down: externalAccess.down },
+  { name: '025-federation-origin', up: federationOrigin.up, down: federationOrigin.down },
 ];
 
 const MIGRATIONS_TABLE = 'schema_migrations';
