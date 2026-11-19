@@ -14,6 +14,7 @@ export interface ColumnQuickAddProps {
   status: TaskStatus;
   context: QuickAddContext;
   scopes: { id: string; color: string }[];
+  draftStorageKey?: string | undefined;
   onCreate: (task: {
     title: string;
     scopeId: string;
@@ -22,7 +23,7 @@ export interface ColumnQuickAddProps {
     aiMode: 'manual' | 'assisted' | 'delegated';
     /** La tipologia escrita amb `$`, si l'àmbit en fa servir. */
     taskTypeId: string | null;
-  }) => void;
+  }) => void | Promise<void>;
   onFullEdit: () => void;
 }
 
@@ -49,6 +50,7 @@ export function ColumnQuickAdd({
   status,
   context,
   scopes,
+  draftStorageKey,
   onCreate,
   onFullEdit,
 }: ColumnQuickAddProps) {
@@ -59,9 +61,11 @@ export function ColumnQuickAdd({
     >
       <div style={{ flex: 1, minWidth: 0 }}>
         <QuickAdd
+          key={draftStorageKey}
           context={context}
           columnLabel={t(`board.column.${status}`)}
           scopeColors={Object.fromEntries(scopes.map((scope) => [scope.id, `var(${scope.color})`]))}
+          draftStorageKey={draftStorageKey}
           onCreate={onCreate}
         />
       </div>

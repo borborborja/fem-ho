@@ -276,6 +276,7 @@ export async function getTask(db: MigrationDb, principal: Principal, id: string)
 
 export interface ListTasksFilters {
   scopeId?: string | undefined;
+  scopeIds?: string[] | undefined;
   projectId?: string | undefined;
   statuses?: TaskStatus[] | undefined;
   limit?: number | undefined;
@@ -316,7 +317,11 @@ export async function listTasks(
   const scopes = await listScopes(db, principal);
   const allowed = scopes
     .map((s) => s.id)
-    .filter((id) => filters.scopeId === undefined || id === filters.scopeId);
+    .filter(
+      (id) =>
+        (filters.scopeId === undefined || id === filters.scopeId) &&
+        (filters.scopeIds === undefined || filters.scopeIds.includes(id)),
+    );
   if (allowed.length === 0) return { data: [], next_cursor: null, has_more: false };
 
   const statuses = filters.statuses ?? [...TASK_STATUSES];
@@ -1809,6 +1814,7 @@ export async function getInbox(
    */
   const bounds = localDayBounds(options.timezone ?? 'UTC', options.date);
   const events = await listInboxEvents(db, principal, principal.userId, {
+    date: options.date,
     from: bounds.startUTC,
     to: bounds.endUTC,
     scopeIds: allowed,

@@ -118,6 +118,7 @@ export function registerTaskRoutes(app: FastifyInstance): void {
       const q = query(request);
       return listTasks(db().db, principal, {
         scopeId: str(q.scope_id),
+        scopeIds: ids(q.scope_ids),
         projectId: str(q.project_id),
         statuses: parseStatuses(q.status),
         limit: num(q.limit),

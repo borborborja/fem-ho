@@ -47,6 +47,10 @@ export interface OutboxRow {
   depends_on?: string[] | undefined;
   /** L'entitat que ha tornat el servidor quan `status = 'conflict'`. */
   server_entity?: Record<string, unknown> | undefined;
+  /** Una resposta perduda del REST pot haver aplicat el moviment abans de reenviar-lo. */
+  possibly_sent_direct?: boolean | undefined;
+  /** El títol conegut quan es va encuar una operació que no porta el títol al cos. */
+  task_title?: string | undefined;
 }
 
 /** Claus de la taula `meta`. */

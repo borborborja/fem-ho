@@ -7,9 +7,8 @@
  * enviar-lo al login seria una porta tancada amb la clau a dins.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { t } from '@fem-ho/contracts';
-import { SyncPill } from '@fem-ho/design-system/femho';
 import { match, useRouter } from './router.js';
 import { useSession, useSessionData } from './session.js';
 import { needsScopeModeWizard, resolveScopeMode } from './scope-mode.js';
@@ -19,7 +18,6 @@ import { TopBar } from './TopBar.js';
 import type { Agent, Checklist } from './types.js';
 import { useApi } from './useApi.js';
 import { BoardScreen } from '../screens/BoardScreen.js';
-import { CalendarScreen } from '../screens/CalendarScreen.js';
 import { DashboardScreen } from '../screens/DashboardScreen.js';
 import { JoinScopeScreen } from '../screens/JoinScopeScreen.js';
 import { InviteScreen, SetupScreen } from '../screens/GateScreens.js';
@@ -29,16 +27,54 @@ import { RegisterScreen } from '../screens/RegisterScreen.js';
 import { PublicShareScreen } from '../screens/PublicShareScreen.js';
 import { CommandPalette } from '../screens/CommandPalette.js';
 import { projectNoun } from './project-noun.js';
-import { ReportsScreen } from '../screens/ReportsScreen.js';
 import { SearchScreen } from '../screens/SearchScreen.js';
-import { SettingsScreen } from '../screens/SettingsScreen.js';
 import { WelcomeScreen } from '../screens/WelcomeScreen.js';
-import { TaskModal, type TaskModalProps } from '../screens/TaskModal.js';
+import type { TaskModalProps } from '../screens/TaskModal.js';
 import { ShareTaskDialog } from '../screens/ShareTaskDialog.js';
-import { ProofRoute } from '../proof/ProofRoute.js';
-import { McpConsentScreen } from '../screens/ExternalAccessPanel.js';
+import { BoardSyncProvider } from '../sync/board-sync.js';
+
+const CalendarScreen = lazy(() =>
+  import('../screens/CalendarScreen.js').then(({ CalendarScreen }) => ({
+    default: CalendarScreen,
+  })),
+);
+const ReportsScreen = lazy(() =>
+  import('../screens/ReportsScreen.js').then(({ ReportsScreen }) => ({ default: ReportsScreen })),
+);
+const SettingsScreen = lazy(() =>
+  import('../screens/SettingsScreen.js').then(({ SettingsScreen }) => ({
+    default: SettingsScreen,
+  })),
+);
+const TaskModal = lazy(() =>
+  import('../screens/TaskModal.js').then(({ TaskModal }) => ({ default: TaskModal })),
+);
+const ProofRoute = lazy(() =>
+  import('../proof/ProofRoute.js').then(({ ProofRoute }) => ({ default: ProofRoute })),
+);
+const McpConsentScreen = lazy(() =>
+  import('../screens/ExternalAccessPanel.js').then(({ McpConsentScreen }) => ({
+    default: McpConsentScreen,
+  })),
+);
+
+function LoadingScreen() {
+  return (
+    <div role="status" style={{ minHeight: '100vh', display: 'grid', placeItems: 'center' }}>
+      <p style={{ fontSize: 13, color: 'var(--ink-faint)' }}>{t('state.loading')}</p>
+    </div>
+  );
+}
 
 export function App() {
+  return (
+    <Suspense fallback={<LoadingScreen />}>
+      <AppRoute />
+    </Suspense>
+  );
+}
+
+function AppRoute() {
   const { route } = useRouter();
   const { state } = useSession();
 
@@ -87,20 +123,16 @@ export function App() {
     return <SetupScreen onDone={() => window.location.assign('/')} />;
   }
 
-  if (state.status === 'loading') {
-    return (
-      <main style={{ minHeight: '100vh', display: 'grid', placeItems: 'center' }}>
-        <p style={{ fontSize: 13, color: 'var(--ink-faint)' }}>{t('state.loading')}</p>
-      </main>
-    );
-  }
+  if (state.status === 'loading') return <LoadingScreen />;
 
   if (state.status === 'anonymous') return <LoginScreen />;
   if (route.path === '/connect/mcp')
     return <McpConsentScreen requestId={route.query.get('request') ?? ''} />;
   return (
     <ToastProvider>
-      <AppShell />
+      <BoardSyncProvider key={state.data.profile.id} userId={state.data.profile.id}>
+        <AppShell />
+      </BoardSyncProvider>
     </ToastProvider>
   );
 }
@@ -449,99 +481,92 @@ function AppShell() {
             : {}),
         }}
       >
-        {list !== null ? (
-          <ListScreen
-            checklistId={list.id!}
-            onOpenTask={setOpenTask}
-            onBack={() => navigate('/')}
-          />
-        ) : route.path === '/search' ? (
-          <SearchScreen onOpenTask={setOpenTask} />
-        ) : route.path === '/informes' ||
-          route.path === '/registre' ||
-          route.path === '/estadistiques' ? (
-          <ReportsScreen
-            activeScopeIds={activeScopeIds}
-            projectIds={projectIds}
-            trackingScopeIds={ambRegistre}
-            projectNoun={noun}
-            onOpenTask={setOpenTask}
-            reloadKey={reloadKey}
-          />
-        ) : route.path === '/dashboard' ? (
-          <DashboardScreen
-            onOpenTask={setOpenTask}
-            onNewTask={() =>
-              setNewTask({
-                status: 'inbox',
-                forAi: false,
-                scopeIds: scopes.map((scope) => scope.id),
-              })
-            }
-            onPickScope={(scopeId) => {
-              navigate(`/?scopes=${scopeId}`);
-            }}
-          />
-        ) : view === 'calendar' ? (
-          <CalendarScreen
-            activeScopeIds={activeScopeIds}
-            onOpenTask={setOpenTask}
-            onNewTask={(dueDate) =>
-              setNewTask({ status: 'inbox', forAi: false, dueDate, scopeIds: activeScopeIds })
-            }
-          />
-        ) : (
-          <BoardScreen
-            key={reloadKey}
-            activeScopeIds={activeScopeIds}
-            projectIds={projectIds}
-            onOpenTask={setOpenTask}
-            onNewTask={(status, forAi) =>
-              setNewTask({ status, forAi, scopeIds: activeScopeIds, projectIds })
-            }
-            aiBoard={aiBoard}
-            flip={flip}
-          />
-        )}
+        <Suspense fallback={<p role="status">{t('state.loading')}</p>}>
+          {list !== null ? (
+            <ListScreen
+              checklistId={list.id!}
+              onOpenTask={setOpenTask}
+              onBack={() => navigate('/')}
+            />
+          ) : route.path === '/search' ? (
+            <SearchScreen onOpenTask={setOpenTask} />
+          ) : route.path === '/informes' ||
+            route.path === '/registre' ||
+            route.path === '/estadistiques' ? (
+            <ReportsScreen
+              activeScopeIds={activeScopeIds}
+              projectIds={projectIds}
+              trackingScopeIds={ambRegistre}
+              projectNoun={noun}
+              onOpenTask={setOpenTask}
+              reloadKey={reloadKey}
+            />
+          ) : route.path === '/dashboard' ? (
+            <DashboardScreen
+              onOpenTask={setOpenTask}
+              onNewTask={() =>
+                setNewTask({
+                  status: 'inbox',
+                  forAi: false,
+                  scopeIds: scopes.map((scope) => scope.id),
+                })
+              }
+              onPickScope={(scopeId) => {
+                navigate(`/?scopes=${scopeId}`);
+              }}
+            />
+          ) : view === 'calendar' ? (
+            <CalendarScreen
+              activeScopeIds={activeScopeIds}
+              onOpenTask={setOpenTask}
+              onNewTask={(dueDate) =>
+                setNewTask({ status: 'inbox', forAi: false, dueDate, scopeIds: activeScopeIds })
+              }
+            />
+          ) : (
+            <BoardScreen
+              key={reloadKey}
+              activeScopeIds={activeScopeIds}
+              projectIds={projectIds}
+              onOpenTask={setOpenTask}
+              onNewTask={(status, forAi) =>
+                setNewTask({ status, forAi, scopeIds: activeScopeIds, projectIds })
+              }
+              aiBoard={aiBoard}
+              flip={flip}
+            />
+          )}
+        </Suspense>
       </main>
 
-      <div
-        style={{
-          position: 'fixed',
-          left: 20,
-          bottom: 'calc(20px + env(safe-area-inset-bottom, 0px))',
-          zIndex: 50,
-        }}
-      >
-        <ConnectionPill />
-      </div>
+      <Suspense fallback={null}>
+        {newTask === null ? null : (
+          <TaskModal
+            create={newTask}
+            onClose={() => setNewTask(null)}
+            onChanged={() => setReloadKey((value) => value + 1)}
+            onShare={setSharingTask}
+            onOpenList={(checklistId) => {
+              setNewTask(null);
+              navigate(`/lists/${checklistId}`);
+            }}
+          />
+        )}
 
-      {newTask === null ? null : (
-        <TaskModal
-          create={newTask}
-          onClose={() => setNewTask(null)}
-          onChanged={() => setReloadKey((value) => value + 1)}
-          onShare={setSharingTask}
-          onOpenList={(checklistId) => {
-            setNewTask(null);
-            navigate(`/lists/${checklistId}`);
-          }}
-        />
-      )}
-
-      {openTask === null ? null : (
-        <TaskModal
-          key={openTask}
-          taskId={openTask}
-          onClose={() => setOpenTask(null)}
-          onChanged={() => setReloadKey((value) => value + 1)}
-          onShare={setSharingTask}
-          onOpenList={(checklistId) => {
-            setOpenTask(null);
-            navigate(`/lists/${checklistId}`);
-          }}
-        />
-      )}
+        {openTask === null ? null : (
+          <TaskModal
+            key={openTask}
+            taskId={openTask}
+            onClose={() => setOpenTask(null)}
+            onChanged={() => setReloadKey((value) => value + 1)}
+            onShare={setSharingTask}
+            onOpenList={(checklistId) => {
+              setOpenTask(null);
+              navigate(`/lists/${checklistId}`);
+            }}
+          />
+        )}
+      </Suspense>
 
       {sharingTask === null ? null : (
         <ShareTaskDialog taskId={sharingTask} onClose={() => setSharingTask(null)} />
@@ -563,48 +588,5 @@ function AppShell() {
         />
       ) : null}
     </div>
-  );
-}
-
-/**
- * La pastilla de connexió. docs/02 §12.
- *
- * "Sense connexió" és persistent; "Sincronitzat" surt dos segons i desapareix. La
- * diferència importa: un avís que se'n va deixa l'usuari sense saber si el que acaba
- * d'escriure s'ha desat.
- */
-function ConnectionPill() {
-  const [online, setOnline] = useState(() => navigator.onLine);
-  const [justSynced, setJustSynced] = useState(false);
-
-  useEffect(() => {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-
-    const goOnline = (): void => {
-      setOnline(true);
-      setJustSynced(true);
-      // Es guarda fora perquè el netejador el pugui cancel·lar: si el component es
-      // desmunta entremig, el `setState` cauria sobre un component mort.
-      clearTimeout(timer);
-      timer = setTimeout(() => setJustSynced(false), 2000);
-    };
-    const goOffline = (): void => setOnline(false);
-
-    window.addEventListener('online', goOnline);
-    window.addEventListener('offline', goOffline);
-    return () => {
-      clearTimeout(timer);
-      window.removeEventListener('online', goOnline);
-      window.removeEventListener('offline', goOffline);
-    };
-  }, []);
-
-  const state = !online ? 'offline' : justSynced ? 'synced' : 'idle';
-  return (
-    <SyncPill
-      state={state}
-      data-testid="sync-pill"
-      label={state === 'offline' ? t('sync.offline') : t('sync.synced')}
-    />
   );
 }

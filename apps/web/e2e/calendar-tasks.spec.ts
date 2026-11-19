@@ -12,7 +12,9 @@
  */
 
 import { expect, test, type Page } from '@playwright/test';
-import { enter, enterAsNew } from './entrar.js';
+import { generatePosition } from '@fem-ho/contracts';
+import { v7 as uuidv7 } from 'uuid';
+import { enter, enterAsNew, token } from './entrar.js';
 
 test.describe.configure({ mode: 'serial' });
 
@@ -116,4 +118,86 @@ test('canviar la data de l’enllaç actualitza la graella sense remuntar la pan
   await expect(page.getByTestId('day-items-2026-08-20')).toHaveCount(0);
   await page.goBack();
   await expect(page.getByTestId('day-items-2026-08-20')).toBeVisible();
+});
+
+test('el dia i l’hora de les cites segueixen el fus del perfil', async ({ page }) => {
+  await enter(page, MEU);
+  const headers = { authorization: `Bearer ${await token(page)}` };
+  expect(
+    (
+      await page.request.patch('/api/v1/auth/me', { headers, data: { timezone: 'Europe/Madrid' } })
+    ).ok(),
+  ).toBe(true);
+  const scopes = JSON.parse(await apiCall(page, 'GET', '/api/v1/scopes')) as { id: string }[];
+  const calendar = JSON.parse(
+    await apiCall(page, 'POST', '/api/v1/calendars', {
+      scope_id: scopes[0]!.id,
+      name: 'Canvi de dia',
+      kind: 'events',
+    }),
+  ) as { id: string };
+  const event = await page.request.post('/api/v1/events', {
+    headers,
+    data: {
+      calendar_id: calendar.id,
+      uid: 'mitjanit-perfil',
+      summary: 'Cita de matinada',
+      starts_at: '2026-11-24T23:30:00.000Z',
+      ends_at: '2026-11-25T00:00:00.000Z',
+    },
+  });
+  expect(event.status()).toBe(201);
+  await page.goto('/calendar?date=2026-11-25');
+  await expect(page.getByTestId('day-items-2026-11-25')).toContainText('Cita de matinada');
+  await expect(page.getByTestId('day-items-2026-11-24')).not.toContainText('Cita de matinada');
+  await page.getByTestId('calendar-mode-day').click();
+  await expect(page.getByTestId('calendar-day')).toContainText('Cita de matinada');
+  await expect(page.getByTestId('calendar-day')).toContainText('0:30');
+});
+
+test('el calendari carrega totes les pàgines dels àmbits seleccionats', async ({ page }) => {
+  await enter(page, MEU);
+  const headers = { authorization: `Bearer ${await token(page)}` };
+  const scopes = JSON.parse(await apiCall(page, 'GET', '/api/v1/scopes')) as { id: string }[];
+  const selected = await page.request.post('/api/v1/scopes', {
+    headers,
+    data: { name: 'Segona agenda', color: '--plou-blue' },
+  });
+  expect(selected.status()).toBe(201);
+  const other = (await selected.json()) as { id: string };
+  const day = '2026-11-26';
+  let position: string | null = null;
+  const operations = Array.from({ length: 201 }, (_, index) => {
+    position = generatePosition(position, null);
+    return {
+      op_id: uuidv7(),
+      entity: 'task',
+      op: 'create',
+      id: uuidv7(),
+      base_version: 0,
+      data: {
+        scope_id: index % 2 === 0 ? scopes[0]!.id : other.id,
+        due_date: day,
+        status: 'todo',
+        position,
+        title: `Tasca paginada ${index + 1}`,
+      },
+    };
+  });
+  for (let offset = 0; offset < operations.length; offset += 50) {
+    const response = await page.request.post('/api/v1/sync/batch', {
+      headers,
+      data: { operations: operations.slice(offset, offset + 50) },
+    });
+    expect(response.ok()).toBe(true);
+    expect(
+      ((await response.json()) as { results: { status: string }[] }).results.every(
+        ({ status }) => status === 'ok',
+      ),
+    ).toBe(true);
+  }
+  const query = new URLSearchParams({ date: day, scopes: `${scopes[0]!.id},${other.id}` });
+  await page.goto(`/calendar?${query}`);
+  await page.getByTestId('calendar-mode-day').click();
+  await expect(page.getByTestId('calendar-day')).toContainText('Tasca paginada 201');
 });

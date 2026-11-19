@@ -5412,6 +5412,8 @@ export interface operations {
         parameters: {
             query?: {
                 scope_id?: string;
+                /** @description Àmbits separats per comes, intersectats amb els permisos i amb scope_id. */
+                scope_ids?: string;
                 project_id?: string;
                 /** @description Valors múltiples separats per comes. */
                 status?: string;

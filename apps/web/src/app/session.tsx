@@ -18,9 +18,26 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { ApiError, api, currentTokens, onSessionExpired, setTokens, type Tokens } from './api.js';
+import {
+  ApiError,
+  api,
+  bindSessionUser,
+  currentSessionEpoch,
+  currentTokens,
+  loadTokens,
+  onSessionExpired,
+  setTokens,
+  TOKEN_STORAGE_KEY,
+  type Tokens,
+} from './api.js';
 import { isLocale, negotiate, setLocale, type Locale } from '@fem-ho/contracts';
 import { applyAccent, applyDefaults, applyTheme } from './theme.js';
+import {
+  accountDatabase,
+  isConnectionFailure,
+  readSnapshot,
+  writeSnapshot,
+} from '../sync/cache.js';
 
 /**
  * Posa l'idioma actiu i l'anuncia a la pàgina.
@@ -131,15 +148,37 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   );
 
   const load = useCallback(async () => {
-    try {
-      const data = await fetchSession();
+    const epoch = currentSessionEpoch();
+    const show = (data: SessionData): void => {
+      if (epoch !== currentSessionEpoch()) return;
       applyTheme(data.profile.theme);
       applyAccent(data.profile.accent);
       applyLocale(data.profile.locale);
       setState({ status: 'ready', data });
+    };
+    try {
+      const data = await fetchSession();
+      if (epoch !== currentSessionEpoch()) return;
+      bindSessionUser(data.profile.id);
+      show(data);
     } catch (error) {
+      if (epoch !== currentSessionEpoch()) return;
+      const userId = currentTokens()?.user_id;
+      if (userId !== undefined && isConnectionFailure(error)) {
+        const db = accountDatabase(userId);
+        try {
+          const cached = await readSnapshot<SessionData>(db, 'session');
+          if (cached?.profile.id === userId) {
+            show(cached);
+            return;
+          }
+        } finally {
+          db.close();
+        }
+      }
       // Un 401 vol dir sessió morta; qualsevol altra cosa és una fallada temporal i no
       // ha de fer fora ningú, però sense dades no hi ha res a pintar.
+      if (epoch !== currentSessionEpoch()) return;
       if (error instanceof ApiError && error.status === 401) setTokens(null);
       applyDefaults();
       setState({ status: 'anonymous' });
@@ -153,7 +192,33 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       setState({ status: 'anonymous' });
     });
     if (currentTokens() !== null) void load();
+    const reconnect = (): void => {
+      if (currentTokens() !== null) void load();
+    };
+    const changeAccount = (event: StorageEvent): void => {
+      if (event.key !== TOKEN_STORAGE_KEY) return;
+      const saved = loadTokens();
+      const active = currentTokens();
+      if (saved?.user_id !== undefined && active?.user_id === saved.user_id) return;
+      if (saved?.access_token === active?.access_token) return;
+      setTokens(saved);
+      if (saved === null) applyDefaults();
+      setState({ status: saved === null ? 'anonymous' : 'loading' });
+      if (saved !== null) void load();
+    };
+    window.addEventListener('online', reconnect);
+    window.addEventListener('storage', changeAccount);
+    return () => {
+      window.removeEventListener('online', reconnect);
+      window.removeEventListener('storage', changeAccount);
+    };
   }, [load]);
+
+  useEffect(() => {
+    if (state.status !== 'ready' || currentTokens()?.user_id !== state.data.profile.id) return;
+    const db = accountDatabase(state.data.profile.id);
+    void writeSnapshot(db, 'session', state.data).finally(() => db.close());
+  }, [state]);
 
   const value = useMemo<SessionApi>(
     () => ({
@@ -180,10 +245,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       logout: async () => {
         // El servidor ha de saber-ho per revocar la sessió; que la crida falli no ha
         // d'impedir sortir, perquè llavors no es podria sortir sense connexió.
-        await api.post('/api/v1/auth/logout').catch(() => undefined);
+        const revoke = api.post('/api/v1/auth/logout').catch(() => undefined);
         setTokens(null);
         applyDefaults();
         setState({ status: 'anonymous' });
+        await revoke;
       },
       reload: load,
       refreshEntities: async () => {

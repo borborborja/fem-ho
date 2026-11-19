@@ -25,16 +25,17 @@ import type { EventOccurrence } from '../app/types.js';
 
 export interface EventSheetProps {
   occurrence: EventOccurrence;
+  timezone: string;
   onClose: () => void;
   onToggleInbox: () => void;
 }
 
-export function EventSheet({ occurrence, onClose, onToggleInbox }: EventSheetProps) {
+export function EventSheet({ occurrence, timezone, onClose, onToggleInbox }: EventSheetProps) {
   const locale = getLocale();
   const inici = new Date(occurrence.starts_at);
   const quan = occurrence.all_day
-    ? longDay(locale, inici)
-    : `${longDay(locale, inici)} · ${shortTime(locale, inici)}`;
+    ? longDay(locale, inici, 'UTC')
+    : `${longDay(locale, inici, timezone)} · ${shortTime(locale, inici, timezone)}`;
 
   return (
     <div

@@ -675,6 +675,11 @@ paths:
           in: query
           schema:
             type: string
+        - name: scope_ids
+          in: query
+          description: Àmbits separats per comes, intersectats amb els permisos i amb scope_id.
+          schema:
+            type: string
         - name: project_id
           in: query
           schema:

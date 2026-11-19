@@ -13,9 +13,17 @@
 
 import { useTimeCompletion, type MoveExtra } from '../board/useTimeCompletion.js';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { generatePosition, t, type QuickAddContext, type TaskStatus } from '@fem-ho/contracts';
+import {
+  comparePositions,
+  eventDateOf,
+  generatePosition,
+  localDateOf,
+  t,
+  type QuickAddContext,
+  type TaskStatus,
+} from '@fem-ho/contracts';
 import { v7 as uuidv7 } from 'uuid';
-import { api } from '../app/api.js';
+import { api, currentSessionEpoch, failureText } from '../app/api.js';
 import { useToasts } from '../app/toasts.js';
 import { Chips } from '../app/Chips.js';
 import { useRouter } from '../app/router.js';
@@ -23,9 +31,12 @@ import { useSessionData, useSession } from '../app/session.js';
 import { useApi } from '../app/useApi.js';
 import type { Board, Inbox, Task } from '../app/types.js';
 import { KanbanBoard, type BoardTask } from '../board/KanbanBoard.js';
+import type { DropPlacement } from '../board/dnd.js';
 import { ColumnQuickAdd, PlusIcon } from '../board/ColumnQuickAdd.js';
 import { DayNavigator } from '../board/DayNavigator.js';
 import { DoneHeader } from '../board/DoneColumnView.js';
+import { useBoardQuery, useBoardSync } from '../sync/board-sync.js';
+import { projectBoardTasks } from '../sync/board-projection.js';
 
 export interface BoardScreenProps {
   activeScopeIds: string[];
@@ -40,39 +51,25 @@ export interface BoardScreenProps {
 }
 
 /**
- * Avui, **en local**.
- *
- * No es fa amb `toISOString()`, que passa per UTC: a Madrid, a les onze de la nit, això
- * donaria el dia de demà i la bústia s'obriria al dia equivocat cada vespre.
- */
-/** La data local `YYYY-MM-DD` d'un instant. Mai per UTC. */
-function localDate(at: Date): string {
-  return `${String(at.getFullYear())}-${String(at.getMonth() + 1).padStart(2, '0')}-${String(
-    at.getDate(),
-  ).padStart(2, '0')}`;
-}
-
-function todayISO(): string {
-  const now = new Date();
-  return `${String(now.getFullYear())}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(
-    now.getDate(),
-  ).padStart(2, '0')}`;
-}
-
-/**
  * «Netejar» només amaga el que ja havies acabat avui. No és una acció sobre les tasques:
  * les que s'acabin després del clic han de continuar entrant a la columna.
  */
 function isDoneHiddenByClear(
   task: Task,
   doneDay: string,
+  today: string,
+  timezone: string,
   clearedAt: string | null | undefined,
 ): boolean {
   if (task.status !== 'done' || task.completed_at == null || clearedAt == null) return false;
   const cleared = Date.parse(clearedAt);
   const completed = Date.parse(task.completed_at);
   if (Number.isNaN(cleared) || Number.isNaN(completed)) return false;
-  return doneDay === todayISO() && localDate(new Date(cleared)) === doneDay && completed <= cleared;
+  return (
+    doneDay === today &&
+    localDateOf(timezone, new Date(cleared)) === doneDay &&
+    completed <= cleared
+  );
 }
 
 /** La targeta tal com la vol el component, des de la tasca tal com la dona l'API. */
@@ -211,6 +208,8 @@ export function BoardScreen({
   const { scopes, projects, people, settings, profile } = useSessionData();
   const { navigate } = useRouter();
   const { updateSettings } = useSession();
+  const { pending, submit } = useBoardSync();
+  const today = localDateOf(profile.timezone, new Date());
 
   const path = useMemo(() => {
     const query = new URLSearchParams();
@@ -226,7 +225,7 @@ export function BoardScreen({
     return `/api/v1/board?${query.toString()}`;
   }, [activeScopeIds]);
 
-  const board = useApi<Board>(path);
+  const board = useBoardQuery<Board>(path);
 
   const activeScopes = scopes.filter((scope) => activeScopeIds.includes(scope.id));
 
@@ -254,7 +253,7 @@ export function BoardScreen({
    * demà"— i no un lloc on es vulgui tornar. Els xips d'àmbit i el filtre de projecte sí
    * que hi viuen, perquè aquells sí que descriuen què estàs mirant.
    */
-  const [day, setDay] = useState(() => todayISO());
+  const [day, setDay] = useState(today);
 
   /**
    * Quin dia ensenya la columna Fet.
@@ -264,7 +263,7 @@ export function BoardScreen({
    * ningú, i l'estat buit no s'arribava a veure mai perquè amb una sola tasca feta el mes
    * passat la columna ja no era buida.
    */
-  const [doneDay, setDoneDay] = useState(() => todayISO());
+  const [doneDay, setDoneDay] = useState(today);
 
   /**
    * I la bústia surt de `/inbox`, no de `/board`.
@@ -278,7 +277,7 @@ export function BoardScreen({
    */
   const inboxPath = useMemo(() => {
     const query = new URLSearchParams({ date: day });
-    query.set('include_overdue', String(day === todayISO()));
+    query.set('include_overdue', String(day === today));
     if (activeScopeIds.length > 0) query.set('scope_ids', activeScopeIds.join(','));
     /**
      * **El calaix viatja a la consulta encara que el servidor ja el sàpiga.**
@@ -291,9 +290,22 @@ export function BoardScreen({
      */
     query.set('mailbox', mailbox);
     return `/api/v1/inbox?${query.toString()}`;
-  }, [day, activeScopeIds, mailbox]);
+  }, [day, today, activeScopeIds, mailbox]);
 
-  const inbox = useApi<Inbox>(inboxPath);
+  const inbox = useBoardQuery<Inbox>(inboxPath);
+  const allTasks = useMemo(() => {
+    const base = board.data?.columns.flatMap((column) =>
+      column.groups.flatMap((group) => group.tasks),
+    );
+    const rail = inbox.data;
+    return projectBoardTasks(
+      [
+        ...(rail === undefined ? [] : [...rail.dated, ...rail.overdue, ...rail.undated]),
+        ...(base ?? []),
+      ],
+      pending,
+    ).filter((task) => activeScopeIds.includes(task.scope_id));
+  }, [board.data, inbox.data, pending, activeScopeIds]);
 
   /**
    * **Refrescar és refrescar els dos.**
@@ -328,7 +340,7 @@ export function BoardScreen({
    * Van al context del parser i no a una crida de l'afegida ràpida: el parser és pur i
    * compartit amb Android, i el que ha de rebre són els noms que pot reconèixer.
    */
-  const taskTypes = useApi<{ data: { id: string; name: string; scope_id: string }[] }>(
+  const taskTypes = useBoardQuery<{ data: { id: string; name: string; scope_id: string }[] }>(
     '/api/v1/task-types',
   );
 
@@ -386,10 +398,8 @@ export function BoardScreen({
   );
 
   const tasks = useMemo<BoardTask[]>(() => {
-    const columns = board.data?.columns ?? [];
     return (
-      columns
-        .flatMap((column) => column.groups.flatMap((group) => group.tasks))
+      allTasks
         /**
          * **La bústia surt sencera als dos taulers; les altres tres es reparteixen.**
          *
@@ -430,8 +440,8 @@ export function BoardScreen({
           if (task.status !== 'done') return true;
           if (task.completed_at == null) return false;
           return (
-            localDate(new Date(task.completed_at)) === doneDay &&
-            !isDoneHiddenByClear(task, doneDay, settings.done_cleared_at)
+            localDateOf(profile.timezone, new Date(task.completed_at)) === doneDay &&
+            !isDoneHiddenByClear(task, doneDay, today, profile.timezone, settings.done_cleared_at)
           );
         })
         .map((task) => {
@@ -450,17 +460,19 @@ export function BoardScreen({
         })
     );
   }, [
-    board.data,
+    allTasks,
     settings.show_task_time,
     optimistic,
     projectName,
     initialsOf,
     aiBoard,
     profile.id,
+    profile.timezone,
     scopes,
     projectIds,
     projects,
     doneDay,
+    today,
     settings.done_cleared_at,
   ]);
 
@@ -474,10 +486,25 @@ export function BoardScreen({
    * sempre, perquè són el dipòsit del que has apuntat i encara no has situat.
    */
   const inboxCards = useMemo<BoardTask[]>(() => {
-    const view = inbox.data;
-    if (view === undefined) return [];
     return (
-      [...view.dated, ...view.overdue, ...view.undated]
+      allTasks
+        .filter((task) => task.status === 'inbox')
+        .filter(
+          (task) =>
+            task.due_date == null ||
+            task.due_date === day ||
+            (day === today && task.due_date < day),
+        )
+        .filter((task) => {
+          if (mailbox === 'all') return true;
+          const own = scopes.find((scope) => scope.id === task.scope_id)?.kind === 'individual';
+          return mailbox === 'own' ? own : !own;
+        })
+        .sort(
+          (a, b) =>
+            Number(a.due_date == null) - Number(b.due_date == null) ||
+            Number(a.due_date !== day) - Number(b.due_date !== day),
+        )
         .filter((task) => {
           if (projectIds.length === 0) return true;
           const triatsDelSeu = projects.some(
@@ -485,18 +512,6 @@ export function BoardScreen({
           );
           if (!triatsDelSeu) return true;
           return task.project_id != null && projectIds.includes(task.project_id);
-        })
-        /**
-         * La columna Fet és **del dia que es mira**, i per defecte avui.
-         *
-         * `completed_at` es compara en data local i no restant mil·lisegons: els dies de
-         * canvi d'hora en tenen 23 o 25, i una resta d'instants els compta malament dos
-         * dies l'any sense donar cap error.
-         */
-        .filter((task) => {
-          if (task.status !== 'done') return true;
-          if (task.completed_at == null) return false;
-          return localDate(new Date(task.completed_at)) === doneDay;
         })
         .map((task) => {
           const assignees = task.assignee_ids ?? [];
@@ -518,7 +533,10 @@ export function BoardScreen({
     );
   }, [
     settings.show_task_time,
-    inbox.data,
+    allTasks,
+    day,
+    today,
+    mailbox,
     optimistic,
     projectName,
     initialsOf,
@@ -546,14 +564,25 @@ export function BoardScreen({
     [activeScopes, projects, people, activeScopeIds, taskTypes.data],
   );
 
-  const move = (taskId: string, status: TaskStatus) =>
-    completion.request(taskId, status, (extra) => performMove(taskId, status, extra));
+  const move = (taskId: string, status: TaskStatus, placement?: DropPlacement) => {
+    if (!navigator.onLine || pending.some((row) => row.entity_id === taskId)) {
+      return performMove(taskId, status, {}, placement).catch((cause: unknown) =>
+        notify(failureText(cause), { tone: 'error' }),
+      );
+    }
+    return completion.request(taskId, status, (extra) =>
+      performMove(taskId, status, extra, placement),
+    );
+  };
   const performMove = async (
     taskId: string,
     status: TaskStatus,
     extra: MoveExtra,
+    placement?: DropPlacement,
   ): Promise<void> => {
-    const before = tasks.find((task) => task.id === taskId)?.status;
+    const task = allTasks.find((candidate) => candidate.id === taskId);
+    if (task === undefined) return;
+    const before = task.status;
     setOptimistic((current) => ({ ...current, [taskId]: status }));
 
     try {
@@ -565,55 +594,62 @@ export function BoardScreen({
        * a la bústia des d'allà l'hi treu — sense això seria una porta d'un sol sentit i
        * una tasca delegada per error no es podria recuperar.
        */
-      // Completar amb temps és una acció humana atòmica: delegar abans canviaria
-      // la versió de la tasca i faria fallar el desament de la durada.
-      if (aiBoard && extra.time_entry === undefined) {
-        const current = board.data?.columns
-          .flatMap((column) => column.groups.flatMap((group) => group.tasks))
-          .find((task) => task.id === taskId);
+      const aiMode =
+        !aiBoard || extra.time_entry !== undefined
+          ? undefined
+          : status === 'inbox' && task.ai_mode !== 'manual'
+            ? 'manual'
+            : status !== 'inbox' && task.ai_mode === 'manual'
+              ? 'delegated'
+              : undefined;
 
-        if (status !== 'inbox' && current?.ai_mode === 'manual') {
-          /**
-           * **`delegated` i no `assisted`.**
-           *
-           * Posava «amb ajuda», i `next_task` només reparteix «delegada»: el que
-           * arrossegaves al tauler de la IA **no l'agafava cap agent, mai**, i res ho
-           * deia. Deixar-hi una targeta vol dir «que ho faci l'agent»; el mode «amb
-           * ajuda» segueix existint per a qui el demani amb `!ia:ajuda`, que és on ja
-           * vivia.
-           */
-          await api.post(`/api/v1/tasks/${taskId}/ai-mode`, { ai_mode: 'delegated' });
-          avisaSiNoTeAgent(current.scope_id);
-        } else if (status === 'inbox' && current !== undefined && current.ai_mode !== 'manual') {
-          await api.post(`/api/v1/tasks/${taskId}/ai-mode`, { ai_mode: 'manual' });
-        }
+      const column = allTasks
+        .filter(
+          (candidate) =>
+            candidate.scope_id === task.scope_id &&
+            candidate.status === status &&
+            candidate.id !== taskId,
+        )
+        .sort((a, b) => comparePositions(a.position, b.position));
+      const target = column.findIndex((task) => task.id === placement?.targetId);
+      const insert = target === -1 ? column.length : target + (placement?.after ? 1 : 0);
+      const lower = column[insert - 1]?.position ?? null;
+      const upper = column.slice(insert).find((task) => task.position !== lower)?.position ?? null;
+      const position = generatePosition(lower, upper);
+
+      const send = async (): Promise<Task> => {
+        const epoch = currentSessionEpoch();
+        if (aiMode !== undefined)
+          await api.post(`/api/v1/tasks/${taskId}/ai-mode`, { ai_mode: aiMode });
+        if (epoch !== currentSessionEpoch()) throw new Error('The account changed.');
+        return api.post<Task>(`/api/v1/tasks/${taskId}/move`, { status, position, ...extra });
+      };
+      if (extra.time_entry !== undefined) {
+        await send();
+        refresh();
+      } else {
+        await submit(
+          {
+            entity_id: taskId,
+            task_title: task.title,
+            op: 'move',
+            base_version: task.version,
+            payload: {
+              status,
+              position,
+              from_status: before,
+              ...(aiMode === undefined ? {} : { ai_mode: aiMode }),
+            },
+          },
+          send,
+        );
+        if (aiMode === 'delegated') avisaSiNoTeAgent(task.scope_id);
       }
-
-      /**
-       * La posició la calcula el client (D3). Es posa al final de la columna de destí
-       * perquè és on el gest deixa la targeta quan no s'ha afinat entre dues.
-       */
-      const column = tasks.filter((task) => task.status === status && task.id !== taskId);
-      const last = column[column.length - 1];
-      const lastPosition =
-        last === undefined
-          ? null
-          : (board.data?.columns
-              .flatMap((c) => c.groups.flatMap((g) => g.tasks))
-              .find((task) => task.id === last.id)?.position ?? null);
-
-      await api.post(`/api/v1/tasks/${taskId}/move`, {
-        status,
-        position: generatePosition(lastPosition, null),
-        ...extra,
-      });
-      refresh();
     } catch (cause: unknown) {
       // Reversió: la targeta torna al seu lloc i l'usuari veu que no s'ha mogut.
       setOptimistic((current) => {
         const next = { ...current };
-        if (before === undefined) delete next[taskId];
-        else next[taskId] = before;
+        delete next[taskId];
         return next;
       });
       /**
@@ -639,17 +675,26 @@ export function BoardScreen({
   ): Promise<void> => {
     // L'identificador el genera el client (D4): així la creació és idempotent i la cua
     // de sortida pot reintentar-la sense duplicar res.
-    await api.post('/api/v1/tasks', {
+    const last = allTasks
+      .filter((task) => task.scope_id === input.scopeId && task.status === status)
+      .reduce<string | null>(
+        (end, task) => (end === null || task.position > end ? task.position : end),
+        null,
+      );
+    const payload = {
       id: uuidv7(),
       scope_id: input.scopeId,
       project_id: input.projectId ?? undefined,
       title: input.title,
       status,
+      position: generatePosition(last, null),
       assignee_ids: input.assigneeIds.length > 0 ? input.assigneeIds : undefined,
       task_type_id: input.taskTypeId ?? undefined,
       ai_mode: input.aiMode,
-    });
-    refresh();
+    };
+    await submit({ entity_id: payload.id, task_title: input.title, op: 'create', payload }, () =>
+      api.post<Task>('/api/v1/tasks', payload),
+    );
   };
 
   const toggleGroup = (status: TaskStatus, scopeId: string): void => {
@@ -737,7 +782,7 @@ export function BoardScreen({
         aiBoard={aiBoard}
         flip={flip}
         doneEmptyLabel={
-          doneDay === todayISO()
+          doneDay === today
             ? t('board.empty.done')
             : t('board.done.emptyDay', {
                 day: new Date(`${doneDay}T12:00:00`).toLocaleDateString(undefined, {
@@ -765,7 +810,7 @@ export function BoardScreen({
               title: event.summary,
               status: 'inbox',
               position: generatePosition(null, null),
-              due_date: event.starts_at.slice(0, 10),
+              due_date: eventDateOf(profile.timezone, event.starts_at, event.all_day),
               source_event: {
                 calendar_id: event.calendar_id,
                 uid: event.uid,
@@ -815,7 +860,7 @@ export function BoardScreen({
             .post('/api/v1/inbox/mail', { message_id: mail.id, visible: !mail.in_inbox })
             .then(() => refresh());
         }}
-        inboxHeader={<DayNavigator value={day} onChange={setDay} today={todayISO()} />}
+        inboxHeader={<DayNavigator value={day} onChange={setDay} today={today} />}
         inboxHeaderExtra={
           potFiltrar ? (
             <div style={{ display: 'flex', justifyContent: 'flex-end', paddingBottom: 6 }}>
@@ -859,6 +904,7 @@ export function BoardScreen({
               status={status}
               context={context}
               scopes={scopes}
+              draftStorageKey={`femho.quick-add:${profile.id}:${status}`}
               // Es torna la promesa: si peta, el camp recupera el que havies escrit.
               onCreate={(task) => create(task, status)}
               // Des del tauler de la IA, el formulari s'obre ja amb els camps d'IA
@@ -868,6 +914,7 @@ export function BoardScreen({
           )
         }
         tasks={tasks}
+        timezone={profile.timezone}
         scopes={activeScopes.map((scope) => ({
           id: scope.id,
           name: scope.name,
@@ -878,7 +925,7 @@ export function BoardScreen({
         onToggleGroup={toggleGroup}
         onOpen={onOpenTask}
         onChanged={refresh}
-        onDrop={(taskId, status) => void move(taskId, status)}
+        onDrop={(taskId, status, placement) => void move(taskId, status, placement)}
         onMove={(taskId, status) => void move(taskId, status)}
         onToggleDone={(taskId) => {
           const task = tasks.find((candidate) => candidate.id === taskId);
@@ -891,7 +938,7 @@ export function BoardScreen({
             onShowAll={() => void updateSettings({ done_cleared_at: null })}
             day={doneDay}
             onPickDay={setDoneDay}
-            onBackToToday={() => setDoneDay(todayISO())}
+            onBackToToday={() => setDoneDay(today)}
           />
         }
       />

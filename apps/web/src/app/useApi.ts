@@ -24,7 +24,11 @@ export interface QueryResult<T> {
   reload: () => void;
 }
 
-export function useApi<T>(path: string | null, deps: unknown[] = []): QueryResult<T> {
+export function useApi<T>(
+  path: string | null,
+  deps: unknown[] = [],
+  load: (path: string, signal: AbortSignal) => Promise<T> = api.get<T>,
+): QueryResult<T> {
   const [data, setData] = useState<T | undefined>(undefined);
   const [error, setError] = useState<Error | undefined>(undefined);
   const [loading, setLoading] = useState(path !== null);
@@ -42,9 +46,9 @@ export function useApi<T>(path: string | null, deps: unknown[] = []): QueryResul
     if (hasData.current) setRevalidating(true);
     else setLoading(true);
 
-    api
-      .get<T>(path, controller.signal)
+    load(path, controller.signal)
       .then((result) => {
+        if (controller.signal.aborted) return;
         hasData.current = true;
         setData(result);
         setError(undefined);
@@ -64,7 +68,7 @@ export function useApi<T>(path: string | null, deps: unknown[] = []): QueryResul
     return () => {
       controller.abort();
     };
-  }, [path, tick, ...deps]);
+  }, [path, tick, load, ...deps]);
 
   const reload = useCallback(() => {
     setTick((value) => value + 1);

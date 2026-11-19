@@ -11,6 +11,7 @@
 
 import { sql } from 'kysely';
 import { v7 as uuidv7 } from 'uuid';
+import { localDayBounds } from '@fem-ho/contracts';
 import { dbBool, isTrue, maybeBool } from '../db/bool.js';
 import type { AuditContext } from '../audit/audited-transaction.js';
 import type { MigrationDb } from '../db/migration-db.js';
@@ -333,6 +334,7 @@ export interface InboxEvent {
 
 export interface ListInboxEventsOptions {
   /** Els límits UTC del dia local de qui mira. Els dona `localDayBounds`. */
+  date: string;
   from: string;
   to: string;
   scopeIds?: string[] | undefined;
@@ -367,10 +369,23 @@ export async function listInboxEvents(
    */
   if (!hasCapability(principal, 'events:read')) return [];
 
-  const occurrences = await listEventOccurrences(db, principal, {
-    from: options.from,
-    to: options.to,
-    scopeIds: options.scopeIds,
+  const civil = localDayBounds('UTC', options.date);
+  const from = Date.parse(options.from);
+  const to = Date.parse(options.to);
+  const civilFrom = Date.parse(civil.startUTC);
+  const civilTo = Date.parse(civil.endUTC);
+  const occurrences = (
+    await listEventOccurrences(db, principal, {
+      from: new Date(Math.min(civilFrom, from)).toISOString(),
+      to: new Date(Math.max(civilTo, to)).toISOString(),
+      scopeIds: options.scopeIds,
+    })
+  ).filter((event) => {
+    const start = Date.parse(event.starts_at);
+    const end = Date.parse(event.ends_at);
+    const lower = event.all_day ? civilFrom : from;
+    const upper = event.all_day ? civilTo : to;
+    return start < upper && (start >= lower || end > lower);
   });
   if (occurrences.length === 0) return [];
 

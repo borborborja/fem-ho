@@ -81,9 +81,11 @@ export class ApiError extends Error {
 export interface Tokens {
   access_token: string;
   refresh_token: string;
+  /** Identitat confirmada per `/auth/settings`, només al navegador. */
+  user_id?: string | undefined;
 }
 
-const STORAGE_KEY = 'femho.tokens';
+export const TOKEN_STORAGE_KEY = 'femho.tokens';
 
 /**
  * Els tokens viuen a `localStorage` i no en una cookie.
@@ -95,13 +97,17 @@ const STORAGE_KEY = 'femho.tokens';
  */
 export function loadTokens(): Tokens | null {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(TOKEN_STORAGE_KEY);
     if (raw === null) return null;
     const parsed = JSON.parse(raw) as Partial<Tokens>;
     if (typeof parsed.access_token !== 'string' || typeof parsed.refresh_token !== 'string') {
       return null;
     }
-    return { access_token: parsed.access_token, refresh_token: parsed.refresh_token };
+    return {
+      access_token: parsed.access_token,
+      refresh_token: parsed.refresh_token,
+      ...(typeof parsed.user_id === 'string' ? { user_id: parsed.user_id } : {}),
+    };
   } catch {
     // Un `localStorage` corrupte o inaccessible (navegació privada estricta) no ha de
     // deixar l'app en blanc: es tracta com si no hi hagués sessió.
@@ -111,8 +117,8 @@ export function loadTokens(): Tokens | null {
 
 export function saveTokens(tokens: Tokens | null): void {
   try {
-    if (tokens === null) localStorage.removeItem(STORAGE_KEY);
-    else localStorage.setItem(STORAGE_KEY, JSON.stringify(tokens));
+    if (tokens === null) localStorage.removeItem(TOKEN_STORAGE_KEY);
+    else localStorage.setItem(TOKEN_STORAGE_KEY, JSON.stringify(tokens));
   } catch {
     // Sense emmagatzematge, la sessió dura el que duri la pestanya. És pitjor que
     // guardar-la, però molt millor que petar.
@@ -133,6 +139,16 @@ export function setTokens(next: Tokens | null): void {
 
 export function currentTokens(): Tokens | null {
   return tokens;
+}
+
+export function currentSessionEpoch(): number {
+  return sessionEpoch;
+}
+
+export function bindSessionUser(userId: string): void {
+  if (tokens === null) return;
+  tokens = { ...tokens, user_id: userId };
+  saveTokens(tokens);
 }
 
 /** Es crida quan el refresc falla: la interfície ha de tornar al login. */
@@ -165,8 +181,8 @@ async function refresh(): Promise<boolean> {
     }
     const next = (await res.json()) as Tokens;
     if (epoch !== sessionEpoch) return false;
-    tokens = next;
-    saveTokens(next);
+    tokens = { ...next, ...(current.user_id === undefined ? {} : { user_id: current.user_id }) };
+    saveTokens(tokens);
     return true;
   })();
   refreshing = pending;

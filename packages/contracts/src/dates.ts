@@ -93,13 +93,15 @@ export function monthName(locale: Locale, month: number): string {
  * Ho fa `Intl` i no una plantilla del catàleg perquè `"{day} de {month}"` no pot
  * expressar ni l'elisió catalana —"1 d'agost" i no "1 de agost"— ni l'ordre anglès.
  */
-export function longDay(locale: Locale, date: Date): string {
-  return new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'long' }).format(date);
+export function longDay(locale: Locale, date: Date, timeZone?: string): string {
+  return new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'long', timeZone }).format(date);
 }
 
 /** Una hora, en el format de l'idioma: 24 h en català i castellà, 12 h en anglès. */
-export function shortTime(locale: Locale, date: Date): string {
-  return new Intl.DateTimeFormat(locale, { hour: 'numeric', minute: '2-digit' }).format(date);
+export function shortTime(locale: Locale, date: Date, timeZone?: string): string {
+  return new Intl.DateTimeFormat(locale, { hour: 'numeric', minute: '2-digit', timeZone }).format(
+    date,
+  );
 }
 
 /** Una data i una hora juntes. L'historial i l'estat de les fonts en fan servir. */

@@ -22,6 +22,7 @@ export interface QuickAddProps {
   columnLabel: string;
   /** Colors dels àmbits, per als punts del desplegable. */
   scopeColors?: Record<string, string> | undefined;
+  draftStorageKey?: string | undefined;
   /**
    * Crear-la. **Si la promesa peta, el camp recupera el text**: sense això, el que has
    * escrit desapareix i sembla creat.
@@ -60,8 +61,38 @@ function openSigil(text: string): { sigil: '#' | '@'; query: string; start: numb
   return { sigil: match[1] as '#' | '@', query, start: match.index };
 }
 
-export function QuickAdd({ context, columnLabel, scopeColors = {}, onCreate }: QuickAddProps) {
-  const [text, setText] = useState('');
+function loadDraft(key: string | undefined): string {
+  try {
+    return key === undefined ? '' : (localStorage.getItem(key) ?? '');
+  } catch {
+    return '';
+  }
+}
+
+function storeDraft(key: string | undefined, text: string): void {
+  if (key === undefined) return;
+  try {
+    if (text === '') localStorage.removeItem(key);
+    else localStorage.setItem(key, text);
+  } catch {
+    // Si el navegador bloqueja l'emmagatzematge, el camp continua funcionant en memòria.
+  }
+}
+
+export function QuickAdd({
+  context,
+  columnLabel,
+  scopeColors = {},
+  draftStorageKey,
+  onCreate,
+}: QuickAddProps) {
+  const [text, setText] = useState(() => loadDraft(draftStorageKey));
+  const revision = useRef(0);
+  const edit = (next: string): void => {
+    revision.current += 1;
+    storeDraft(draftStorageKey, next);
+    setText(next);
+  };
   const [active, setActive] = useState(0);
   const [submitted, setSubmitted] = useState(false);
   /** L'última creació no ha arribat al servidor i el text ha tornat al camp. */
@@ -119,7 +150,7 @@ export function QuickAdd({ context, columnLabel, scopeColors = {}, onCreate }: Q
   const pick = (suggestion: Suggestion): void => {
     const open = openSigil(text);
     if (open === null) return;
-    setText(text.slice(0, open.start) + suggestion.insert);
+    edit(text.slice(0, open.start) + suggestion.insert);
     setActive(0);
     setDismissed(false);
     inputRef.current?.focus();
@@ -167,6 +198,7 @@ export function QuickAdd({ context, columnLabel, scopeColors = {}, onCreate }: Q
    */
   const crear = (scopeId: string): void => {
     const escrit = text;
+    const submitting = revision.current;
     const resultat = onCreate({
       title: parsed.title,
       scopeId,
@@ -182,15 +214,19 @@ export function QuickAdd({ context, columnLabel, scopeColors = {}, onCreate }: Q
     setFallada(false);
     inputRef.current?.focus();
 
-    if (resultat instanceof Promise) {
-      void resultat.catch(() => {
-        // Només es recupera si mentrestant no s'ha escrit res més: si ja n'estàs
-        // escrivint una altra, trepitjar-la seria pitjor que perdre la primera.
-        setText((actual) => (actual === '' ? escrit : actual));
+    // L'esborrany en disc espera la resposta o que la cua hagi acabat d'escriure'l.
+    void Promise.resolve(resultat).then(
+      () => {
+        if (revision.current === submitting && loadDraft(draftStorageKey) === escrit)
+          storeDraft(draftStorageKey, '');
+      },
+      () => {
+        // Un gest de captura tardà no pot trepitjar el text que ja s'està escrivint.
+        if (revision.current === submitting) setText(escrit);
         setFallada(true);
         inputRef.current?.focus();
-      });
-    }
+      },
+    );
   };
 
   const submit = (): void => {
@@ -259,7 +295,7 @@ export function QuickAdd({ context, columnLabel, scopeColors = {}, onCreate }: Q
         inputRef={inputRef}
         value={text}
         onChange={(next) => {
-          setText(next);
+          edit(next);
           setFallada(false);
           setActive(0);
           // Tornar a escriure reobre el desplegable: el descart val per a aquell moment,
@@ -275,7 +311,7 @@ export function QuickAdd({ context, columnLabel, scopeColors = {}, onCreate }: Q
           const token = parsed.tokens.find(
             (candidate) => candidate.start === chip.start && candidate.kind === chip.kind,
           );
-          if (token !== undefined) setText(revertToken(text, token));
+          if (token !== undefined) edit(revertToken(text, token));
           inputRef.current?.focus();
         }}
         error={errorMessage}
