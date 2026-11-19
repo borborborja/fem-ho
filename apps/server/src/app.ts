@@ -35,6 +35,7 @@ import type { GoogleMailProvider } from './net/google-oauth.js';
 import { registerReportRoutes } from './http/reports.js';
 import { registerSessionRoutes } from './http/sessions.js';
 import { registerTokenRoutes } from './http/tokens.js';
+import { registerTaskContextRoutes } from './http/task-context.js';
 import { registerChecklistRoutes, registerEventRoutes, registerTaskRoutes } from './http/tasks.js';
 
 export interface BuildOptions {
@@ -132,6 +133,7 @@ export function buildApp(config: Config, options: BuildOptions = {}): FastifyIns
 
   registerScopeRoutes(app, instanceSecret);
   registerTaskRoutes(app);
+  registerTaskContextRoutes(app);
   registerAttachmentRoutes(app);
   registerFederationRoutes(app, instanceSecret);
   registerEventRoutes(app, instanceSecret);

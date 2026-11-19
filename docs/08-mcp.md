@@ -50,7 +50,7 @@ El token que arriba a Fem-ho és **per a Fem-ho**. S'ha de validar que ho sigui,
 
 S'ordenen **alfabèticament** a la llista: els clients cacheguen, i un ordre estable millora els encerts de la memòria cau de prompts.
 
-Són **18**. La disciplina de nombre importa: una definició de tool ocupa entre 100 i 500 tokens, i amb catàlegs de 40 tools una part gran de la finestra de context se'n va en metadades abans de començar. Hi ha servidors MCP de Vikunja que n'exposen més de 30, i és un error que no s'ha de copiar.
+El catàleg té **20 eines**. Cada credencial veu les que corresponen als seus permisos.
 
 ### Lectura
 
@@ -61,7 +61,8 @@ Són **18**. La disciplina de nombre importa: una definició de tool ocupa entre
 | `list_scopes` | Àmbits accessibles, amb descripció i instruccions. |
 | `list_projects` | Projectes, filtrables per àmbit. |
 | `list_tasks` | Tasques amb filtres i paginació. |
-| `get_task` | Una tasca sencera: subtasques, llistes, comentaris, adjunts, historial. |
+| `get_task` | La fitxa d'una tasca. |
+| `get_task_context` | Identificadors d'àmbits i, dins d'un àmbit, projectes, tipologies, etiquetes i responsables. |
 | `search_tasks` | Cerca de text. |
 | `list_events` | Esdeveniments en una finestra. **Requereix `from` i `to`.** |
 
@@ -69,11 +70,12 @@ Són **18**. La disciplina de nombre importa: una definició de tool ocupa entre
 
 | Tool | Què fa |
 | --- | --- |
-| `create_task` | Crea. Respecta `can_create_tasks` de l'agent. |
+| `create_task` | Crea en qualsevol columna amb les dades inicials. Respecta `can_create_tasks` de l'agent. |
 | `update_task` | Modifica camps. |
 | `move_task` | Canvia `status` i `position`. |
 | `complete_task` | Completa, amb cascada i recurrència. |
 | `add_comment` | Comenta. **És la via principal perquè un agent reporti.** |
+| `add_task_attachment` | Adjunta un fitxer per Base64 o per URL HTTPS. Reutilitza l'UUID per reintentar. |
 | `ask_user` | Pregunta **i s'atura**: el comentari surt igual, la tasca passa a demanar atenció i **la reserva es deixa anar** —qui espera no treballa—. La marca la baixa una resposta d'una persona, o completar la tasca. Mai un «vist». |
 | `resume_task` | L'agent ha sabut per un altre canal el que li faltava: ho deixa escrit, la marca cau i **torna a reservar** la tasca. El text és obligatori: primer es documenta, després es desbloqueja. |
 | `update_checklist_item` | Marca un ítem. |
@@ -95,7 +97,8 @@ Cada tool declara les seves pistes de comportament, i cal encertar-les perquè s
 | --- | --- | --- | --- |
 | `whoami`, `get_*`, `list_*`, `search_*` | sí | no | sí |
 | `create_task`, `add_comment`, `ask_user`, `resume_task` | no | no | no |
-| `update_*`, `move_task`, `complete_task` | no | no | sí |
+| `update_*`, `complete_task`, `add_task_attachment` | no | no | sí |
+| `move_task` | no | no | no |
 | `release_task` | no | no | sí |
 | `next_task` | no | no | **no** |
 
@@ -148,7 +151,8 @@ Els clients actuals gairebé no fan servir recursos: prioritza les tools. Els qu
 | `femho://tasks/{id}/attachments/{id}` | Un fitxer de context |
 | `femho://guide` | Com parlar amb Fem-ho: vocabulari, columnes, què vol dir cada mode d'IA |
 
-Els adjunts es retornen com a **enllaç a recurs** des de `get_task`, no com a contingut incrustat. Una tasca amb tres PDF de context no ha de fer explotar la finestra de context de qui només volia veure el títol.
+Els fitxers es poden baixar per l'API REST amb els permisos d'adjunts. `get_task` torna
+la fitxa de la tasca.
 
 ---
 

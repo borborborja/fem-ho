@@ -1,11 +1,11 @@
 /**
- * Les **18 tools** d'MCP (docs/08 §3).
+ * Les eines d'MCP (docs/08 §3).
  *
  * **Sense prefix, verb primer** (D6): els clients ja fan namespace pel seu compte —a
  * Claude una tool acaba sent `mcp__femho__list_tasks`— i posar-hi un `femho_` a sobre
  * malgasta tokens a cada nom, a cada crida i a cada finestra de context.
  *
- * **Divuit i les justes.** Una definició de tool ocupa entre 100 i 500 tokens; amb catàlegs
+ * Una definició de tool ocupa entre 100 i 500 tokens; amb catàlegs
  * de 40, una part gran de la finestra de context se'n va en metadades abans de començar. La
  * darrera que hi ha entrat, `ask_user`, és la que evita el pitjor error d'un agent que
  * treballa sol: endevinar en comptes de preguntar.
@@ -17,6 +17,7 @@
  */
 
 import { z } from 'zod';
+import { taskCreateShape, taskMoveMcpShape, taskPatchShape } from '../services/task-delivery.js';
 
 export interface ToolAnnotations {
   readOnlyHint: boolean;
@@ -68,6 +69,21 @@ export const TOOLS: ToolSpec[] = [
     annotations: CREATE,
   },
   {
+    name: 'add_task_attachment',
+    title: 'Attach a file to a task',
+    description:
+      'Adds one file to an existing task. Supply Base64 bytes or a public HTTPS download URL. Reuse the same attachment UUID when retrying.',
+    inputSchema: {
+      task_id: taskId,
+      id: z.uuid().describe('Client-generated attachment UUID. Keep it for retries.'),
+      filename: z.string().min(1),
+      content_base64: z.string().optional().describe('Standard Base64, up to 1 MiB decoded.'),
+      url: z.string().optional().describe('Public HTTPS download URL for the file.'),
+      ai_context: z.boolean().optional(),
+    },
+    annotations: { ...MODIFY, openWorldHint: true },
+  },
+  {
     name: 'ask_user',
     title: 'Ask the person and wait',
     description:
@@ -90,14 +106,8 @@ export const TOOLS: ToolSpec[] = [
     name: 'create_task',
     title: 'Create a task',
     description:
-      "Creates a task. It always has to have a scope; it may have no project. Respects the agent's `can_create_tasks`.",
-    inputSchema: {
-      scope_id: scopeId,
-      title: z.string().describe('The title, already free of sigils.'),
-      project_id: z.string().optional(),
-      description: z.string().optional(),
-      due_date: z.string().optional().describe('Date in ISO format, without a time.'),
-    },
+      'Creates a task in Inbox, To do, Doing or Done with its initial data. Use get_task_context to find identifiers. Pass a client-generated id for safe retries. Attach files separately with add_task_attachment.',
+    inputSchema: taskCreateShape,
     annotations: CREATE,
   },
   {
@@ -111,8 +121,16 @@ export const TOOLS: ToolSpec[] = [
   {
     name: 'get_task',
     title: 'A whole task',
-    description: 'A task with its subtasks, checklists, comments, attachments and history.',
+    description: 'Reads the task record by its identifier.',
     inputSchema: { task_id: taskId },
+    annotations: READ,
+  },
+  {
+    name: 'get_task_context',
+    title: 'Find identifiers for task operations',
+    description:
+      'Lists authorized scopes. With scope_id, also lists projects, task types, labels and eligible assignees in that scope. Use the profile timezone for date-based task inputs.',
+    inputSchema: { scope_id: scopeId.optional() },
     annotations: READ,
   },
   {
@@ -157,16 +175,13 @@ export const TOOLS: ToolSpec[] = [
   {
     name: 'move_task',
     title: 'Move a task',
-    description: 'Changes the column and the position of a task.',
+    description:
+      'Moves a task inside its scope. Defaults to the end of the destination column. Pass expected_version to detect concurrent changes.',
     inputSchema: {
       task_id: taskId,
-      status: z.enum(['inbox', 'todo', 'doing', 'done']),
-      position: z
-        .string()
-        .optional()
-        .describe('The fractional index. If not given, it goes to the end.'),
+      ...taskMoveMcpShape,
     },
-    annotations: MODIFY,
+    annotations: { ...MODIFY, idempotentHint: false },
   },
   {
     name: 'next_task',
@@ -218,9 +233,7 @@ export const TOOLS: ToolSpec[] = [
     description: 'Changes fields of a task. Only the ones given.',
     inputSchema: {
       task_id: taskId,
-      title: z.string().optional(),
-      description: z.string().optional(),
-      due_date: z.string().nullable().optional(),
+      ...taskPatchShape,
     },
     annotations: MODIFY,
   },
@@ -236,9 +249,9 @@ export const TOOLS: ToolSpec[] = [
 
 /** Comprovació d'invariants del catàleg. Es crida en construir el servidor. */
 export function assertCatalogue(tools: ToolSpec[] = TOOLS): void {
-  if (tools.length !== 18) {
+  if (tools.length !== 20) {
     throw new Error(
-      `El catàleg ha de tenir 18 tools i en té ${String(tools.length)} (docs/08 §3).`,
+      `El catàleg ha de tenir 20 tools i en té ${String(tools.length)} (docs/08 §3).`,
     );
   }
 

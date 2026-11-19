@@ -10,6 +10,41 @@ type TokenInput = NonNullable<
   operations['createApiToken']['requestBody']
 >['content']['application/json'];
 
+const TASK_OPERATIONS = [
+  ['tasks:read', 'external.operation.read'],
+  ['tasks:create', 'external.operation.create'],
+  ['tasks:move', 'external.operation.move'],
+  ['tasks:update', 'external.operation.update'],
+  ['tasks:attach', 'external.operation.attach'],
+] as const;
+
+type TaskOperation = (typeof TASK_OPERATIONS)[number][0];
+type Permission = 'read_only' | 'read_write' | 'custom';
+const DELETE_CAPABILITIES = ['tasks:delete', 'events:delete'];
+
+function operationsOf(capabilities: readonly string[]): TaskOperation[] {
+  return TASK_OPERATIONS.map(([operation]) => operation).filter(
+    (operation) =>
+      capabilities.includes(operation) ||
+      (operation === 'tasks:attach'
+        ? capabilities.includes('attachments:write')
+        : operation !== 'tasks:read' && capabilities.includes('tasks:write')),
+  );
+}
+
+function permissionSummary(capabilities: string[]): string {
+  const labels = TASK_OPERATIONS.filter(([operation]) => capabilities.includes(operation));
+  if (labels.length > 0 && capabilities.every((value) => labels.some(([op]) => value === op)))
+    return labels.map(([, key]) => t(key)).join(' · ');
+  return t(
+    capabilities.some(
+      (capability) => capability.endsWith(':write') || capability.endsWith(':delete'),
+    )
+      ? 'external.readWrite'
+      : 'external.readOnly',
+  );
+}
+
 function Box({ children }: { children: ReactNode }) {
   return (
     <section
@@ -89,6 +124,38 @@ export function ScopeSelection({
   );
 }
 
+function TaskOperationSelection({
+  selected,
+  onChange,
+  canChoose,
+}: {
+  selected: readonly TaskOperation[];
+  onChange: (operations: TaskOperation[]) => void;
+  canChoose: (operation: TaskOperation) => boolean;
+}) {
+  return (
+    <fieldset style={{ border: 0, padding: 0, display: 'grid', gap: 8 }}>
+      <legend>{t('external.taskOperations')}</legend>
+      {TASK_OPERATIONS.filter(([operation]) => canChoose(operation)).map(([operation, label]) => (
+        <label key={operation} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <input
+            type="checkbox"
+            checked={selected.includes(operation)}
+            onChange={(e) =>
+              onChange(
+                e.target.checked
+                  ? [...selected, operation]
+                  : selected.filter((item) => item !== operation),
+              )
+            }
+          />
+          {t(label)}
+        </label>
+      ))}
+    </fieldset>
+  );
+}
+
 function TokenEditor({
   access,
   token,
@@ -107,31 +174,55 @@ function TokenEditor({
   const [name, setName] = useState(token?.name ?? '');
   const [selected, setSelected] = useState<string[]>(token?.scope_ids ?? []);
   const [channels, setChannels] = useState<string[]>(token?.channels ?? ['mcp']);
-  const [permission, setPermission] = useState<'read_only' | 'read_write'>(
-    token?.capabilities.some((c) => c.endsWith(':write')) ? 'read_write' : 'read_only',
+  const agent = agentId ?? token?.ai_agent_id;
+  const presetFor = (mode: 'read_only' | 'read_write') =>
+    agent
+      ? access.presets[mode].filter(
+          (c) => !['events:write', 'projects:write', 'attachments:write'].includes(c),
+        )
+      : access.presets[mode];
+  const before = token?.capabilities.filter((c) => !DELETE_CAPABILITIES.includes(c));
+  const [permission, setPermission] = useState<Permission>(() => {
+    if (!before) return agent ? 'read_only' : 'custom';
+    for (const mode of ['read_only', 'read_write'] as const) {
+      const preset = presetFor(mode);
+      if (preset.length === before.length && preset.every((c) => before.includes(c))) return mode;
+    }
+    return 'custom';
+  });
+  const [selectedOperations, setOperations] = useState<TaskOperation[]>(() =>
+    token ? operationsOf(token.capabilities) : ['tasks:read'],
   );
-  const [deletion, setDeletion] = useState(token?.capabilities.includes('tasks:delete') ?? false);
-  const [expiry, setExpiry] = useState(
+  const [permissionsChanged, setPermissionsChanged] = useState(token === undefined);
+  const originalDeletion = token?.capabilities.filter((c) => DELETE_CAPABILITIES.includes(c)) ?? [];
+  const [deletion, setDeletion] = useState<boolean | null>(null);
+  const [initialExpiry] = useState(() =>
     token
       ? (token.expires_at?.slice(0, 10) ?? '')
       : new Date(Date.now() + 90 * 86400_000).toISOString().slice(0, 10),
   );
+  const [expiry, setExpiry] = useState(initialExpiry);
+  const selectedCapabilities =
+    permission === 'custom'
+      ? selectedOperations.filter((operation) => !agent || operation !== 'tasks:attach')
+      : presetFor(permission);
+  const deleteCapabilities = deletion && channels.includes('api') ? DELETE_CAPABILITIES : [];
+  const capabilities = [
+    ...(permissionsChanged ? selectedCapabilities : (before ?? [])),
+    ...(deletion === null ? originalDeletion : deleteCapabilities),
+  ];
   const save = useMutation(async () => {
-    const preset = agentId
-      ? access.presets[permission].filter(
-          (c) => !['events:write', 'projects:write', 'attachments:write'].includes(c),
-        )
-      : access.presets[permission];
-    const capabilities = [
-      ...preset,
-      ...(deletion && channels.includes('api') ? ['tasks:delete', 'events:delete'] : []),
-    ];
     const input: TokenInput = {
       name,
       capabilities,
       scope_ids: selected,
       channels: channels as ('api' | 'mcp')[],
-      expires_at: expiry ? new Date(`${expiry}T23:59:59Z`).toISOString() : null,
+      expires_at:
+        token && expiry === initialExpiry
+          ? (token.expires_at ?? null)
+          : expiry
+            ? new Date(`${expiry}T23:59:59Z`).toISOString()
+            : null,
     };
     if (token) {
       await api.patch(`/api/v1/tokens/${token.id}`, input);
@@ -189,12 +280,26 @@ function TokenEditor({
             className="plou-input"
             aria-label={t('external.permission')}
             value={permission}
-            onChange={(e) => setPermission(e.target.value as typeof permission)}
+            onChange={(e) => {
+              setPermission(e.target.value as Permission);
+              setPermissionsChanged(true);
+            }}
           >
             <option value="read_only">{t('external.readOnly')}</option>
             <option value="read_write">{t('external.readWrite')}</option>
+            <option value="custom">{t('external.custom')}</option>
           </select>
         </label>
+        {permission === 'custom' ? (
+          <TaskOperationSelection
+            selected={selectedOperations}
+            canChoose={(operation) => !agent || operation !== 'tasks:attach'}
+            onChange={(operations) => {
+              setOperations(operations);
+              setPermissionsChanged(true);
+            }}
+          />
+        ) : null}
         <ScopeSelection scopes={scopes} selected={selected} onChange={setSelected} />
         {channels.includes('api') && !agentId && !token?.ai_agent_id ? (
           <details>
@@ -202,7 +307,7 @@ function TokenEditor({
             <label>
               <input
                 type="checkbox"
-                checked={deletion}
+                checked={deletion ?? originalDeletion.length > 0}
                 onChange={(e) => setDeletion(e.target.checked)}
               />
               {t('external.deletePermission')}
@@ -224,7 +329,13 @@ function TokenEditor({
           <button
             className="plou-btn plou-btn-primary"
             data-testid="token-create"
-            disabled={save.busy || !name.trim() || selected.length === 0 || channels.length === 0}
+            disabled={
+              save.busy ||
+              !name.trim() ||
+              selected.length === 0 ||
+              channels.length === 0 ||
+              capabilities.length === 0
+            }
           >
             {t(token ? 'external.save' : 'tokens.create')}
           </button>
@@ -268,7 +379,7 @@ async function probe(token: string) {
     };
   };
   const identity = await call('whoami', {});
-  await call('list_tasks', { limit: 1 });
+  if (identity.capabilities.includes('tasks:read')) await call('list_tasks', { limit: 1 });
   return identity;
 }
 
@@ -384,12 +495,7 @@ export function ExternalAccessPanel({ onGoToAgent }: { onGoToAgent: () => void }
                 .map((id) => scopes.find((s) => s.id === id)?.name ?? id)
                 .join(' · ')}
               <br />
-              {t('external.permission')}:{' '}
-              {t(
-                verified.capabilities.some((c) => c.endsWith(':write'))
-                  ? 'external.readWrite'
-                  : 'external.readOnly',
-              )}
+              {t('external.permission')}: {permissionSummary(verified.capabilities)}
             </p>
           ) : null}
           <ErrorText error={check.error} />
@@ -422,11 +528,7 @@ export function ExternalAccessPanel({ onGoToAgent }: { onGoToAgent: () => void }
             </span>
             <span>
               {(token.channels ?? ['api', 'mcp']).map((c) => t(`external.${c}`)).join(' · ')} ·{' '}
-              {t(
-                token.capabilities.some((c) => c.endsWith(':write') || c.endsWith(':delete'))
-                  ? 'external.readWrite'
-                  : 'external.readOnly',
-              )}
+              {permissionSummary(token.capabilities)}
             </span>
             <span>
               {token.scope_ids.length
@@ -550,14 +652,27 @@ export function McpConsentScreen({ requestId }: { requestId: string }) {
   const access = useApi<Access>('/api/v1/external-access');
   const { scopes } = useSessionData();
   const [selected, setSelected] = useState<string[]>([]);
-  const [permission, setPermission] = useState('read_only');
+  const [permission, setPermission] = useState<Permission>('custom');
+  const [selectedOperations, setOperations] = useState<TaskOperation[]>(['tasks:read']);
   const [enable, setEnable] = useState(false);
+  const readRequested = request.data?.read_requested !== false;
+  const writeRequested = request.data?.write_requested === true;
+  const canChoose = (operation: TaskOperation) =>
+    operation === 'tasks:read' ? readRequested : writeRequested;
+  const capabilities = selectedOperations.filter(canChoose);
   const submit = useMutation(async (approve: boolean) => {
     if (approve && !access.data?.mcp_enabled && enable)
       await api.patch('/api/v1/external-access', { mcp_enabled: true });
     const result = await api.post<{ redirect_url: string }>(
       `/api/v1/mcp/authorization/${encodeURIComponent(requestId)}`,
-      { approve, permission, scope_ids: selected },
+      approve
+        ? {
+            approve,
+            permission,
+            scope_ids: selected,
+            ...(permission === 'custom' ? { capabilities } : {}),
+          }
+        : { approve },
     );
     window.location.assign(result.redirect_url);
   });
@@ -578,14 +693,22 @@ export function McpConsentScreen({ requestId }: { requestId: string }) {
                 className="plou-input"
                 aria-label={t('external.permission')}
                 value={permission}
-                onChange={(e) => setPermission(e.target.value)}
+                onChange={(e) => setPermission(e.target.value as Permission)}
               >
-                <option value="read_only">{t('external.readOnly')}</option>
-                {request.data.write_requested ? (
+                {readRequested ? <option value="read_only">{t('external.readOnly')}</option> : null}
+                {readRequested && writeRequested ? (
                   <option value="read_write">{t('external.readWrite')}</option>
                 ) : null}
+                <option value="custom">{t('external.custom')}</option>
               </select>
             </label>
+            {permission === 'custom' ? (
+              <TaskOperationSelection
+                selected={capabilities}
+                onChange={setOperations}
+                canChoose={canChoose}
+              />
+            ) : null}
             {access.data && !access.data.mcp_enabled ? (
               <label>
                 <input
@@ -601,6 +724,7 @@ export function McpConsentScreen({ requestId }: { requestId: string }) {
               disabled={
                 submit.busy ||
                 selected.length === 0 ||
+                (permission === 'custom' && capabilities.length === 0) ||
                 !access.data ||
                 (!access.data.mcp_enabled && !enable)
               }

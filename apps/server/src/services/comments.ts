@@ -45,6 +45,25 @@ export async function addComment(
 ): Promise<Comment> {
   if (!hasCapability(principal, 'comments:write')) throw missingCapability('comments:write');
 
+  const task = await sql<{ scope_id: string }>`
+    SELECT scope_id FROM tasks WHERE id = ${taskId} AND deleted_at IS NULL
+  `.execute(ctx.tx);
+  const row = task.rows[0];
+  if (row === undefined) throw notFound('task', taskId);
+
+  await assertScopeAccess(ctx.tx, principal, row.scope_id);
+  return insertTaskComment(ctx, principal, taskId, row.scope_id, body, id);
+}
+
+/** El cridant ja ha autoritzat l'escriptura a la tasca i n'ha resolt l'àmbit. */
+export async function insertTaskComment(
+  ctx: AuditContext,
+  principal: Principal,
+  taskId: string,
+  scopeId: string,
+  body: string,
+  id = uuidv7(),
+): Promise<Comment> {
   if (body.trim() === '') {
     throw new PolicyError(
       'body-required',
@@ -53,15 +72,6 @@ export async function addComment(
       'An empty comment says nothing: write the reason in it.',
     );
   }
-
-  const task = await sql<{ scope_id: string }>`
-    SELECT scope_id FROM tasks WHERE id = ${taskId} AND deleted_at IS NULL
-  `.execute(ctx.tx);
-  const row = task.rows[0];
-  if (row === undefined) throw notFound('task', taskId);
-
-  await assertScopeAccess(ctx.tx, principal, row.scope_id);
-
   await sql`
     INSERT INTO comments (id, task_id, author_id, author_agent_id, guest_name, body,
                           created_at, updated_at)
@@ -79,7 +89,7 @@ export async function addComment(
     ctx.record({
       entityType: 'task',
       entityId: taskId,
-      scopeId: row.scope_id,
+      scopeId,
       verb: 'answered',
     });
   }
@@ -92,7 +102,7 @@ export async function addComment(
   ctx.record({
     entityType: 'task',
     entityId: taskId,
-    scopeId: row.scope_id,
+    scopeId,
     verb: 'commented',
     changes: { body: { from: null, to: body.trim() } },
   });

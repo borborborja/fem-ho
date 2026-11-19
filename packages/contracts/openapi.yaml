@@ -665,6 +665,21 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
 
+  /task-context:
+    get:
+      tags: [tasks]
+      operationId: getTaskContext
+      summary: Identificadors per preparar una operació sobre tasques
+      parameters:
+        - { name: scope_id, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: Àmbits autoritzats i, si es demana un àmbit, les opcions assignables.
+          content: { application/json: { schema: { $ref: '#/components/schemas/TaskContext' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   /tasks:
     get:
       tags: [tasks]
@@ -733,6 +748,8 @@ paths:
         **`scope_id` és obligatori.** És la invariant central del producte: pot ser que
         un àmbit tingui una tasca sense projecte, però mai una tasca sense àmbit
         (docs/01 §4). L'`id` i la `position` els pot posar el client (D3, D4).
+        La fitxa i les seves dades inicials es desen juntes. Conserva el mateix `id`
+        per als reintents. Els fitxers es poden pujar després a la ruta d'adjunts.
       requestBody:
         required: true
         content:
@@ -745,19 +762,24 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Task'
+                $ref: '#/components/schemas/TaskWriteResult'
         '200':
           description: Ja existia amb aquest `id`. Idempotència.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Task'
+                $ref: '#/components/schemas/TaskWriteResult'
         '401':
           $ref: '#/components/responses/Unauthenticated'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Conflicte amb una tasca existent.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
         '422':
-          description: Falta l'àmbit, o no és vàlid.
+          description: Les dades o referències de la tasca són invàlides.
           content:
             application/problem+json:
               schema:
@@ -775,8 +797,10 @@ paths:
 
         S'accepta `position` directament —el camí normal, calculada al client (D3)— o
         `{before_id, after_id}` perquè el servidor la calculi, per a clients simples.
+        Si s'ometen, la tasca es col·loca al final de la columna dins del seu àmbit.
         `time_entry` anota minuts exactes en completar des de Per fer o Inbox amb registre activat;
-        requereix `expected_version`. Completar i anotar formen una única transacció.
+        requereix `expected_version` i la capacitat general `tasks:write`.
+        Completar i anotar formen una única transacció.
         L’identificador del bloc fa els reintents idempotents; un canvi concurrent retorna 409.
         Entrar a Fent obre un tram nou i sortir-ne el tanca, també per sota d’un minut.
       parameters:
@@ -797,7 +821,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Task'
+                $ref: '#/components/schemas/TaskWriteResult'
         '401':
           $ref: '#/components/responses/Unauthenticated'
         '403':
@@ -836,7 +860,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Task'
+                $ref: '#/components/schemas/TaskWriteResult'
         '401':
           $ref: '#/components/responses/Unauthenticated'
         '403':
@@ -1377,6 +1401,7 @@ paths:
                   client_name: { type: string }
                   client_id: { type: string }
                   redirect_uri: { type: string }
+                  read_requested: { type: boolean }
                   write_requested: { type: boolean }
     post:
       operationId: consentMcpAuthorization
@@ -1391,7 +1416,11 @@ paths:
               properties:
                 approve: { type: boolean }
                 scope_ids: { type: array, items: { type: string } }
-                permission: { type: string, enum: [read_only, read_write] }
+                permission: { type: string, enum: [read_only, read_write, custom] }
+                capabilities:
+                  type: array
+                  description: Operacions a concedir quan el permís és `custom`.
+                  items: { $ref: '#/components/schemas/TaskOperationCapability' }
       responses:
         '200':
           description: Redirecció validada amb codi efímer o denegació.
@@ -2913,7 +2942,8 @@ paths:
       responses:
         '200':
           description: Modificada.
-          content: { application/json: { schema: { $ref: '#/components/schemas/Task' } } }
+          content:
+            { application/json: { schema: { $ref: '#/components/schemas/TaskWriteResult' } } }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -4064,26 +4094,53 @@ paths:
       operationId: uploadTaskAttachment
       summary: Adjuntar un fitxer a una tasca
       description: >-
-        **El cos va cru**, no en multipart: el nom a la consulta i els bytes al cos. Així
-        el navegador pot enviar un `File` tal qual, i s'estalvia una dependència per
-        analitzar un format que aquí no aporta res —només hi ha un fitxer per petició.
-        El tipus s'infereix **del contingut** i no de l'extensió (docs/10 §8).
+        Accepta un fitxer per petició. Amb `application/octet-stream`, envia els bytes
+        del fitxer al cos i el nom a la consulta. Amb JSON, envia la URL HTTPS pública
+        del fitxer i el seu nom. Conserva l'identificador de l'adjunt per als reintents.
+        El tipus s'infereix a partir dels bytes (docs/10 §8).
       parameters:
         - { name: id, in: path, required: true, schema: { type: string } }
-        - { name: filename, in: query, required: true, schema: { type: string } }
+        - { name: filename, in: query, schema: { type: string } }
+        - { name: id, in: query, schema: { type: string, format: uuid } }
         - { name: ai_context, in: query, schema: { type: string, enum: ['true', 'false'] } }
       requestBody:
         required: true
         content:
           application/octet-stream: { schema: { type: string, format: binary } }
+          application/json:
+            schema:
+              type: object
+              required: [id, filename, url]
+              additionalProperties: false
+              properties:
+                id: { type: string, format: uuid }
+                filename: { type: string, minLength: 1 }
+                url: { type: string, format: uri }
+                ai_context: { type: boolean }
       responses:
+        '200':
+          description: L'adjunt ja s'havia desat amb aquest identificador.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Attachment' } } }
         '201':
           description: Adjuntat.
           content: { application/json: { schema: { $ref: '#/components/schemas/Attachment' } } }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Conflicte amb un adjunt existent.
+          content:
+            { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
         '413':
           description: Per damunt de `FEMHO_MAX_UPLOAD_MB`.
+          content:
+            { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+        '422':
+          description: Dades de l'adjunt o URL invàlides.
+          content:
+            { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+        '502':
+          description: La descàrrega de l'adjunt ha fallat.
           content:
             { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
 
@@ -5127,6 +5184,7 @@ components:
 
     TaskPatch:
       type: object
+      additionalProperties: false
       description: |
         `null` vol dir "buida'l" i absent vol dir "no el toquis". Per moure-la, `/move`.
       properties:
@@ -5147,6 +5205,15 @@ components:
             `null` la torna a l'espai general de l'àmbit. **L'àmbit no es pot canviar
             editant**: altres membres, altres etiquetes i l'assignació automàtica dels
             àmbits individuals. Un projecte d'un altre àmbit es rebutja amb `422`.
+        task_type_id: { type: [string, 'null'] }
+        assignee_ids:
+          type: array
+          description: Substitueix el conjunt de responsables.
+          items: { type: string }
+        label_ids:
+          type: array
+          description: Substitueix el conjunt d'etiquetes.
+          items: { type: string }
         rrule:
           type: [string, 'null']
           description: 'RFC 5545. `null` deixa de repetir-se.'
@@ -5766,6 +5833,10 @@ components:
         view_count: { type: integer }
         created_at: { type: string, format: date-time }
         revoked_at: { type: [string, 'null'], format: date-time }
+
+    TaskOperationCapability:
+      type: string
+      enum: ['tasks:read', 'tasks:create', 'tasks:move', 'tasks:update', 'tasks:attach']
 
     ExternalAccessSwitches:
       type: object
@@ -6840,6 +6911,83 @@ components:
         task_types_enabled: { type: boolean }
         task_type_required: { type: boolean }
 
+    NamedTaskReference:
+      type: object
+      additionalProperties: false
+      required: [id, name]
+      properties:
+        id: { type: string }
+        name: { type: string }
+
+    TaskContext:
+      type: object
+      additionalProperties: false
+      required: [timezone, scopes]
+      properties:
+        timezone: { type: string, description: Fus del perfil en format IANA. }
+        scopes:
+          type: array
+          items:
+            type: object
+            required: [id, name, writable, task_type_required]
+            properties:
+              id: { type: string }
+              name: { type: string }
+              writable: { type: boolean, description: El rol dins l'àmbit permet escriure. }
+              task_type_required: { type: boolean }
+        details:
+          type: object
+          required: [scope_id, projects, task_types, labels, assignees]
+          properties:
+            scope_id: { type: string }
+            projects:
+              type: array
+              items: { $ref: '#/components/schemas/NamedTaskReference' }
+            task_types:
+              type: array
+              items: { $ref: '#/components/schemas/NamedTaskReference' }
+            labels:
+              type: array
+              items: { $ref: '#/components/schemas/NamedTaskReference' }
+            assignees:
+              type: array
+              items: { $ref: '#/components/schemas/NamedTaskReference' }
+
+    TaskWriteReceipt:
+      type: object
+      additionalProperties: false
+      required: [id, scope_id, status, position, version, completed_at]
+      properties:
+        id: { type: string }
+        scope_id: { type: string }
+        status: { type: string, enum: [inbox, todo, doing, done] }
+        position: { type: string }
+        version: { type: integer }
+        completed_at: { type: [string, 'null'], format: date-time }
+
+    TaskWriteResult:
+      description: Les credencials granulars sense `tasks:read` reben només el rebut.
+      anyOf:
+        - $ref: '#/components/schemas/Task'
+        - $ref: '#/components/schemas/TaskWriteReceipt'
+
+    InitialTaskChecklist:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1 }
+        show_completed_inline: { type: boolean }
+        items:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [text]
+            properties:
+              text: { type: string, minLength: 1 }
+              done: { type: boolean }
+
     TaskInput:
       type: object
       additionalProperties: false
@@ -6849,13 +6997,21 @@ components:
         scope_id:
           type: string
           description: Obligatori. Mai una tasca sense àmbit (docs/01 §4).
-        project_id: { type: string }
+        project_id: { type: [string, 'null'] }
         title: { type: string, minLength: 1 }
         description: { type: string }
         status:
           type: string
           enum: [inbox, todo, doing, done]
           default: inbox
+        completed_at:
+          description: |
+            Data al fus del perfil o instant amb zona horària. Només és vàlid si la
+            tasca neix a Fet (`done`). Si s'omet, es fa servir l'hora del servidor.
+            Una tasca recurrent creada així es desa com a registre històric.
+          anyOf:
+            - { type: string, format: date }
+            - { type: string, format: date-time }
         position: { type: string }
         due_date: { type: string }
         due_time: { type: string }
@@ -6868,6 +7024,32 @@ components:
           type: array
           items: { type: string }
         task_type_id: { type: string }
+        label_ids:
+          type: array
+          items: { type: string }
+        subtasks:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [title]
+            properties:
+              title: { type: string, minLength: 1 }
+              done: { type: boolean }
+              checklists:
+                type: array
+                items: { $ref: '#/components/schemas/InitialTaskChecklist' }
+        checklists:
+          type: array
+          items: { $ref: '#/components/schemas/InitialTaskChecklist' }
+        comments:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [body]
+            properties:
+              body: { type: string, minLength: 1 }
         source_event:
           type: object
           additionalProperties: false

@@ -11,6 +11,10 @@ incloses les dels seus agents IA, sense tancar les sessions de la web ni d'Andro
 - **Només lectura:** consultar tasques, esdeveniments, projectes i àmbits autoritzats.
 - **Lectura i escriptura:** també crear, editar, moure i completar tasques. No inclou
   eliminar-les. Les eliminacions REST de tasques i esdeveniments són un permís avançat.
+- **Personalitzat:** tria **Consultar**, **Crear**, **Moure i completar**, **Editar** i
+  **Adjuntar fitxers** per separat. Els permisos s'apliquen als àmbits seleccionats i al
+  rol que hi tens. El consentiment OAuth mostra les operacions de lectura i escriptura
+  que ha demanat el client. Les autoritzacions existents conserven els seus permisos.
 - **Canals:** API, MCP o tots dos, en els tokens manuals. OAuth concedeix només MCP.
 - **Caducitat:** els tokens manuals proposen 90 dies, editables. El secret es mostra
   només una vegada; al servidor només se'n guarda el hash.
@@ -26,6 +30,57 @@ La llista mostra l'estat, l'últim ús, la caducitat, els canals i els àmbits. 
 immediat. Editar un token manual conserva el secret i aplica els nous límits a la
 petició següent. Per canviar una autorització OAuth, revoca-la i torna a connectar:
 cal consentiment nou. L'historial identifica el canal, el nom i l'ID de la credencial.
+
+## Enviar una tasca des d'un LLM
+
+1. Tria **Crear** i els àmbits on vols rebre tasques. Afegeix **Consultar** per trobar
+   tasques pel títol, **Moure i completar** per canviar-ne la columna, i **Adjuntar
+   fitxers** si vols incloure documents.
+2. Crida `get_task_context` per obtenir els àmbits. Amb `scope_id` també torna els
+   identificadors de projectes, tipologies, etiquetes i responsables. Per REST, fes
+   `GET /api/v1/task-context?scope_id=…`.
+3. Envia aquest tipus de càrrega amb `create_task` o `POST /api/v1/tasks`, substituint
+   els identificadors pels de la teva instància. Genera `id` al client i reutilitza'l
+   en els reintents.
+
+```json
+{
+  "id": "01955f3c-3c04-7d4e-996b-644400000001",
+  "scope_id": "ÀMBIT",
+  "title": "Preparar el dossier",
+  "description": "Incloure el resum i adjuntar les notes originals.",
+  "project_id": "PROJECTE",
+  "task_type_id": "TIPOLOGIA",
+  "assignee_ids": ["PERSONA"],
+  "label_ids": ["ETIQUETA"],
+  "status": "todo",
+  "due_date": "2027-01-15",
+  "due_time": "10:30",
+  "deadline": "2027-01-15T17:00:00+01:00",
+  "ai_mode": "assisted",
+  "ai_instructions": "Comprova que el resum inclogui els acords.",
+  "subtasks": [{ "title": "Recollir les notes" }],
+  "checklists": [{ "name": "Lliurament", "items": [{ "text": "Revisar el resum" }] }],
+  "comments": [{ "body": "Tasca preparada a partir de les notes de la reunió." }]
+}
+```
+
+Les columnes són Inbox (`inbox`), Per fer (`todo`), Fent (`doing`) i Fet (`done`). Sense
+`status`, la tasca entra a Inbox. Amb `done`, `completed_at` accepta una data del perfil
+o un instant amb zona horària. Si l'ometes, el servidor fa servir l'hora actual. Una
+tasca recurrent importada a Fet es desa com a registre històric.
+
+Per moure una tasca, crida `move_task` amb `task_id`, `status` i, opcionalment,
+`expected_version` del rebut. Per REST, envia el cos a `POST /api/v1/tasks/{id}/move`
+amb l'identificador a la ruta. La tasca queda al final de la columna si omets la posició.
+
+Amb la tasca desada, crida `add_task_attachment` per a cada fitxer amb `task_id`, un
+`id` UUID propi del fitxer, `filename` i un de `content_base64` o `url`. El contingut
+Base64 a MCP té un màxim d'1 MiB. La URL ha de ser HTTPS i accessible des de Fem-ho.
+Per REST, `POST /api/v1/tasks/{id}/attachments` accepta JSON amb `id`, `filename`,
+`url`, o els bytes del fitxer com a `application/octet-stream` amb `id` i `filename`
+a la consulta. Les pujades REST i les descàrregues per URL tenen el límit configurat
+a la instància. Conserva l'identificador si has de reintentar un fitxer.
 
 ## ChatGPT
 
@@ -111,7 +166,7 @@ consulten a cada petició, també abans de renovar.
 ### Verificar sense modificar dades
 
 Ajustos ofereix **Comprovar connexió MCP** després de crear un token: executa `whoami`
-i `list_tasks`, i mostra els àmbits i permisos efectius. Per a OAuth, fes la mateixa
+i, si es pot consultar tasques, `list_tasks`. Mostra els àmbits i permisos efectius. Per a OAuth, fes la mateixa
 comprovació des del client després del consentiment. Un `401` indica credencial
 invàlida o caducada; un `403`, canal apagat o permís insuficient. Si apareix una URL
 incorrecta al descobriment, revisa `FEMHO_BASE_URL`.

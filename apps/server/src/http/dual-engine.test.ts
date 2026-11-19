@@ -149,6 +149,89 @@ describe.each(MOTORS)('motor $engine', (motor) => {
     });
   });
 
+  it('lliura la tasca històrica amb els seus fills i no els duplica en un reintent', async () => {
+    await sql`UPDATE users SET timezone = 'Europe/Madrid' WHERE id = ${userId}`.execute(conn.db);
+    const label = await api('POST', '/api/v1/labels', { scope_id: scopeId, name: 'Documentada' });
+    expect(label.statusCode, label.body).toBe(201);
+    const labelId = label.json<{ id: string }>().id;
+    const context = await api('GET', `/api/v1/task-context?scope_id=${scopeId}`);
+    expect(context.statusCode, context.body).toBe(200);
+    expect(context.json()).toMatchObject({
+      timezone: 'Europe/Madrid',
+      details: { scope_id: scopeId, assignees: [{ id: userId }], labels: [{ id: labelId }] },
+    });
+    const id = uuidv7();
+    const input = {
+      id,
+      scope_id: scopeId,
+      title: 'Acta finalitzada',
+      description: 'Descripció completa',
+      status: 'done',
+      completed_at: '2024-05-11',
+      due_date: '2024-05-11',
+      due_time: '12:30',
+      rrule: 'FREQ=DAILY',
+      assignee_ids: [userId, userId],
+      label_ids: [labelId],
+      checklists: [{ name: 'A la tasca', items: [{ text: 'Revisat', done: true }] }],
+      subtasks: [
+        {
+          title: 'Redacció',
+          done: true,
+          checklists: [{ name: 'A la subtasca', items: [{ text: 'Esborrany' }] }],
+        },
+      ],
+      comments: [{ body: 'Verificat' }],
+    };
+
+    const created = await api('POST', '/api/v1/tasks', input);
+    expect(created.statusCode, created.body).toBe(201);
+    expect(created.json()).toMatchObject({
+      id,
+      completed_at: '2024-05-10T22:00:00.000Z',
+      label_ids: [labelId],
+      assignee_ids: [userId],
+      status: 'done',
+      progress: { total: 3, done: 2, lists: 3 },
+    });
+    expect((await api('POST', '/api/v1/tasks', input)).statusCode).toBe(200);
+    const subs = (await api('GET', `/api/v1/tasks/${id}/subtasks`)).json<{ id: string }[]>();
+    expect(subs).toEqual([expect.objectContaining({ title: 'Redacció', done: true })]);
+    const lists = (await api('GET', `/api/v1/tasks/${id}/checklists`)).json();
+    expect(lists).toMatchObject([
+      { name: 'A la tasca', subtask_id: null, items: [{ text: 'Revisat', done: true }] },
+      {
+        name: 'A la subtasca',
+        subtask_id: subs[0]!.id,
+        items: [{ text: 'Esborrany', done: false }],
+      },
+    ]);
+    const comments = (await api('GET', `/api/v1/tasks/${id}/comments`)).json();
+    expect(comments).toEqual([expect.objectContaining({ body: 'Verificat', author_id: userId })]);
+    expect(
+      (await sql`SELECT id FROM tasks WHERE recurrence_parent_id = ${id}`.execute(conn.db)).rows,
+    ).toHaveLength(0);
+  });
+
+  it('desfà la creació sencera si una escriptura dels fills falla', async () => {
+    const id = uuidv7();
+    const failed = await api('POST', '/api/v1/tasks', {
+      id,
+      title: 'Lliurament incomplet',
+      scope_id: scopeId,
+      subtasks: [{ title: 'Aquesta arriba a inserir-se' }],
+      comments: [{ body: '   ' }],
+    });
+    expect(failed.statusCode, failed.body).toBe(422);
+    expect((await api('GET', `/api/v1/tasks/${id}`)).statusCode).toBe(404);
+    expect(
+      (await sql`SELECT id FROM subtasks WHERE task_id = ${id}`.execute(conn.db)).rows,
+    ).toHaveLength(0);
+    expect(
+      (await sql`SELECT id FROM activity_log WHERE entity_id = ${id}`.execute(conn.db)).rows,
+    ).toHaveLength(0);
+  });
+
   describe('llistes senzilles', () => {
     it('crear una llista i un ítem no peta a cap motor', async () => {
       const taskId = await novaTasca('Amb llista');

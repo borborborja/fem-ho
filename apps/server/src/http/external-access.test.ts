@@ -98,7 +98,7 @@ async function token(capabilities = MCP_READ, scope_ids = [personal], channels =
   expect(response.statusCode, response.body).toBe(201);
   return response.json() as { token: string; summary: { id: string } };
 }
-async function oauth(write = false) {
+async function oauth(write: boolean | 'femho:write' = false) {
   const registration = await app.inject({
     method: 'POST',
     url: '/oauth/register',
@@ -119,7 +119,7 @@ async function oauth(write = false) {
     response_type: 'code',
     code_challenge_method: 'S256',
     code_challenge: createHash('sha256').update(verifier).digest('base64url'),
-    scope: write ? 'femho:read femho:write' : 'femho:read',
+    scope: typeof write === 'string' ? write : write ? 'femho:read femho:write' : 'femho:read',
   });
   const start = await app.inject({ method: 'GET', url: `/oauth/authorize?${query}` });
   expect(start.statusCode, start.body).toBe(302);
@@ -148,6 +148,50 @@ async function oauth(write = false) {
 }
 
 describe('permisos externs', () => {
+  it('separa crear, moure i editar amb tokens manuals i conserva la selecció en canviar el nom', async () => {
+    const create = await token(['tasks:create']);
+    const move = await token(['tasks:move']);
+    const update = await token(['tasks:update']);
+    const created = await request(
+      'POST',
+      '/api/v1/tasks',
+      { title: 'Tasca privada', description: 'Detall privat', scope_id: personal },
+      create.token,
+    );
+    expect(created.statusCode, created.body).toBe(201);
+    const taskUrl = `/api/v1/tasks/${created.json().id}`;
+    const denied = async (
+      method: 'GET' | 'PATCH' | 'POST' | 'DELETE',
+      url: string,
+      input?: object,
+      grant = create.token,
+    ) => expect((await request(method, url, input, grant)).statusCode).toBe(403);
+    await denied('GET', taskUrl);
+    await denied('PATCH', taskUrl, { title: 'Rebutjat' });
+    await denied('POST', `${taskUrl}/move`, { status: 'todo' });
+    await denied('DELETE', taskUrl);
+    await denied('POST', '/api/v1/tasks', { title: 'Rebutjat', scope_id: work });
+
+    const moved = await request('POST', `${taskUrl}/move`, { status: 'todo' }, move.token);
+    expect(moved.statusCode, moved.body).toBe(200);
+    expect(moved.json().status).toBe('todo');
+    expect(moved.body).not.toContain('Detall privat');
+    await denied('POST', '/api/v1/tasks', { title: 'Rebutjat', scope_id: personal }, move.token);
+    await denied('PATCH', taskUrl, { title: 'Rebutjat' }, move.token);
+
+    const edited = await request('PATCH', taskUrl, { title: 'Editat' }, update.token);
+    expect(edited.statusCode, edited.body).toBe(200);
+    await denied('POST', `${taskUrl}/move`, { status: 'done' }, update.token);
+
+    const renamed = await request('PATCH', `/api/v1/tokens/${move.summary.id}`, {
+      name: 'Moviments',
+    });
+    expect(renamed.json().capabilities).toEqual(['tasks:move']);
+    expect(
+      (await request('POST', `${taskUrl}/move`, { status: 'doing' }, move.token)).statusCode,
+    ).toBe(200);
+    await denied('GET', taskUrl, undefined, move.token);
+  });
   it('el compte nou neix amb API i MCP apagats', async () => {
     const res = await app.inject({
       method: 'POST',
@@ -280,6 +324,81 @@ describe('permisos externs', () => {
       future.json().id,
     );
   });
+});
+
+it('OAuth publica només les operacions consentides i les conserva en renovar', async () => {
+  const flow = await oauth('femho:write');
+  const consentUrl = `/api/v1/mcp/authorization/${flow.id}`;
+  expect((await request('GET', consentUrl)).json()).toMatchObject({
+    read_requested: false,
+    write_requested: true,
+  });
+  for (const capabilities of [
+    ['tasks:read'],
+    ['tasks:write'],
+    ['tasks:create', 'tasks:delete'],
+    [],
+  ]) {
+    const rejected = await request('POST', consentUrl, {
+      approve: true,
+      permission: 'custom',
+      scope_ids: [personal],
+      capabilities,
+    });
+    expect(rejected.statusCode, rejected.body).toBe(400);
+  }
+  const permitted = ['tasks:create', 'tasks:attach'];
+  const approved = await request('POST', consentUrl, {
+    approve: true,
+    permission: 'custom',
+    scope_ids: [personal],
+    capabilities: permitted,
+  });
+  expect(approved.statusCode, approved.body).toBe(200);
+  const issued = await flow.exchange(
+    new URL(approved.json().redirect_url).searchParams.get('code')!,
+  );
+  expect(issued.statusCode, issued.body).toBe(200);
+  expect(issued.json().scope).toBe('femho:write');
+
+  const renewed = await app.inject({
+    method: 'POST',
+    url: '/oauth/token',
+    payload: {
+      grant_type: 'refresh_token',
+      client_id: flow.client,
+      resource,
+      refresh_token: issued.json().refresh_token,
+    },
+  });
+  expect(renewed.statusCode, renewed.body).toBe(200);
+  expect(renewed.json().scope).toBe('femho:write');
+  const credential = renewed.json().access_token as string;
+  expect((await request('GET', '/api/v1/tasks', undefined, credential)).statusCode).toBe(401);
+  const client = new Client({ name: 'OAuth custom client', version: '1' });
+  await client.connect(
+    new StreamableHTTPClientTransport(new URL(`${address}/mcp`), {
+      requestInit: { headers: { Authorization: `Bearer ${credential}` } },
+    }) as never,
+  );
+  try {
+    const { tools } = await client.listTools();
+    const visible = tools.map((tool) => tool.name);
+    expect(visible).toContain('create_task');
+    expect(visible).toContain('add_task_attachment');
+    expect(visible).not.toContain('list_tasks');
+    expect(visible).not.toContain('move_task');
+    expect(visible).not.toContain('update_task');
+    const identity = await client.callTool({ name: 'whoami', arguments: {} });
+    expect(identity.content).toMatchObject([{ type: 'text' }]);
+    const { text } = (identity.content as Array<{ text: string }>)[0]!;
+    expect(JSON.parse(text)).toMatchObject({
+      capabilities: permitted.sort(),
+      scope_ids: [personal],
+    });
+  } finally {
+    await client.close();
+  }
 });
 
 describe('OAuth MCP', () => {
@@ -555,6 +674,21 @@ it('les credencials IA poden acotar àmbits i permisos però no escalar-los', as
     capabilities: ['tasks:read', 'scopes:read'],
   });
   expect(credential.statusCode, credential.body).toBe(201);
+  const mover = await request('POST', `/api/v1/ai/agents/${id}/credentials`, {
+    name: 'Move personal',
+    scope_ids: [personal],
+    channels: ['mcp'],
+    capabilities: ['tasks:move'],
+  });
+  expect(mover.statusCode, mover.body).toBe(201);
+  expect(mover.json().summary.capabilities).toEqual(['tasks:move']);
+  const attacher = await request('POST', `/api/v1/ai/agents/${id}/credentials`, {
+    name: 'Attachments',
+    scope_ids: [personal],
+    channels: ['mcp'],
+    capabilities: ['tasks:attach'],
+  });
+  expect(attacher.statusCode, attacher.body).toBe(422);
   expect(
     (await request('GET', '/api/v1/scopes', undefined, credential.json().token)).body,
   ).not.toContain(work);

@@ -20,16 +20,20 @@
  */
 
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { sql } from 'kysely';
-import { v7 as uuidv7 } from 'uuid';
-import type { AuditContext } from '../audit/audited-transaction.js';
+import { v7 as uuidv7, validate as validUuid } from 'uuid';
+import { auditedTransaction, type AuditContext } from '../audit/audited-transaction.js';
+import { ResponseTooLargeError, safeFetch } from '../dav/fetch-safe.js';
+import { dbBool, isTrue } from '../db/bool.js';
+import type { Connection } from '../db/connection.js';
 import type { MigrationDb } from '../db/migration-db.js';
-import { PolicyError, missingCapability, notFound } from '../policy/errors.js';
+import { PolicyError, missingCapability, notFound, unauthenticated } from '../policy/errors.js';
 import { hasCapability, type Principal } from '../policy/principal.js';
 import { visibleCalendarIds } from '../policy/calendar-visibility.js';
-import { assertScopeAccess } from './scopes.js';
+import { assertScopeAccess, assertScopeRole } from './scopes.js';
+import { assertWritable } from './tasks.js';
 
 export interface AttachmentRow {
   id: string;
@@ -146,6 +150,228 @@ export interface UploadInput {
   isAiContext?: boolean | undefined;
 }
 
+export type TaskAttachmentInput = {
+  taskId: string;
+  id?: string | undefined;
+  filename: string;
+  isAiContext?: boolean | undefined;
+} & ({ data: Uint8Array } | { contentBase64: string } | { url: string });
+
+interface TaskAttachmentOptions {
+  dataDir: string;
+  maxUploadBytes: number;
+  reauthorize?: () => Promise<Principal>;
+}
+
+export const MCP_ATTACHMENT_MAX_BYTES = 1_048_576;
+
+function attachmentTooLarge(maxBytes: number): PolicyError {
+  const limitMb = maxBytes / MCP_ATTACHMENT_MAX_BYTES;
+  return new PolicyError(
+    'attachment-too-big',
+    'Attachment too large',
+    413,
+    `The file is larger than the ${String(limitMb)} MB limit.`,
+    { limit_mb: limitMb },
+  );
+}
+
+async function taskUploadScope(
+  db: MigrationDb,
+  principal: Principal,
+  taskId: string,
+  now: string,
+): Promise<string> {
+  if (!hasCapability(principal, 'tasks:attach') && !hasCapability(principal, 'attachments:write'))
+    throw missingCapability('tasks:attach');
+
+  const {
+    rows: [task],
+  } = await sql<{ id: string; scope_id: string; ai_mode: 'manual' | 'assisted' | 'delegated' }>`
+    SELECT id, scope_id, ai_mode FROM tasks WHERE id = ${taskId} AND deleted_at IS NULL
+  `.execute(db);
+  if (task === undefined) throw notFound('task', taskId);
+
+  await assertScopeRole(db, principal, task.scope_id, 'content');
+  if (principal.kind === 'agent') await assertWritable({ tx: db, now }, principal, task, 'edit');
+  return task.scope_id;
+}
+
+async function findTaskAttachmentReplay(
+  db: MigrationDb,
+  userId: string,
+  scopeId: string,
+  id: string,
+  input: TaskAttachmentInput,
+): Promise<AttachmentRow | undefined> {
+  const result = await sql<
+    AttachmentRow & { deleted_at: string | null; storage_path: string | null }
+  >`
+    SELECT ${COLUMNS}, deleted_at, storage_path FROM attachments WHERE id = ${id}
+  `.execute(db);
+  const row = result.rows[0];
+  if (row === undefined) return undefined;
+  if (
+    row.deleted_at !== null ||
+    row.storage_path === null ||
+    row.source !== 'upload' ||
+    row.uploaded_by !== userId ||
+    row.task_id !== input.taskId ||
+    row.scope_id !== scopeId ||
+    row.filename !== safeFilename(input.filename) ||
+    isTrue(row.is_ai_context) !== (input.isAiContext === true)
+  ) {
+    throw new PolicyError(
+      'attachment-id-conflict',
+      'Attachment identifier is already used',
+      409,
+      'Reuse an identifier only to retry the same file upload.',
+    );
+  }
+  const { deleted_at: _deleted, storage_path: _path, ...attachment } = row;
+  return attachment;
+}
+
+async function taskAttachmentData(
+  input: TaskAttachmentInput,
+  maxBytes: number,
+): Promise<Uint8Array> {
+  if ('data' in input) {
+    if (input.data.byteLength > maxBytes) throw attachmentTooLarge(maxBytes);
+    return input.data;
+  }
+  if ('contentBase64' in input) {
+    const limit = Math.min(maxBytes, MCP_ATTACHMENT_MAX_BYTES);
+    if (input.contentBase64.length > Math.ceil(limit / 3) * 4) throw attachmentTooLarge(limit);
+    const bytes = Buffer.from(input.contentBase64, 'base64');
+    if (bytes.toString('base64') !== input.contentBase64) {
+      throw new PolicyError(
+        'invalid-attachment-base64',
+        'Invalid Base64',
+        422,
+        'Send standard Base64 file content.',
+      );
+    }
+    if (bytes.byteLength > limit) throw attachmentTooLarge(limit);
+    return bytes;
+  }
+
+  let url: URL | undefined;
+  try {
+    url = input.url.length <= 8192 ? new URL(input.url) : undefined;
+  } catch {
+    // La URL pot tenir una signatura i no ha de sortir a l’error.
+  }
+  if (url?.protocol !== 'https:' || url.username !== '' || url.password !== '') {
+    throw new PolicyError(
+      'invalid-attachment-url',
+      'Invalid download URL',
+      422,
+      'Provide a public HTTPS download URL.',
+    );
+  }
+
+  try {
+    const response = await safeFetch(url.href, { maxBytes });
+    const encoding = response.headers.get('content-encoding');
+    if (response.status === 200 && (encoding === null || encoding === 'identity')) {
+      return response.bytes;
+    }
+  } catch (error) {
+    if (error instanceof ResponseTooLargeError) throw attachmentTooLarge(maxBytes);
+    // Ni els errors del destí ni les capçaleres es reenvien al client.
+  }
+  throw new PolicyError(
+    'attachment-download-failed',
+    'Download failed',
+    502,
+    'The file could not be downloaded. Retry with a working public HTTPS link.',
+  );
+}
+
+export async function deliverTaskAttachment(
+  connection: Connection,
+  principal: Principal,
+  input: TaskAttachmentInput,
+  options: TaskAttachmentOptions,
+): Promise<{ attachment: AttachmentRow; created: boolean }> {
+  const { db, engine } = connection;
+  const id = input.id ?? uuidv7();
+  if (!validUuid(id)) {
+    throw new PolicyError(
+      'invalid-attachment-id',
+      'Invalid attachment identifier',
+      422,
+      'Use a UUID for the attachment identifier.',
+    );
+  }
+  const scopeId = await taskUploadScope(db, principal, input.taskId, new Date().toISOString());
+  if (input.id !== undefined) {
+    const existing = await findTaskAttachmentReplay(db, principal.userId, scopeId, id, input);
+    if (existing !== undefined) return { attachment: existing, created: false };
+  }
+  const data = await taskAttachmentData(input, options.maxUploadBytes);
+  const writer = 'url' in input && options.reauthorize ? await options.reauthorize() : principal;
+  if (writer.userId !== principal.userId || writer.credentialId !== principal.credentialId)
+    throw unauthenticated('The upload credential changed.');
+
+  let storedPath: string | undefined;
+  try {
+    return await auditedTransaction(
+      db,
+      writer,
+      async (ctx) => {
+        const currentScope = await taskUploadScope(ctx.tx, writer, input.taskId, ctx.now);
+        // Nom al disc independent de l’identificador de reintent. Un intent perdedor
+        // o avortat mai sobreescriu els bytes que ja ha confirmat un altre procés.
+        const storageId = uuidv7();
+        const relative = pathFor(storageId, ctx.now);
+        const row = await insertAttachment(
+          ctx,
+          writer,
+          { ...input, data },
+          currentScope,
+          id,
+          relative,
+        );
+        if (row === undefined) {
+          const existing = await findTaskAttachmentReplay(
+            ctx.tx,
+            writer.userId,
+            currentScope,
+            id,
+            input,
+          );
+          if (existing === undefined) throw new Error('Attachment insert lost its existing row.');
+          ctx.noChange();
+          return { attachment: existing, created: false };
+        }
+        storedPath = relative;
+        await storeAttachment(storageId, data, ctx.now, options.dataDir);
+        return { attachment: row, created: true };
+      },
+      { engine },
+    );
+  } catch (error) {
+    if (storedPath !== undefined) {
+      try {
+        await rm(join(options.dataDir, storedPath), { force: true });
+      } catch (cleanupError) {
+        if ((cleanupError as NodeJS.ErrnoException).code !== 'ENOTDIR') {
+          throw new AggregateError(
+            [error, cleanupError],
+            'Attachment storage and cleanup failed.',
+            {
+              cause: cleanupError,
+            },
+          );
+        }
+      }
+    }
+    throw error;
+  }
+}
+
 /**
  * De quin àmbit és l'adjunt.
  *
@@ -201,13 +427,7 @@ export async function uploadAttachment(
    * capa d'HTTP. Aquí perquè el sync i el MCP no hi passen.
    */
   if (input.data.length > maxBytes) {
-    throw new PolicyError(
-      'attachment-too-big',
-      'Attachment too large',
-      413,
-      `The file is larger than the ${String(Math.round(maxBytes / 1_048_576))} MB limit.`,
-      { limit_mb: Math.round(maxBytes / 1_048_576) },
-    );
+    throw attachmentTooLarge(maxBytes);
   }
 
   const { scopeId, calendarId } = await scopeOfParent(ctx.tx, input.taskId, input.eventId);
@@ -216,29 +436,41 @@ export async function uploadAttachment(
 
   const id = uuidv7();
   const { path: relative } = await storeAttachment(id, input.data, ctx.now, dataDir);
+  const row = await insertAttachment(ctx, principal, input, scopeId, id, relative);
+  if (row === undefined) throw new Error('A generated attachment identifier already exists.');
+  return row;
+}
 
-  await sql`
+async function insertAttachment(
+  ctx: AuditContext,
+  principal: Principal,
+  input: UploadInput,
+  scopeId: string,
+  id: string,
+  relative: string,
+): Promise<AttachmentRow | undefined> {
+  const filename = safeFilename(input.filename);
+  const found = await sql<AttachmentRow>`
     INSERT INTO attachments (id, task_id, event_id, scope_id, filename, mime_type, size_bytes,
                              storage_path, source, is_ai_context, uploaded_by,
                              created_at, updated_at, version)
     VALUES (${id}, ${input.taskId ?? null}, ${input.eventId ?? null}, ${scopeId},
-            ${safeFilename(input.filename)}, ${sniffMime(input.data)}, ${input.data.length},
-            ${relative}, 'upload', ${input.isAiContext === true ? 1 : 0}, ${principal.userId},
+            ${filename}, ${sniffMime(input.data)}, ${input.data.length},
+            ${relative}, 'upload', ${dbBool(input.isAiContext === true)}, ${principal.userId},
             ${ctx.now}, ${ctx.now}, 1)
+    ON CONFLICT (id) DO NOTHING RETURNING ${COLUMNS}
   `.execute(ctx.tx);
+  const row = found.rows[0];
+  if (row === undefined) return undefined;
 
   ctx.record({
     entityType: 'attachment',
     entityId: id,
     scopeId,
     verb: 'created',
-    changes: { filename: { from: null, to: safeFilename(input.filename) } },
+    changes: { filename: { from: null, to: filename } },
   });
-
-  const found = await sql<AttachmentRow>`
-    SELECT ${COLUMNS} FROM attachments WHERE id = ${id}
-  `.execute(ctx.tx);
-  return found.rows[0]!;
+  return row;
 }
 
 /**

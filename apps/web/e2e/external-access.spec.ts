@@ -28,14 +28,25 @@ for (const theme of ['light', 'dark'] as const) {
     await page.getByTestId('token-name').fill('Personal de prova');
     await expect(page.getByTestId('token-create')).toBeDisabled();
     await page.getByLabel('Personal MCP', { exact: true }).check();
+    await page.getByLabel('Consultar tasques', { exact: true }).uncheck();
+    await expect(page.getByTestId('token-create')).toBeDisabled();
+    await page.getByLabel('Crear tasques', { exact: true }).check();
     await page.getByTestId('token-create').click();
     const secret = page.getByTestId('token-value');
     await expect(secret).toBeVisible();
     await page.getByRole('button', { name: 'Comprovar connexió MCP' }).click();
     await expect(page.getByTestId('mcp-verified')).toContainText('Connexió verificada');
     await expect(page.getByTestId('mcp-verified')).toContainText('Personal MCP');
+    await expect(page.getByTestId('mcp-verified')).toContainText('Crear tasques');
     await page.getByRole('button', { name: 'Ja he desat el token' }).click();
     await expect(secret).toHaveCount(0);
+    const credential = page.getByRole('article').filter({ hasText: 'Personal de prova' });
+    await credential.getByRole('button', { name: 'Editar', exact: true }).click();
+    await expect(page.getByLabel('Consultar tasques', { exact: true })).not.toBeChecked();
+    await expect(page.getByLabel('Crear tasques', { exact: true })).toBeChecked();
+    await page.getByTestId('token-name').fill('Tasques de prova');
+    await page.getByTestId('token-create').click();
+    await expect(page.getByRole('article').filter({ hasText: 'Tasques de prova' })).toBeVisible();
     await page.screenshot({ path: `/tmp/femho-mcp-settings-${theme}.png`, fullPage: true });
     await page.setViewportSize({ width: 390, height: 844 });
     await expect
@@ -68,6 +79,9 @@ for (const theme of ['light', 'dark'] as const) {
     await expect(page.getByRole('heading', { name: 'Autoritzar connexió a Fem-ho' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Autoritzar', exact: true })).toBeDisabled();
     await page.getByLabel('Personal MCP', { exact: true }).check();
+    await page.getByLabel('Consultar tasques', { exact: true }).uncheck();
+    await expect(page.getByRole('button', { name: 'Autoritzar', exact: true })).toBeDisabled();
+    await page.getByLabel('Moure tasques', { exact: true }).check();
     await page.screenshot({ path: `/tmp/femho-mcp-consent-${theme}.png`, fullPage: true });
     await page.route('**/oauth-test-callback?**', (route) =>
       route.fulfill({ contentType: 'text/plain', body: 'Callback' }),
@@ -87,13 +101,15 @@ for (const theme of ['light', 'dark'] as const) {
       },
     });
     expect(issued.status()).toBe(200);
-    expect((await issued.json()).scope).toBe('femho:read');
+    expect((await issued.json()).scope).toBe('femho:write');
     const grants = await page.request.get('/api/v1/tokens', { headers });
-    const grant = (await grants.json()).data.find(
-      (g: { name: string }) => g.name === 'Client navegador',
-    );
+    const all = (await grants.json()).data;
+    const grant = all.find((g: { name: string }) => g.name === 'Client navegador');
     expect(grant.scope_ids).toEqual([scopeId]);
     expect(grant.channels).toEqual(['mcp']);
-    expect(grant.capabilities).not.toContain('tasks:write');
+    expect(grant.capabilities).toEqual(['tasks:move']);
+    expect(all.find((g: { name: string }) => g.name === 'Tasques de prova').capabilities).toEqual([
+      'tasks:create',
+    ]);
   });
 }

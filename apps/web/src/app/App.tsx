@@ -126,8 +126,10 @@ function AppRoute() {
   if (state.status === 'loading') return <LoadingScreen />;
 
   if (state.status === 'anonymous') return <LoginScreen />;
-  if (route.path === '/connect/mcp')
-    return <McpConsentScreen requestId={route.query.get('request') ?? ''} />;
+  if (route.path === '/connect/mcp') {
+    const requestId = route.query.get('request') ?? '';
+    return <McpConsentScreen key={requestId} requestId={requestId} />;
+  }
   return (
     <ToastProvider>
       <BoardSyncProvider key={state.data.profile.id} userId={state.data.profile.id}>

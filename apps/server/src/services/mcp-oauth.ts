@@ -5,6 +5,7 @@ import type { MigrationDb } from '../db/migration-db.js';
 import type { AuditContext } from '../audit/audited-transaction.js';
 import type { Principal } from '../policy/principal.js';
 import { hashToken, tokenHashEquals } from '../auth/tokens.js';
+import { TASK_OPERATIONS } from '../policy/capabilities.js';
 import { PolicyError, unauthenticated } from '../policy/errors.js';
 import { resolveTokenId } from '../policy/resolve.js';
 import { createToken } from './tokens.js';
@@ -28,6 +29,35 @@ export const MCP_WRITE = [
   'comments:write',
   'attachments:write',
 ];
+
+function consentCapabilities(input: Record<string, unknown>, requestedScope: string): string[] {
+  const requested = new Set(requestedScope.split(/\s+/));
+  if (input.permission === 'read_only' && requested.has('femho:read')) return MCP_READ;
+  if (
+    input.permission === 'read_write' &&
+    requested.has('femho:read') &&
+    requested.has('femho:write')
+  )
+    return MCP_WRITE;
+
+  if (input.permission !== 'custom') throw oauthError('Client did not request these permissions.');
+  const { capabilities } = input;
+  if (
+    !Array.isArray(capabilities) ||
+    capabilities.length === 0 ||
+    capabilities.some(
+      (capability) => !TASK_OPERATIONS.some((operation) => operation === capability),
+    )
+  )
+    throw oauthError('Select one or more task operations.');
+  if (
+    capabilities.some(
+      (capability) => !requested.has(capability === 'tasks:read' ? 'femho:read' : 'femho:write'),
+    )
+  )
+    throw oauthError('Client did not request these permissions.');
+  return [...new Set(capabilities as string[])];
+}
 const secret = () => randomBytes(32).toString('base64url');
 const expires = (seconds: number) => new Date(Date.now() + seconds * 1000).toISOString();
 export const oauthError = (detail = 'Invalid OAuth request.') =>
@@ -197,17 +227,15 @@ export async function consent(
     ctx.record({ entityType: 'oauth_request', entityId: id, verb: 'revoked' });
     return { redirect_url: redirect.href };
   }
-  if (input.approve !== true || !['read_only', 'read_write'].includes(String(input.permission)))
-    throw oauthError();
+  if (input.approve !== true) throw oauthError();
   await assertExternalChannel(ctx.tx, principal.userId, 'mcp', ['mcp']);
-  if (input.permission === 'read_write' && !request.scope.split(/\s+/).includes('femho:write'))
-    throw oauthError('Client did not request write permission.');
+  const capabilities = consentCapabilities(input, request.scope);
   const client = await clientOf(ctx.tx, request.client_id);
   const created = await createToken(ctx, principal, {
     name: client.name,
     channels: ['mcp'],
     credential_type: 'oauth',
-    capabilities: input.permission === 'read_write' ? MCP_WRITE : MCP_READ,
+    capabilities,
     scope_ids: Array.isArray(input.scope_ids) ? (input.scope_ids as string[]) : [],
   });
   const code = secret();
@@ -247,6 +275,17 @@ async function issue(
   const token = await sql<{
     capabilities: string;
   }>`SELECT capabilities FROM api_tokens WHERE id = ${tokenId}`.execute(ctx.tx);
+  const capabilities = JSON.parse(token.rows[0]!.capabilities) as string[];
+  const scopes = [];
+  if (capabilities.some((capability) => capability.endsWith(':read'))) scopes.push('femho:read');
+  if (
+    capabilities.some(
+      (capability) =>
+        capability.endsWith(':write') ||
+        TASK_OPERATIONS.some((operation) => operation === capability && operation !== 'tasks:read'),
+    )
+  )
+    scopes.push('femho:write');
   ctx.record({
     entityType: 'oauth_session',
     entityId: id,
@@ -257,9 +296,7 @@ async function issue(
     token_type: 'Bearer',
     expires_in: 900,
     refresh_token: refresh,
-    scope: (JSON.parse(token.rows[0]!.capabilities) as string[]).some((c) => c.endsWith(':write'))
-      ? 'femho:read femho:write'
-      : 'femho:read',
+    scope: scopes.join(' '),
   };
 }
 

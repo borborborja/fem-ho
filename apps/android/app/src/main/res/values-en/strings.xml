@@ -224,8 +224,9 @@
     <string name="external_client_hermes">Hermes</string>
     <string name="external_closesecret">I have saved the token</string>
     <string name="external_connect">Connect an application</string>
-    <string name="external_consenthelp">This application can access all tasks in the scopes you select, including Inbox. Choose only the permissions it needs.</string>
+    <string name="external_consenthelp">Permissions apply to tasks in the scopes you select, including Inbox. Choose the operations the application needs.</string>
     <string name="external_credentials">Credentials</string>
+    <string name="external_custom">By operation</string>
     <string name="external_deletepermission">Allow deleting tasks and events through the API</string>
     <string name="external_deny">Deny</string>
     <string name="external_documentation">View official documentation</string>
@@ -239,7 +240,7 @@
     <string name="external_futurescopes">New scopes will require explicit permission.</string>
     <string name="external_guide_chatgpt">In ChatGPT, enable developer mode if your account allows it. Add an MCP server under plugins/connectors, paste this URL and select OAuth. Fem-ho opens for sign-in and consent. Availability depends on your account and workspace policy.</string>
     <string name="external_guide_claude">In Claude, go to Settings → Connectors → Add custom connector. Paste this URL and connect. Authorize scopes and permissions in Fem-ho when the browser opens.</string>
-    <string name="external_guide_hermes">Add this entry under mcp_servers in your Hermes configuration. Complete OAuth authorization in the browser when connecting. Then request whoami and list_tasks to verify access.</string>
+    <string name="external_guide_hermes">Add this entry under mcp_servers in your Hermes configuration. Complete OAuth authorization in the browser when connecting. Request whoami to verify access and list_tasks if you allowed reading tasks.</string>
     <string name="external_inheritedscopes">Inherits the agent’s scopes</string>
     <string name="external_lastused">Last used: {date}</string>
     <string name="external_manual">Manual token alternative</string>
@@ -249,10 +250,15 @@
     <string name="external_noexpiry">Leave empty for no expiry.</string>
     <string name="external_oauthcredential">OAuth connection</string>
     <string name="external_oauthpermissions">Each connection authorizes its own scopes and permissions. Revoke it from the credentials list. The URL must use HTTPS and be reachable by the client.</string>
+    <string name="external_operation_attach">Add task attachments</string>
+    <string name="external_operation_create">Create tasks</string>
+    <string name="external_operation_move">Move tasks</string>
+    <string name="external_operation_read">Read tasks</string>
+    <string name="external_operation_update">Edit tasks</string>
     <string name="external_paused">Paused</string>
     <string name="external_permission">Permissions</string>
     <string name="external_permissionsdetail">Detailed permissions</string>
-    <string name="external_probefailed">MCP check failed (HTTP {status}). Check the channel and read permissions.</string>
+    <string name="external_probefailed">MCP check failed (HTTP {status}). Check that MCP access is enabled.</string>
     <string name="external_readonly">Read only</string>
     <string name="external_readwrite">Read and write</string>
     <string name="external_reconnect">To change permissions, revoke this connection and reconnect from the application.</string>
@@ -261,8 +267,9 @@
     <string name="external_scopes">Allowed scopes</string>
     <string name="external_selectall">Select all current scopes</string>
     <string name="external_switchhelp">Pause external access without deleting credentials. This also affects AI agents. Web and Android keep working.</string>
+    <string name="external_taskoperations">Task operations</string>
     <string name="external_unavailablescope">Unavailable scope</string>
-    <string name="external_verified">Connection verified: identity and task reading succeeded.</string>
+    <string name="external_verified">Connection verified.</string>
     <string name="inbox_day_next">Next day</string>
     <string name="inbox_day_pick">Pick a day</string>
     <string name="inbox_day_prev">Previous day</string>

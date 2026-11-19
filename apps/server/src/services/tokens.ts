@@ -112,7 +112,7 @@ export interface CreateTokenInput {
 }
 
 export function credentialCapabilities(raw: unknown): string[] {
-  const allowed = [
+  const legacy = [
     'tasks:read',
     'tasks:write',
     // Les instruccions de l'àmbit i del projecte manen sobre el seu criteri, i
@@ -127,7 +127,8 @@ export function credentialCapabilities(raw: unknown): string[] {
     'attachments:read',
     'events:read',
   ];
-  if (raw === undefined) return allowed;
+  if (raw === undefined) return legacy;
+  const allowed = [...legacy, 'tasks:create', 'tasks:move', 'tasks:update'];
   if (
     !Array.isArray(raw) ||
     raw.length === 0 ||

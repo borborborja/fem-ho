@@ -99,11 +99,13 @@ export function registerMcpOAuthRoutes(app: FastifyInstance) {
       requireHumanSession(principal);
       const auth = await authorizationRequest(db(), request.params.id);
       const client = await clientOf(db(), auth.client_id);
+      const scopes = auth.scope.split(/\s+/);
       return {
         client_name: client.name,
         client_id: client.id,
         redirect_uri: auth.redirect_uri,
-        write_requested: auth.scope.split(/\s+/).includes('femho:write'),
+        read_requested: scopes.includes('femho:read'),
+        write_requested: scopes.includes('femho:write'),
       };
     }),
   );

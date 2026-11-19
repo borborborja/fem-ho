@@ -371,7 +371,7 @@ que no tenir-ne cap.
 
 Complet respecte de `docs/05` §4: **més de 120 rutes**. Autenticació amb refresc rotatiu,
 capa de política única, `activity_log` dins de la mateixa transacció que el canvi,
-sincronització amb cursor, CalDAV en port propi, MCP amb 18 tools, compartits,
+sincronització amb cursor, CalDAV en port propi, MCP amb 20 eines, compartits,
 notificacions i administració.
 
 Els dos motors es proven: la suite `dual-engine` recorre els camins d'escriptura a
@@ -767,7 +767,7 @@ que el producte no és teu.
 Els llegeixen agents d'MCP, DAVx⁵, Thunderbird i qui programi contra l'API — cap d'ells té
 catàleg ni idioma:
 
-- Les 18 tools d'MCP: títols, descripcions i tots els `.describe()`. Traduir-les per
+- Les 20 eines d'MCP: títols, descripcions i tots els `.describe()`. Traduir-les per
   idioma d'usuari no tindria on mirar-se —un token no és una persona— i faria que el
   mateix servidor descrivís les seves eines diferent segons qui preguntés.
 - Els ~20 missatges `text/plain` del camí DAV.

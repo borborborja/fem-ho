@@ -38,7 +38,7 @@ let scopePersonal: string;
 let scopeFamilia: string;
 
 async function api(
-  method: 'GET' | 'POST',
+  method: 'GET' | 'POST' | 'PATCH',
   url: string,
   payload?: Record<string, unknown>,
   headers: Record<string, string> = auth,
@@ -467,6 +467,95 @@ describe("l'abast del token val també per a les tasques", () => {
     );
     expect(rebutjada.statusCode).toBe(403);
     expect(rebutjada.json<{ detail: string }>().detail).toContain('Personal');
+  });
+});
+
+describe('lliurament de tasques amb permisos per operació', () => {
+  async function tokenOf(capabilities: string[]) {
+    const token = await api('POST', '/api/v1/tokens', {
+      name: 'Lliurament',
+      capabilities,
+      scope_ids: [scopePersonal],
+      channels: ['api'],
+    });
+    expect(token.statusCode, token.body).toBe(201);
+    return { authorization: `Bearer ${token.json<{ token: string }>().token}` };
+  }
+
+  it('la creació, el moviment i l’edició es concedeixen per separat', async () => {
+    const creator = await tokenOf(['tasks:create']);
+    const mover = await tokenOf(['tasks:move']);
+    const editor = await tokenOf(['tasks:update']);
+    const id = uuidv7();
+    const draft = { id, scope_id: scopePersonal, title: 'Privada', status: 'todo' };
+    const url = `/api/v1/tasks/${id}`;
+    const created = await api('POST', '/api/v1/tasks', draft, creator);
+    expect(created.statusCode, created.body).toBe(201);
+    expect(created.json()).toEqual({
+      id,
+      scope_id: scopePersonal,
+      status: 'todo',
+      position: expect.any(String),
+      version: 1,
+      completed_at: null,
+    });
+    expect((await api('GET', url, undefined, creator)).statusCode).toBe(403);
+    expect((await api('POST', `${url}/move`, { status: 'doing' }, creator)).statusCode).toBe(403);
+    expect((await api('PATCH', url, { title: 'Canvi' }, mover)).statusCode).toBe(403);
+    const moved = await api('POST', `${url}/move`, { status: 'doing', expected_version: 1 }, mover);
+    expect(moved.statusCode, moved.body).toBe(200);
+    expect(moved.json()).toMatchObject({ version: 2, status: 'doing' });
+    expect(moved.json()).not.toHaveProperty('title');
+    expect(
+      (await api('POST', `${url}/move`, { status: 'done', expected_version: 1 }, mover)).statusCode,
+    ).toBe(409);
+    const edited = await api('PATCH', url, { title: 'Canvi permès' }, editor);
+    expect(edited.statusCode, edited.body).toBe(200);
+    expect(edited.json()).not.toHaveProperty('title');
+    expect((await api('GET', url)).json()).toMatchObject({
+      title: 'Canvi permès',
+      status: 'doing',
+    });
+  });
+
+  it('rebutja estats i relacions que no corresponen al lliurament', async () => {
+    const id = uuidv7();
+    const draft = { id, scope_id: scopePersonal, title: 'Tasca en proves' };
+    expect((await api('POST', '/api/v1/tasks', { ...draft, status: 'unknown' })).statusCode).toBe(
+      422,
+    );
+    expect(
+      (
+        await api('POST', '/api/v1/tasks', {
+          ...draft,
+          status: 'done',
+          completed_at: '2999-01-01',
+        })
+      ).statusCode,
+    ).toBe(422);
+    expect(
+      (
+        await api('POST', '/api/v1/tasks', {
+          ...draft,
+          status: 'todo',
+          completed_at: '2024-01-01',
+        })
+      ).statusCode,
+    ).toBe(422);
+    expect((await api('GET', `/api/v1/tasks/${id}`)).statusCode).toBe(404);
+    expect((await api('POST', '/api/v1/tasks', draft)).statusCode).toBe(201);
+    const neighbour = await api('POST', '/api/v1/tasks', {
+      scope_id: scopeFamilia,
+      title: 'Veïna d’un altre àmbit',
+      status: 'doing',
+    });
+    const neighbourId = neighbour.json<{ id: string }>().id;
+    const invalid = await api('POST', `/api/v1/tasks/${id}/move`, {
+      status: 'doing',
+      before_id: neighbourId,
+    });
+    expect(invalid.statusCode, invalid.body).toBe(422);
+    expect((await api('GET', `/api/v1/tasks/${id}`)).json()).toMatchObject({ status: 'inbox' });
   });
 });
 

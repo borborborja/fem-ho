@@ -48,6 +48,9 @@ export function registerMcpRoutes(app: FastifyInstance): void {
       connection,
       principal,
       version: app.config.version,
+      dataDir: app.config.dataDir,
+      maxUploadBytes: app.config.maxUploadBytes,
+      reauthorize: () => principalOf(app, request, 'mcp'),
     });
 
     /**

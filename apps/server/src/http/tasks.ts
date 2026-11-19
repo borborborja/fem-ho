@@ -46,20 +46,22 @@ import { setTaskLabel } from '../services/labels.js';
 import { listProjects, listScopes } from '../services/scopes.js';
 import { createSubtask, deleteSubtask, listSubtasks, updateSubtask } from '../services/subtasks.js';
 import {
+  createDeliveredTask,
+  moveDeliveredTask,
+  taskMutationReceipt,
+  updateDeliveredTask,
+} from '../services/task-delivery.js';
+import {
   completeTask,
-  createTask,
   deleteTask,
   getBoard,
   getDashboard,
   getInbox,
   getTask,
   listTasks,
-  moveTask,
   setAssignee,
   takeOverTask,
-  updateTask,
 } from '../services/tasks.js';
-import type { Task } from '../services/tasks.js';
 import { PolicyError } from '../policy/errors.js';
 import { isMailbox, type Mailbox } from '../policy/mailbox.js';
 import { getProfile, getSettings } from '../services/users.js';
@@ -75,34 +77,8 @@ function parseStatuses(raw: unknown): TaskStatus[] | undefined {
   return valid.length > 0 ? valid : undefined;
 }
 
-function parseAiMode(raw: unknown): Task['ai_mode'] | undefined {
-  return raw === 'manual' || raw === 'assisted' || raw === 'delegated' ? raw : undefined;
-}
-
-function parseRecurrenceMode(raw: unknown): 'schedule' | 'completion' | undefined {
-  return raw === 'schedule' || raw === 'completion' ? raw : undefined;
-}
-
 function parseSeriesMode(raw: unknown): SeriesMode {
   return raw === 'future' || raw === 'all' ? raw : 'single';
-}
-
-/**
- * D'on ve una tasca feta a partir d'una cita.
- *
- * Les tres parts són **la identitat externa** de l'esdeveniment i no el seu `id`: el
- * refresc d'una font reescriu les files i les pot tornar a la vida, o sigui que l'`id` no
- * és estable.
- */
-function sourceEvent(
-  raw: unknown,
-): { calendar_id: string; uid: string; recurrence_id?: string | null } | undefined {
-  if (typeof raw !== 'object' || raw === null) return undefined;
-  const value = raw as Record<string, unknown>;
-  const calendarId = str(value.calendar_id);
-  const uid = str(value.uid);
-  if (calendarId === undefined || uid === undefined) return undefined;
-  return { calendar_id: calendarId, uid, recurrence_id: str(value.recurrence_id) ?? null };
 }
 
 /** `caldav`, `ical` o `rss`; qualsevol altra cosa no és una font que sapiguem llegir. */
@@ -132,37 +108,15 @@ export function registerTaskRoutes(app: FastifyInstance): void {
 
   app.post('/api/v1/tasks', async (request, reply) =>
     handle(app, request, reply, async (principal) => {
-      const input = body(request);
-      const result = await auditedTransaction(db().db, principal, (ctx) =>
-        createTask(
-          ctx,
-          principal,
-          {
-            id: str(input.id),
-            scope_id: str(input.scope_id),
-            project_id: str(input.project_id),
-            title: str(input.title),
-            description: str(input.description),
-            status: parseStatuses(input.status)?.[0],
-            position: str(input.position),
-            due_date: str(input.due_date),
-            due_time: str(input.due_time),
-            deadline: str(input.deadline),
-            rrule: str(input.rrule),
-            recurrence_mode: parseRecurrenceMode(input.recurrence_mode),
-            ai_mode: parseAiMode(input.ai_mode),
-            ai_instructions: str(input.ai_instructions),
-            assignee_ids: Array.isArray(input.assignee_ids)
-              ? input.assignee_ids.filter((v): v is string => typeof v === 'string')
-              : undefined,
-            task_type_id: str(input.task_type_id),
-            source_event: sourceEvent(input.source_event),
-          },
-          db().engine,
-        ),
+      const { engine } = db();
+      const result = await auditedTransaction(
+        db().db,
+        principal,
+        (ctx) => createDeliveredTask(ctx, principal, body(request), engine),
+        { engine },
       );
       void reply.code(result.created ? 201 : 200);
-      return result.task;
+      return taskMutationReceipt(principal, result.task);
     }),
   );
 
@@ -174,22 +128,13 @@ export function registerTaskRoutes(app: FastifyInstance): void {
 
   app.patch<{ Params: { id: string } }>('/api/v1/tasks/:id', async (request, reply) =>
     handle(app, request, reply, async (principal) => {
-      const input = body(request);
-      return auditedTransaction(db().db, principal, (ctx) =>
-        updateTask(ctx, principal, request.params.id, {
-          title: str(input.title),
-          description: nullable(input, 'description'),
-          due_date: nullable(input, 'due_date'),
-          due_time: nullable(input, 'due_time'),
-          deadline: nullable(input, 'deadline'),
-          project_id: nullable(input, 'project_id'),
-          task_type_id: nullable(input, 'task_type_id'),
-          rrule: nullable(input, 'rrule'),
-          recurrence_mode: parseRecurrenceMode(input.recurrence_mode),
-          ai_mode: parseAiMode(input.ai_mode),
-          ai_instructions: nullable(input, 'ai_instructions'),
-        }),
+      const task = await auditedTransaction(
+        db().db,
+        principal,
+        (ctx) => updateDeliveredTask(ctx, principal, request.params.id, body(request)),
+        { engine: db().engine },
       );
+      return taskMutationReceipt(principal, task);
     }),
   );
 
@@ -205,27 +150,26 @@ export function registerTaskRoutes(app: FastifyInstance): void {
 
   app.post<{ Params: { id: string } }>('/api/v1/tasks/:id/move', async (request, reply) =>
     handle(app, request, reply, async (principal) => {
-      const input = body(request);
-      return auditedTransaction(db().db, principal, (ctx) =>
-        moveTask(ctx, principal, request.params.id, {
-          status: parseStatuses(input.status)?.[0],
-          position: str(input.position),
-          time_entry: input.time_entry as
-            import('../services/tasks.js').CompletionTimeInput | undefined,
-          expected_version: input.expected_version as number | undefined,
-          before_id: str(input.before_id) ?? null,
-          after_id: str(input.after_id) ?? null,
-        }),
+      const task = await auditedTransaction(
+        db().db,
+        principal,
+        (ctx) => moveDeliveredTask(ctx, principal, request.params.id, body(request)),
+        { engine: db().engine },
       );
+      return taskMutationReceipt(principal, task);
     }),
   );
 
   app.post<{ Params: { id: string } }>('/api/v1/tasks/:id/complete', async (request, reply) =>
-    handle(app, request, reply, async (principal) =>
-      auditedTransaction(db().db, principal, (ctx) =>
-        completeTask(ctx, principal, request.params.id),
-      ),
-    ),
+    handle(app, request, reply, async (principal) => {
+      const task = await auditedTransaction(
+        db().db,
+        principal,
+        (ctx) => completeTask(ctx, principal, request.params.id),
+        { engine: db().engine },
+      );
+      return taskMutationReceipt(principal, task);
+    }),
   );
 
   /**

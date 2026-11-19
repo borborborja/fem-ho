@@ -9,19 +9,25 @@
  * que no s'ha compartit **no ha de sortir**, encara que l'àmbit sí que ho estigui.
  */
 
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { sql } from 'kysely';
 import { v7 as uuidv7 } from 'uuid';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { FastifyInstance, LightMyRequestResponse } from 'fastify';
 import { buildApp } from '../app.js';
 import { loadConfig } from '../config.js';
 import { hashPassword } from '../auth/password.js';
+import * as download from '../dav/fetch-safe.js';
 import { connect, type Connection } from '../db/connection.js';
 import { migrateToLatest } from '../db/migrator.js';
-import { safeFilename, sniffMime } from './attachments.js';
+import {
+  deliverTaskAttachment,
+  MCP_ATTACHMENT_MAX_BYTES,
+  safeFilename,
+  sniffMime,
+} from './attachments.js';
 
 const tmp = mkdtempSync(join(tmpdir(), 'femho-att-'));
 const NOW = '2026-08-07T09:00:00.000Z';
@@ -31,6 +37,7 @@ let conn: Connection;
 let app: FastifyInstance;
 let auth: Record<string, string>;
 let altreAuth: Record<string, string>;
+let ownerId: string;
 let scopeId: string;
 let taskId: string;
 
@@ -72,6 +79,7 @@ beforeAll(async () => {
 
   const hash = await hashPassword(PASSWORD);
   const userId = uuidv7();
+  ownerId = userId;
   const altreId = uuidv7();
   await sql`
     INSERT INTO users (id, email, name, password_hash, kind, role, created_at, updated_at)
@@ -119,6 +127,8 @@ afterAll(async () => {
   await conn.close();
   rmSync(tmp, { recursive: true, force: true });
 });
+
+afterEach(() => vi.restoreAllMocks());
 
 describe('el tipus surt del contingut', () => {
   it("i no de l'extensió que digui el client", () => {
@@ -208,6 +218,176 @@ describe('pujar i baixar', () => {
 
     const despres = await api('GET', `/api/v1/attachments/${attachmentId}/content`);
     expect(despres.statusCode).toBe(404);
+  });
+});
+
+describe('lliurar adjunts amb reintents', () => {
+  function downloaded(bytes: Buffer, status = 200): download.SafeResponse {
+    return {
+      bytes,
+      body: bytes.toString('utf8'),
+      status,
+      headers: new Headers(),
+      url: 'https://example.test/file',
+    };
+  }
+
+  function taskAttachPrincipal() {
+    return {
+      kind: 'user',
+      userId: ownerId,
+      capabilities: new Set<'tasks:attach'>(['tasks:attach']),
+      scopeIds: new Set([scopeId]),
+      source: 'mcp',
+    } as const;
+  }
+
+  it('conserva un sol fitxer i una sola entrada quan se’n repeteix la pujada binària', async () => {
+    const id = uuidv7();
+    const url = `/api/v1/tasks/${taskId}/attachments?id=${id}&filename=notes.txt`;
+    const bytes = Buffer.from('Notes per a la reunió');
+    const responses = await Promise.all([upload(url, bytes), upload(url, bytes)]);
+    expect(responses.map((res) => res.statusCode).sort()).toEqual([200, 201]);
+    for (const res of responses) expect(res.json()).toMatchObject({ id, filename: 'notes.txt' });
+    const content = await api('GET', `/api/v1/attachments/${id}/content`);
+    expect(content.body).toBe(bytes.toString());
+    expect(await rastre(id)).toEqual([{ verb: 'created', entity_type: 'attachment' }]);
+
+    expect((await upload(url.replace('notes.txt', 'agenda.txt'), bytes)).statusCode).toBe(409);
+  });
+
+  it('descarrega els bytes i conserva el rebut quan es torna a demanar', async () => {
+    const fetch = vi
+      .spyOn(download, 'safeFetch')
+      .mockResolvedValue(downloaded(Buffer.from('%PDF-1.7 rebut')));
+    const id = uuidv7();
+    const endpoint = `/api/v1/tasks/${taskId}/attachments`;
+    const input = {
+      id,
+      filename: 'rebut.pdf',
+      url: 'https://example.test/rebut?signature=fixture',
+    };
+    const first = await api('POST', endpoint, input);
+    expect(first.statusCode, first.body).toBe(201);
+    expect(first.json()).toMatchObject({ id, mime_type: 'application/pdf', external_url: null });
+    expect(first.body).not.toContain('signature');
+    const second = await api('POST', endpoint, {
+      ...input,
+      url: 'https://example.test/rebut?signature=renovada',
+    });
+    expect(second.statusCode, second.body).toBe(200);
+    expect(second.json()).toEqual(first.json());
+    expect(fetch).toHaveBeenCalledExactlyOnceWith(input.url, {
+      maxBytes: app.config.maxUploadBytes,
+    });
+    expect(await rastre(id)).toEqual([{ verb: 'created', entity_type: 'attachment' }]);
+  });
+
+  it('pot reintentar una descàrrega fallida sense perdre la tasca ni els altres fitxers', async () => {
+    const endpoint = `/api/v1/tasks/${taskId}/attachments`;
+    const good = await upload(`${endpoint}?filename=notes.txt`, Buffer.from('notes'));
+    expect(good.statusCode, good.body).toBe(201);
+    vi.spyOn(download, 'safeFetch')
+      .mockRejectedValueOnce(new Error('https://example.test/notes?signature=fiable'))
+      .mockResolvedValueOnce(downloaded(Buffer.from('Acta')));
+
+    const id = uuidv7();
+    const input = { id, filename: 'acta.txt', url: 'https://example.test/acta?signature=fiable' };
+    const failure = await api('POST', endpoint, input);
+    expect(failure.statusCode, failure.body).toBe(502);
+    expect(failure.body).not.toContain('signature');
+    expect(await rastre(id)).toEqual([]);
+    expect((await api('GET', `/api/v1/tasks/${taskId}`)).statusCode).toBe(200);
+    expect((await api('GET', `/api/v1/attachments/${good.json().id}/content`)).body).toBe('notes');
+
+    const retry = await api('POST', endpoint, {
+      ...input,
+      url: 'https://example.test/acta?signature=nova',
+    });
+    expect(retry.statusCode, retry.body).toBe(201);
+    expect((await api('GET', `/api/v1/attachments/${id}/content`)).body).toBe('Acta');
+    expect(await rastre(id)).toHaveLength(1);
+  });
+
+  it('comprova l’àmbit abans de descarregar i respecta la revocació mentre es descarrega', async () => {
+    const issued = await api('POST', '/api/v1/tokens', {
+      name: 'Adjuntar',
+      capabilities: ['tasks:attach'],
+      channels: ['api'],
+      scope_ids: [scopeId],
+    });
+    expect(issued.statusCode, issued.body).toBe(201);
+    const { token, summary } = issued.json<{ token: string; summary: { id: string } }>();
+    const fetch = vi.spyOn(download, 'safeFetch').mockImplementationOnce(async () => {
+      expect((await api('DELETE', `/api/v1/tokens/${summary.id}`)).statusCode).toBe(204);
+      return downloaded(Buffer.from('notes'));
+    });
+
+    const id = uuidv7();
+    const endpoint = `/api/v1/tasks/${taskId}/attachments`;
+    const input = { id, filename: 'notes.txt', url: 'https://example.test/notes' };
+    expect((await api('POST', endpoint, input, altreAuth)).statusCode).toBe(403);
+    expect(fetch).not.toHaveBeenCalled();
+    const revoked = await api('POST', endpoint, input, { authorization: `Bearer ${token}` });
+    expect(revoked.statusCode, revoked.body).toBe(401);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(await rastre(id)).toEqual([]);
+    expect((await api('GET', `/api/v1/attachments/${id}/content`)).statusCode).toBe(404);
+  });
+
+  it('aplica el límit dels fitxers i valida l’identificador i la codificació', async () => {
+    const id = uuidv7();
+    vi.spyOn(download, 'safeFetch').mockRejectedValueOnce(new download.ResponseTooLargeError());
+    const endpoint = `/api/v1/tasks/${taskId}/attachments`;
+    const oversized = await api('POST', endpoint, {
+      id,
+      filename: 'llarg.txt',
+      url: 'https://example.test/file',
+    });
+    expect(oversized.statusCode, oversized.body).toBe(413);
+    expect((await upload(`${endpoint}?id=incorrecte`, Buffer.from('notes'))).statusCode).toBe(422);
+    expect(
+      (await api('POST', endpoint, { id, filename: 'notes.txt', url: 'http://example.test/notes' }))
+        .statusCode,
+    ).toBe(422);
+
+    const principal = taskAttachPrincipal();
+    const options = { dataDir: tmp, maxUploadBytes: 2 * MCP_ATTACHMENT_MAX_BYTES };
+    const input = { id, taskId, filename: 'notes.txt' };
+    await expect(
+      deliverTaskAttachment(conn, principal, { ...input, contentBase64: 'incorrecte!' }, options),
+    ).rejects.toMatchObject({ status: 422 });
+    await expect(
+      deliverTaskAttachment(
+        conn,
+        principal,
+        { ...input, contentBase64: Buffer.alloc(MCP_ATTACHMENT_MAX_BYTES + 1).toString('base64') },
+        options,
+      ),
+    ).rejects.toMatchObject({ status: 413 });
+    const result = await deliverTaskAttachment(
+      conn,
+      principal,
+      { ...input, contentBase64: Buffer.from('notes').toString('base64') },
+      options,
+    );
+    expect(result).toMatchObject({ created: true, attachment: { id, size_bytes: 5 } });
+  });
+
+  it('desfà la fila i l’auditoria si els bytes no es poden desar', async () => {
+    const unavailable = join(tmp, 'attachment-volume');
+    writeFileSync(unavailable, 'fitxer en lloc de volum');
+    const input = { id: uuidv7(), taskId, filename: 'notes.txt', data: Buffer.from('notes') };
+    const principal = taskAttachPrincipal();
+    await expect(
+      deliverTaskAttachment(conn, principal, input, { dataDir: unavailable, maxUploadBytes: 100 }),
+    ).rejects.toThrow();
+    expect(await rastre(input.id)).toEqual([]);
+    expect((await api('GET', `/api/v1/attachments/${input.id}/content`)).statusCode).toBe(404);
+    await expect(
+      deliverTaskAttachment(conn, principal, input, { dataDir: tmp, maxUploadBytes: 100 }),
+    ).resolves.toMatchObject({ created: true });
+    expect(await rastre(input.id)).toHaveLength(1);
   });
 });
 

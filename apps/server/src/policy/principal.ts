@@ -39,8 +39,17 @@ export interface Principal {
   label?: string;
 }
 
+const legacyTaskWrites: ReadonlySet<Capability> = new Set([
+  'tasks:create',
+  'tasks:move',
+  'tasks:update',
+]);
+
 export function hasCapability(principal: Principal, capability: Capability): boolean {
-  return principal.capabilities.has(capability);
+  return (
+    principal.capabilities.has(capability) ||
+    (legacyTaskWrites.has(capability) && principal.capabilities.has('tasks:write'))
+  );
 }
 
 /** Un principal pot veure aquest àmbit? `scopeIds` a null vol dir tots els seus. */

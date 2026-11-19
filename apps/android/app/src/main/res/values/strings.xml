@@ -224,8 +224,9 @@
     <string name="external_client_hermes">Hermes</string>
     <string name="external_closesecret">Ja he desat el token</string>
     <string name="external_connect">Connectar una aplicació</string>
-    <string name="external_consenthelp">Aquesta aplicació podrà accedir a totes les tasques dels àmbits que seleccionis, inclòs Inbox. Tria només els permisos que necessiti.</string>
+    <string name="external_consenthelp">Els permisos s’apliquen a les tasques dels àmbits que seleccionis, inclòs Inbox. Tria les operacions que necessiti l’aplicació.</string>
     <string name="external_credentials">Credencials</string>
+    <string name="external_custom">Per operació</string>
     <string name="external_deletepermission">Permetre eliminar tasques i esdeveniments per API</string>
     <string name="external_deny">Denegar</string>
     <string name="external_documentation">Veure la documentació oficial</string>
@@ -239,7 +240,7 @@
     <string name="external_futurescopes">Els àmbits nous requeriran autorització explícita.</string>
     <string name="external_guide_chatgpt">A ChatGPT, activa el mode desenvolupador si el teu compte ho permet. Afegeix un servidor MCP a l’apartat de plugins/connectors, enganxa aquesta URL i selecciona OAuth. S’obrirà Fem-ho per iniciar sessió i autoritzar-lo. La disponibilitat depèn del compte i de la política de l’espai de treball.</string>
     <string name="external_guide_claude">A Claude, ves a Ajustos → Connectors → Afegir connector personalitzat. Enganxa aquesta URL i connecta’l. Autoritza els àmbits i permisos a Fem-ho quan s’obri el navegador.</string>
-    <string name="external_guide_hermes">Afegeix aquesta entrada a mcp_servers del fitxer de configuració d’Hermes. En connectar, completa l’autorització OAuth al navegador. Després demana whoami i list_tasks per comprovar l’accés.</string>
+    <string name="external_guide_hermes">Afegeix aquesta entrada a mcp_servers del fitxer de configuració d’Hermes. En connectar, completa l’autorització OAuth al navegador. Demana whoami per comprovar l’accés i list_tasks si has autoritzat la lectura.</string>
     <string name="external_inheritedscopes">Hereta els àmbits de l’agent</string>
     <string name="external_lastused">Últim ús: {date}</string>
     <string name="external_manual">Alternativa amb token manual</string>
@@ -249,10 +250,15 @@
     <string name="external_noexpiry">Deixa la data buida per no posar caducitat.</string>
     <string name="external_oauthcredential">Connexió OAuth</string>
     <string name="external_oauthpermissions">Cada connexió autoritza els seus propis àmbits i permisos. Pots revocar-la a la llista de credencials. L’URL ha de ser HTTPS i accessible des del client.</string>
+    <string name="external_operation_attach">Afegir adjunts a les tasques</string>
+    <string name="external_operation_create">Crear tasques</string>
+    <string name="external_operation_move">Moure tasques</string>
+    <string name="external_operation_read">Consultar tasques</string>
+    <string name="external_operation_update">Editar tasques</string>
     <string name="external_paused">Pausat</string>
     <string name="external_permission">Permisos</string>
     <string name="external_permissionsdetail">Permisos detallats</string>
-    <string name="external_probefailed">La comprovació MCP ha fallat (HTTP {status}). Revisa el canal i els permisos de lectura.</string>
+    <string name="external_probefailed">La comprovació MCP ha fallat (HTTP {status}). Revisa que el canal MCP estigui actiu.</string>
     <string name="external_readonly">Només lectura</string>
     <string name="external_readwrite">Lectura i escriptura</string>
     <string name="external_reconnect">Per canviar els permisos, revoca aquesta connexió i torna a connectar des de l’aplicació.</string>
@@ -261,8 +267,9 @@
     <string name="external_scopes">Àmbits autoritzats</string>
     <string name="external_selectall">Seleccionar tots els actuals</string>
     <string name="external_switchhelp">Pausa l’accés extern sense esborrar les credencials. Afecta també els agents IA. La web i Android continuen funcionant.</string>
+    <string name="external_taskoperations">Operacions amb tasques</string>
     <string name="external_unavailablescope">Àmbit no disponible</string>
-    <string name="external_verified">Connexió verificada: identitat i lectura de tasques correctes.</string>
+    <string name="external_verified">Connexió verificada.</string>
     <string name="inbox_day_next">El dia següent</string>
     <string name="inbox_day_pick">Triar el dia</string>
     <string name="inbox_day_prev">El dia abans</string>

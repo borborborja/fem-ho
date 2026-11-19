@@ -404,6 +404,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/task-context": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Identificadors per preparar una operació sobre tasques */
+        get: operations["getTaskContext"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/tasks": {
         parameters: {
             query?: never;
@@ -419,6 +436,8 @@ export interface paths {
          * @description **`scope_id` és obligatori.** És la invariant central del producte: pot ser que
          *     un àmbit tingui una tasca sense projecte, però mai una tasca sense àmbit
          *     (docs/01 §4). L'`id` i la `position` els pot posar el client (D3, D4).
+         *     La fitxa i les seves dades inicials es desen juntes. Conserva el mateix `id`
+         *     per als reintents. Els fitxers es poden pujar després a la ruta d'adjunts.
          */
         post: operations["createTask"];
         delete?: never;
@@ -444,8 +463,10 @@ export interface paths {
          *
          *     S'accepta `position` directament —el camí normal, calculada al client (D3)— o
          *     `{before_id, after_id}` perquè el servidor la calculi, per a clients simples.
+         *     Si s'ometen, la tasca es col·loca al final de la columna dins del seu àmbit.
          *     `time_entry` anota minuts exactes en completar des de Per fer o Inbox amb registre activat;
-         *     requereix `expected_version`. Completar i anotar formen una única transacció.
+         *     requereix `expected_version` i la capacitat general `tasks:write`.
+         *     Completar i anotar formen una única transacció.
          *     L’identificador del bloc fa els reintents idempotents; un canvi concurrent retorna 409.
          *     Entrar a Fent obre un tram nou i sortir-ne el tanca, també per sota d’un minut.
          */
@@ -2373,7 +2394,7 @@ export interface paths {
         put?: never;
         /**
          * Adjuntar un fitxer a una tasca
-         * @description **El cos va cru**, no en multipart: el nom a la consulta i els bytes al cos. Així el navegador pot enviar un `File` tal qual, i s'estalvia una dependència per analitzar un format que aquí no aporta res —només hi ha un fitxer per petició. El tipus s'infereix **del contingut** i no de l'extensió (docs/10 §8).
+         * @description Accepta un fitxer per petició. Amb `application/octet-stream`, envia els bytes del fitxer al cos i el nom a la consulta. Amb JSON, envia la URL HTTPS pública del fitxer i el seu nom. Conserva l'identificador de l'adjunt per als reintents. El tipus s'infereix a partir dels bytes (docs/10 §8).
          */
         post: operations["uploadTaskAttachment"];
         delete?: never;
@@ -3188,6 +3209,11 @@ export interface components {
              *     àmbits individuals. Un projecte d'un altre àmbit es rebutja amb `422`.
              */
             project_id?: string | null;
+            task_type_id?: string | null;
+            /** @description Substitueix el conjunt de responsables. */
+            assignee_ids?: string[];
+            /** @description Substitueix el conjunt d'etiquetes. */
+            label_ids?: string[];
             /** @description RFC 5545. `null` deixa de repetir-se. */
             rrule?: string | null;
             /**
@@ -3681,6 +3707,8 @@ export interface components {
             /** Format: date-time */
             revoked_at?: string | null;
         };
+        /** @enum {string} */
+        TaskOperationCapability: "tasks:read" | "tasks:create" | "tasks:move" | "tasks:update" | "tasks:attach";
         ExternalAccessSwitches: {
             api_enabled: boolean;
             mcp_enabled: boolean;
@@ -4438,11 +4466,53 @@ export interface components {
             task_types_enabled?: boolean;
             task_type_required?: boolean;
         };
+        NamedTaskReference: {
+            id: string;
+            name: string;
+        };
+        TaskContext: {
+            /** @description Fus del perfil en format IANA. */
+            timezone: string;
+            scopes: {
+                id: string;
+                name: string;
+                /** @description El rol dins l'àmbit permet escriure. */
+                writable: boolean;
+                task_type_required: boolean;
+            }[];
+            details?: {
+                scope_id: string;
+                projects: components["schemas"]["NamedTaskReference"][];
+                task_types: components["schemas"]["NamedTaskReference"][];
+                labels: components["schemas"]["NamedTaskReference"][];
+                assignees: components["schemas"]["NamedTaskReference"][];
+            };
+        };
+        TaskWriteReceipt: {
+            id: string;
+            scope_id: string;
+            /** @enum {string} */
+            status: "inbox" | "todo" | "doing" | "done";
+            position: string;
+            version: number;
+            /** Format: date-time */
+            completed_at: string | null;
+        };
+        /** @description Les credencials granulars sense `tasks:read` reben només el rebut. */
+        TaskWriteResult: components["schemas"]["Task"] | components["schemas"]["TaskWriteReceipt"];
+        InitialTaskChecklist: {
+            name: string;
+            show_completed_inline?: boolean;
+            items?: {
+                text: string;
+                done?: boolean;
+            }[];
+        };
         TaskInput: {
             id?: string;
             /** @description Obligatori. Mai una tasca sense àmbit (docs/01 §4). */
             scope_id: string;
-            project_id?: string;
+            project_id?: string | null;
             title: string;
             description?: string;
             /**
@@ -4450,6 +4520,12 @@ export interface components {
              * @enum {string}
              */
             status: "inbox" | "todo" | "doing" | "done";
+            /**
+             * @description Data al fus del perfil o instant amb zona horària. Només és vàlid si la
+             *     tasca neix a Fet (`done`). Si s'omet, es fa servir l'hora del servidor.
+             *     Una tasca recurrent creada així es desa com a registre històric.
+             */
+            completed_at?: string;
             position?: string;
             due_date?: string;
             due_time?: string;
@@ -4470,6 +4546,16 @@ export interface components {
             ai_instructions?: string;
             assignee_ids?: string[];
             task_type_id?: string;
+            label_ids?: string[];
+            subtasks?: {
+                title: string;
+                done?: boolean;
+                checklists?: components["schemas"]["InitialTaskChecklist"][];
+            }[];
+            checklists?: components["schemas"]["InitialTaskChecklist"][];
+            comments?: {
+                body: string;
+            }[];
             /**
              * @description De quin esdeveniment surt aquesta tasca.
              *
@@ -5408,6 +5494,31 @@ export interface operations {
             403: components["responses"]["Forbidden"];
         };
     };
+    getTaskContext: {
+        parameters: {
+            query?: {
+                scope_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Àmbits autoritzats i, si es demana un àmbit, les opcions assignables. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskContext"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
     listTasks: {
         parameters: {
             query?: {
@@ -5468,7 +5579,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Task"];
+                    "application/json": components["schemas"]["TaskWriteResult"];
                 };
             };
             /** @description Creada. */
@@ -5477,12 +5588,21 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Task"];
+                    "application/json": components["schemas"]["TaskWriteResult"];
                 };
             };
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
-            /** @description Falta l'àmbit, o no és vàlid. */
+            /** @description Conflicte amb una tasca existent. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Les dades o referències de la tasca són invàlides. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -5514,7 +5634,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Task"];
+                    "application/json": components["schemas"]["TaskWriteResult"];
                 };
             };
             401: components["responses"]["Unauthenticated"];
@@ -5557,7 +5677,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Task"];
+                    "application/json": components["schemas"]["TaskWriteResult"];
                 };
             };
             401: components["responses"]["Unauthenticated"];
@@ -6172,6 +6292,7 @@ export interface operations {
                         client_name: string;
                         client_id: string;
                         redirect_uri: string;
+                        read_requested?: boolean;
                         write_requested: boolean;
                     };
                 };
@@ -6193,7 +6314,9 @@ export interface operations {
                     approve: boolean;
                     scope_ids?: string[];
                     /** @enum {string} */
-                    permission?: "read_only" | "read_write";
+                    permission?: "read_only" | "read_write" | "custom";
+                    /** @description Operacions a concedir quan el permís és `custom`. */
+                    capabilities?: components["schemas"]["TaskOperationCapability"][];
                 };
             };
         };
@@ -7912,7 +8035,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Task"];
+                    "application/json": components["schemas"]["TaskWriteResult"];
                 };
             };
             401: components["responses"]["Unauthenticated"];
@@ -9405,8 +9528,9 @@ export interface operations {
     };
     uploadTaskAttachment: {
         parameters: {
-            query: {
-                filename: string;
+            query?: {
+                filename?: string;
+                id?: string;
                 ai_context?: "true" | "false";
             };
             header?: never;
@@ -9418,9 +9542,26 @@ export interface operations {
         requestBody: {
             content: {
                 "application/octet-stream": string;
+                "application/json": {
+                    /** Format: uuid */
+                    id: string;
+                    filename: string;
+                    /** Format: uri */
+                    url: string;
+                    ai_context?: boolean;
+                };
             };
         };
         responses: {
+            /** @description L'adjunt ja s'havia desat amb aquest identificador. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Attachment"];
+                };
+            };
             /** @description Adjuntat. */
             201: {
                 headers: {
@@ -9432,8 +9573,36 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description Conflicte amb un adjunt existent. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description Per damunt de `FEMHO_MAX_UPLOAD_MB`. */
             413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dades de l'adjunt o URL invàlides. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description La descàrrega de l'adjunt ha fallat. */
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };

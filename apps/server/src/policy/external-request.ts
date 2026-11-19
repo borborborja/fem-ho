@@ -1,6 +1,6 @@
-import type { Principal } from './principal.js';
+import { hasCapability, type Principal } from './principal.js';
 import { missingCapability, PolicyError } from './errors.js';
-import type { Capability } from './capabilities.js';
+import { TASK_OPERATIONS, type Capability } from './capabilities.js';
 
 /** Les integracions entren només a recursos amb comprovació d'àmbit al servei.
  * Una ruta nova no hereta accés extern sense que se n'hagi revisat la política. */
@@ -11,6 +11,28 @@ export function assertExternalRequest(principal: Principal, method: string, path
   let resource: string | undefined;
   const relative = path.replace(/^\/api\/v1\//, '');
   if (relative === 'auth/me' && read) return;
+  if (relative === 'task-context' && read) {
+    if (
+      !TASK_OPERATIONS.some((operation) => hasCapability(principal, operation)) &&
+      !hasCapability(principal, 'attachments:write')
+    )
+      throw missingCapability('tasks:read');
+    return;
+  }
+  if (method === 'POST' && /^tasks\/[^/]+\/attachments$/.test(relative)) {
+    if (!hasCapability(principal, 'tasks:attach') && !hasCapability(principal, 'attachments:write'))
+      throw missingCapability('tasks:attach');
+    return;
+  }
+  let taskOperation: Capability | undefined;
+  if (method === 'POST' && relative === 'tasks') taskOperation = 'tasks:create';
+  else if (method === 'POST' && /^tasks\/[^/]+\/(move|complete)$/.test(relative))
+    taskOperation = 'tasks:move';
+  else if (method === 'PATCH' && /^tasks\/[^/]+$/.test(relative)) taskOperation = 'tasks:update';
+  if (taskOperation !== undefined) {
+    if (!hasCapability(principal, taskOperation)) throw missingCapability(taskOperation);
+    return;
+  }
   // El lot comprova cada operació al seu servei: conserva les denegacions individuals.
   if (relative === 'sync/batch' && method === 'POST') return;
   if (relative === 'ai/next-task' && principal.kind === 'agent') {
@@ -52,5 +74,5 @@ export function assertExternalRequest(principal: Principal, method: string, path
   // Adjunts i checklists expressen l'eliminació amb :write al contracte existent.
   const capability =
     `${resource}:${action === 'delete' && ['attachments', 'checklists'].includes(resource) ? 'write' : action}` as Capability;
-  if (!principal.capabilities.has(capability)) throw missingCapability(capability);
+  if (!hasCapability(principal, capability)) throw missingCapability(capability);
 }

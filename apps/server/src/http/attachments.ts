@@ -1,22 +1,65 @@
 /**
  * Les rutes dels adjunts.
  *
- * **El cos va cru, no en multipart.** Un `POST` amb `application/octet-stream`, el nom a
- * la consulta i els bytes al cos. Dues raons: el navegador pot enviar un `File` tal qual
- * sense muntar cap `FormData`, i evita una dependència nova —que en aquest projecte costa
- * paperassa de procedència (`no-pinned-from-research`)— per analitzar un format que aquí
- * no aporta res: només hi ha un fitxer per petició.
+ * El navegador envia els bytes crus. Una integració també pot donar una URL de descàrrega
+ * quan adjunta un fitxer a una tasca. Cada petició correspon a un sol fitxer.
  */
 
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
+import { z } from 'zod';
 import { auditedTransaction } from '../audit/audited-transaction.js';
+import { PolicyError } from '../policy/errors.js';
 import {
+  deliverTaskAttachment,
   deleteAttachment,
   listAttachments,
   readAttachment,
+  type TaskAttachmentInput,
   uploadAttachment,
 } from '../services/attachments.js';
+import { principalOf } from './auth.js';
 import { handle, query, str } from './handle.js';
+
+const DownloadInput = z.strictObject({
+  id: z.string(),
+  filename: z.string().min(1),
+  url: z.string(),
+  ai_context: z.boolean().optional(),
+});
+
+function taskAttachmentInput(
+  request: FastifyRequest<{ Params: { id: string } }>,
+): TaskAttachmentInput {
+  const taskId = request.params.id;
+  if (request.body === undefined || request.body instanceof Buffer) {
+    const options = query(request);
+    if (options.id !== undefined && typeof options.id !== 'string')
+      throw new PolicyError(
+        'invalid-attachment-id',
+        'Invalid attachment identifier',
+        422,
+        'Use a single UUID for the attachment identifier.',
+      );
+    return {
+      taskId,
+      id: str(options.id),
+      filename: str(options.filename) ?? 'fitxer',
+      isAiContext: str(options.ai_context) === 'true',
+      data: request.body ?? Buffer.alloc(0),
+    };
+  }
+  const parsed = DownloadInput.safeParse(request.body);
+  if (!parsed.success) {
+    throw new PolicyError(
+      'invalid-attachment-download',
+      'Invalid attachment download',
+      422,
+      'Send an attachment id, filename and public HTTPS download URL.',
+    );
+  }
+  const { id, filename, url, ai_context } = parsed.data;
+  return { taskId, id, filename, url, isAiContext: ai_context };
+}
 
 export function registerAttachmentRoutes(app: FastifyInstance): void {
   const db = (): NonNullable<FastifyInstance['connection']> => app.connection!;
@@ -45,31 +88,41 @@ export function registerAttachmentRoutes(app: FastifyInstance): void {
         listAttachments(db().db, principal, { [param]: request.params.id }),
       ),
     );
-
-    app.post<{ Params: { id: string } }>(
-      `/api/v1/${kind}/:id/attachments`,
-      async (request, reply) =>
-        handle(app, request, reply, async (principal) => {
-          const data = request.body instanceof Buffer ? request.body : Buffer.alloc(0);
-          const row = await auditedTransaction(db().db, principal, (ctx) =>
-            uploadAttachment(
-              ctx,
-              principal,
-              {
-                [param]: request.params.id,
-                filename: str(query(request).filename) ?? 'fitxer',
-                data,
-                isAiContext: str(query(request).ai_context) === 'true',
-              },
-              app.config.dataDir,
-              app.config.maxUploadBytes,
-            ),
-          );
-          void reply.code(201);
-          return row;
-        }),
-    );
   }
+
+  app.post<{ Params: { id: string } }>('/api/v1/tasks/:id/attachments', async (request, reply) =>
+    handle(app, request, reply, async (principal) => {
+      const result = await deliverTaskAttachment(db(), principal, taskAttachmentInput(request), {
+        dataDir: app.config.dataDir,
+        maxUploadBytes: app.config.maxUploadBytes,
+        reauthorize: () => principalOf(app, request),
+      });
+      void reply.code(result.created ? 201 : 200);
+      return result.attachment;
+    }),
+  );
+
+  app.post<{ Params: { id: string } }>('/api/v1/events/:id/attachments', async (request, reply) =>
+    handle(app, request, reply, async (principal) => {
+      const data = request.body instanceof Buffer ? request.body : Buffer.alloc(0);
+      const row = await auditedTransaction(db().db, principal, (ctx) =>
+        uploadAttachment(
+          ctx,
+          principal,
+          {
+            eventId: request.params.id,
+            filename: str(query(request).filename) ?? 'fitxer',
+            data,
+            isAiContext: str(query(request).ai_context) === 'true',
+          },
+          app.config.dataDir,
+          app.config.maxUploadBytes,
+        ),
+      );
+      void reply.code(201);
+      return row;
+    }),
+  );
 
   /**
    * El contingut.

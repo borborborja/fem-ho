@@ -222,22 +222,20 @@ export async function listPinnedChecklists(
   }));
 }
 
+interface ChecklistInput {
+  id?: string | undefined;
+  name?: string | undefined;
+  subtask_id?: string | undefined;
+  show_completed_inline?: boolean | undefined;
+}
+
 export async function createChecklist(
   ctx: AuditContext,
   principal: Principal,
   taskId: string,
-  input: {
-    id?: string | undefined;
-    name?: string | undefined;
-    subtask_id?: string | undefined;
-    show_completed_inline?: boolean | undefined;
-  },
+  input: ChecklistInput,
 ): Promise<ChecklistView> {
   if (!hasCapability(principal, 'checklists:write')) throw missingCapability('checklists:write');
-  if (input.name === undefined || input.name.trim() === '') {
-    throw new PolicyError('name-required', 'Name required', 422, 'La llista necessita un nom.');
-  }
-
   const task = await sql<{ scope_id: string }>`
     SELECT scope_id FROM tasks WHERE id = ${taskId} AND deleted_at IS NULL
   `.execute(ctx.tx);
@@ -246,6 +244,20 @@ export async function createChecklist(
   await assertScopeAccess(ctx.tx, principal, scopeId, { type: 'La tasca', id: taskId });
 
   await assertChecklistAnchor(ctx.tx, taskId, input.subtask_id);
+  return insertChecklist(ctx, principal, taskId, scopeId, input);
+}
+
+/** El cridant ja ha autoritzat la tasca i ha comprovat l'àncora de subtasca. */
+export async function insertChecklist(
+  ctx: AuditContext,
+  principal: Principal,
+  taskId: string,
+  scopeId: string,
+  input: ChecklistInput,
+): Promise<ChecklistView> {
+  if (input.name === undefined || input.name.trim() === '') {
+    throw new PolicyError('name-required', 'Name required', 422, 'La llista necessita un nom.');
+  }
 
   const id = input.id ?? uuidv7();
   const last = await sql<{ position: string }>`
@@ -279,12 +291,27 @@ export async function createChecklistItem(
   input: { id?: string | undefined; text?: string | undefined; position?: string | undefined },
 ): Promise<ChecklistItemView> {
   if (!hasCapability(principal, 'checklists:write')) throw missingCapability('checklists:write');
+  const { scopeId } = await taskOfChecklist(ctx.tx, checklistId);
+  await assertScopeAccess(ctx.tx, principal, scopeId);
+  return insertChecklistItem(ctx, principal, checklistId, scopeId, input);
+}
+
+/** Crear un ítem ja fet conserva l'estat importat de la tasca i de la subtasca. */
+export async function insertChecklistItem(
+  ctx: AuditContext,
+  principal: Principal,
+  checklistId: string,
+  scopeId: string,
+  input: {
+    id?: string | undefined;
+    text?: string | undefined;
+    position?: string | undefined;
+    done?: boolean | undefined;
+  },
+): Promise<ChecklistItemView> {
   if (input.text === undefined || input.text.trim() === '') {
     throw new PolicyError('text-required', 'Text required', 422, 'The item needs text.');
   }
-
-  const { scopeId } = await taskOfChecklist(ctx.tx, checklistId);
-  await assertScopeAccess(ctx.tx, principal, scopeId);
 
   const id = input.id ?? uuidv7();
   const last = await sql<{ position: string }>`
@@ -293,8 +320,10 @@ export async function createChecklistItem(
   `.execute(ctx.tx);
 
   await sql`
-    INSERT INTO checklist_items (id, checklist_id, text, done, position, created_at, updated_at, version)
-    VALUES (${id}, ${checklistId}, ${input.text.trim()}, ${dbBool(false)},
+    INSERT INTO checklist_items (id, checklist_id, text, done, done_at, done_by, position,
+                                 created_at, updated_at, version)
+    VALUES (${id}, ${checklistId}, ${input.text.trim()}, ${dbBool(input.done === true)},
+            ${input.done === true ? ctx.now : null}, ${input.done === true ? principal.userId : null},
             ${input.position ?? generatePosition(last.rows[0]?.position ?? null, null)},
             ${ctx.now}, ${ctx.now}, 1)
   `.execute(ctx.tx);

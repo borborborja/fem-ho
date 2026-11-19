@@ -63,6 +63,28 @@ function result(body: string): Record<string, unknown> {
   return json.result ?? json.error ?? {};
 }
 
+async function credential(capabilities: string[]): Promise<string> {
+  const generated = generateApiToken();
+  await sql`
+    INSERT INTO api_tokens (id, user_id, name, token_prefix, token_hash, capabilities,
+                            scope_ids, created_at)
+    VALUES (${uuidv7()}, ${userId}, 'Integració', ${generated.prefix}, ${generated.hash},
+            ${JSON.stringify(capabilities)}, ${JSON.stringify([scopeId])}, ${NOW})
+  `.execute(conn.db);
+  return `Bearer ${generated.token}`;
+}
+
+async function callTool(name: string, args: Record<string, unknown>, auth?: string) {
+  const response = await rpc('tools/call', { name, arguments: args }, auth);
+  expect(response.status).toBe(200);
+  return result(response.body) as { content: { text: string }[]; isError?: boolean };
+}
+
+function toolData<T>(response: Awaited<ReturnType<typeof callTool>>): T {
+  expect(response.isError, response.content[0]?.text).not.toBe(true);
+  return JSON.parse(response.content[0]!.text) as T;
+}
+
 beforeAll(async () => {
   for (const key of Object.keys(process.env)) {
     if (key.startsWith('FEMHO_')) delete process.env[key];
@@ -91,11 +113,14 @@ beforeAll(async () => {
     INSERT INTO api_tokens (id, user_id, name, token_prefix, token_hash, capabilities,
                             scope_ids, created_at)
     VALUES (${uuidv7()}, ${userId}, 'Agent', ${generated.prefix}, ${generated.hash},
-            ${JSON.stringify(['tasks:read', 'tasks:write', 'scopes:read', 'projects:read', 'comments:write', 'comments:read', 'checklists:write', 'events:read'])},
+            ${JSON.stringify(['tasks:read', 'tasks:write', 'scopes:read', 'projects:read', 'comments:write', 'comments:read', 'checklists:write', 'events:read', 'attachments:write'])},
             ${JSON.stringify([scopeId])}, ${NOW})
   `.execute(conn.db);
 
-  app = buildApp({ ...loadConfig('0.1.0-test'), logLevel: 'silent' }, { connection: conn });
+  app = buildApp(
+    { ...loadConfig('0.1.0-test'), dataDir: tmp, logLevel: 'silent' },
+    { connection: conn },
+  );
 });
 
 afterAll(async () => {
@@ -105,10 +130,10 @@ afterAll(async () => {
 });
 
 describe('el catàleg', () => {
-  it('són DIVUIT, ni una més', () => {
+  it('el catàleg inclou les vint eines documentades', () => {
     // "Una definició de tool ocupa entre 100 i 500 tokens" (docs/08 §3). La disciplina
     // de nombre és el que evita que la finestra de context se'n vagi en metadades.
-    expect(TOOLS).toHaveLength(18);
+    expect(TOOLS).toHaveLength(20);
     expect(() => assertCatalogue()).not.toThrow();
   });
 
@@ -158,16 +183,17 @@ describe('el catàleg', () => {
     const byName = new Map(TOOLS.map((tool) => [tool.name, tool.annotations]));
 
     // Les de lectura: el client les pot aprovar sol.
-    for (const name of ['whoami', 'get_task', 'list_tasks', 'search_tasks']) {
+    for (const name of ['whoami', 'get_task', 'get_task_context', 'list_tasks', 'search_tasks']) {
       expect(byName.get(name)?.readOnlyHint).toBe(true);
     }
 
     // `next_task` **no** és idempotent: cada crida reserva una tasca diferent.
     expect(byName.get('next_task')?.idempotentHint).toBe(false);
     expect(byName.get('create_task')?.idempotentHint).toBe(false);
+    expect(byName.get('move_task')?.idempotentHint).toBe(false);
 
     // Les que modifiquen sí que ho són.
-    for (const name of ['update_task', 'move_task', 'complete_task', 'release_task']) {
+    for (const name of ['update_task', 'complete_task', 'release_task', 'add_task_attachment']) {
       expect(byName.get(name)?.idempotentHint).toBe(true);
     }
 
@@ -214,7 +240,7 @@ describe('tools/list', () => {
     expect(response.status).toBe(200);
 
     const tools = (result(response.body).tools ?? []) as { name: string }[];
-    expect(tools).toHaveLength(14);
+    expect(tools).toHaveLength(16);
     expect(tools.map((tool) => tool.name)).toEqual(
       TOOLS.filter(
         (tool) => !['next_task', 'release_task', 'ask_user', 'resume_task'].includes(tool.name),
@@ -257,6 +283,212 @@ describe('tools/call', () => {
       SELECT title FROM tasks WHERE scope_id = ${scopeId} ORDER BY created_at DESC LIMIT 1
     `.execute(conn.db);
     expect(row.rows[0]?.title).toBe('Escrita per un agent');
+  });
+
+  it('descobreix referències i lliura una tasca completa amb una credencial de creació', async () => {
+    const auth = await credential(['tasks:create']);
+    const label = uuidv7();
+    const project = uuidv7();
+    const type = uuidv7();
+    await sql`INSERT INTO labels (id, scope_id, name, color, created_at)
+      VALUES (${label}, ${scopeId}, 'Revisió', '--plou-blue', ${NOW})`.execute(conn.db);
+    await sql`INSERT INTO projects (id, scope_id, name, position, created_at, updated_at)
+      VALUES (${project}, ${scopeId}, 'Arxiu', 'a1', ${NOW}, ${NOW})`.execute(conn.db);
+    await sql`INSERT INTO task_types (id, scope_id, name, color, position, created_at, updated_at)
+      VALUES (${type}, ${scopeId}, 'Contingut', '--plou-blue', 'a1', ${NOW}, ${NOW})`.execute(
+      conn.db,
+    );
+
+    const tools = (result((await rpc('tools/list', {}, auth)).body).tools ?? []) as {
+      name: string;
+    }[];
+    expect(tools.map((tool) => tool.name)).toEqual(['create_task', 'get_task_context', 'whoami']);
+    const context = toolData(await callTool('get_task_context', { scope_id: scopeId }, auth));
+    expect(context).toMatchObject({
+      timezone: 'Europe/Madrid',
+      scopes: [{ id: scopeId, writable: true }],
+      details: {
+        projects: [{ id: project, name: 'Arxiu' }],
+        task_types: [{ id: type, name: 'Contingut' }],
+        labels: [{ id: label, name: 'Revisió' }],
+        assignees: [{ id: userId, name: 'Borja' }],
+      },
+    });
+    expect(context).not.toHaveProperty('details.assignees.0.email');
+    const restContext = await app.inject({
+      method: 'GET',
+      url: `/api/v1/task-context?scope_id=${scopeId}`,
+      headers: { authorization: auth },
+    });
+    expect(restContext.json()).toEqual(context);
+
+    const id = uuidv7();
+    const input = {
+      id,
+      scope_id: scopeId,
+      title: 'Preparar el dossier',
+      description: 'Materials de l’arxiu',
+      project_id: project,
+      task_type_id: type,
+      assignee_ids: [userId],
+      status: 'done',
+      completed_at: '2025-01-16',
+      due_date: '2025-01-16',
+      due_time: '14:30',
+      deadline: '2025-01-16T18:00:00+01:00',
+      rrule: 'FREQ=WEEKLY',
+      recurrence_mode: 'completion',
+      ai_mode: 'assisted',
+      ai_instructions: 'Comprova el format',
+      label_ids: [label],
+      subtasks: [
+        {
+          title: 'Revisar la portada',
+          done: true,
+          checklists: [{ name: 'Disseny', items: [{ text: 'Tipografia', done: true }] }],
+        },
+      ],
+      checklists: [{ name: 'Publicació', items: [{ text: 'Revisió final' }] }],
+      comments: [{ body: 'El dossier està llest.' }],
+    };
+    const creation = toolData<{ task: Record<string, unknown>; created: boolean }>(
+      await callTool('create_task', input, auth),
+    );
+    expect(creation).toMatchObject({
+      created: true,
+      task: { id, status: 'done', completed_at: '2025-01-15T23:00:00.000Z' },
+    });
+    expect(creation.task).not.toHaveProperty('title');
+    expect(toolData(await callTool('create_task', input, auth))).toEqual({
+      ...creation,
+      created: false,
+    });
+    expect((await callTool('get_task', { task_id: id }, auth)).isError).toBe(true);
+
+    const stored = toolData(await callTool('get_task', { task_id: id }));
+    expect(stored).toMatchObject({
+      id,
+      title: input.title,
+      due_time: '14:30',
+      ai_instructions: input.ai_instructions,
+      deadline: '2025-01-16T17:00:00.000Z',
+    });
+    const children = await sql<{
+      subtasks: number;
+      checklists: number;
+      comments: number;
+      labels: number;
+    }>`
+      SELECT (SELECT COUNT(*) FROM subtasks WHERE task_id = ${id}) AS subtasks,
+             (SELECT COUNT(*) FROM checklists WHERE task_id = ${id}) AS checklists,
+             (SELECT COUNT(*) FROM comments WHERE task_id = ${id}) AS comments,
+             (SELECT COUNT(*) FROM task_labels WHERE task_id = ${id}) AS labels
+    `.execute(conn.db);
+    expect(children.rows[0]).toEqual({ subtasks: 1, checklists: 2, comments: 1, labels: 1 });
+  });
+
+  it('mou entre columnes sense exposar la fitxa i detecta versions obsoletes', async () => {
+    const { task } = toolData<{ task: { id: string; version: number } }>(
+      await callTool('create_task', { title: 'Revisar el resum', scope_id: scopeId }),
+    );
+    const auth = await credential(['tasks:move']);
+    const moved = toolData<Record<string, unknown>>(
+      await callTool(
+        'move_task',
+        { task_id: task.id, status: 'doing', expected_version: task.version },
+        auth,
+      ),
+    );
+    expect(moved).toMatchObject({ id: task.id, status: 'doing', version: task.version + 1 });
+    expect(moved).not.toHaveProperty('title');
+    expect(
+      (
+        await callTool(
+          'move_task',
+          { task_id: task.id, status: 'done', expected_version: task.version },
+          auth,
+        )
+      ).isError,
+    ).toBe(true);
+    const completed = toolData(await callTool('complete_task', { task_id: task.id }, auth));
+    expect(completed).toMatchObject({
+      id: task.id,
+      status: 'done',
+      completed_at: expect.any(String),
+    });
+    expect(
+      (await callTool('create_task', { scope_id: scopeId, title: 'Altra tasca' }, auth)).isError,
+    ).toBe(true);
+  });
+
+  it('adjunta bytes amb un identificador de reintent i un permís independent', async () => {
+    const { task } = toolData<{ task: { id: string } }>(
+      await callTool('create_task', { scope_id: scopeId, title: 'Informe mensual' }),
+    );
+    const auth = await credential(['tasks:attach']);
+    const bytes = Buffer.from('Informe sense format');
+    const args = {
+      task_id: task.id,
+      id: uuidv7(),
+      filename: 'informe.txt',
+      content_base64: bytes.toString('base64'),
+    };
+    const first = toolData(await callTool('add_task_attachment', args, auth));
+    expect(first).toMatchObject({
+      created: true,
+      attachment: { id: args.id, task_id: task.id, size_bytes: bytes.length },
+    });
+    expect(toolData(await callTool('add_task_attachment', args, auth))).toMatchObject({
+      created: false,
+      attachment: { id: args.id },
+    });
+    expect(
+      (
+        await callTool(
+          'add_task_attachment',
+          { ...args, url: 'https://files.example.net/informe.txt' },
+          auth,
+        )
+      ).isError,
+    ).toBe(true);
+    expect((await callTool('get_task', { task_id: task.id }, auth)).isError).toBe(true);
+  });
+
+  it('edita la fitxa amb el permís propi i conserva la columna', async () => {
+    const { task } = toolData<{ task: { id: string } }>(
+      await callTool('create_task', {
+        scope_id: scopeId,
+        title: 'Informe inicial',
+        status: 'todo',
+        description: 'Descripció provisional',
+        ai_instructions: 'Mantén el format',
+      }),
+    );
+    const auth = await credential(['tasks:update']);
+    const edited = toolData(
+      await callTool(
+        'update_task',
+        {
+          task_id: task.id,
+          title: 'Informe revisat',
+          description: null,
+          due_time: '13:15',
+        },
+        auth,
+      ),
+    );
+    expect(edited).toMatchObject({ id: task.id, status: 'todo' });
+    expect(edited).not.toHaveProperty('ai_instructions');
+    expect((await callTool('move_task', { task_id: task.id, status: 'doing' }, auth)).isError).toBe(
+      true,
+    );
+    expect(toolData(await callTool('get_task', { task_id: task.id }))).toMatchObject({
+      title: 'Informe revisat',
+      description: null,
+      due_time: '13:15',
+      status: 'todo',
+      ai_instructions: 'Mantén el format',
+    });
   });
 
   it("l'escriptura queda a activity_log, com qualsevol altra", async () => {
