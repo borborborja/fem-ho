@@ -3,9 +3,29 @@
 Què hi ha, què s'ha verificat i **què encara no hi és**. Es manté al dia amb el codi:
 una llista d'estat que exagera és pitjor que no tenir-ne cap.
 
-Data de l'última verificació completa: **2026-08-12**.
+Data de l'última verificació completa: **2026-11-19**.
 
 ---
+
+## Integritat, sincronització i treball fora de línia · 0.19.1
+
+La sincronització comprova els permisos vigents de cada operació i del seu àmbit.
+Les còpies abans de migrar SQLite incorporen les transaccions confirmades del WAL.
+La migració 025 afegeix la procedència dels canvis federats i el receptor desa els
+canvis i el cursor junts. L'edició web conserva els camps que la persona no ha modificat.
+
+El tauler web desa esborranys, captures ràpides i moviments sense connexió. En recuperar
+la xarxa, reenvia les operacions amb el mateix identificador. El calendari respecta el fus
+del perfil, i el tauler permet reordenar targetes amb el teclat i el ratolí.
+
+Android separa la base local i la cua per compte i servidor, i torna a sincronitzar quan
+recupera la xarxa. Les sessions antigues demanen tornar a entrar. El fitxer `femho.db`
+anterior es conserva. Les seves operacions queden fora de la sincronització automàtica
+perquè el fitxer no identifica el compte ni el servidor que les va crear.
+
+Verificat amb 271 proves de Chromium, 1.308 de SQLite i PostgreSQL amb Radicale i Xandikos,
+i 126 d'Android. L'APK amb R8 ha arrencat en un emulador Android 14. La imatge `amd64` ha
+arrencat i la còpia restaurable de SQLite ha superat la comprovació d'integritat.
 
 ## MCP i API per usuari amb OAuth · 2026-09-15
 
