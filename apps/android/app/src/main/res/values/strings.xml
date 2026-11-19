@@ -299,6 +299,7 @@
     <string name="login_certfingerprint">Empremta</string>
     <string name="login_certreject">Cancel·la</string>
     <string name="login_certtitle">Certificat no reconegut</string>
+    <string name="login_changeserver">Canviar de servidor</string>
     <string name="login_checkserver">Comprovar</string>
     <string name="login_email">Correu</string>
     <string name="login_error">Correu o contrasenya incorrectes.</string>

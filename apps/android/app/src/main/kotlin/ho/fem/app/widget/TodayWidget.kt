@@ -78,11 +78,9 @@ class TodayWidget : GlanceAppWidget() {
         suspend fun read(): Pair<WidgetContext, TodayData?> {
             val widget = widgetContext(context)
 
-            val data = if (!widget.signedIn) {
-                null
-            } else {
+            val data = widget.account?.let { account ->
                 withContext(Dispatchers.IO) {
-                    val local = Container.get(context).local
+                    val local = Container.get(context).local(account)
                     val today = LocalDate.now().toString()
                     val scopes = local.scopes().associate { it.id to it.color }
                     val locale = context.resources.configuration.locales[0]?.language ?: "ca"

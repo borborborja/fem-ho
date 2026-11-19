@@ -312,6 +312,7 @@
   "login.insecure": "Aquesta adreça no va xifrada. Qualsevol de la xarxa pot llegir el que hi passi.",
   "login.password": "Contrasenya",
   "login.register": "Fer-se un compte",
+  "login.changeServer": "Canviar de servidor",
   "login.server": "Servidor",
   "login.serverHint": "L'adreça del teu servidor de Fem-ho",
   "login.serverNewer": "El servidor és més nou que aquesta app. Actualitza-la.",

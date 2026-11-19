@@ -299,6 +299,7 @@
     <string name="login_certfingerprint">Huella</string>
     <string name="login_certreject">Cancelar</string>
     <string name="login_certtitle">Certificado no reconocido</string>
+    <string name="login_changeserver">Cambiar de servidor</string>
     <string name="login_checkserver">Comprobar</string>
     <string name="login_email">Correo</string>
     <string name="login_error">Correo o contraseña incorrectos.</string>

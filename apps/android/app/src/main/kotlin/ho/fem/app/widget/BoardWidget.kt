@@ -57,9 +57,9 @@ class BoardWidget : GlanceAppWidget() {
             val column = widgetColumn(prefs[WIDGET_COLUMN])
             val container = Container.get(context)
             BoardFrame(widget, column,
-                if (widget.signedIn) container.local.column(column, widget.activeScopes) else emptyList(),
-                widget.signedIn && (container.repositoryOrNull()?.pending?.first() ?: 0) > 0,
-                if (widget.signedIn) widgetAccount(container) else "")
+                widget.account?.let { container.local(it).column(column, widget.activeScopes) }.orEmpty(),
+                (widget.account?.let { container.repository(it).pending.first() } ?: 0) > 0,
+                widget.account?.identity?.key.orEmpty())
         }
         val initial = read()
         val frames = FemhoWidgets.snapshots.observe { read() }.flowOn(Dispatchers.IO)
@@ -129,9 +129,9 @@ class AdvanceTaskAction : ActionCallback {
         if (!widget.signedIn) { FemhoWidgets.updateAll(context); return }
         val container = Container.get(context)
         withContext(Dispatchers.IO) {
-            val account = widgetAccount(container)
-            if (account.isEmpty() || parameters[ACCOUNT_KEY] != account) return@withContext
-            val repository = container.repositoryOrNull() ?: return@withContext
+            val account = widget.account ?: return@withContext
+            if (container.account() != account || parameters[ACCOUNT_KEY] != account.identity.key) return@withContext
+            val repository = container.repository(account)
             val task = repository.tasks.first().find { it.id == taskId && it.status == source } ?: return@withContext
             if (widget.activeScopes.isNotEmpty() && task.scopeId !in widget.activeScopes) return@withContext
             val next = TaskStatus.entries[source.ordinal + 1]

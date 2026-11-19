@@ -4,12 +4,12 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import androidx.core.app.NotificationCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.json.JSONObject
-import kotlinx.coroutines.flow.first
 import org.unifiedpush.android.connector.FailedReason
 import org.unifiedpush.android.connector.MessagingReceiver
 import org.unifiedpush.android.connector.data.PushEndpoint
@@ -28,6 +28,7 @@ import org.unifiedpush.android.connector.data.PushMessage
 class PushReceiver : MessagingReceiver() {
 
     override fun onMessage(context: Context, message: PushMessage, instance: String) {
+        val account = (context.applicationContext as FemhoApplication).container.account() ?: return
         val payload = runCatching { JSONObject(String(message.content)) }.getOrNull() ?: return
 
         val title = payload.optString("title").ifEmpty { return }
@@ -54,7 +55,10 @@ class PushReceiver : MessagingReceiver() {
         fun actionPending(action: String, requestCode: Int): PendingIntent {
             val intent = Intent(context, NotificationActionReceiver::class.java)
                 .setAction(action)
+                .setData(Uri.Builder().scheme("femho").authority("notification")
+                    .appendPath(account.identity.key).appendPath(taskId.orEmpty()).build())
                 .putExtra(NotificationActionReceiver.EXTRA_TASK_ID, taskId)
+                .putExtra(NotificationActionReceiver.EXTRA_ACCOUNT_KEY, account.identity.key)
             return PendingIntent.getBroadcast(
                 context,
                 requestCode,
@@ -99,9 +103,9 @@ class PushReceiver : MessagingReceiver() {
         val keys = endpoint.pubKeySet ?: return
 
         CoroutineScope(Dispatchers.IO).launch {
-            val base = container.settings.serverUrl.first() ?: return@launch
+            val account = container.account() ?: return@launch
             runCatching {
-                container.api(base).subscribePush(
+                container.api(account).subscribePush(
                     endpoint = endpoint.url,
                     p256dh = keys.pubKey,
                     auth = keys.auth,

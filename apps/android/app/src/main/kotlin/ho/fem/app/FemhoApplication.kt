@@ -1,6 +1,8 @@
 package ho.fem.app
 
 import android.app.Application
+import android.net.ConnectivityManager
+import android.net.Network
 import ho.fem.data.Container
 
 /**
@@ -30,5 +32,12 @@ class FemhoApplication : Application() {
          */
         Notifications.ensureChannel(this)
         Notifications.schedulePolling(this)
+        getSystemService(ConnectivityManager::class.java).registerDefaultNetworkCallback(
+            object : ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: Network) {
+                    if (container.account() != null) Notifications.requestSync(this@FemhoApplication)
+                }
+            },
+        )
     }
 }

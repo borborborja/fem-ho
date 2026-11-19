@@ -7,11 +7,14 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.room.Room
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKey
 import ho.fem.model.AuthTokens
 import ho.fem.network.FemhoApi
+import ho.fem.network.InMemoryTokenStore
 import ho.fem.network.TokenStore
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -31,21 +34,64 @@ class Container(context: Context) {
     val appContext: Context get() = app
 
     val settings: Settings = Settings(app)
-    val tokens: TokenStore = EncryptedTokenStore(app)
+    private val sessions = AccountSessions(app)
+    val expiredAccounts = sessions.expirations
+    private val sessionChangeLock = Mutex()
 
-    private val database: FemhoDatabase = Room
-        .databaseBuilder(app, FemhoDatabase::class.java, "femho.db")
-        // Sense migracions destructives: la base local és una memòria cau, però la cua
-        // de sortida NO ho és, i esborrar-la perdria escriptures que ningú ha vist.
-        .addMigrations(FemhoDatabase.MIGRATION_1_2, FemhoDatabase.MIGRATION_2_3)
-        .build()
+    private class Workspace(val database: FemhoDatabase) {
+        val syncLock = Mutex()
+        val moveLock = Mutex()
+    }
 
-    /**
-     * El servidor pot canviar sense reinstal·lar res, i per això el client es construeix
-     * a cada ús amb la base actual en comptes de guardar-se'n una còpia. Si el host té
-     * un certificat confirmat per empremta, el client l'hi passa (docs/03 §2:38).
-     */
-    fun api(baseUrl: String): FemhoApi {
+    private val workspaces = ConcurrentHashMap<String, Workspace>()
+
+    private fun workspace(account: ActiveAccount): Workspace =
+        workspaces.computeIfAbsent(account.identity.key) {
+            // L'antic femho.db no té cap marca de propietat. Es conserva sencer i
+            // no s'obre en nom de cap compte: una cua antiga no es pot atribuir amb seguretat.
+            Workspace(Room.databaseBuilder(app, FemhoDatabase::class.java, "femho-${account.identity.key}.db")
+                .addMigrations(FemhoDatabase.MIGRATION_1_2, FemhoDatabase.MIGRATION_2_3)
+                .build())
+        }
+
+    fun account(baseUrl: String? = null): ActiveAccount? = runCatching {
+        sessions.active()?.takeIf { baseUrl == null || it.identity.serverUrl == normalizeServerUrl(baseUrl) }
+    }.getOrNull()
+
+    fun api(baseUrl: String): FemhoApi = client(baseUrl, InMemoryTokenStore())
+
+    fun api(account: ActiveAccount): FemhoApi =
+        client(account.identity.serverUrl, sessions.tokensFor(account))
+
+    suspend fun authenticate(baseUrl: String, login: suspend (FemhoApi) -> AuthTokens): ActiveAccount =
+        sessionChangeLock.withLock {
+            val base = normalizeServerUrl(baseUrl)
+            val pending = InMemoryTokenStore()
+            val api = client(base, pending)
+            login(api)
+            val userId = api.profile().id
+            val credentials = AuthTokens(checkNotNull(pending.access()), checkNotNull(pending.refresh()))
+            val identity = AccountIdentity(base, userId)
+            settings.setServerUrl(base)
+            withContext(Dispatchers.IO) { sessions.start(identity, credentials) }
+        }
+
+    suspend fun logout(account: ActiveAccount, onLocalLogout: suspend () -> Unit) {
+        val previous = sessionChangeLock.withLock {
+            withContext(Dispatchers.IO) { sessions.end(account) }
+        }
+        onLocalLogout()
+        if (previous != null) client(account.identity.serverUrl, InMemoryTokenStore(previous)).logout()
+    }
+
+    fun repository(account: ActiveAccount): Repository {
+        val workspace = workspace(account)
+        return Repository(workspace.database.dao(), api(account), workspace.syncLock, workspace.moveLock)
+    }
+
+    fun local(account: ActiveAccount): LocalReads = LocalReads(workspace(account).database.dao())
+
+    private fun client(baseUrl: String, tokens: TokenStore): FemhoApi {
         val der = runCatching {
             val host = java.net.URI(baseUrl).host ?: return@runCatching null
             val b64 = settings.trustedCertCache[host] ?: return@runCatching null
@@ -53,28 +99,6 @@ class Container(context: Context) {
         }.getOrNull()
         return FemhoApi(baseUrl, tokens, der)
     }
-
-    // App, widget i WorkManager comparteixen el pany: no poden enviar el mateix tram alhora.
-    private val syncLock = kotlinx.coroutines.sync.Mutex()
-    private val moveLock = kotlinx.coroutines.sync.Mutex()
-    fun repository(baseUrl: String): Repository = Repository(database.dao(), api(baseUrl), syncLock, moveLock)
-
-    /**
-     * Lectura local sense servidor, per als widgets. `database` i `dao()` es queden
-     * privats: la porta és de només lectura i és l'única que hi ha.
-     */
-    val local: LocalReads = LocalReads(database.dao())
-
-    /**
-     * El repositori amb el servidor configurat, o `null` si encara no n'hi ha cap.
-     *
-     * Els widgets i els treballadors s'executen sense saber si algú ha configurat mai la
-     * instància. `repository(baseUrl)` els obligaria a llegir el DataStore pel seu
-     * compte i a inventar-se què fer amb el `null`; així la resposta és una i és la
-     * mateixa a tot arreu.
-     */
-    suspend fun repositoryOrNull(): Repository? =
-        settings.serverUrl.first()?.let { repository(it) }
 
     companion object {
         @Volatile
@@ -106,7 +130,7 @@ private val Context.dataStore by preferencesDataStore(name = "femho")
  */
 class Settings(private val context: Context) {
     private val serverKey = stringPreferencesKey("server_url")
-    private val scopesKey = stringPreferencesKey("active_scopes")
+    private val scopesKey = "active_scopes"
 
     /**
      * Els projectes que es veuen. **Buit vol dir tots** (`docs/14` P7).
@@ -115,7 +139,7 @@ class Settings(private val context: Context) {
      * ha URL: va a les preferències, com els àmbits actius, i per la mateixa raó —qui
      * torna a obrir l'app es troba el tauler tal com el va deixar.
      */
-    private val projectsKey = stringPreferencesKey("active_projects")
+    private val projectsKey = "active_projects"
     private val themeKey = stringPreferencesKey("theme")
     private val accentKey = stringPreferencesKey("accent")
     // Preferències de la pestanya General (paritat amb la web)
@@ -129,10 +153,15 @@ class Settings(private val context: Context) {
     private val inboxShowOverdueKey = booleanPreferencesKey("inbox_show_overdue")
 
     val serverUrl: Flow<String?> = read(serverKey)
-    val activeScopes: Flow<List<String>> =
-        read(scopesKey).map { it?.split(",")?.filter(String::isNotEmpty) ?: emptyList() }
-    val activeProjects: Flow<List<String>> =
-        read(projectsKey).map { it?.split(",")?.filter(String::isNotEmpty) ?: emptyList() }
+    private fun accountKey(name: String, account: ActiveAccount): Preferences.Key<String> =
+        stringPreferencesKey("${name}_${account.identity.key}")
+
+    private fun readAccountList(name: String, account: ActiveAccount): Flow<List<String>> =
+        read(accountKey(name, account)).map { it?.split(",")?.filter(String::isNotEmpty).orEmpty() }
+
+    suspend fun activeScopes(account: ActiveAccount): List<String> = readAccountList(scopesKey, account).first()
+
+    fun activeProjects(account: ActiveAccount): Flow<List<String>> = readAccountList(projectsKey, account)
     val theme: Flow<String> = read(themeKey).map { it ?: "system" }
     val accent: Flow<String> = read(accentKey).map { it ?: "default" }
     val scopeMode: Flow<String> = read(scopeModeKey).map { it ?: "multi" }
@@ -152,8 +181,10 @@ class Settings(private val context: Context) {
         context.dataStore.data.map { it[key] }
 
     suspend fun setServerUrl(value: String) = write(serverKey, value)
-    suspend fun setActiveScopes(value: List<String>) = write(scopesKey, value.joinToString(","))
-    suspend fun setActiveProjects(value: List<String>) = write(projectsKey, value.joinToString(","))
+    suspend fun setActiveScopes(account: ActiveAccount, value: List<String>) =
+        write(accountKey(scopesKey, account), value.joinToString(","))
+    suspend fun setActiveProjects(account: ActiveAccount, value: List<String>) =
+        write(accountKey(projectsKey, account), value.joinToString(","))
     suspend fun setTheme(value: String) = write(themeKey, value)
     suspend fun setAccent(value: String) = write(accentKey, value)
     // Preferències de la pestanya General
@@ -192,37 +223,5 @@ class Settings(private val context: Context) {
 
     private suspend fun writeBoolean(key: Preferences.Key<Boolean>, value: Boolean) {
         context.dataStore.edit { it[key] = value }
-    }
-}
-
-/**
- * Els testimonis, xifrats amb la clau del dispositiu.
- *
- * `EncryptedSharedPreferences` i no `DataStore`: el que cal aquí és xifratge en repòs
- * lligat al magatzem de claus del dispositiu, i és l'única peça d'AndroidX que el dona
- * sense muntar-lo a mà. Un testimoni de refresc en clar al disc val tant com la
- * contrasenya.
- */
-private class EncryptedTokenStore(context: Context) : TokenStore {
-    private val prefs = EncryptedSharedPreferences.create(
-        context,
-        "femho-tokens",
-        MasterKey.Builder(context).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build(),
-        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
-    )
-
-    override fun access(): String? = prefs.getString("access", null)
-    override fun refresh(): String? = prefs.getString("refresh", null)
-
-    override fun save(tokens: AuthTokens) {
-        prefs.edit()
-            .putString("access", tokens.accessToken)
-            .putString("refresh", tokens.refreshToken)
-            .apply()
-    }
-
-    override fun clear() {
-        prefs.edit().clear().apply()
     }
 }

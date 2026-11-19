@@ -311,6 +311,7 @@
   "login.insecure": "This address is not encrypted. Anyone on the network can read what goes through it.",
   "login.password": "Password",
   "login.register": "Create an account",
+  "login.changeServer": "Change server",
   "login.server": "Server",
   "login.serverHint": "The address of your Fem-ho server",
   "login.serverNewer": "The server is newer than this app. Update it.",

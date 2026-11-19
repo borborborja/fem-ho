@@ -43,10 +43,14 @@ import ho.fem.model.TaskPage
 import ho.fem.model.TaskType
 import ho.fem.model.UserProfile
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.MediaType.Companion.toMediaType
@@ -82,8 +86,6 @@ class FemhoApi(
         explicitNulls = false
         encodeDefaults = true
     }
-    private val refreshLock = Mutex()
-
     companion object {
         private val JSON_TYPE = "application/json; charset=utf-8".toMediaType()
 
@@ -148,27 +150,26 @@ class FemhoApi(
         body: String?,
         authenticated: Boolean,
     ): String = withContext(Dispatchers.IO) {
-        fun send(): okhttp3.Response {
+        fun send(access: String?): okhttp3.Response {
             val builder = Request.Builder().url(url(path))
             when (method) {
                 "GET" -> builder.get()
                 "DELETE" -> builder.delete(body?.toRequestBody(JSON_TYPE))
                 else -> builder.method(method, (body ?: "{}").toRequestBody(JSON_TYPE))
             }
-            if (authenticated) {
-                tokens.access()?.let { builder.header("Authorization", "Bearer $it") }
-            }
+            if (access != null) builder.header("Authorization", "Bearer $access")
             // docs/05 §1: el canal el declara el client i el servidor el propaga fins a
             // `activity_log` sense que cap servei l'hagi de passar a mà.
             builder.header("X-Femho-Source", "android")
             return client.newCall(builder.build()).execute()
         }
 
-        val sentAccess = tokens.access()
-        var response = send()
+        val sentAccess = if (authenticated) tokens.access() else null
+        var response = send(sentAccess)
         if (response.code == 401 && authenticated) {
             response.close()
-            if (refresh(sentAccess)) response = send() else throw ApiException(401, "")
+            if (!refresh(sentAccess)) throw ApiException(401, "")
+            response = send(tokens.access() ?: throw ApiException(401, ""))
         }
 
         response.use {
@@ -184,7 +185,7 @@ class FemhoApi(
      * Si un altre fil ja l'ha refrescat mentre aquest esperava el pany, no se'n fa un
      * altre: es mira si el testimoni d'accés ha canviat.
      */
-    private suspend fun refresh(sentAccess: String?): Boolean = refreshLock.withLock {
+    private suspend fun refresh(sentAccess: String?): Boolean = tokens.refreshLock.withLock {
         val refreshToken = tokens.refresh() ?: return@withLock false
         if (sentAccess != tokens.access()) return@withLock true
 
@@ -192,7 +193,7 @@ class FemhoApi(
             val text = raw(
                 "POST",
                 "/api/v1/auth/refresh",
-                """{"refresh_token":"$refreshToken"}""",
+                encode(mapOf("refresh_token" to refreshToken)),
                 authenticated = false,
             )
             // Una resposta tardana no pot restaurar una sessió que ja s'ha tancat.
@@ -220,10 +221,7 @@ class FemhoApi(
 
     private fun encode(body: Any): String = when (body) {
         is String -> body
-        is Map<*, *> -> body.entries.joinToString(",", "{", "}") { (key, value) ->
-            "\"$key\":" + encodeValue(value)
-        }
-        else -> error("cos no suportat: ${body::class}")
+        else -> jsonValue(body).toString()
     }
 
     /**
@@ -235,12 +233,13 @@ class FemhoApi(
      * cap error aquí. Va caldre en afegir `source_event`, que és el primer cos amb un
      * objecte a dins.
      */
-    private fun encodeValue(value: Any?): String = when (value) {
-        null -> "null"
-        is Number, is Boolean -> value.toString()
-        is Map<*, *> -> encode(value)
-        is List<*> -> value.joinToString(",", "[", "]") { encodeValue(it) }
-        else -> "\"${value.toString().replace("\\", "\\\\").replace("\"", "\\\"")}\""
+    private fun jsonValue(value: Any?): JsonElement = when (value) {
+        null -> JsonNull
+        is Number -> JsonPrimitive(value)
+        is Boolean -> JsonPrimitive(value)
+        is Map<*, *> -> JsonObject(value.entries.associate { (key, item) -> key.toString() to jsonValue(item) })
+        is List<*> -> JsonArray(value.map(::jsonValue))
+        else -> JsonPrimitive(value.toString())
     }
 
     // ------------------------------------------------------------------ públic
@@ -954,10 +953,7 @@ class FemhoApi(
 
     suspend fun getTask(id: String): Task = get("/api/v1/tasks/$id")
 
-    suspend fun updateTask(id: String, fields: Map<String, Any?>): Task {
-        val filtered = fields.filterValues { it != null }.mapValues { it.value!! }
-        return patch("/api/v1/tasks/$id", filtered as Map<String, Any>)
-    }
+    suspend fun updateTask(id: String, fields: Map<String, Any?>): Task = patch("/api/v1/tasks/$id", fields)
 
     suspend fun deleteTask(id: String) {
         raw("DELETE", "/api/v1/tasks/$id", null, authenticated = true)

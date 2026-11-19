@@ -11,7 +11,6 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import ho.fem.app.widget.FemhoWidgets
-import kotlinx.coroutines.flow.first
 import java.util.concurrent.TimeUnit
 
 /**
@@ -79,11 +78,9 @@ object Notifications {
 class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         val container = (applicationContext as FemhoApplication).container
-        val base = container.settings.serverUrl.first() ?: return Result.success()
-        if (runCatching { container.tokens.refresh() }.getOrNull() == null) return Result.success()
-
-        val active = container.settings.activeScopes.first()
-        return runCatching { container.repository(base).refresh(active, null) }
+        val account = container.account() ?: return Result.success()
+        val active = container.settings.activeScopes(account)
+        return runCatching { container.repository(account).refresh(active, null) }
             .fold(
                 // Un error de xarxa és `retry`, no `failure`: la feina segueix sent
                 // vàlida i el sistema la tornarà a provar amb espera creixent.

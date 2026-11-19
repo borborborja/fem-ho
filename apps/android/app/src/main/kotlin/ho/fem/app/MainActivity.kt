@@ -649,6 +649,13 @@ private fun LoginScreen(model: AppViewModel, instanceName: String, serverNewer: 
             Text(stringResource(R.string.login_submit))
         }
 
+        androidx.compose.material3.TextButton(
+            onClick = model::chooseAnotherServer,
+            modifier = Modifier.fillMaxWidth().testTag("login-change-server"),
+        ) {
+            Text(stringResource(R.string.login_changeserver))
+        }
+
         if (registration == "open") {
             Text(
                 text = stringResource(R.string.login_register),
@@ -1038,7 +1045,7 @@ private fun BoardHost(model: AppViewModel, requestedStatus: TaskStatus?, onStatu
                             if (active.isEmpty()) scopes.map { it.id } else active.toList(),
                     ),
                     placeholder = columnAddLabels[status].orEmpty(),
-                    scopeRequiredLabel = { noms -> "${'$'}{quickAddError}${'$'}noms" },
+                    scopeRequiredLabel = { names -> quickAddError + names },
                     aiModeLabel = { mode ->
                         when (mode) {
                             "assisted" -> assistedLabel
@@ -1148,6 +1155,8 @@ private fun TaskDetailSheet(model: AppViewModel) {
     val createdShareUrl by model.createdShareUrl.collectAsStateWithLifecycle()
     val openAttachments by model.openAttachments.collectAsStateWithLifecycle()
     val attachmentError by model.attachmentError.collectAsStateWithLifecycle()
+    val taskSaveError by model.taskSaveError.collectAsStateWithLifecycle()
+    val taskSaving by model.taskSaving.collectAsStateWithLifecycle()
     val scopes by model.scopes.collectAsStateWithLifecycle()
     val projects by model.projects.collectAsStateWithLifecycle()
     val people by model.people.collectAsStateWithLifecycle()
@@ -1291,14 +1300,9 @@ private fun TaskDetailSheet(model: AppViewModel) {
                 close = stringResource(R.string.nav_close),
                 emptyChecklists = stringResource(R.string.checklist_empty),
             ),
-            onSave = { title, mode ->
-                model.rename(task, title)
-                if (mode != task.aiMode) model.setAiMode(task, mode)
-                model.closeTask()
-            },
-            onUpdateDetails = { description, projectId, dueDate, dueTime, deadline, rrule, recurrenceMode ->
-                model.updateTaskDetails(task, description, projectId, dueDate, dueTime, deadline, rrule, recurrenceMode)
-            },
+            onSave = { fields, mode -> model.saveTaskDetails(task, fields, mode) },
+            saveError = if (taskSaveError) stringResource(R.string.error_generic) else null,
+            saving = taskSaving,
             onStatus = { model.move(task, it) },
             onToggleItem = model::toggleItem,
             onAddAssignee = { model.addAssignee(task, it) },
@@ -1368,7 +1372,8 @@ private fun CalendarHost(model: AppViewModel, onSettings: () -> Unit, onBoard: (
      */
     val appLocale = androidx.compose.ui.platform.LocalConfiguration.current.locales[0]
         ?.language ?: "ca"
-    val weekStart = Dates.weekStart(appLocale)
+    val weekStartChoice by model.preferenceWeekStart.collectAsStateWithLifecycle(initialValue = "auto")
+    val weekStart = Dates.resolveWeekStart(weekStartChoice, appLocale)
 
     val labels = CalendarLabels(
         // Els noms surten del CLDR i no del catàleg: `java.time` i `Intl` porten la
@@ -1879,6 +1884,10 @@ private fun Modifier.androidClickable(onClick: () -> Unit): Modifier = this.clic
 @Composable
 private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> Unit) {
     val locale by model.preferenceLocale.collectAsStateWithLifecycle(initialValue = "ca")
+    val appLocale = androidx.compose.ui.platform.LocalConfiguration.current.locales[0]?.language ?: "ca"
+    val firstDayLabel = stringResource(
+        if (Dates.weekStart(appLocale) == Dates.SUNDAY) R.string.settings_day_sun else R.string.settings_day_mon,
+    )
     val scopeMode by model.preferenceScopeMode.collectAsStateWithLifecycle(initialValue = "multi")
     val weekStart by model.preferenceWeekStart.collectAsStateWithLifecycle(initialValue = "auto")
     val eventTaskDeleted by model.preferenceEventTaskDeleted.collectAsStateWithLifecycle(initialValue = "return_to_inbox")
@@ -1912,6 +1921,7 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
     val adminInviteUrl by model.adminInviteUrl.collectAsStateWithLifecycle()
     val adminError by model.adminError.collectAsStateWithLifecycle()
     val instanceName by model.instanceName.collectAsStateWithLifecycle()
+    val instanceVersion by model.instanceVersion.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) {
         model.loadEntityData()
@@ -1983,7 +1993,7 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
             scopeModeSingleHint = stringResource(R.string.settings_scopemode_single_hint),
             scopeModeHelp = stringResource(R.string.settings_scopemode_help),
             weekStart = stringResource(R.string.settings_weekstart),
-            weekStartAuto = stringResource(R.string.settings_weekstart_auto, stringResource(R.string.settings_day_mon)),
+            weekStartAuto = stringResource(R.string.settings_weekstart_auto).replace("{day}", firstDayLabel),
             weekStartMonday = stringResource(R.string.settings_day_mon),
             weekStartSunday = stringResource(R.string.settings_day_sun),
             eventTaskDeleted = stringResource(R.string.settings_events_ondelete),
@@ -2000,7 +2010,9 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
             inboxBelow = stringResource(R.string.settings_inbox_below),
             inboxShowOverdue = stringResource(R.string.settings_inboxshowoverdue),
             about = stringResource(R.string.settings_about),
-            aboutSource = stringResource(R.string.settings_source).format("0.13.0", "AGPL-3.0-or-later"),
+            aboutSource = stringResource(R.string.settings_source)
+                .replace("{version}", instanceVersion.ifEmpty { "—" })
+                .replace("{license}", "AGPL-3.0-or-later"),
             aboutCredits = stringResource(R.string.settings_credits),
             // Perfil
             profileName = stringResource(R.string.settings_profilename),
@@ -2832,7 +2844,8 @@ private fun DashboardHost(model: AppViewModel, onBoard: () -> Unit, onSettings: 
 
     val appLocale = androidx.compose.ui.platform.LocalConfiguration.current.locales[0]
         ?.language ?: "ca"
-    val weekStart = Dates.weekStart(appLocale)
+    val weekStartChoice by model.preferenceWeekStart.collectAsStateWithLifecycle(initialValue = "auto")
+    val weekStart = Dates.resolveWeekStart(weekStartChoice, appLocale)
     val calendarLabels = CalendarLabels(
         weekdays = Dates.weekdayNames(appLocale, weekStart),
         months = (1..12).map { Dates.monthName(appLocale, it) },

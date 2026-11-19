@@ -299,6 +299,7 @@
     <string name="login_certfingerprint">Fingerprint</string>
     <string name="login_certreject">Cancel</string>
     <string name="login_certtitle">Unrecognized certificate</string>
+    <string name="login_changeserver">Change server</string>
     <string name="login_checkserver">Check</string>
     <string name="login_email">Email</string>
     <string name="login_error">Wrong email or password.</string>
