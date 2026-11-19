@@ -120,5 +120,6 @@ dependencies {
     androidTestImplementation(composeBom)
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     androidTestImplementation("androidx.test.ext:junit:1.3.0")
+    androidTestImplementation("androidx.room:room-runtime:2.8.4")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }

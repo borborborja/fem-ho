@@ -738,13 +738,33 @@ data class InviteResult(
 data class ApiTokenSummary(
     val id: String,
     val name: String = "",
-    val prefix: String,
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+    @kotlinx.serialization.json.JsonNames("prefix")
+    @SerialName("token_prefix") val prefix: String,
     @SerialName("created_at") val createdAt: String,
     @SerialName("last_used_at") val lastUsedAt: String? = null,
     @SerialName("revoked_at") val revokedAt: String? = null,
     @SerialName("ai_agent_id") val aiAgentId: String? = null,
+    @SerialName("scope_ids") val scopeIds: List<String> = emptyList(),
+    @SerialName("expires_at") val expiresAt: String? = null,
+    @SerialName("credential_type") val credentialType: String = "pat",
+    val channels: List<String> = listOf("api", "mcp"),
     val capabilities: List<String> = emptyList(),
+    val oauth: OAuthStatus? = null,
 )
+
+@Serializable
+data class OAuthStatus(val status: String, @SerialName("expires_at") val expiresAt: String? = null)
+
+@Serializable
+data class ExternalAccess(
+    @SerialName("api_enabled") val apiEnabled: Boolean,
+    @SerialName("mcp_enabled") val mcpEnabled: Boolean,
+    @SerialName("mcp_url") val mcpUrl: String = "",
+)
+
+@Serializable
+data class CreatedApiToken(val token: String, val summary: ApiTokenSummary)
 
 /** L'agent estès que Ajustos ▸ Usuari IA necessita (el simple ja viu a dalt). */
 @Serializable

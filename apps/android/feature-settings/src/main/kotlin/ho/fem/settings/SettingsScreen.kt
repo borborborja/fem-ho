@@ -132,15 +132,7 @@ data class SettingsLabels(
     val navCreate: String,
     val newScope: String,
     // MCP i API
-    val mcpInstructions: String,
-    val mcpUrl: String,
-    val tokensTitle: String,
-    val tokensName: String,
-    val tokensCreate: String,
     val tokensOnceWarning: String,
-    val tokensPrefix: String,
-    val tokensLastUsed: String,
-    val tokensNever: String,
     val tokensRevoke: String,
     val tokensCopy: String,
     // Gestió de l'àmbit: projectes, etiquetes, tipologies i dedicació
@@ -305,9 +297,7 @@ fun SettingsScreen(
     mailRules: List<ho.fem.model.MailRule> = emptyList(),
     googleMailContent: @Composable () -> Unit = {},
     mailPollingContent: @Composable (ho.fem.model.MailAccount) -> Unit = {},
-    mcpUrl: String = "",
-    tokens: List<ho.fem.model.ApiTokenSummary> = emptyList(),
-    createdToken: String? = null,
+    mcpContent: @Composable () -> Unit = {},
     onTheme: (String) -> Unit,
     onAccent: (String) -> Unit,
     onLocale: (String) -> Unit,
@@ -326,8 +316,6 @@ fun SettingsScreen(
     onSetName: (String) -> Unit = {},
     onSetGravatar: (Boolean) -> Unit = {},
     onChangePassword: (String, String, (String) -> Unit, () -> Unit) -> Unit = { _, _, _, _ -> },
-    onCreateToken: (String, List<String>) -> Unit = { _, _ -> },
-    onRevokeToken: (String) -> Unit = {},
     onCreateProject: (String, String) -> Unit = { _, _ -> },
     onDeleteProject: (String) -> Unit = {},
     onCreateLabel: (String, String) -> Unit = { _, _ -> },
@@ -517,15 +505,7 @@ fun SettingsScreen(
                     onCreateMailRule = onCreateMailRule,
                     onDeleteMailRule = onDeleteMailRule,
                 )
-                "mcp" -> McpTab(
-                    labels = labels,
-                    mcpUrl = mcpUrl,
-                    tokens = tokens,
-                    createdToken = createdToken,
-                    onCreateToken = onCreateToken,
-                    onRevokeToken = onRevokeToken,
-                    onCopyToClipboard = onCopyToClipboard,
-                )
+                "mcp" -> mcpContent()
                 "ai" -> AiTab(
                     labels = labels,
                     scopes = scopes,
@@ -723,7 +703,7 @@ private fun GeneralTab(
 }
 
 @Composable
-private fun Group(title: String, content: @Composable () -> Unit) {
+internal fun Group(title: String, content: @Composable () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -1045,220 +1025,6 @@ private fun ProfileTab(
                     .heightIn(min = FemhoSize.touch)
                     .padding(vertical = 12.dp),
             )
-        }
-    }
-}
-
-/**
- * La pestanya MCP i API.
- *
- * Segueix el mateix disseny que la web (SettingsScreen.tsx:1650-1818):
- * - URL MCP amb botó de copiar
- * - Crear token (POST /tokens amb name + capabilities)
- * - El token es mostra UN SOL COP amb botó de copiar (P17: mai es torna a veure)
- * - Llista de tokens amb prefix i últim ús
- * - Botó de revocar a cada token
- */
-@Composable
-private fun McpTab(
-    labels: SettingsLabels,
-    mcpUrl: String,
-    tokens: List<ho.fem.model.ApiTokenSummary>,
-    createdToken: String?,
-    onCreateToken: (String, List<String>) -> Unit,
-    onRevokeToken: (String) -> Unit,
-    onCopyToClipboard: (String) -> Unit,
-) {
-    var tokenName by remember { mutableStateOf("") }
-
-    // URL MCP
-    Group(labels.tabs.mcp) {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(
-                text = labels.mcpInstructions,
-                color = Femho.colors.inkSoft,
-                fontSize = FemhoText.meta,
-            )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                androidx.compose.foundation.text.BasicTextField(
-                    value = mcpUrl,
-                    onValueChange = {},
-                    readOnly = true,
-                    modifier = Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(FemhoShape.pill))
-                        .background(Femho.colors.ghostBg)
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                    decorationBox = { innerTextField ->
-                        Box(modifier = Modifier.padding(vertical = 4.dp)) {
-                            Text(
-                                text = mcpUrl,
-                                color = Femho.colors.ink,
-                                fontSize = FemhoText.body,
-                            )
-                            innerTextField()
-                        }
-                    },
-                )
-                Text(
-                    text = labels.tokensCopy,
-                    color = Femho.onBrand,
-                    fontSize = FemhoText.body,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier
-                        .clickable { onCopyToClipboard(mcpUrl) }
-                        .heightIn(min = FemhoSize.touch)
-                        .padding(vertical = 12.dp, horizontal = 16.dp),
-                )
-            }
-        }
-    }
-
-    // Tokens
-    Group(labels.tokensTitle) {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            // Token creat: es mostra UN SOL COP
-            if (createdToken != null) {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        androidx.compose.foundation.text.BasicTextField(
-                            value = createdToken,
-                            onValueChange = {},
-                            readOnly = true,
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(FemhoShape.pill))
-                                .background(Femho.colors.ghostBg)
-                                .padding(horizontal = 12.dp, vertical = 10.dp),
-                            decorationBox = { innerTextField ->
-                                Box(modifier = Modifier.padding(vertical = 4.dp)) {
-                                    Text(
-                                        text = createdToken,
-                                        color = Femho.colors.ink,
-                                        fontSize = FemhoText.body,
-                                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                                    )
-                                    innerTextField()
-                                }
-                            },
-                        )
-                        Text(
-                            text = labels.tokensCopy,
-                            color = Femho.onBrand,
-                            fontSize = FemhoText.body,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier
-                                .clickable { onCopyToClipboard(createdToken) }
-                                .heightIn(min = FemhoSize.touch)
-                                .padding(vertical = 12.dp, horizontal = 16.dp),
-                        )
-                    }
-                    Text(
-                        text = labels.tokensOnceWarning,
-                        color = Femho.colors.dangerText,
-                        fontSize = FemhoText.meta,
-                    )
-                }
-            }
-
-            // Llista de tokens
-            tokens.forEach { token ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(
-                            text = token.prefix,
-                            color = Femho.colors.ink,
-                            fontSize = FemhoText.body,
-                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                        )
-                        Text(
-                            text = token.lastUsedAt?.let { lastUsed ->
-                                // Format simple de data
-                                labels.tokensLastUsed
-                            } ?: labels.tokensNever,
-                            color = Femho.colors.inkSoft,
-                            fontSize = FemhoText.meta,
-                        )
-                    }
-                    Text(
-                        text = labels.tokensRevoke,
-                        color = Femho.colors.dangerText,
-                        fontSize = FemhoText.body,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier
-                            .clickable { onRevokeToken(token.id) }
-                            .heightIn(min = FemhoSize.touch)
-                            .padding(vertical = 12.dp, horizontal = 16.dp),
-                    )
-                }
-            }
-
-            // Formulari de creació
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                androidx.compose.foundation.text.BasicTextField(
-                    value = tokenName,
-                    onValueChange = { tokenName = it },
-                    modifier = Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(FemhoShape.pill))
-                        .background(Femho.colors.ghostBg)
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                    decorationBox = { innerTextField ->
-                        Box(modifier = Modifier.padding(vertical = 4.dp)) {
-                            if (tokenName.isEmpty()) {
-                                Text(
-                                    text = labels.tokensName,
-                                    color = Femho.colors.inkFaint,
-                                    fontSize = FemhoText.body,
-                                )
-                            } else {
-                                Text(
-                                    text = tokenName,
-                                    color = Femho.colors.ink,
-                                    fontSize = FemhoText.body,
-                                )
-                            }
-                            innerTextField()
-                        }
-                    },
-                )
-                Text(
-                    text = labels.tokensCreate,
-                    color = if (tokenName.trim().isEmpty()) Femho.colors.inkFaint else Femho.onBrand,
-                    fontSize = FemhoText.body,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier
-                        .clickable(enabled = tokenName.trim().isNotEmpty()) {
-                            if (tokenName.trim().isEmpty()) return@clickable
-                            // Capacitats per defecte com la web
-                            onCreateToken(
-                                tokenName.trim(),
-                                listOf("tasks:read", "tasks:write", "checklists:read", "checklists:write"),
-                            )
-                            tokenName = ""
-                        }
-                        .heightIn(min = FemhoSize.touch)
-                        .padding(vertical = 12.dp, horizontal = 16.dp),
-                )
-            }
         }
     }
 }

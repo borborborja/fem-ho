@@ -5,15 +5,19 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -22,14 +26,23 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
@@ -38,6 +51,8 @@ import ho.fem.designsystem.FemhoShape
 import ho.fem.designsystem.FemhoSize
 import ho.fem.designsystem.FemhoText
 import ho.fem.model.QuickAddContext
+import ho.fem.model.QuickAddError
+import ho.fem.model.QuickAddResult
 import ho.fem.model.QuickAddSuggestion
 import ho.fem.model.TokenKind
 import ho.fem.model.openSigil
@@ -62,13 +77,39 @@ fun QuickAddField(
     placeholder: String,
     scopeRequiredLabel: (String) -> String,
     aiModeLabel: (String) -> String,
-    onCreate: (title: String, scopeId: String, projectId: String?, assigneeIds: List<String>) -> Unit,
+    addLabel: String,
+    creationError: String,
+    onCreate: (QuickAddResult, onPersisted: (Boolean) -> Unit) -> Unit,
     /** El text que arriba de fora (full de compartir, accessos directes), si n'hi ha. */
     initialText: String = "",
     modifier: Modifier = Modifier,
+    draftText: String? = null,
+    onDraftChange: ((String) -> Unit)? = null,
+    savingExternally: Boolean = false,
+    focusRequested: Boolean = false,
+    onFocusHandled: () -> Unit = {},
 ) {
-    var text by remember { mutableStateOf(initialText) }
-    var submitted by remember { mutableStateOf(false) }
+    var localDraft by rememberSaveable { mutableStateOf(initialText) }
+    val text = draftText ?: localDraft
+    fun changeDraft(value: String) {
+        if (draftText == null) localDraft = value else onDraftChange?.invoke(value)
+    }
+    var submitted by rememberSaveable { mutableStateOf(false) }
+    var failed by rememberSaveable { mutableStateOf(false) }
+    var persistingLocally by remember { mutableStateOf(false) }
+    val persisting = persistingLocally || savingExternally
+    var focused by remember { mutableStateOf(false) }
+    val focusRequester = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
+    val windowFocused = LocalWindowInfo.current.isWindowFocused
+    LaunchedEffect(focusRequested, windowFocused) {
+        // Un toc al widget pot portar una activitat viva al davant abans que la finestra tingui focus.
+        if (focusRequested && windowFocused && focusRequester.requestFocus()) {
+            withFrameNanos { }
+            keyboard?.show()
+            onFocusHandled()
+        }
+    }
     // Escape tanca el full sense tocar el text (QuickAdd.tsx:71); tornar a escriure el
     // reobre, que és el que espera qui el va tancar per mirar el que ja havia escrit.
     var dismissed by remember { mutableStateOf(false) }
@@ -77,15 +118,15 @@ fun QuickAddField(
     // El text que arriba de fora (full de compartir) ho fa quan el camp ja és a
     // pantalla: si només el llegís el `remember`, no es veuria mai.
     LaunchedEffect(initialText) {
-        if (initialText.isNotBlank()) text = initialText
+        if (initialText.isNotBlank() && text.isBlank()) changeDraft(initialText)
     }
 
     val parsed = remember(text, context) { parseQuickAdd(text, context) }
 
     // El full d'autocompletat: el mateix sigil i el mateix filtre que la web, amb les
     // persones per @, àmbits i projectes per # i les tipologies per $.
-    val suggestions = remember(text, context, parsed.tokens, dismissed) {
-        if (dismissed) emptyList() else quickAddSuggestions(text, context, parsed.tokens)
+    val suggestions = remember(text, context, parsed.tokens, dismissed, focused) {
+        if (dismissed || !focused) emptyList() else quickAddSuggestions(text, context, parsed.tokens)
     }
 
     LaunchedEffect(suggestions) {
@@ -94,9 +135,29 @@ fun QuickAddField(
 
     fun pick(suggestion: QuickAddSuggestion) {
         val open = openSigil(text) ?: return
-        text = text.substring(0, open.start) + suggestion.insert
+        changeDraft(text.substring(0, open.start) + suggestion.insert)
         active = 0
         dismissed = false
+    }
+
+    fun submit() {
+        val submittedText = draftText ?: localDraft
+        if (persistingLocally || savingExternally || submittedText.isBlank()) return
+        val result = parseQuickAdd(submittedText, context)
+        submitted = true
+        failed = false
+        if (result.error != null || result.scopeId == null) return
+        persistingLocally = true
+        onCreate(result) { saved ->
+            persistingLocally = false
+            failed = !saved
+            if (saved) {
+                // Si l'esborrany viu al ViewModel, aquest rep la confirmació encara que
+                // la pantalla es recreï mentre Room desa la tasca.
+                if (draftText == null && localDraft == submittedText) localDraft = ""
+                submitted = false
+            }
+        }
     }
 
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -105,7 +166,7 @@ fun QuickAddField(
                 items(parsed.tokens, key = { "${it.kind}-${it.start}" }) { token ->
                     Chip(
                         label = if (token.kind == TokenKind.AI_MODE) aiModeLabel(token.id) else token.label,
-                        onClick = { text = revertToken(text, token) },
+                        onClick = { changeDraft(revertToken(text, token)) },
                     )
                 }
             }
@@ -114,14 +175,15 @@ fun QuickAddField(
         // El full ancorat sobre el teclat (docs/03 §4:82): res de popups que el teclat
         // taparia. Va just a sobre del camp, que és on el teclat comença.
         if (suggestions.isNotEmpty()) {
-            Column(
+            LazyColumn(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .heightIn(max = FemhoSize.touch * 3)
                     .clip(RoundedCornerShape(FemhoShape.column))
                     .background(Femho.colors.panelBg)
                     .testTag("quick-add-suggestions"),
             ) {
-                suggestions.forEachIndexed { index, suggestion ->
+                itemsIndexed(suggestions, key = { _, suggestion -> suggestion.insert }) { index, suggestion ->
                     Text(
                         text = suggestion.label,
                         color = Femho.colors.ink,
@@ -141,13 +203,29 @@ fun QuickAddField(
         OutlinedTextField(
             value = text,
             onValueChange = {
-                text = it
+                changeDraft(it)
                 // L'error desapareix en tornar a escriure: no s'ha de quedar clavat.
                 if (submitted) submitted = false
+                if (failed) failed = false
                 dismissed = false
             },
             singleLine = true,
             placeholder = { Text(placeholder) },
+            trailingIcon = {
+                IconButton(
+                    enabled = text.isNotBlank() && !persisting,
+                    onClick = ::submit,
+                    modifier = Modifier
+                        .semantics { contentDescription = addLabel }
+                        .testTag("quick-add-submit"),
+                ) {
+                    if (persisting) {
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                    } else {
+                        Text("+", color = Femho.colors.ink, fontSize = FemhoText.body)
+                    }
+                }
+            },
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(
                 onDone = {
@@ -155,20 +233,15 @@ fun QuickAddField(
                     if (suggestions.isNotEmpty()) {
                         suggestions.getOrNull(active)?.let { pick(it) }
                     } else {
-                        submitted = true
-                        // "Si hi ha més d'un àmbit actiu i no s'ha escrit #, NO ES CREA RES."
-                        val scopeId = parsed.scopeId
-                        if (parsed.error == null && scopeId != null) {
-                            onCreate(parsed.title, scopeId, parsed.projectId, parsed.assigneeIds)
-                            text = ""
-                            submitted = false
-                        }
+                        submit()
                     }
                 },
             ),
             modifier = Modifier
                 .fillMaxWidth()
                 .testTag("quick-add")
+                .focusRequester(focusRequester)
+                .onFocusChanged { focused = it.isFocused }
                 .onPreviewKeyEvent { event ->
                     if (event.type == KeyEventType.KeyDown && suggestions.isNotEmpty()) {
                         when (event.nativeKeyEvent.keyCode) {
@@ -190,19 +263,26 @@ fun QuickAddField(
                             }
                             else -> false
                         }
-                    } else {
-                        false
-                    }
+                    } else if (
+                        event.type == KeyEventType.KeyDown &&
+                        event.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_ENTER
+                    ) {
+                        if (event.nativeKeyEvent.repeatCount == 0) submit()
+                        true
+                    } else false
                 },
         )
 
-        if (submitted && parsed.error?.wire == "scope-required") {
+        val error = when {
+            failed -> creationError
+            submitted && parsed.error == QuickAddError.SCOPE_REQUIRED -> scopeRequiredLabel(
+                context.scopes.filter { it.id in context.activeScopeIds }.joinToString(", #") { it.name },
+            )
+            else -> null
+        }
+        if (error != null) {
             Text(
-                text = scopeRequiredLabel(
-                    context.scopes
-                        .filter { it.id in context.activeScopeIds }
-                        .joinToString(", #") { it.name },
-                ),
+                text = error,
                 color = Femho.colors.dangerText,
                 fontSize = FemhoText.meta,
                 modifier = Modifier.testTag("quick-add-error"),

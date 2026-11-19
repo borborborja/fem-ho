@@ -9,6 +9,7 @@ import androidx.room.OnConflictStrategy
 import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Transaction
+import androidx.room.Update
 import androidx.room.RoomDatabase
 import ho.fem.model.TaskStatus
 import kotlinx.coroutines.flow.Flow
@@ -47,6 +48,15 @@ data class TaskEntity(
     val version: Int,
     /** Esborrat suau: arriba pel sync i no es pot esborrar la fila (docs/06 §7). */
     @ColumnInfo(name = "deleted") val deleted: Boolean = false,
+    /** La resta del contracte de Task, per conservar els detalls que el tauler no indexa. */
+    @ColumnInfo(name = "task_json") val taskJson: String? = null,
+)
+
+@Entity(tableName = "task_lists")
+data class TaskListsEntity(
+    @PrimaryKey @ColumnInfo(name = "task_id") val taskId: String,
+    val subtasks: String,
+    val checklists: String,
 )
 
 @Entity(tableName = "scopes")
@@ -240,6 +250,12 @@ data class OutboxEntity(
     val payload: String,
     @ColumnInfo(name = "queued_at") val queuedAt: Long,
     val attempts: Int = 0,
+    @ColumnInfo(defaultValue = "'pending'") val state: String = "pending",
+    @ColumnInfo(name = "task_id") val taskId: String? = null,
+    @ColumnInfo(name = "parent_id") val parentId: String? = null,
+    @ColumnInfo(name = "base_fields") val baseFields: String? = null,
+    @ColumnInfo(name = "server_entity") val serverEntity: String? = null,
+    val detail: String? = null,
 )
 
 /** El resultat de `countByStatus`. No és una taula: és la projecció d'un `GROUP BY`. */
@@ -252,6 +268,15 @@ interface FemhoDao {
 
     @Query("SELECT * FROM tasks WHERE id = :id AND deleted = 0")
     fun task(id: String): Flow<TaskEntity?>
+
+    @Query("SELECT * FROM tasks WHERE id = :id")
+    suspend fun taskRow(id: String): TaskEntity?
+
+    @Query("SELECT * FROM tasks")
+    suspend fun taskRows(): List<TaskEntity>
+
+    @Query("DELETE FROM tasks WHERE id = :id")
+    suspend fun removeTask(id: String)
 
     /**
      * L'última posició d'una columna, per posar-hi una targeta nova al final.
@@ -352,17 +377,36 @@ interface FemhoDao {
      * la pantalla d'inici és un "Res per avui" que es queda fins al proper refresc.
      * Es va veure exactament així a l'emulador.
      */
-    @Query("SELECT * FROM tasks WHERE id IN (SELECT entity_id FROM outbox WHERE entity = 'task')")
+    @Query("SELECT * FROM tasks WHERE id IN (SELECT COALESCE(task_id, entity_id) FROM outbox WHERE task_id IS NOT NULL OR entity = 'task')")
     suspend fun pendingTasks(): List<TaskEntity>
 
     @Transaction
-    suspend fun replaceTasks(rows: List<TaskEntity>) {
-        // Un toc durant la petició de refresc encara no és al servidor. El pany de
-        // flush impedeix retirar-lo de la cua fins que s’ha aplicat la instantània.
-        val pending = pendingTasks()
-        val ids = pending.map { it.id }.toSet()
+    suspend fun replaceBoard(
+        scopes: List<ScopeEntity>,
+        projects: List<ProjectEntity>,
+        people: List<PersonEntity>,
+        rows: List<TaskEntity>,
+        fetchedScopes: List<String>,
+        projectId: String?,
+    ) {
+        val visible = scopes.map { it.id }.toSet()
+        val fetched = fetchedScopes.toSet()
+        val preserved = (taskRows().filter {
+            it.scopeId in visible && (it.scopeId !in fetched || (projectId != null && it.projectId != projectId))
+        } + pendingTasks().filter { it.scopeId in visible }).associateBy { it.id }
+        clearRevokedScopeIssues(scopes.map { it.id })
+        clearScopes()
+        clearProjects()
+        putScopes(scopes)
+        putProjects(projects)
+        if (people.isNotEmpty()) {
+            clearPeople()
+            putPeople(people)
+        }
         clearTasks()
-        putTasks(rows.filter { it.id !in ids } + pending)
+        putTasks(rows.filter { it.id !in preserved && it.scopeId in visible } + preserved.values)
+        purgeOrphanTaskLists()
+        purgeOrphanComments()
     }
 
     @Query("DELETE FROM scopes")
@@ -405,8 +449,29 @@ interface FemhoDao {
     @Query("SELECT * FROM outbox ORDER BY queued_at, rowid")
     suspend fun outbox(): List<OutboxEntity>
 
+    @Query("SELECT * FROM outbox WHERE op_id = :opId")
+    suspend fun operation(opId: String): OutboxEntity?
+
+    @Query("UPDATE outbox SET state = :state, detail = :detail, server_entity = :serverEntity WHERE op_id = :opId")
+    suspend fun markIssue(opId: String, state: String, detail: String?, serverEntity: String?)
+
+    @Query("UPDATE outbox SET state = 'revoked', server_entity = NULL, base_fields = NULL, detail = NULL WHERE COALESCE(task_id, entity_id) IN (SELECT id FROM tasks WHERE scope_id NOT IN (:visibleScopes))")
+    suspend fun clearRevokedScopeIssues(visibleScopes: List<String>)
+
+    @Query("UPDATE tasks SET deleted = 1 WHERE id = :id")
+    suspend fun markRemoteTaskDeleted(id: String)
+
+    @Transaction
+    suspend fun markDeletedConflict(issue: OutboxEntity, serverEntity: String) {
+        markIssue(issue.opId, "conflict", null, serverEntity)
+        markRemoteTaskDeleted(issue.entityId)
+    }
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun enqueue(operation: OutboxEntity)
+
+    @Update
+    suspend fun updateOperation(operation: OutboxEntity)
 
     @Query("DELETE FROM outbox WHERE op_id = :opId")
     suspend fun dequeue(opId: String)
@@ -414,14 +479,41 @@ interface FemhoDao {
     @Query("UPDATE outbox SET attempts = attempts + 1 WHERE op_id = :opId")
     suspend fun failed(opId: String)
 
-    /**
-     * La fusió d'operacions del mateix camp de la mateixa entitat (docs/06 §4).
-     *
-     * Tres canvis de títol offline són **una** operació, no tres: enviar-les totes
-     * faria que l'historial ensenyés tres edicions que l'usuari no reconeix.
-     */
-    @Query("DELETE FROM outbox WHERE entity_id = :entityId AND op = :op")
-    suspend fun collapse(entityId: String, op: String)
+    @Transaction
+    suspend fun enqueueAll(operations: List<OutboxEntity>) {
+        operations.forEach { enqueue(it) }
+    }
+
+    @Transaction
+    suspend fun acknowledgeTask(opId: String, rebased: List<OutboxEntity>, task: TaskEntity) {
+        dequeue(opId)
+        rebased.forEach { updateOperation(it) }
+        putTasks(listOf(task))
+    }
+
+    @Query("UPDATE outbox SET op_id = :newId, base_version = :baseVersion, payload = :payload, base_fields = :baseFields, state = 'pending', attempts = 0, detail = NULL, server_entity = NULL WHERE op_id = :oldId")
+    suspend fun replaceIssue(oldId: String, newId: String, baseVersion: Int, payload: String, baseFields: String?)
+
+    @Transaction
+    suspend fun resolveIssue(remove: List<String>, previousId: String?, replacement: OutboxEntity?, taskId: String?, task: TaskEntity?) {
+        remove.forEach { dequeue(it) }
+        if (previousId != null && replacement != null) {
+            replaceIssue(previousId, replacement.opId, replacement.baseVersion, replacement.payload, replacement.baseFields)
+        }
+        if (task != null) putTasks(listOf(task))
+        else if (taskId != null) {
+            removeTask(taskId)
+            purgeOrphanTaskLists()
+            purgeOrphanComments()
+        }
+    }
+
+    @Transaction
+    suspend fun acknowledgeChild(opId: String, lists: TaskListsEntity?, comment: CommentEntity?) {
+        if (lists != null) putTaskLists(lists)
+        if (comment != null) putComments(listOf(comment))
+        dequeue(opId)
+    }
 
     // -------------------------------------------------------------- etiquetes
 
@@ -467,6 +559,27 @@ interface FemhoDao {
 
     @Query("DELETE FROM comments WHERE task_id = :taskId")
     suspend fun clearComments(taskId: String)
+
+    @Query("DELETE FROM comments WHERE task_id NOT IN (SELECT id FROM tasks)")
+    suspend fun purgeOrphanComments()
+
+    @Transaction
+    suspend fun replaceComments(taskId: String, rows: List<CommentEntity>) {
+        clearComments(taskId)
+        putComments(rows)
+    }
+
+    @Query("SELECT * FROM task_lists WHERE task_id = :taskId")
+    fun taskLists(taskId: String): Flow<TaskListsEntity?>
+
+    @Query("SELECT * FROM task_lists WHERE task_id = :taskId")
+    suspend fun taskListsOnce(taskId: String): TaskListsEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun putTaskLists(lists: TaskListsEntity)
+
+    @Query("DELETE FROM task_lists WHERE task_id NOT IN (SELECT id FROM tasks)")
+    suspend fun purgeOrphanTaskLists()
 
     // ------------------------------------------------------------- sessions
 
@@ -569,6 +682,7 @@ interface FemhoDao {
 @Database(
     entities = [
         TaskEntity::class,
+        TaskListsEntity::class,
         ScopeEntity::class,
         ProjectEntity::class,
         PersonEntity::class,
@@ -584,7 +698,7 @@ interface FemhoDao {
         ScopeSettingsEntity::class,
         AgentEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = false,
 )
 abstract class FemhoDatabase : RoomDatabase() {
@@ -601,6 +715,20 @@ abstract class FemhoDatabase : RoomDatabase() {
      * directament a v2 sense passar per la migració.
      */
     companion object {
+        val MIGRATION_3_4 = object : androidx.room.migration.Migration(3, 4) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE tasks ADD COLUMN task_json TEXT")
+                db.execSQL("ALTER TABLE outbox ADD COLUMN state TEXT NOT NULL DEFAULT 'pending'")
+                db.execSQL("ALTER TABLE outbox ADD COLUMN task_id TEXT")
+                db.execSQL("ALTER TABLE outbox ADD COLUMN parent_id TEXT")
+                db.execSQL("ALTER TABLE outbox ADD COLUMN base_fields TEXT")
+                db.execSQL("ALTER TABLE outbox ADD COLUMN server_entity TEXT")
+                db.execSQL("ALTER TABLE outbox ADD COLUMN detail TEXT")
+                db.execSQL("UPDATE outbox SET task_id = entity_id WHERE entity = 'task'")
+                db.execSQL("CREATE TABLE IF NOT EXISTS task_lists (task_id TEXT NOT NULL PRIMARY KEY, subtasks TEXT NOT NULL, checklists TEXT NOT NULL)")
+            }
+        }
+
         val MIGRATION_2_3 = object : androidx.room.migration.Migration(2, 3) {
             override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE mail_accounts ADD COLUMN auth_method TEXT NOT NULL DEFAULT 'password'")

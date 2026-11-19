@@ -6,6 +6,8 @@ import ho.fem.model.AgentDetail
 import ho.fem.model.Calendar
 import ho.fem.model.CalendarOrigin
 import ho.fem.model.Comment
+import ho.fem.model.Checklist
+import ho.fem.model.ChecklistItem
 import ho.fem.model.Label
 import ho.fem.model.MailAccount
 import ho.fem.model.MailRule
@@ -16,6 +18,7 @@ import ho.fem.model.Project
 import ho.fem.model.Scope
 import ho.fem.model.ScopeKind
 import ho.fem.model.ScopeSettings
+import ho.fem.model.Subtask
 import ho.fem.model.Session
 import ho.fem.model.ShareAccess
 import ho.fem.model.ShareCreated
@@ -32,18 +35,47 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.combine
 import java.time.Instant
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.decodeFromJsonElement
+import kotlinx.serialization.json.encodeToJsonElement
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.io.IOException
 import java.util.UUID
+
+data class TaskLists(
+    val subtasks: List<Subtask> = emptyList(),
+    val checklists: List<Checklist> = emptyList(),
+)
+
+data class SyncIssue(
+    val opId: String,
+    val entity: String,
+    val entityId: String,
+    val title: String?,
+    val kind: String,
+    val detail: String?,
+    val localPayload: String,
+    val serverPayload: String?,
+    val canKeepLocal: Boolean,
+    val dependentCount: Int,
+)
+
+private val storedJson = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
 /**
  * El repositori. docs/03 §11.
@@ -66,6 +98,35 @@ class Repository(
     val projects: Flow<List<Project>> = dao.projects().map { rows -> rows.map { it.toDomain() } }
     val people: Flow<List<Person>> = dao.people().map { rows -> rows.map { Person(it.id, it.name) } }
     val pending: Flow<Int> = dao.outboxFlow().map { it.size }
+    val syncIssues: Flow<List<SyncIssue>> = combine(dao.outboxFlow(), dao.tasks()) { queue, local ->
+        val titles = local.associate { it.id to it.title }
+        queue.filter { it.state != "pending" }.map {
+            SyncIssue(
+                opId = it.opId, entity = it.entity, entityId = it.entityId, title = titles[it.rootTaskId()],
+                kind = if (it.state == "conflict") "conflict" else "rejected",
+                detail = it.detail, localPayload = it.payload, serverPayload = it.serverEntity,
+                canKeepLocal = it.state != "revoked" &&
+                    it.serverEntity?.let { value -> objectFrom(value)["deleted_at"] in listOf(null, JsonNull) } != false,
+                dependentCount = dependenciesToDiscard(it, queue).size - 1,
+            )
+        }
+    }
+
+    fun observeTask(id: String): Flow<Task?> = dao.task(id).map { it?.toDomain() }
+
+    suspend fun refreshTask(id: String) {
+        val before = dao.taskRow(id)
+        val task = api.getTask(id)
+        moveLock.withLock {
+            val local = dao.taskRow(id)
+            val canSeed = before == null && dao.scopesOnce().any { it.id == task.scopeId }
+            if ((local?.deleted == false || (local == null && canSeed)) &&
+                dao.outbox().none { it.rootTaskId() == id } && (local?.version ?: 0) <= task.version
+            ) {
+                dao.putTasks(listOf(task.toEntity()))
+            }
+        }
+    }
 
     /**
      * Refresca-ho tot des del servidor.
@@ -80,16 +141,18 @@ class Repository(
         val scopes = api.scopes()
         val projects = api.projects()
         val people = api.people()
-        val board = api.board(scopeIds.ifEmpty { scopes.map { it.id } }, projectId)
-
-        dao.putScopes(scopes.map { it.toEntity() })
-        dao.putProjects(projects.map { it.toEntity() })
-        if (people.isNotEmpty()) dao.putPeople(people.map { PersonEntity(it.id, it.name) })
-
-        // Es reemplaça la instantània sencera del tauler: mantenir les que ja no hi són
-        // deixaria a la pantalla tasques que algú ha esborrat des d'un altre dispositiu.
-        // **En una transacció**, perquè ningú llegeixi la taula mig buida.
-        dao.replaceTasks(board.tasks.map { it.toEntity() })
+        val fetchedScopes = scopeIds.ifEmpty { scopes.map { it.id } }
+        val board = api.board(fetchedScopes, projectId)
+        moveLock.withLock {
+            dao.replaceBoard(
+                scopes.map { it.toEntity() },
+                projects.map { it.toEntity() },
+                people.map { PersonEntity(it.id, it.name) },
+                board.tasks.map { it.toEntity() },
+                fetchedScopes,
+                projectId,
+            )
+        }
     }
 
     /**
@@ -105,33 +168,103 @@ class Repository(
 
     private suspend fun flushPending() {
         val blocked = mutableSetOf<Pair<String, String>>()
-        for (operation in dao.outbox()) {
+        val blockedCreations = mutableSetOf<String>()
+        val queued = dao.outbox()
+        for (original in queued) {
+            val operation = dao.operation(original.opId) ?: continue
             val entity = operation.entity to operation.entityId
-            if (entity in blocked) continue
+            if (entity in blocked || operation.parentId in blockedCreations ||
+                (operation.entity != "task" && operation.rootTaskId() in blockedCreations)
+            ) {
+                if (operation.op == "create") blockedCreations += operation.entityId
+                continue
+            }
+            if (operation.state != "pending") {
+                blocked += entity
+                if (operation.op == "create") blockedCreations += operation.entityId
+                continue
+            }
             val response = try {
-                api.syncBatch(
-                    """{"operations":[{"op_id":"${operation.opId}","entity":"${operation.entity}",""" +
-                        """"op":"${operation.op}","id":"${operation.entityId}",""" +
-                        """"base_version":${operation.baseVersion},"occurred_at":"${Instant.ofEpochMilli(operation.queuedAt)}","data":${operation.payload}}]}""",
-                )
+                api.syncBatch(operation.requestBody())
             } catch (cancelled: CancellationException) {
                 throw cancelled
+            } catch (error: FemhoApi.ApiException) {
+                if (error.status == 401 || error.status == 429 || error.status >= 500) throw error
+                dao.markIssue(operation.opId, if (error.status == 409) "conflict" else "rejected", error.detail, null)
+                blocked += entity
+                if (operation.op == "create") blockedCreations += operation.entityId
+                continue
             } catch (error: IOException) {
                 dao.failed(operation.opId)
                 throw error
             }
 
-            when (batchStatus(response, operation.opId)) {
-                "ok" -> dao.dequeue(operation.opId)
+            val receipt = batchReceipt(response, operation.opId)
+            when (val status = receipt?.string("status")) {
+                "ok" -> moveLock.withLock { acknowledge(operation, receipt?.get("entity") as? JsonObject) }
                 "conflict", "rejected" -> {
-                    dao.failed(operation.opId)
-                    blocked.add(entity)
+                    val error = receipt?.get("error") as? JsonObject
+                    val reportedStatus = error?.primitive("status")?.intOrNull
+                    if (reportedStatus == 429 || (reportedStatus != null && reportedStatus >= 500)) {
+                        dao.failed(operation.opId)
+                        throw IOException("Sync operation should be retried")
+                    }
+                    val server = receipt?.get("server_entity") as? JsonObject
+                    if (operation.entity == "task" && server?.get("deleted_at")?.let { it != JsonNull } == true) {
+                        moveLock.withLock { dao.markDeletedConflict(operation, server.toString()) }
+                    } else {
+                        dao.markIssue(operation.opId, if (reportedStatus == 409) "conflict" else status,
+                            error?.string("detail"), server?.toString())
+                    }
+                    blocked += entity
+                    if (operation.op == "create") blockedCreations += operation.entityId
                 }
                 else -> {
                     dao.failed(operation.opId)
                     throw IOException("Sync operation was not confirmed: ${operation.opId}")
                 }
             }
+        }
+    }
+
+    private suspend fun acknowledge(operation: OutboxEntity, entity: JsonObject?) {
+        if (operation.entity == "task") {
+            val canonical = entity?.toTaskOrNull()
+            if (entity != null && canonical?.id != operation.entityId) {
+                throw IOException("The sync receipt does not identify the edited task")
+            }
+            if (canonical == null) {
+                dao.dequeue(operation.opId)
+                return
+            }
+            val following = dao.outbox().filter { it.opId != operation.opId && it.entity == "task" && it.entityId == canonical.id }
+            var task: Task = canonical
+            val rebased = following.map { next ->
+                val base = next.baseFields?.let(::objectFrom)
+                val mayAdvance = next.state == "pending" && (
+                    next.op != "update" || (base != null && task.baseText(objectFrom(next.payload)) == base)
+                )
+                val current = if (mayAdvance) next.copy(baseVersion = canonical.version) else next
+                task = task.applyOperation(current)
+                current
+            }
+            dao.acknowledgeTask(operation.opId, rebased, task.toEntity(deleted = following.any { it.op == "delete" }))
+            return
+        }
+
+        val taskId = operation.rootTaskId()
+        if (taskId == null) {
+            dao.dequeue(operation.opId)
+            return
+        }
+        if (operation.entity == "comment") {
+            val comment = entity?.let { runCatching { storedJson.decodeFromJsonElement<Comment>(it) }.getOrNull() }
+                ?: operation.toComment()
+            dao.acknowledgeChild(operation.opId, null, comment?.toEntity())
+        } else {
+            val canonical = dao.taskListsOnce(taskId).toTaskLists()
+            val updated = canonical.applyOperation(operation, entity)
+            dao.acknowledgeChild(operation.opId, updated.toEntity(taskId), null)
         }
     }
 
@@ -147,44 +280,60 @@ class Repository(
         title: String,
         projectId: String?,
         status: TaskStatus = TaskStatus.INBOX,
-    ): String {
-        // L'identificador el genera el client (D4): la creació és idempotent i la cua la
-        // pot reintentar sense duplicar res.
+        assigneeIds: List<String> = emptyList(),
+        aiMode: AiMode = AiMode.MANUAL,
+        taskTypeId: String? = null,
+        dueDate: String? = null,
+        dueTime: String? = null,
+    ): String = moveLock.withLock {
+        require(title.isNotBlank())
         val id = UUID.randomUUID().toString()
-        val wire = status.name.lowercase()
-        // Al final de la columna, com fa el servidor quan el client no dona posició.
-        val position = generatePosition(dao.lastPosition(scopeId, wire), null)
-
-        dao.putTaskAndEnqueue(
-                TaskEntity(
-                    id = id,
-                    scopeId = scopeId,
-                    projectId = projectId,
-                    title = title,
-                    description = null,
-                    status = wire,
-                    position = position,
-                    dueDate = null,
-                    dueTime = null,
-                    completedAt = null,
-                    aiMode = "manual",
-                    assigneeIds = "",
-                    version = 1,
-                ),
-            OutboxEntity(
-                opId = UUID.randomUUID().toString(),
-                entity = "task",
-                op = "create",
-                entityId = id,
-                baseVersion = 0,
-                payload = """{"id":"$id","scope_id":"$scopeId","title":${quote(title)}""" +
-                    ""","status":"$wire"""" +
-                    (projectId?.let { ""","project_id":"$it"""" } ?: "") + "}",
-                queuedAt = System.currentTimeMillis(),
-            ),
+        val now = System.currentTimeMillis()
+        val task = Task(
+            id = id, scopeId = scopeId, projectId = projectId, title = title.trim(),
+            status = status, position = generatePosition(dao.lastPosition(scopeId, status.name.lowercase()), null),
+            dueDate = dueDate, dueTime = dueTime,
+            completedAt = if (status == TaskStatus.DONE) Instant.ofEpochMilli(now).toString() else null,
+            aiMode = aiMode, assigneeIds = assigneeIds, taskTypeId = taskTypeId,
         )
-        return id
+        val payload = buildJsonObject {
+            put("id", id)
+            put("scope_id", scopeId)
+            put("title", task.title)
+            put("status", status.name.lowercase())
+            put("position", task.position)
+            put("ai_mode", aiMode.wire)
+            put("assignee_ids", storedJson.encodeToJsonElement(assigneeIds))
+            projectId?.let { put("project_id", it) }
+            taskTypeId?.let { put("task_type_id", it) }
+            dueDate?.let { put("due_date", it) }
+            dueTime?.let { put("due_time", it) }
+        }
+        dao.putTaskAndEnqueue(
+            task.toEntity(), operation("task", "create", id, 0, payload, taskId = id, time = now),
+        )
+        id
     }
+
+    suspend fun editTask(id: String, fields: Map<String, String?>, mode: AiMode? = null): Task =
+        moveLock.withLock {
+            val current = checkNotNull(dao.task(id).first()?.toDomain())
+            val allowed = setOf("title", "description", "project_id", "due_date", "due_time", "deadline", "rrule",
+                "recurrence_mode", "ai_instructions", "task_type_id")
+            require(fields.keys.all { it in allowed })
+            if ("title" in fields) require(!fields["title"].isNullOrBlank())
+            val changes = buildJsonObject {
+                fields.forEach { (key, value) -> put(key, if (key == "title") value?.trim() else value) }
+                mode?.let { put("ai_mode", it.wire) }
+            }
+            val updated = current.withPatch(changes)
+            if (current == updated) return@withLock current
+            dao.putTaskAndEnqueue(
+                updated.toEntity(),
+                operation("task", "update", id, current.version, changes, taskId = id, base = current.baseText(changes)),
+            )
+            updated
+        }
 
     suspend fun moveTask(task: Task, status: TaskStatus, neighbours: Pair<String?, String?>) {
         val position = generatePosition(neighbours.first, neighbours.second)
@@ -204,25 +353,9 @@ class Repository(
             dao.putTaskAndEnqueue(
                 current.copy(status = status, position = position,
                     completedAt = if (status == TaskStatus.DONE) Instant.ofEpochMilli(at).toString() else null).toEntity(),
-                OutboxEntity(UUID.randomUUID().toString(), "task", "move", task.id, current.version, payload, at),
+                operation("task", "move", task.id, current.version, objectFrom(payload), taskId = task.id, time = at),
             )
         }
-    }
-
-    suspend fun renameTask(task: Task, title: String) {
-        dao.putTasks(listOf(task.copy(title = title).toEntity()))
-        dao.collapse(task.id, "update")
-        dao.enqueue(
-            OutboxEntity(
-                opId = UUID.randomUUID().toString(),
-                entity = "task",
-                op = "update",
-                entityId = task.id,
-                baseVersion = task.version,
-                payload = """{"title":${quote(title)}}""",
-                queuedAt = System.currentTimeMillis(),
-            ),
-        )
     }
 
     // ------------------------------------------------------------ etiquetes
@@ -264,14 +397,138 @@ class Repository(
     // ----------------------------------------------------------- comentaris
 
     fun commentsByTask(taskId: String): Flow<List<Comment>> =
-        dao.commentsByTask(taskId).map { rows -> rows.map { it.toDomain() } }
+        combine(dao.commentsByTask(taskId), dao.outboxFlow()) { rows, queue ->
+            val comments = (rows.map { it.toDomain() } + queue.filter { it.rootTaskId() == taskId }
+                .mapNotNull { it.toComment() })
+            comments.distinctBy { it.id }.sortedWith(compareBy({ it.createdAt }, { it.id }))
+        }
 
-    suspend fun addComment(taskId: String, body: String): Comment {
-        // Pot encuar-se (comment és a sync.ts:64-70), però en aquesta passada es tracta
-        // com a escriptura en línia per simplicitat —el mateix patró que createProject.
-        val comment = api.addComment(taskId, body)
-        dao.putComments(listOf(comment.toEntity()))
-        return comment
+    suspend fun refreshComments(taskId: String) = flushLock.withLock {
+        val comments = api.taskComments(taskId)
+        moveLock.withLock {
+            if (dao.task(taskId).first() != null) dao.replaceComments(taskId, comments.map { it.toEntity() })
+        }
+    }
+
+    suspend fun addComment(taskId: String, body: String): Comment = moveLock.withLock {
+        require(body.isNotBlank())
+        checkNotNull(dao.task(taskId).first())
+        val id = UUID.randomUUID().toString()
+        val op = operation("comment", "create", id, 0, buildJsonObject {
+            put("id", id)
+            put("task_id", taskId)
+            put("body", body.trim())
+        }, taskId = taskId, parentId = taskId)
+        dao.enqueue(op)
+        checkNotNull(op.toComment())
+    }
+
+    // ------------------------------------------------------- llistes locals
+
+    fun taskLists(taskId: String): Flow<TaskLists> =
+        combine(dao.taskLists(taskId), dao.outboxFlow()) { lists, queue ->
+            lists.toTaskLists().withQueue(taskId, queue)
+        }
+
+    suspend fun refreshTaskLists(taskId: String) = flushLock.withLock {
+        val subtasks = api.subtasks(taskId)
+        val checklists = api.checklists(taskId)
+        moveLock.withLock {
+            if (dao.task(taskId).first() != null) dao.putTaskLists(TaskLists(subtasks, checklists).toEntity(taskId))
+        }
+    }
+
+    suspend fun addSubtask(taskId: String, title: String) = moveLock.withLock {
+        require(title.isNotBlank())
+        checkNotNull(dao.task(taskId).first())
+        val lists = localLists(taskId)
+        val id = UUID.randomUUID().toString()
+        val position = generatePosition(lists.subtasks.maxOfOrNull { it.position }, null)
+        dao.enqueue(operation("subtask", "create", id, 0, buildJsonObject {
+            put("task_id", taskId)
+            put("title", title.trim())
+            put("position", position)
+        }, taskId = taskId, parentId = taskId))
+    }
+
+    suspend fun addChecklistItem(taskId: String, listName: String, text: String) = moveLock.withLock {
+        require(listName.isNotBlank() && text.isNotBlank())
+        checkNotNull(dao.task(taskId).first())
+        val lists = localLists(taskId)
+        val existing = lists.checklists.firstOrNull { it.name.equals(listName.trim(), ignoreCase = true) }
+        val listId = existing?.id ?: UUID.randomUUID().toString()
+        val now = System.currentTimeMillis()
+        val createList = if (existing == null) operation("checklist", "create", listId, 0, buildJsonObject {
+            put("task_id", taskId)
+            put("name", listName.trim())
+            put("position", generatePosition(lists.checklists.maxOfOrNull { it.position }, null))
+        }, taskId = taskId, parentId = taskId, time = now) else null
+        val createItem = operation("checklist_item", "create", UUID.randomUUID().toString(), 0, buildJsonObject {
+            put("checklist_id", listId)
+            put("text", text.trim())
+            put("position", generatePosition(existing?.items?.maxOfOrNull { it.position }, null))
+        }, taskId = taskId, parentId = listId, time = now)
+        dao.enqueueAll(listOfNotNull(createList, createItem))
+    }
+
+    suspend fun setSubtask(taskId: String, id: String, done: Boolean) = moveLock.withLock {
+        val item = checkNotNull(localLists(taskId).subtasks.find { it.id == id })
+        if (item.done != done) dao.enqueue(operation("subtask", "update", id, item.version,
+            buildJsonObject { put("done", done) }, taskId = taskId, parentId = taskId))
+    }
+
+    suspend fun setChecklistItem(taskId: String, id: String, done: Boolean) = moveLock.withLock {
+        val checklist = checkNotNull(localLists(taskId).checklists.find { list -> list.items.any { it.id == id } })
+        if (checklist.items.first { it.id == id }.done != done) {
+            dao.enqueue(operation("checklist_item", "update", id, 0, buildJsonObject { put("done", done) },
+                taskId = taskId, parentId = checklist.id))
+        }
+    }
+
+    private suspend fun localLists(taskId: String): TaskLists =
+        dao.taskListsOnce(taskId).toTaskLists().withQueue(taskId, dao.outbox())
+
+    /**
+     * El servidor recorda el resultat d'un op_id. Només la decisió explícita de
+     * conservar un canvi rebutjat crea una operació nova.
+     */
+    suspend fun resolveSyncIssue(opId: String, keepLocal: Boolean) = flushLock.withLock {
+        val issue = dao.operation(opId) ?: return@withLock
+        if (issue.state == "pending") return@withLock
+        require(!keepLocal || issue.state != "revoked")
+        val taskId = issue.rootTaskId()
+        val canonical =
+            if (issue.entity == "task" && issue.op != "create" && taskId != null) {
+                try {
+                    api.getTask(taskId)
+                } catch (error: FemhoApi.ApiException) {
+                    if (error.status != 404 && error.status != 403) throw error
+                    if (keepLocal) throw error
+                    null
+                }
+            } else null
+
+        moveLock.withLock {
+            val queue = dao.outbox()
+            val replacement = if (keepLocal) issue.retryOn(canonical) else null
+            val discarded = if (keepLocal) emptyList() else dependenciesToDiscard(issue, queue)
+            val projected = canonical?.let { server ->
+                queue.filter { it.entity == "task" && it.entityId == server.id && it.opId !in discarded }
+                    .map { if (it.opId == issue.opId && replacement != null) replacement else it }
+                    .let { remaining ->
+                        remaining.fold(server) { value, next -> value.applyOperation(next) }
+                            .toEntity(deleted = remaining.any { it.op == "delete" })
+                    }
+            }
+            val replaceTask = issue.entity == "task" && (canonical != null || !keepLocal)
+            dao.resolveIssue(
+                discarded,
+                issue.opId.takeIf { replacement != null },
+                replacement,
+                if (replaceTask) taskId else null,
+                projected,
+            )
+        }
     }
 
     // ------------------------------------------------------------ sessions
@@ -495,10 +752,10 @@ class Repository(
         return task
     }
 
-    suspend fun deleteTask(id: String) {
-        api.deleteTask(id)
-        // Esborrat suau: no esborrem la fila, només la marquem
-        dao.putTasks(listOf(TaskEntity(id = id, scopeId = "", projectId = null, title = "", description = null, status = "done", position = "", dueDate = null, dueTime = null, completedAt = null, aiMode = "manual", assigneeIds = "", version = 1, deleted = true)))
+    suspend fun deleteTask(id: String) = moveLock.withLock {
+        val current = checkNotNull(dao.task(id).first()?.toDomain())
+        dao.putTaskAndEnqueue(current.toEntity(deleted = true),
+            operation("task", "delete", id, current.version, buildJsonObject {}, taskId = id))
     }
 
     suspend fun addAssignee(taskId: String, userId: String) {
@@ -598,7 +855,6 @@ class Repository(
     ) =
         api.updateSettings(gravatar, weekStart, eventTaskDeleted, showCalendarWidget, showOverdueSection, inboxPosition, inboxShowOverdue)
 
-    private fun quote(value: String): String = JsonPrimitive(value).toString()
 }
 
 /**
@@ -607,20 +863,21 @@ class Repository(
  * Es llegeix amb el JSON de `kotlinx` i no amb un regex: `"status"` també és un camp de
  * les tasques, i l'entitat que el servidor torna dins del resultat en porta un.
  */
-internal fun batchStatus(response: String, opId: String): String? = runCatching {
-    Json.parseToJsonElement(response)
+internal fun batchStatus(response: String, opId: String): String? = batchReceipt(response, opId)?.string("status")
+
+private fun batchReceipt(response: String, opId: String): JsonObject? = runCatching {
+    storedJson.parseToJsonElement(response)
         .jsonObject["results"]
         ?.jsonArray
         ?.firstOrNull { it.jsonObject["op_id"]?.jsonPrimitive?.content == opId }
         ?.jsonObject
-        ?.get("status")
-        ?.jsonPrimitive
-        ?.content
 }.getOrNull()
 
 // ------------------------------------------------------------------ conversions
 
-internal fun TaskEntity.toDomain(): Task = Task(
+internal fun TaskEntity.toDomain(): Task = (taskJson?.let {
+    runCatching { storedJson.decodeFromString<Task>(it) }.getOrNull()
+} ?: Task(id = id, scopeId = scopeId, title = title, position = position)).copy(
     id = id,
     scopeId = scopeId,
     projectId = projectId,
@@ -636,7 +893,7 @@ internal fun TaskEntity.toDomain(): Task = Task(
     version = version,
 )
 
-internal fun Task.toEntity(): TaskEntity = TaskEntity(
+internal fun Task.toEntity(deleted: Boolean = false): TaskEntity = TaskEntity(
     id = id,
     scopeId = scopeId,
     projectId = projectId,
@@ -650,7 +907,149 @@ internal fun Task.toEntity(): TaskEntity = TaskEntity(
     aiMode = aiMode.wire,
     assigneeIds = assigneeIds.joinToString(","),
     version = version,
+    deleted = deleted,
+    taskJson = storedJson.encodeToString(this),
 )
+
+private fun objectFrom(value: String): JsonObject =
+    runCatching { storedJson.parseToJsonElement(value) as JsonObject }.getOrDefault(JsonObject(emptyMap()))
+
+private fun JsonObject.primitive(key: String): JsonPrimitive? = this[key] as? JsonPrimitive
+private fun JsonObject.string(key: String): String? = primitive(key)?.contentOrNull
+private fun JsonObject.bool(key: String): Boolean? =
+    primitive(key)?.let { it.booleanOrNull ?: it.intOrNull?.let { number -> number != 0 } }
+
+private fun JsonObject.toTaskOrNull(): Task? = runCatching {
+    val normalized = bool("needs_attention")?.let {
+        JsonObject(this + ("needs_attention" to JsonPrimitive(it)))
+    } ?: this
+    storedJson.decodeFromJsonElement<Task>(normalized)
+}.getOrNull()
+
+private fun Task.withPatch(changes: JsonObject): Task =
+    storedJson.decodeFromJsonElement(JsonObject(storedJson.encodeToJsonElement(this).jsonObject + changes))
+
+private fun Task.baseText(changes: JsonObject): JsonObject = JsonObject(
+    buildMap {
+        if ("title" in changes) put("title", JsonPrimitive(title))
+        if ("description" in changes) put("description", description?.let(::JsonPrimitive) ?: JsonNull)
+        if ("ai_instructions" in changes) put("ai_instructions", aiInstructions?.let(::JsonPrimitive) ?: JsonNull)
+    },
+)
+
+private fun Task.applyOperation(operation: OutboxEntity): Task {
+    val payload = objectFrom(operation.payload)
+    return when (operation.op) {
+        "update" -> withPatch(payload)
+        "move" -> withPatch(JsonObject(payload + ("completed_at" to
+            if (payload.string("status") == "done") JsonPrimitive(Instant.ofEpochMilli(operation.queuedAt).toString())
+            else JsonNull)))
+        else -> this
+    }
+}
+
+private fun operation(
+    entity: String, op: String, id: String, baseVersion: Int, payload: JsonObject,
+    taskId: String, parentId: String? = null, base: JsonObject? = null, time: Long = System.currentTimeMillis(),
+): OutboxEntity = OutboxEntity(
+    UUID.randomUUID().toString(), entity, op, id, baseVersion, payload.toString(), time,
+    taskId = taskId, parentId = parentId, baseFields = base?.toString(),
+)
+
+private fun OutboxEntity.rootTaskId(): String? = taskId ?: entityId.takeIf { entity == "task" }
+
+private fun OutboxEntity.requestBody(): String = buildJsonObject {
+    put("operations", kotlinx.serialization.json.JsonArray(listOf(buildJsonObject {
+        put("op_id", opId)
+        put("entity", entity)
+        put("op", op)
+        put("id", entityId)
+        put("base_version", baseVersion)
+        put("occurred_at", Instant.ofEpochMilli(queuedAt).toString())
+        put("data", storedJson.parseToJsonElement(payload))
+    })))
+}.toString()
+
+private fun OutboxEntity.retryOn(task: Task?): OutboxEntity {
+    val changes = objectFrom(payload).toMutableMap()
+    if (entity == "task" && op == "move" && task != null) {
+        changes["from_status"] = JsonPrimitive(task.status.name.lowercase())
+        changes["occurred_at"] = JsonPrimitive(Instant.now().toString())
+    }
+    val updated = JsonObject(changes)
+    return copy(
+        opId = UUID.randomUUID().toString(), baseVersion = task?.version ?: baseVersion,
+        payload = updated.toString(), baseFields = task?.baseText(updated)?.toString() ?: baseFields,
+        state = "pending", attempts = 0, detail = null, serverEntity = null,
+    )
+}
+
+private fun dependenciesToDiscard(issue: OutboxEntity, queue: List<OutboxEntity>): List<String> {
+    if (issue.op != "create") return listOf(issue.opId)
+    val roots = mutableSetOf(issue.entityId)
+    return queue.filter {
+        val affected = it.entityId in roots || it.parentId in roots || it.rootTaskId() in roots
+        if (affected && it.op == "create") roots += it.entityId
+        affected
+    }.map { it.opId }
+}
+
+private fun OutboxEntity.toComment(): Comment? {
+    if (entity != "comment" || op != "create") return null
+    val parent = rootTaskId() ?: return null
+    return Comment(
+        id = entityId, taskId = parent,
+        body = objectFrom(payload).string("body").orEmpty(),
+        createdAt = Instant.ofEpochMilli(queuedAt).toString(),
+    )
+}
+
+private fun TaskListsEntity?.toTaskLists(): TaskLists = this?.let {
+    TaskLists(storedJson.decodeFromString(it.subtasks), storedJson.decodeFromString(it.checklists))
+} ?: TaskLists()
+
+private fun TaskLists.toEntity(taskId: String): TaskListsEntity = TaskListsEntity(
+    taskId, storedJson.encodeToString(subtasks), storedJson.encodeToString(checklists),
+)
+
+private fun TaskLists.withQueue(taskId: String, queue: List<OutboxEntity>): TaskLists =
+    queue.filter { it.rootTaskId() == taskId && it.entity in setOf("subtask", "checklist", "checklist_item") }
+        .fold(this) { value, next -> value.applyOperation(next) }
+
+private fun TaskLists.applyOperation(operation: OutboxEntity, entity: JsonObject? = null): TaskLists {
+    val data = entity ?: objectFrom(operation.payload)
+    val id = operation.entityId
+    val done = data.bool("done")
+    return when (operation.entity) {
+        "subtask" -> {
+            val updated = if (operation.op == "create") {
+                val item = Subtask(id, requireNotNull(operation.rootTaskId()), data.string("title").orEmpty(), done ?: false,
+                    data.string("position").orEmpty(), data.primitive("version")?.intOrNull ?: 1)
+                subtasks.filterNot { it.id == id } + item
+            } else {
+                subtasks.map { if (it.id != id) it else it.copy(done = done ?: it.done,
+                    version = data.primitive("version")?.intOrNull ?: it.version) }
+            }
+            copy(subtasks = updated.sortedWith(compareBy({ it.position }, { it.id })))
+        }
+        "checklist" -> {
+            val existing = checklists.find { it.id == id }
+            val list = existing ?: Checklist(id, requireNotNull(operation.rootTaskId()),
+                name = data.string("name").orEmpty(), position = data.string("position").orEmpty())
+            copy(checklists = (checklists.filterNot { it.id == id } + list).sortedWith(compareBy({ it.position }, { it.id })))
+        }
+        "checklist_item" -> copy(checklists = checklists.map { list ->
+            if (list.id != operation.parentId) return@map list
+            val updated = if (operation.op == "create") {
+                list.items.filterNot { it.id == id } + ChecklistItem(
+                    id, list.id, data.string("text").orEmpty(), done ?: false, data.string("position").orEmpty(),
+                )
+            } else list.items.map { if (it.id == id) it.copy(done = done ?: it.done) else it }
+            list.copy(items = updated.sortedWith(compareBy({ it.position }, { it.id })))
+        })
+        else -> this
+    }
+}
 
 internal fun ScopeEntity.toDomain(): Scope = Scope(
     id = id,

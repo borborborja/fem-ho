@@ -3,6 +3,7 @@ package ho.fem.app
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
@@ -39,6 +40,7 @@ import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -66,17 +68,21 @@ import ho.fem.designsystem.ScopeChip
 import ho.fem.designsystem.TaskCard
 import ho.fem.designsystem.scopeColor
 import ho.fem.model.Checklist
+import ho.fem.model.CalendarDate
 import ho.fem.model.Project
 import ho.fem.model.Scope
 import ho.fem.model.TaskStatus
 import ho.fem.model.UserProfile
 import ho.fem.calendar.CalendarLabels
+import ho.fem.calendar.AgendaEntry
 import ho.fem.calendar.DayList
 import ho.fem.calendar.InboxLabels
 import ho.fem.calendar.InboxRail
 import ho.fem.calendar.MonthView
 import ho.fem.calendar.WeekList
 import ho.fem.settings.SettingsEmptyStates
+import ho.fem.settings.McpSettings
+import ho.fem.settings.McpSettingsLabels
 import ho.fem.settings.SettingsLabels
 import ho.fem.settings.SettingsScreen
 import ho.fem.settings.SettingsTabs
@@ -95,6 +101,7 @@ import ho.fem.model.QuickAddContext
 import ho.fem.model.QuickAddPerson
 import ho.fem.model.QuickAddProject
 import ho.fem.model.QuickAddScope
+import ho.fem.model.QuickAddTaskType
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -121,7 +128,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         val container = (application as FemhoApplication).container
-        pending.value = intent
+        if (savedInstanceState == null) pending.value = intent
 
         setContent {
             val model: AppViewModel = viewModel(
@@ -170,11 +177,47 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun Root(model: AppViewModel, pending: MutableState<Intent?>) {
     val session by model.session.collectAsStateWithLifecycle()
-    var screen by remember { mutableStateOf(Screen.BOARD) }
-    var requestedStatus by remember { mutableStateOf<TaskStatus?>(null) }
+    val openTask by model.openTask.collectAsStateWithLifecycle()
+    val error by model.actionError.collectAsStateWithLifecycle()
+    val snackbar = remember { androidx.compose.material3.SnackbarHostState() }
+    val snackbarScope = androidx.compose.runtime.rememberCoroutineScope()
+    val errorMessage = error?.let { stringResource(it) }
+    LaunchedEffect(errorMessage) {
+        if (errorMessage != null) {
+            snackbarScope.launch { snackbar.showSnackbar(errorMessage) }
+            model.consumeActionError()
+        }
+    }
+    var route by rememberSaveable { mutableStateOf(Screen.BOARD.name) }
+    val screen = Screen.valueOf(route.substringAfterLast('/'))
+    fun go(destination: Screen) {
+        if (destination == screen) return
+        route = if (destination == Screen.BOARD) Screen.BOARD.name else "$route/${destination.name}"
+    }
+    fun back() {
+        route = route.substringBeforeLast('/', Screen.BOARD.name)
+    }
+    var requestedStatus by rememberSaveable { mutableStateOf<TaskStatus?>(null) }
     // El token d'un convit que arriba per deep link (femho://join|invite/{token}).
-    var joinToken by remember { mutableStateOf<String?>(null) }
-    var inviteToken by remember { mutableStateOf<String?>(null) }
+    var joinToken by rememberSaveable { mutableStateOf<String?>(null) }
+    var inviteToken by rememberSaveable { mutableStateOf<String?>(null) }
+    var wasSignedIn by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(session) {
+        when {
+            session is AppViewModel.Session.Ready -> wasSignedIn = true
+            session is AppViewModel.Session.Checking -> Unit
+            wasSignedIn -> {
+                wasSignedIn = false
+                route = Screen.BOARD.name
+                requestedStatus = null
+                joinToken = null
+                inviteToken = null
+            }
+        }
+    }
+    BackHandler(enabled = session is AppViewModel.Session.Ready && openTask == null && screen != Screen.BOARD) {
+        back()
+    }
 
     /**
      * L'intent s'atén i **es consumeix**.
@@ -185,112 +228,107 @@ private fun Root(model: AppViewModel, pending: MutableState<Intent?>) {
      */
     LaunchedEffect(pending.value) {
         val intent = pending.value ?: return@LaunchedEffect
-        screen = Route.screenOf(intent)
+        val destination = Route.screenOf(intent)
+        route = if (destination == Screen.BOARD) destination.name else "${Screen.BOARD.name}/${destination.name}"
         requestedStatus = Route.statusOf(intent)
         Route.taskOf(intent)?.let { model.openById(it) }
-        if (Route.quickAddOf(intent)) model.requestQuickAdd(Route.draftOf(intent) ?: "")
+        if (Route.quickAddOf(intent)) {
+            requestedStatus = TaskStatus.INBOX
+            model.requestQuickAdd(Route.draftOf(intent) ?: "")
+        }
         // El full de compartir: el text rebut es converteix en una tasca a la bústia.
         if (intent?.action == android.content.Intent.ACTION_SEND) {
             val text = intent.getStringExtra(android.content.Intent.EXTRA_TEXT).orEmpty()
-            if (text.isNotBlank()) model.requestQuickAdd(text)
+            if (text.isNotBlank()) {
+                requestedStatus = TaskStatus.INBOX
+                model.requestQuickAdd(text)
+            }
         }
         // Els deep links de convit: el token el guarda la pantalla d'acceptar.
         Route.joinTokenOf(intent)?.let { token ->
-            screen = Screen.JOIN
+            route = "${Screen.BOARD.name}/${Screen.JOIN.name}"
             model.consumeJoin()
             joinToken = token
             model.loadJoinPreview(token)
         }
         Route.inviteTokenOf(intent)?.let { token ->
-            screen = Screen.INVITE
+            route = "${Screen.BOARD.name}/${Screen.INVITE.name}"
             model.consumeJoin()
             inviteToken = token
         }
         pending.value = null
     }
 
-    when (val state = session) {
-        is AppViewModel.Session.Checking -> Loading()
-
-        is AppViewModel.Session.NeedsServer -> ServerScreen(model, state.message)
-
-        is AppViewModel.Session.NeedsLogin -> LoginScreen(model, state.instanceName, false, state.registration)
-
-        is AppViewModel.Session.NeedsLoginNewer -> LoginScreen(model, state.instanceName, true, state.registration)
-
-        is AppViewModel.Session.NeedsCertConfirm -> CertConfirmScreen(model, state.fingerprint)
-
-        is AppViewModel.Session.Ready -> {
-            // El wizard de la primera entrada, si la persona no ha triat mai el mode
-            // d'àmbits i la instància deixa triar (docs/12 §3).
-            val needsWizard by model.needsScopeModeWizard.collectAsStateWithLifecycle()
-            if (needsWizard) {
-                WelcomeScreen(model)
-            } else {
-                when (screen) {
-                Screen.BOARD -> BoardHost(
-                    model = model,
-                    requestedStatus = requestedStatus,
-                    onStatusOpened = { requestedStatus = null },
-                    onSettings = { screen = Screen.SETTINGS },
-                    onCalendar = { screen = Screen.CALENDAR },
-                    onRegistre = { screen = Screen.REGISTRE },
-                    onEstadistiques = { screen = Screen.ESTADISTIQUES },
-                    onSearch = { screen = Screen.SEARCH },
-                    onDashboard = { screen = Screen.DASHBOARD },
-                )
-                Screen.DASHBOARD -> DashboardHost(
-                    model = model,
-                    onBoard = { screen = Screen.BOARD },
-                    onSettings = { screen = Screen.SETTINGS },
-                )
-                Screen.SEARCH -> SearchHost(
-                    model = model,
-                    onBoard = { screen = Screen.BOARD },
-                )
-                Screen.CALENDAR -> CalendarHost(
-                    model = model,
-                    onSettings = { screen = Screen.SETTINGS },
-                    onBoard = { screen = Screen.BOARD },
-                    onDashboard = { screen = Screen.DASHBOARD },
-                )
-                Screen.SETTINGS -> SettingsHost(
-                    model = model,
-                    serverUrl = state.serverUrl,
-                    onBack = { screen = Screen.BOARD },
-                )
-                Screen.REGISTRE -> RegistreHost(
-                    model = model,
-                    onBoard = { screen = Screen.BOARD },
-                )
-                Screen.ESTADISTIQUES -> EstadistiquesHost(
-                    model = model,
-                    onBoard = { screen = Screen.BOARD },
-                )
-                Screen.JOIN -> JoinScreen(
-                    model = model,
-                    token = joinToken.orEmpty(),
-                    onDone = {
-                        screen = Screen.BOARD
-                        model.consumeJoin()
-                        joinToken = null
-                    },
-                )
-                Screen.INVITE -> InviteScreen(
-                    model = model,
-                    token = inviteToken.orEmpty(),
-                    onDone = {
-                        screen = Screen.BOARD
-                    model.consumeJoin()
-                    inviteToken = null
-                },
+    Box(Modifier.fillMaxSize()) {
+        when (val state = session) {
+            is AppViewModel.Session.Checking -> Loading()
+            is AppViewModel.Session.NeedsServer -> ServerScreen(model, state.message)
+            is AppViewModel.Session.NeedsLogin -> LoginScreen(
+                model, state.instanceName, false, state.registration, state.expired,
             )
+            is AppViewModel.Session.NeedsLoginNewer -> LoginScreen(
+                model, state.instanceName, true, state.registration,
+            )
+            is AppViewModel.Session.NeedsCertConfirm -> CertConfirmScreen(model, state.fingerprint)
+            is AppViewModel.Session.Ready -> {
+                val needsWizard by model.needsScopeModeWizard.collectAsStateWithLifecycle()
+                if (needsWizard) {
+                    WelcomeScreen(model)
+                } else {
+                    when (screen) {
+                        Screen.BOARD -> BoardHost(
+                            model = model,
+                            requestedStatus = requestedStatus,
+                            onStatusOpened = { requestedStatus = null },
+                            onSettings = { go(Screen.SETTINGS) },
+                            onCalendar = { go(Screen.CALENDAR) },
+                            onRegistre = { go(Screen.REGISTRE) },
+                            onEstadistiques = { go(Screen.ESTADISTIQUES) },
+                            onSearch = { go(Screen.SEARCH) },
+                            onDashboard = { go(Screen.DASHBOARD) },
+                        )
+                        Screen.DASHBOARD -> DashboardHost(
+                            model = model,
+                            onBoard = { go(Screen.BOARD) },
+                            onSettings = { go(Screen.SETTINGS) },
+                        )
+                        Screen.SEARCH -> SearchHost(model = model, onBoard = ::back)
+                        Screen.CALENDAR -> CalendarHost(
+                            model = model,
+                            onSettings = { go(Screen.SETTINGS) },
+                            onBoard = { go(Screen.BOARD) },
+                            onDashboard = { go(Screen.DASHBOARD) },
+                            onSearch = { go(Screen.SEARCH) },
+                        )
+                        Screen.SETTINGS -> SettingsHost(
+                            model = model, serverUrl = state.serverUrl, onBack = ::back,
+                        )
+                        Screen.REGISTRE -> RegistreHost(model = model, onBoard = ::back)
+                        Screen.ESTADISTIQUES -> EstadistiquesHost(model = model, onBoard = ::back)
+                        Screen.JOIN -> JoinScreen(
+                            model = model,
+                            token = joinToken.orEmpty(),
+                            onDone = {
+                                go(Screen.BOARD)
+                                model.consumeJoin()
+                                joinToken = null
+                            },
+                        )
+                        Screen.INVITE -> InviteScreen(
+                            model = model,
+                            token = inviteToken.orEmpty(),
+                            onDone = {
+                                go(Screen.BOARD)
+                                model.consumeJoin()
+                                inviteToken = null
+                            },
+                        )
+                    }
+                }
+                TaskDetailSheet(model)
             }
-            }
-
-            // El full de detall, per sobre de qualsevol pantalla (cerca inclosa).
-            TaskDetailSheet(model)
         }
+        androidx.compose.material3.SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter))
     }
 }
 
@@ -586,8 +624,14 @@ private fun CertConfirmScreen(model: AppViewModel, fingerprint: String) {
 }
 
 @Composable
-private fun LoginScreen(model: AppViewModel, instanceName: String, serverNewer: Boolean, registration: String = "disabled") {
-    var email by remember { mutableStateOf("") }
+private fun LoginScreen(
+    model: AppViewModel,
+    instanceName: String,
+    serverNewer: Boolean,
+    registration: String = "disabled",
+    expired: Boolean = false,
+) {
+    var email by rememberSaveable { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     // Si la instància té registre obert, es pot passar a crear un compte (docs/12 §3).
@@ -599,7 +643,7 @@ private fun LoginScreen(model: AppViewModel, instanceName: String, serverNewer: 
     }
 
     Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp).testTag("login-screen"),
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp).testTag("login-screen"),
         verticalArrangement = Arrangement.spacedBy(14.dp, Alignment.CenterVertically),
     ) {
         Wordmark()
@@ -615,12 +659,19 @@ private fun LoginScreen(model: AppViewModel, instanceName: String, serverNewer: 
                 fontSize = FemhoText.meta,
             )
         }
+        if (expired) {
+            Text(stringResource(R.string.login_sessionexpired), color = Femho.colors.inkSoft)
+        }
 
         androidx.compose.material3.OutlinedTextField(
             value = email,
             onValueChange = { email = it },
             singleLine = true,
             label = { Text(stringResource(R.string.login_email)) },
+            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                keyboardType = androidx.compose.ui.text.input.KeyboardType.Email,
+                imeAction = androidx.compose.ui.text.input.ImeAction.Next,
+            ),
             modifier = Modifier.fillMaxWidth().testTag("login-email"),
         )
         androidx.compose.material3.OutlinedTextField(
@@ -629,13 +680,15 @@ private fun LoginScreen(model: AppViewModel, instanceName: String, serverNewer: 
             singleLine = true,
             visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
             label = { Text(stringResource(R.string.login_password)) },
+            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                keyboardType = androidx.compose.ui.text.input.KeyboardType.Password,
+            ),
             modifier = Modifier.fillMaxWidth().testTag("login-password"),
         )
 
-        if (error != null) {
-            // Mai es diu si el correu existeix: sempre el mateix missatge.
+        error?.let { message ->
             Text(
-                stringResource(R.string.login_error),
+                message.ifBlank { stringResource(R.string.error_generic) },
                 color = Femho.colors.dangerText,
                 fontSize = FemhoText.body,
                 modifier = Modifier.testTag("login-error"),
@@ -643,7 +696,11 @@ private fun LoginScreen(model: AppViewModel, instanceName: String, serverNewer: 
         }
 
         androidx.compose.material3.Button(
-            onClick = { model.login(email, password) { error = it } },
+            enabled = email.isNotBlank() && password.isNotEmpty(),
+            onClick = {
+                error = null
+                model.login(email.trim(), password) { error = it }
+            },
             modifier = Modifier.fillMaxWidth().testTag("login-submit"),
         ) {
             Text(stringResource(R.string.login_submit))
@@ -836,6 +893,8 @@ private fun BoardHost(model: AppViewModel, requestedStatus: TaskStatus?, onStatu
     val tasks by model.tasks.collectAsStateWithLifecycle()
     val scopes by model.scopes.collectAsStateWithLifecycle()
     val pending by model.pending.collectAsStateWithLifecycle()
+    val syncIssues by model.syncIssues.collectAsStateWithLifecycle()
+    var showSyncIssues by rememberSaveable { mutableStateOf(false) }
     val projects by model.projects.collectAsStateWithLifecycle()
     val people by model.people.collectAsStateWithLifecycle()
     val taskTypes by model.taskTypes.collectAsStateWithLifecycle()
@@ -845,15 +904,9 @@ private fun BoardHost(model: AppViewModel, requestedStatus: TaskStatus?, onStatu
     // El detall de tasca llegeix etiquetes i tipologies; si no es carreguen aquí, la
     // secció del detall surt buida fins que s'obren els Ajustos.
     LaunchedEffect(Unit) { model.loadEntityData() }
-    val openTask by model.openTask.collectAsStateWithLifecycle()
-    val openChecklists by model.openChecklists.collectAsStateWithLifecycle()
-    val openComments by model.openComments.collectAsStateWithLifecycle()
-    val openActivity by model.openActivity.collectAsStateWithLifecycle()
-    val openShares by model.openShares.collectAsStateWithLifecycle()
-    val createdShareUrl by model.createdShareUrl.collectAsStateWithLifecycle()
-    val openAttachments by model.openAttachments.collectAsStateWithLifecycle()
-    val attachmentError by model.attachmentError.collectAsStateWithLifecycle()
     val quickAddDraft by model.quickAddDraft.collectAsStateWithLifecycle()
+    val quickAddTexts by model.quickAddTexts.collectAsStateWithLifecycle()
+    val quickAddSaving by model.quickAddSaving.collectAsStateWithLifecycle()
     val pinned by model.pinned.collectAsStateWithLifecycle()
     val activeProjects by model.activeProjects.collectAsStateWithLifecycle()
     val expandedCards by model.expandedCards.collectAsStateWithLifecycle()
@@ -863,7 +916,8 @@ private fun BoardHost(model: AppViewModel, requestedStatus: TaskStatus?, onStatu
     val aiEnabled by model.aiEnabled.collectAsStateWithLifecycle()
     val aiBoard by model.aiBoard.collectAsStateWithLifecycle()
     val aiBoardLabel = stringResource(R.string.board_ia_toggle)
-    var active by remember { mutableStateOf<Set<String>>(emptySet()) }
+    val activeScopeIds by model.activeScopes.collectAsStateWithLifecycle()
+    val active = activeScopeIds.toSet()
 
     // Els textos es resolen aquí i no dins dels callbacks: `stringResource` és
     // `@Composable` i no es pot cridar des d'una lambda que no ho és.
@@ -945,11 +999,7 @@ private fun BoardHost(model: AppViewModel, requestedStatus: TaskStatus?, onStatu
             active = active,
             pending = pending,
             view = Screen.BOARD,
-            onToggle = { id ->
-                val next = if (id in active) active - id else active + id
-                // No es poden desactivar tots: amb cap, es tornen a veure tots.
-                active = if (next.isEmpty()) emptySet() else next
-            },
+            onToggle = model::toggleScope,
             onSettings = onSettings,
             onDashboard = onDashboard,
             onView = {
@@ -969,6 +1019,17 @@ private fun BoardHost(model: AppViewModel, requestedStatus: TaskStatus?, onStatu
             aiBoardLabel = aiBoardLabel,
             attentionCount = visible.count { it.needsAttention },
         )
+        if (syncIssues.isNotEmpty()) {
+            androidx.compose.material3.TextButton(
+                onClick = { showSyncIssues = true },
+                modifier = Modifier.testTag("sync-issues"),
+            ) {
+                Text(stringResource(R.string.sync_reviewchanges).replace("{count}", syncIssues.size.toString()))
+            }
+        }
+        if (showSyncIssues && syncIssues.isNotEmpty()) {
+            SyncIssuesDialog(syncIssues, model::resolveSyncIssue) { showSyncIssues = false }
+        }
 
         val lockNoticeContext = androidx.compose.ui.platform.LocalContext.current
         val lockNoticeText = stringResource(R.string.ai_lock_card)
@@ -1043,6 +1104,7 @@ private fun BoardHost(model: AppViewModel, requestedStatus: TaskStatus?, onStatu
                         people = people.map { QuickAddPerson(it.id, it.name) },
                         activeScopeIds =
                             if (active.isEmpty()) scopes.map { it.id } else active.toList(),
+                        taskTypes = taskTypes.map { QuickAddTaskType(it.id, it.name, it.scopeId) },
                     ),
                     placeholder = columnAddLabels[status].orEmpty(),
                     scopeRequiredLabel = { names -> quickAddError + names },
@@ -1053,9 +1115,16 @@ private fun BoardHost(model: AppViewModel, requestedStatus: TaskStatus?, onStatu
                             else -> manualLabel
                         }
                     },
-                    initialText = quickAddDraft.orEmpty(),
-                    onCreate = { title, scopeId, _, _ -> model.create(scopeId, title, status) },
-                    modifier = Modifier.padding(top = 8.dp).testTag("quick-add-${'$'}{status.name.lowercase()}"),
+                    initialText = if (status == TaskStatus.INBOX) quickAddDraft.orEmpty() else "",
+                    addLabel = stringResource(R.string.task_new),
+                    creationError = stringResource(R.string.board_quickadd_failed),
+                    draftText = quickAddTexts[status].orEmpty(),
+                    onDraftChange = { model.setQuickAddText(status, it) },
+                    savingExternally = status in quickAddSaving,
+                    focusRequested = status == TaskStatus.INBOX && requestedStatus == null && quickAddDraft != null,
+                    onFocusHandled = model::quickAddConsumed,
+                    onCreate = { result, finished -> model.create(result, status, finished) },
+                    modifier = Modifier.padding(top = 8.dp).testTag("quick-add-${status.name.lowercase()}"),
                 )
             },
             /**
@@ -1143,6 +1212,61 @@ private fun BoardHost(model: AppViewModel, requestedStatus: TaskStatus?, onStatu
 
     // El full de detall es crida des de `Session.Ready`, per sobre de totes les
     // pantalles: si visqués aquí dins, la cerca no el podria obrir (tasca 31).
+}
+
+@Composable
+private fun SyncIssuesDialog(
+    issues: List<ho.fem.data.SyncIssue>,
+    onResolve: (String, Boolean) -> Unit,
+    onClose: () -> Unit,
+) {
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text(stringResource(R.string.sync_issuestitle)) },
+        text = {
+            Column(
+                Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                issues.forEach { issue ->
+                    androidx.compose.runtime.key(issue.opId) {
+                        Column {
+                            Text(
+                                issue.title ?: stringResource(R.string.sync_unknownoperation),
+                                fontWeight = FontWeight.Bold,
+                            )
+                            Text(
+                                issue.detail ?: stringResource(
+                                    if (issue.kind == "conflict") R.string.sync_conflict else R.string.sync_rejected,
+                                ),
+                            )
+                            if (issue.canKeepLocal) {
+                                androidx.compose.material3.TextButton(
+                                    onClick = { onResolve(issue.opId, true) },
+                                    modifier = Modifier.testTag("sync-keep-local"),
+                                ) { Text(stringResource(R.string.sync_applymychange)) }
+                            }
+                            androidx.compose.material3.TextButton(
+                                onClick = { onResolve(issue.opId, false) },
+                                modifier = Modifier.testTag("sync-keep-server"),
+                            ) {
+                                Text(
+                                    stringResource(
+                                        if (issue.canKeepLocal) R.string.sync_keepserver else R.string.sync_discardchange,
+                                    ),
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = onClose) {
+                Text(stringResource(R.string.nav_close))
+            }
+        },
+    )
 }
 
 @Composable
@@ -1299,6 +1423,10 @@ private fun TaskDetailSheet(model: AppViewModel) {
                 save = stringResource(R.string.nav_save),
                 close = stringResource(R.string.nav_close),
                 emptyChecklists = stringResource(R.string.checklist_empty),
+                discardDraftTitle = stringResource(R.string.task_discarddrafttitle),
+                discardDraftMessage = stringResource(R.string.task_discarddraftmessage),
+                discardDraft = stringResource(R.string.task_discarddraft),
+                commentError = stringResource(R.string.error_generic),
             ),
             onSave = { fields, mode -> model.saveTaskDetails(task, fields, mode) },
             saveError = if (taskSaveError) stringResource(R.string.error_generic) else null,
@@ -1311,7 +1439,7 @@ private fun TaskDetailSheet(model: AppViewModel) {
             onAddLabel = { model.addTaskLabel(task, it) },
             onRemoveLabel = { model.removeTaskLabel(task, it) },
             onCreateLabel = { model.createTaskLabel(task, it) },
-            onAddComment = { model.addComment(task.id, it) },
+            onAddComment = { body, finished -> model.addComment(task.id, body, finished) },
             onUndoActivity = { model.undoActivity(it) },
             onDelete = { model.deleteTask(task) },
             onTakeOver = { model.takeOver(task, it) },
@@ -1339,41 +1467,41 @@ private fun TaskDetailSheet(model: AppViewModel) {
 }
 
 @Composable
-private fun CalendarHost(model: AppViewModel, onSettings: () -> Unit, onBoard: () -> Unit, onDashboard: () -> Unit) {
+private fun CalendarHost(
+    model: AppViewModel,
+    onSettings: () -> Unit,
+    onBoard: () -> Unit,
+    onDashboard: () -> Unit,
+    onSearch: () -> Unit = {},
+) {
     val scopes by model.scopes.collectAsStateWithLifecycle()
+    val scopeIds by model.activeScopes.collectAsStateWithLifecycle()
     val pending by model.pending.collectAsStateWithLifecycle()
-    val events by model.events.collectAsStateWithLifecycle()
-    val inbox by model.inbox.collectAsStateWithLifecycle()
-    var active by remember { mutableStateOf<Set<String>>(emptySet()) }
-    var selected by remember { mutableStateOf(java.time.LocalDate.now()) }
-
-    /**
-     * **La clau és `selected` sencer i no el mes i l'any.**
-     *
-     * Amb `selected.month, selected.year`, triar un altre dia del mateix mes no tornava a
-     * demanar res: la bústia que es carregava era la del dia en què s'havia obert el mes,
-     * i no canviava fins a passar de mes. Com que fins ara el resultat no es pintava
-     * enlloc, no ho havia vist ningú.
-     */
-    androidx.compose.runtime.LaunchedEffect(selected) {
-        val first = selected.withDayOfMonth(1)
-        model.loadCalendar(
-            from = first.minusDays(7).toString(),
-            to = first.plusMonths(1).plusDays(7).toString(),
-            day = selected.toString(),
-        )
+    val tasks by model.tasks.collectAsStateWithLifecycle()
+    val calendar by model.calendar.collectAsStateWithLifecycle()
+    val timezone by model.profileTimezone.collectAsStateWithLifecycle()
+    val zone = remember(timezone) {
+        runCatching { java.time.ZoneId.of(timezone) }.getOrElse { java.time.ZoneId.systemDefault() }
     }
-
-    /**
-     * L'idioma i el primer dia de la setmana d'aquesta pantalla.
-     *
-     * L'idioma surt de la configuració efectiva —que ja és la del perfil si Android 13+
-     * l'ha aplicada— i el primer dia, de `Dates`, el mateix codi que la web.
-     */
+    val today = java.time.LocalDate.now(zone)
+    var selectedDay by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<String?>(null) }
+    val selected = selectedDay?.let(java.time.LocalDate::parse) ?: today
+    var mode by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(CalendarMode.MONTH) }
     val appLocale = androidx.compose.ui.platform.LocalConfiguration.current.locales[0]
         ?.language ?: "ca"
     val weekStartChoice by model.preferenceWeekStart.collectAsStateWithLifecycle(initialValue = "auto")
     val weekStart = Dates.resolveWeekStart(weekStartChoice, appLocale)
+    val first = selected.withDayOfMonth(1)
+    val firstWeekDay = selected.minusDays(Dates.weekIndex(selected, weekStart).toLong())
+    val request = AppViewModel.CalendarRequest(
+        from = first.minusDays(7).toString(),
+        to = first.plusMonths(1).plusDays(7).toString(),
+        day = selected.toString(),
+        scopeIds = scopeIds.sorted(),
+        timezone = timezone,
+    )
+    LaunchedEffect(request) { model.loadCalendar(request) }
+    val response = calendar.takeIf { it.request == request }
 
     val labels = CalendarLabels(
         // Els noms surten del CLDR i no del catàleg: `java.time` i `Intl` porten la
@@ -1385,27 +1513,49 @@ private fun CalendarHost(model: AppViewModel, onSettings: () -> Unit, onBoard: (
         emptyWeek = stringResource(R.string.calendar_empty_week),
     )
 
-    // Es resol FORA del `colorOf`: llegir `Femho.colors` és una lectura de composició i
-    // el callback de `DayList` no ho és. Amb el mapa ja resolt, el callback és una
-    // consulta i prou.
     val palette = Femho.colors
     val colors = scopes.associate { it.id to palette.scopeColor(it.color) }
     val fallback = palette.inkFaint
-    var mode by remember { mutableStateOf(CalendarMode.MONTH) }
+    val scopedTasks = if (scopeIds.isEmpty()) tasks else tasks.filter { it.scopeId in scopeIds }
+    val agenda = buildList {
+        response?.events.orEmpty().forEach { occurrence ->
+            val date = CalendarDate.event(occurrence.startsAt, occurrence.allDay, zone) ?: return@forEach
+            add(date.day to AgendaEntry(occurrence.summary, colors[occurrence.scopeId] ?: fallback, date.timeLabel))
+        }
+        scopedTasks.forEach { task ->
+            if (task.status == TaskStatus.DONE) return@forEach
+            val due = task.dueDate?.let { runCatching { java.time.LocalDate.parse(it) }.getOrNull() }
+                ?: return@forEach
+            if (due < first.minusDays(7) || due > first.plusMonths(1).plusDays(7)) return@forEach
+            add(due to AgendaEntry(task.title, colors[task.scopeId] ?: fallback, task.dueTime?.take(5)) { model.open(task) })
+        }
+    }.groupBy({ it.first }, { it.second }).mapValues { (_, entries) -> entries.sortedBy { it.time.orEmpty() } }
+    val inboxTasks = scopedTasks.filter { it.status == TaskStatus.INBOX && it.dueDate?.let { date -> date <= request.day } != false }
+        .sortedWith(compareBy({ it.dueDate == null }, { it.dueDate != request.day }, { it.position }))
+    fun shift(direction: Long) {
+        selectedDay = when (mode) {
+            CalendarMode.MONTH -> selected.plusMonths(direction)
+            CalendarMode.WEEK -> selected.plusWeeks(direction)
+            CalendarMode.DAY -> selected.plusDays(direction)
+        }.toString()
+    }
 
     Column(Modifier.fillMaxSize()) {
         TopBar(
             scopes = scopes,
-            active = active,
+            active = scopeIds.toSet(),
             pending = pending,
             view = Screen.CALENDAR,
-            onToggle = { id ->
-                val next = if (id in active) active - id else active + id
-                active = if (next.isEmpty()) emptySet() else next
-            },
+            onToggle = model::toggleScope,
             onSettings = onSettings,
             onDashboard = onDashboard,
-            onView = { if (it == Screen.BOARD) onBoard() },
+            onView = {
+                when (it) {
+                    Screen.BOARD -> onBoard()
+                    Screen.SEARCH -> onSearch()
+                    else -> Unit
+                }
+            },
         )
 
         Row(
@@ -1423,94 +1573,98 @@ private fun CalendarHost(model: AppViewModel, onSettings: () -> Unit, onBoard: (
                     fontSize = FemhoText.body,
                     fontWeight = if (mode == target) FontWeight.Bold else FontWeight.Medium,
                     modifier = Modifier
-                        .padding(vertical = 12.dp)
-                        .testTag("calendar-mode-${'$'}{target.name.lowercase()}")
-                        .androidClickable { mode = target },
+                        .testTag("calendar-mode-${target.name.lowercase()}")
+                        .androidClickable { mode = target }
+                        .heightIn(min = FemhoSize.touch)
+                        .padding(horizontal = 8.dp, vertical = 12.dp),
                 )
             }
         }
 
-        when (mode) {
-            CalendarMode.MONTH -> {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            val previous = stringResource(R.string.calendar_previous)
+            val next = stringResource(R.string.calendar_next)
+            androidx.compose.material3.TextButton(onClick = { shift(-1) }, modifier = Modifier.testTag("calendar-previous")) {
+                Text("‹", modifier = Modifier.semantics { contentDescription = previous })
+            }
+            androidx.compose.material3.TextButton(onClick = { selectedDay = today.toString() }, modifier = Modifier.testTag("calendar-today")) {
+                Text(stringResource(R.string.dashboard_today))
+            }
+            androidx.compose.material3.TextButton(onClick = { shift(1) }, modifier = Modifier.testTag("calendar-next")) {
+                Text("›", modifier = Modifier.semantics { contentDescription = next })
+            }
+        }
+
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+            if (response?.failed == true) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(stringResource(R.string.calendar_loaderror), modifier = Modifier.weight(1f), color = Femho.colors.ink)
+                    androidx.compose.material3.TextButton(onClick = { model.loadCalendar(request) }) { Text(stringResource(R.string.nav_retry)) }
+                }
+            }
+            if (response == null || response.loading) {
+                Text(stringResource(R.string.state_loading), Modifier.padding(horizontal = 12.dp), color = Femho.colors.inkSoft)
+            }
+            if (mode == CalendarMode.MONTH) {
                 MonthView(
                     year = selected.year,
                     month = selected.monthValue,
                     selected = selected,
-                    today = java.time.LocalDate.now(),
-                    dots = events
-                        .groupBy { java.time.LocalDate.parse(it.startsAt.substring(0, 10)) }
-                        .mapValues { (_, list) ->
-                            list.mapNotNull { colors[it.scopeId] }.distinct().take(3)
-                        },
+                    today = today,
+                    dots = agenda.mapValues { (_, entries) -> entries.map { it.color }.distinct().take(3) },
                     labels = labels,
                     weekStart = weekStart,
-                    onSelect = { selected = it },
-                )
-
-                DayList(
-                    occurrences = events.filter { it.startsAt.startsWith(selected.toString()) },
-                    colorOf = { colors[it] ?: fallback },
-                    labels = labels,
-                    modifier = Modifier.weight(1f),
+                    onSelect = { selectedDay = it.toString() },
                 )
             }
-
-            CalendarMode.WEEK -> {
-                // Amb quin dia comença la setmana ho decideix l'idioma: `Dates` és el
-                // mateix codi que fa servir la web, i per això no divergeixen.
-                val first = selected.minusDays(Dates.weekIndex(selected, weekStart).toLong())
+            val dateLabel = java.time.format.DateTimeFormatter.ofLocalizedDate(java.time.format.FormatStyle.MEDIUM)
+                .withLocale(java.util.Locale.forLanguageTag(appLocale))
+            val showEmpty = response?.let { !it.loading && !it.failed } == true
+            if (mode == CalendarMode.WEEK) {
+                Text(
+                    "${firstWeekDay.format(dateLabel)} – ${firstWeekDay.plusDays(6).format(dateLabel)}",
+                    Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    color = Femho.colors.ink,
+                    fontWeight = FontWeight.Bold,
+                )
                 WeekList(
                     days = (0L..6L).map { offset ->
-                        val day = first.plusDays(offset)
-                        day to events.filter { it.startsAt.startsWith(day.toString()) }
+                        val day = firstWeekDay.plusDays(offset)
+                        day to agenda[day].orEmpty()
                     },
                     labels = labels,
-                    onSelect = {
-                        selected = it
-                        mode = CalendarMode.DAY
-                    },
-                    modifier = Modifier.weight(1f).padding(horizontal = 12.dp),
+                    onSelect = { selectedDay = it.toString(); mode = CalendarMode.DAY },
+                    modifier = Modifier.padding(horizontal = 12.dp),
                     weekStart = weekStart,
+                    showEmpty = showEmpty,
                 )
+            } else {
+                Text(selected.format(dateLabel), Modifier.padding(horizontal = 12.dp), color = Femho.colors.ink, fontWeight = FontWeight.Bold)
+                DayList(agenda[selected].orEmpty(), labels, showEmpty = showEmpty)
             }
-
-            CalendarMode.DAY -> DayList(
-                occurrences = events.filter { it.startsAt.startsWith(selected.toString()) },
+            InboxRail(
+                tasks = inboxTasks,
+                events = response?.inbox?.events.orEmpty(),
                 colorOf = { colors[it] ?: fallback },
-                labels = labels,
-                modifier = Modifier.weight(1f),
+                labels = InboxLabels(
+                    title = stringResource(R.string.board_column_inbox),
+                    empty = stringResource(R.string.board_empty_inbox),
+                    fromCalendar = stringResource(R.string.inbox_section_events),
+                    allDay = stringResource(R.string.inbox_event_allday),
+                    toTask = stringResource(R.string.inbox_event_totask),
+                    hide = stringResource(R.string.inbox_eye_hide),
+                    show = stringResource(R.string.inbox_eye_show),
+                ),
+                onOpenTask = model::open,
+                onEventToTask = { model.eventToTask(it, request) },
+                onEventToggle = { model.setEventInInbox(it, visible = !it.inInbox, request = request) },
+                eventTime = { CalendarDate.event(it.startsAt, it.allDay, zone)?.timeLabel.orEmpty() },
             )
         }
-
-        /**
-         * I el dipòsit del dia, que fins ara es demanava i es llençava.
-         *
-         * Va **sota** la graella i no al costat: a la web és un rail perquè hi ha amplada;
-         * en un telèfon, dues columnes de 180px no serveixen per a res. És el mateix
-         * contingut i les mateixes accions (docs/02 §10: la web en mòbil i l'app han de
-         * ser gairebé idèntiques).
-         */
-        InboxRail(
-            tasks = (inbox?.dated.orEmpty() + inbox?.overdue.orEmpty() + inbox?.undated.orEmpty()),
-            events = inbox?.events.orEmpty(),
-            colorOf = { colors[it] ?: fallback },
-            labels = InboxLabels(
-                title = stringResource(R.string.board_column_inbox),
-                empty = stringResource(R.string.board_empty_inbox),
-                fromCalendar = stringResource(R.string.inbox_section_events),
-                allDay = stringResource(R.string.inbox_event_allday),
-                toTask = stringResource(R.string.inbox_event_totask),
-                hide = stringResource(R.string.inbox_eye_hide),
-                show = stringResource(R.string.inbox_eye_show),
-            ),
-            onOpenTask = { model.open(it) },
-            onEventToTask = { model.eventToTask(it, selected.toString()) },
-            // El contrari del que hi ha ara, i no `null`: amb una font que per defecte no
-            // entra a la bústia —un RSS—, `null` no faria res i el botó semblaria espatllat.
-            onEventToggle = {
-                model.setEventInInbox(it, visible = !it.inInbox, day = selected.toString())
-            },
-        )
     }
 }
 
@@ -1678,7 +1832,7 @@ private fun TopBar(
                         .padding(vertical = 7.dp, horizontal = 18.dp)
                         .clip(RoundedCornerShape(FemhoShape.pill))
                         .background(if (isActive) Femho.colors.cardBg else androidx.compose.ui.graphics.Color.Transparent)
-                        .testTag("view-${'$'}{target.name.lowercase()}")
+                        .testTag("view-${target.name.lowercase()}")
                         .androidClickable { onView(target) },
                     textAlign = TextAlign.Center,
                 )
@@ -1706,6 +1860,7 @@ private fun TopBar(
                         color = Femho.colors.scopeColor(scope.color),
                         active = active.isEmpty() || scope.id in active,
                         onClick = { onToggle(scope.id) },
+                        modifier = Modifier.testTag("scope-chip-${scope.id}"),
                     )
                 }
             }
@@ -1777,7 +1932,7 @@ private fun TopBar(
             }
         }
 
-        PinnedRow(pinned = pinned, onOpenList = onOpenList)
+        if (pinned.isNotEmpty()) PinnedRow(pinned = pinned, onOpenList = onOpenList)
     }
 }
 
@@ -1901,8 +2056,6 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
     val profile by model.profile.collectAsStateWithLifecycle()
     val gravatarEnabled by model.gravatarEnabled.collectAsStateWithLifecycle()
     val scopes by model.scopes.collectAsStateWithLifecycle()
-    val tokens by model.tokens.collectAsStateWithLifecycle()
-    val createdToken by model.createdToken.collectAsStateWithLifecycle()
     val projects by model.projects.collectAsStateWithLifecycle()
     val labels by model.labels.collectAsStateWithLifecycle()
     val taskTypes by model.taskTypes.collectAsStateWithLifecycle()
@@ -2026,15 +2179,7 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
             passwordChanged = stringResource(R.string.settings_passwordchanged),
             navSave = stringResource(R.string.nav_save),
             // MCP i API
-            mcpInstructions = stringResource(R.string.settings_mcpinstructions),
-            mcpUrl = stringResource(R.string.settings_mcpurl),
-            tokensTitle = stringResource(R.string.tokens_title),
-            tokensName = stringResource(R.string.tokens_name),
-            tokensCreate = stringResource(R.string.tokens_create),
             tokensOnceWarning = stringResource(R.string.tokens_oncewarning),
-            tokensPrefix = stringResource(R.string.tokens_prefix),
-            tokensLastUsed = stringResource(R.string.tokens_lastused),
-            tokensNever = stringResource(R.string.tokens_never),
             tokensRevoke = stringResource(R.string.tokens_revoke),
             tokensCopy = stringResource(R.string.tokens_copy),
             // Agents (Usuari IA)
@@ -2194,9 +2339,7 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
         theme = theme,
         accent = accent,
         serverUrl = serverUrl,
-        mcpUrl = "$serverUrl/mcp",
-        tokens = tokens,
-        createdToken = createdToken,
+        mcpContent = { McpSettingsHost(model, scopes, "$serverUrl/mcp") },
         agents = agentsDetail,
         agentScopeAvailability = agentScopeAvailability,
         agentCredentials = agentCredentials,
@@ -2217,8 +2360,6 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
         onSetName = model::setName,
         onSetGravatar = model::setGravatar,
         onChangePassword = model::changePassword,
-        onCreateToken = model::createToken,
-        onRevokeToken = model::revokeToken,
         onCopyToClipboard = model::copyToClipboard,
         onCreateAgent = model::createAgent,
         onAgentEnabled = model::setAgentEnabled,
@@ -2273,6 +2414,95 @@ private fun fmtMinutes(minutes: Long): String {
         h > 0 -> "${h} h"
         else -> "${m} min"
     }
+}
+
+@Composable
+private fun McpSettingsHost(model: AppViewModel, scopes: List<Scope>, fallbackMcpUrl: String) {
+    val access by model.externalAccess.collectAsStateWithLifecycle()
+    val tokens by model.tokens.collectAsStateWithLifecycle()
+    val createdToken by model.createdToken.collectAsStateWithLifecycle()
+    val busy by model.tokenBusy.collectAsStateWithLifecycle()
+    val failed by model.tokenError.collectAsStateWithLifecycle()
+    McpSettings(
+        labels = McpSettingsLabels(
+            title = stringResource(R.string.external_connect),
+            instructions = stringResource(R.string.external_oauthpermissions),
+            apiEnabled = stringResource(R.string.external_apienabled),
+            mcpEnabled = stringResource(R.string.external_mcpenabled),
+            url = stringResource(R.string.settings_mcpurl),
+            copy = stringResource(R.string.tokens_copy),
+            connections = stringResource(R.string.external_credentials),
+            empty = stringResource(R.string.external_nocredentials),
+            create = stringResource(R.string.tokens_create),
+            edit = stringResource(R.string.external_edit),
+            restrict = stringResource(R.string.external_restrict),
+            restrictHelp = stringResource(R.string.external_restricthelp),
+            revoke = stringResource(R.string.tokens_revoke),
+            name = stringResource(R.string.tokens_name),
+            warning = stringResource(R.string.tokens_oncewarning),
+            hideSecret = stringResource(R.string.external_closesecret),
+            scopes = stringResource(R.string.external_scopes),
+            unavailableScope = stringResource(R.string.external_unavailablescope),
+            permissions = stringResource(R.string.external_permission),
+            channels = stringResource(R.string.external_channels),
+            channelLabels = mapOf(
+                "mcp" to stringResource(R.string.external_mcp),
+                "api" to stringResource(R.string.external_api),
+            ),
+            operationLabels = mapOf(
+                "tasks:read" to stringResource(R.string.external_operation_read),
+                "tasks:create" to stringResource(R.string.external_operation_create),
+                "tasks:move" to stringResource(R.string.external_operation_move),
+                "tasks:update" to stringResource(R.string.external_operation_update),
+                "tasks:attach" to stringResource(R.string.external_operation_attach),
+                "tasks:write" to stringResource(R.string.external_capability_taskswrite),
+                "events:read" to stringResource(R.string.external_capability_eventsread),
+                "events:write" to stringResource(R.string.external_capability_eventswrite),
+                "projects:read" to stringResource(R.string.external_capability_projectsread),
+                "projects:write" to stringResource(R.string.external_capability_projectswrite),
+                "scopes:read" to stringResource(R.string.external_capability_scopesread),
+                "checklists:read" to stringResource(R.string.external_capability_checklistsread),
+                "checklists:write" to stringResource(R.string.external_capability_checklistswrite),
+                "comments:read" to stringResource(R.string.external_capability_commentsread),
+                "comments:write" to stringResource(R.string.external_capability_commentswrite),
+                "attachments:read" to stringResource(R.string.external_capability_attachmentsread),
+                "attachments:write" to stringResource(R.string.external_capability_attachmentswrite),
+            ),
+            save = stringResource(R.string.nav_save),
+            cancel = stringResource(R.string.nav_cancel),
+            loading = stringResource(R.string.state_loading),
+            error = stringResource(R.string.error_generic),
+            retry = stringResource(R.string.nav_retry),
+            oauth = stringResource(R.string.external_oauthcredential),
+            manual = stringResource(R.string.external_manualcredential),
+            agent = stringResource(R.string.external_agentcredential),
+            lastUsed = stringResource(R.string.external_lastused),
+            neverUsed = stringResource(R.string.tokens_never),
+            expires = stringResource(R.string.external_expires),
+            noExpiry = stringResource(R.string.external_never),
+            statusLabels = mapOf(
+                "active" to stringResource(R.string.external_active),
+                "pending" to stringResource(R.string.external_pending),
+                "paused" to stringResource(R.string.external_paused),
+                "expired" to stringResource(R.string.external_expired),
+                "revoked" to stringResource(R.string.external_revoked),
+            ),
+        ),
+        access = access,
+        fallbackMcpUrl = fallbackMcpUrl,
+        scopeOptions = scopes,
+        tokens = tokens,
+        createdToken = createdToken,
+        busy = busy,
+        failed = failed,
+        onLoad = model::loadTokens,
+        onChannel = model::setExternalAccess,
+        onCreate = model::createToken,
+        onEdit = model::editToken,
+        onRevoke = model::revokeToken,
+        onHideSecret = model::hideCreatedToken,
+        onCopy = model::copyToClipboard,
+    )
 }
 
 @Composable

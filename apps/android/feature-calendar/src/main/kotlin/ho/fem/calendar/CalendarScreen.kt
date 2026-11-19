@@ -10,8 +10,6 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -28,7 +26,6 @@ import ho.fem.designsystem.Femho
 import ho.fem.designsystem.FemhoShape
 import ho.fem.designsystem.FemhoText
 import ho.fem.model.Dates
-import ho.fem.model.EventOccurrence
 import java.time.LocalDate
 
 /**
@@ -50,6 +47,13 @@ data class CalendarLabels(
     val months: List<String>,
     val emptyDay: String,
     val emptyWeek: String,
+)
+
+data class AgendaEntry(
+    val title: String,
+    val color: Color,
+    val time: String? = null,
+    val onOpen: (() -> Unit)? = null,
 )
 
 /**
@@ -150,7 +154,7 @@ private fun DayCell(
                     else -> Modifier
                 },
             )
-            .then(if (date == null) Modifier else Modifier.clickable { onSelect(date) }),
+            .then(if (date == null) Modifier else Modifier.testTag("calendar-date-$date").clickable { onSelect(date) }),
         contentAlignment = Alignment.Center,
     ) {
         if (date != null) {
@@ -177,23 +181,23 @@ private fun DayCell(
 /** La setmana, com a llista vertical de dies (docs/03 §5). */
 @Composable
 fun WeekList(
-    days: List<Pair<LocalDate, List<EventOccurrence>>>,
+    days: List<Pair<LocalDate, List<AgendaEntry>>>,
     labels: CalendarLabels,
     onSelect: (LocalDate) -> Unit,
     modifier: Modifier = Modifier,
     weekStart: Int = 1,
+    showEmpty: Boolean = true,
 ) {
-    LazyColumn(
+    Column(
         modifier = modifier.fillMaxWidth().testTag("calendar-week"),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        items(days, key = { it.first.toString() }) { (date, occurrences) ->
+        days.forEach { (date, entries) ->
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(FemhoShape.card))
                     .background(Femho.colors.cardBg)
-                    .clickable { onSelect(date) }
                     .padding(12.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
@@ -201,13 +205,12 @@ fun WeekList(
                     text = "${labels.weekdays.getOrElse(weekIndex(date, weekStart)) { "" }} ${date.dayOfMonth}",
                     color = Femho.colors.ink,
                     fontWeight = FontWeight.Bold,
+                    modifier = Modifier.fillMaxWidth().clickable { onSelect(date) }.padding(vertical = 8.dp),
                 )
-                if (occurrences.isEmpty()) {
+                if (entries.isEmpty() && showEmpty) {
                     EmptyState(labels.emptyWeek)
                 } else {
-                    occurrences.forEach {
-                        Text(it.summary, color = Femho.colors.inkSoft, fontSize = FemhoText.body)
-                    }
+                    entries.forEach { AgendaRow(it) }
                 }
             }
         }
@@ -216,44 +219,40 @@ fun WeekList(
 
 @Composable
 fun DayList(
-    occurrences: List<EventOccurrence>,
-    colorOf: (String) -> Color,
+    entries: List<AgendaEntry>,
     labels: CalendarLabels,
     modifier: Modifier = Modifier,
+    showEmpty: Boolean = true,
 ) {
     Column(
         modifier = modifier.fillMaxWidth().padding(12.dp).testTag("calendar-day"),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        if (occurrences.isEmpty()) {
+        if (entries.isEmpty() && showEmpty) {
             EmptyState(labels.emptyDay)
         } else {
-            occurrences.forEach { occurrence ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(9.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Box(
-                        Modifier.size(7.dp).clip(CircleShape)
-                            .background(colorOf(occurrence.scopeId)),
-                    )
-                    Text(
-                        text = occurrence.summary,
-                        color = Femho.colors.ink,
-                        fontSize = FemhoText.cardTitle,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.weight(1f),
-                    )
-                    if (!occurrence.allDay) {
-                        Text(
-                            text = occurrence.startsAt.substring(11, 16),
-                            color = Femho.colors.inkFaint,
-                            fontSize = FemhoText.meta,
-                        )
-                    }
-                }
-            }
+            entries.forEach { AgendaRow(it) }
         }
+    }
+}
+
+@Composable
+private fun AgendaRow(entry: AgendaEntry) {
+    val open = entry.onOpen
+    Row(
+        modifier = Modifier.fillMaxWidth()
+            .then(if (open == null) Modifier else Modifier.clickable(onClick = open))
+            .padding(vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(7.dp).clip(CircleShape).background(entry.color))
+        Text(
+            text = entry.title,
+            color = Femho.colors.ink,
+            fontSize = FemhoText.body,
+            modifier = Modifier.weight(1f),
+        )
+        entry.time?.let { Text(it, color = Femho.colors.inkSoft, fontSize = FemhoText.meta) }
     }
 }

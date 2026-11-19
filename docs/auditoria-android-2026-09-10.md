@@ -93,3 +93,52 @@ S’ha intentat arrencar un AVD nou sense tocar cap emulador amb dades prèvies.
 - El detall desa només els camps editats, permet buidar valors i conserva l’esborrany si la petició falla. La serialització JSON conserva els salts de línia i distingeix un valor explícitament buit d’un camp omès. Les proves cobreixen també el refresc de credencials entre clients concurrents.
 - En un emulador API 34 aïllat amb un servidor real de proves, una tasca creada sense connexió en el compte A va romandre al seu fitxer Room en entrar al compte B. En tornar a A es va sincronitzar. Una segona tasca en cua es va sincronitzar en treure el mode avió. En el detall, una descripció de dues línies va sobreviure a una fallada sense xarxa i es va desar en reintentar.
 - Les 125 proves habituals de Kotlin i la prova d’integració amb el servidor han passat. S’han construït els APK de depuració i de publicació amb R8. El de publicació, signat amb una clau temporal, s’ha instal·lat i arrencat en fred a l’emulador. S’hi ha iniciat sessió i s’han carregat les tasques del compte. La configuració dels ginys i els tocs al llançador, i UnifiedPush amb un distribuïdor extern, encara requereixen verificació.
+
+## Reparació del flux diari · 19 de novembre de 2026
+
+La prova inicial va fer servir l'APK publicat de v0.20.0, un AVD Android 14 i una
+instància local amb tasques de prova. L'APK arrencava i permetia entrar. El detall
+amagava una data límit que constava al servidor, desar en mode avió fallava i
+enrere sortia de l'app amb el detall obert. El calendari ometia tasques datades,
+la interfície carregava català amb un perfil en castellà i les columnes curtes
+del tauler quedaven centrades en vertical.
+
+- **Tasques i cua.** Room v4 conserva els camps del tauler i el detall, incloses
+  les operacions pendents de v3. Les edicions, moviments i accions de llistes es
+  desen localment. La UI registra els conflictes i permet recuperar la versió
+  del servidor o tornar a aplicar un canvi.
+- **Interfície.** Les columnes comencen a dalt i la captura ràpida és accessible
+  quan la llista és llarga. Els formularis mantenen el text fins al desament, i el
+  detall llegeix la tasca oberta per identificador. L'idioma ve del perfil.
+- **Calendari i Ajustos.** El calendari mostra les tasques locals i les cites,
+  aplica els àmbits actius i fa servir el fus del perfil. MCP i API consumeix els
+  formats vigents del servidor i gestiona les credencials OAuth i manuals.
+- **Ginys.** L'elecció d'àmbits es desa per compte i és compartida amb el llançador.
+  El giny configurable s'afegeix amb Inbox i es pot reconfigurar amb el seu botó.
+
+La prova instrumentada es pot repetir en un emulador aïllat amb Node 22, JDK 17 i
+el SDK d'Android. El guió arrenca una instància amb dades sintètiques i grava el
+resultat d'AndroidJUnitRunner. GitHub Actions la incorpora a la matriu API 34 i 36.
+
+```sh
+ANDROID_SERIAL=emulator-5554 bash tools/android-emulator/smoke.sh
+```
+
+- Les 133 proves JVM han passat, inclosa la integració de temps i moviments amb
+  el servidor. Han passat set proves instrumentades en cadascun dels dos AVD,
+  amb la migració Room, la captura amb camps complets, el guardat en mode avió,
+  un conflicte real, el calendari filtrat, l'idioma del perfil, el canvi de
+  compte i la gestió de MCP.
+- En API 36 s'ha comprovat la pantalla a 360 dp, el tema fosc i el text al 130 %.
+  Aturar el procés en mode avió i tornar-lo a arrencar conserva la tasca i la
+  mateixa operació pendent. Quan torna la connexió apareix una sola tasca al
+  servidor.
+- En API 34 s'ha actualitzat una còpia de l'APK publicat v0.20.0 a l'APK amb R8,
+  tots dos amb la mateixa clau temporal de proves. La tasca creada sense xarxa
+  a v3 s'ha mantingut visible després de migrar a v4 i ha arribat una sola
+  vegada al servidor en reconnectar.
+- Al llançador d'API 34 s'han afegit els tres ginys. El configurable ha canviat de
+  columna i ha sincronitzat un moviment creat en mode avió. El tauler de tres
+  columnes ha completat una tasca i ha obert l'app. Avui ha mostrat el dia del
+  perfil amb el dispositiu en un altre fus, ha obert el detall i ha posat el
+  cursor a la captura ràpida des del llançador.

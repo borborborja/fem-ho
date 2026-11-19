@@ -60,6 +60,7 @@ fun InboxRail(
     onOpenTask: (Task) -> Unit = {},
     onEventToTask: (InboxEvent) -> Unit = {},
     onEventToggle: (InboxEvent) -> Unit = {},
+    eventTime: (InboxEvent) -> String,
 ) {
     Column(
         modifier = modifier.fillMaxWidth().padding(12.dp).testTag("inbox-rail"),
@@ -128,7 +129,7 @@ fun InboxRail(
                 ) {
                     Box(Modifier.size(7.dp).clip(CircleShape).background(colorOf(event.scopeId)))
                     Text(
-                        text = if (event.allDay) labels.allDay else event.startsAt.substring(11, 16),
+                        text = if (event.allDay) labels.allDay else eventTime(event),
                         color = Femho.colors.inkSoft,
                         fontSize = FemhoText.meta,
                         fontWeight = FontWeight.Bold,
