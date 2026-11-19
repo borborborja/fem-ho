@@ -15,7 +15,7 @@ import android.content.Intent
  * arriben amb component explícit, o sigui que no cal exposar cap superfície nova a la
  * resta del telèfon per fer això.
  */
-enum class Screen { BOARD, CALENDAR, SETTINGS, REGISTRE, ESTADISTIQUES, SEARCH, DASHBOARD, JOIN, INVITE }
+enum class Screen { BOARD, CALENDAR, SETTINGS, SEARCH, DASHBOARD, JOIN, INVITE }
 
 object Route {
     const val EXTRA_SCREEN = "ho.fem.screen"
@@ -26,6 +26,20 @@ object Route {
     const val EXTRA_QUICK_ADD = "ho.fem.quick_add"
     const val EXTRA_DRAFT = "ho.fem.draft"
 
+    /** Conserva els destins vàlids quan una actualització retira una pantalla. */
+    fun restoreStack(saved: String): String {
+        val screens = mutableListOf(Screen.BOARD)
+        for (name in saved.split('/')) {
+            val screen = screenNamed(name) ?: continue
+            if (screen != Screen.BOARD && screen != screens.last()) screens.add(screen)
+        }
+        return screens.joinToString("/") { it.name }
+    }
+
+    fun currentScreen(stack: String): Screen = screenNamed(stack.substringAfterLast('/')) ?: Screen.BOARD
+
+    private fun screenNamed(name: String): Screen? = Screen.entries.firstOrNull { it.name == name }
+
     /**
      * La pantalla que demana l'intent. **El tauler si no en demana cap**, que és el que
      * l'app feia abans i el que ha de seguir fent quan s'obre des del llançador.
@@ -33,8 +47,6 @@ object Route {
     fun screenOf(intent: Intent?): Screen = when (intent?.getStringExtra(EXTRA_SCREEN)) {
         "calendar" -> Screen.CALENDAR
         "settings" -> Screen.SETTINGS
-        "registre" -> Screen.REGISTRE
-        "estadistiques" -> Screen.ESTADISTIQUES
         "search" -> Screen.SEARCH
         else -> Screen.BOARD
     }

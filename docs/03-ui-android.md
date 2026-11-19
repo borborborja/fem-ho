@@ -12,7 +12,7 @@ La referència visual és `Fem-ho Mobile.dc.html`, dissenyat sobre un llenç de 
 
 El brief (línia 4): *"la UI web ha de ser responsive i la versió web mòbil ha de ser gairebé igual o igual a la mobile app"*.
 
-Això vol dir que **la web en mòbil i l'app Android han de ser indistingibles**, i que la disciplina va en les dues direccions: si canvies el kanban a Compose, canvia igual la web mòbil.
+La web mòbil i Android comparteixen el model, els patrons d'interacció i el llenguatge visual. Les seccions 3 i 4 descriuen les adaptacions natives de la capçalera, la navegació i el tauler.
 
 Tres mecanismes ho sostenen:
 
@@ -43,28 +43,26 @@ El camp de servidor:
 
 ## 3 · Estructura
 
-Una sola `Activity` amb Compose i navegació per grafs.
+Una sola `Activity` amb Compose i una pila de navegació desada.
 
-La capçalera és una columna, no una fila, perquè hi cap menys:
+La capçalera s'organitza en files compactes.
 
-1. Wordmark "Fem-ho" a 20px (clicable → dashboard global) i, a la dreta, l'avatar.
-2. `SegmentedControl` Tasques/Calendari a amplada completa, mida `mobile`.
-3. Chips d'àmbit, que emboliquen.
-4. **Les llistes pinejades**, quan n'hi ha, sota els xips: el nom i **com va** cada una, com a la web. Toca-hi obre la tasca que la conté — a Android les llistes viuen dins de la tasca i no hi ha pantalla pròpia.
+1. El wordmark obre el Tauler general. La mateixa fila conté la cerca, l'accés a Ajustos i, quan pertoquen, el commutador d'IA i el recompte d'operacions pendents.
+2. Dues pestanyes a amplada completa permeten passar de Tasques a Calendari.
+3. Els xips dels àmbits visibles es desplacen horitzontalment. Al tauler, Projectes queda ancorat a la dreta quan algun àmbit actiu té projectes. Obre un selector opac, ancorat al botó, amb caselles agrupades per àmbit. Si un àmbit queda sense cap projecte seleccionat, s'hi veuen totes les tasques ([decisió P7](14-decisions.md)).
+4. Les llistes pinejades apareixen sota els xips quan n'hi ha. Mostren el nom i el progrés, i obren la tasca que les conté.
 
-5. **El filtre de projectes**: un botó fix a la dreta dels xips d'àmbit (fora del scroll horitzontal) que obre un popup flotant amb selecció múltiple per àmbit. El botó només es mostra si algun àmbit actiu té projectes, i el menú epigrafa cada àmbit amb els seus projectes en caselles. El criteri és el mateix (`docs/14` P7): **un àmbit sense res triat vol dir tots els seus**.
-
-Padding lateral de 16px.
+El Registre i les Estadístiques de dedicació es consulten a la web. Els canvis de tasca fets des d'Android continuen alimentant el seguiment de dedicació. En actualitzar, la navegació recupera els destins vàlids de la pila i els antics intents dels informes obren el tauler.
 
 ---
 
 ## 4 · Kanban
 
-**Columnes desplaçables horitzontalment** amb un pager, cadascuna al 80% de l'amplada perquè s'endevini la següent. Desplaçament amb ajust.
+El tauler és un pager horitzontal amb ajust en acabar el gest. La pàgina veïna treu el cap amb 32 dp per indicar que es pot lliscar.
 
 Cada columna té la seva llista mandrosa amb l'estat de scroll preservat.
 
-Indicador de posició sota les columnes: quatre punts clicables (un per columna INBOX/TODO/DOING/DONE), l'actiu amb `--gradient-brand-2stop`.
+Les quatre pestanyes del tauler obren la columna corresponent i mostren el títol i el recompte de tasques visibles. La pestanya seleccionada segueix la pàgina activa quan es llisca. La pestanya fa també de capçalera de la seva columna.
 
 **L'Inbox continua sent visualment diferent** (targeta sòlida contra contenidor buit), igual que a la web.
 

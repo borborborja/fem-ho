@@ -14,9 +14,11 @@ import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -412,11 +414,8 @@ fun Pill(text: String, modifier: Modifier = Modifier, background: Color? = null)
  */
 @Composable
 fun KanbanColumn(
-    label: String,
-    count: Int,
     modifier: Modifier = Modifier,
     inbox: Boolean = false,
-    header: @Composable (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Column(
@@ -425,31 +424,10 @@ fun KanbanColumn(
             .clip(RoundedCornerShape(FemhoShape.column))
             .background(if (inbox) Femho.colors.cardBg else Femho.colors.columnBg)
             .border(1.dp, Femho.colors.cardBorder, RoundedCornerShape(FemhoShape.column))
-            .padding(14.dp)
-            .testTag(if (inbox) "inbox-rail" else "kanban-column"),
+            .padding(8.dp),
         verticalArrangement = Arrangement.spacedBy(FemhoSize.cardGap),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = label,
-                    color = Femho.colors.ink,
-                    fontSize = FemhoText.columnTitle,
-                    fontWeight = FontWeight.ExtraBold,
-                )
-                Pill(count.toString(), background = if (inbox) Femho.colors.inboxPillBg else null)
-            }
-            header?.invoke()
-        }
-        content()
-    }
+        content = content,
+    )
 }
 
 /** Estat buit amb **frase sencera**, mai un guió (docs/00, docs/02 §12). */
@@ -472,18 +450,26 @@ fun ScopeChip(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Text(
-        text = label,
-        color = if (active) Femho.onBrand else Femho.colors.inkSoft,
-        fontSize = FemhoText.body,
-        fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
+    Box(
         modifier = modifier
+            .heightIn(min = FemhoSize.touch)
             .clip(RoundedCornerShape(FemhoShape.pill))
-            .background(if (active) color else Femho.colors.ghostBg)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 9.dp)
-            .testTag("scope-chip"),
-    )
+            .toggleable(value = active, role = Role.Checkbox, onValueChange = { onClick() }),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = label,
+            color = if (active) Femho.onBrand else Femho.colors.inkSoft,
+            fontSize = FemhoText.body,
+            fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier
+                .clip(RoundedCornerShape(FemhoShape.pill))
+                .background(if (active) color else Femho.colors.ghostBg)
+                .padding(horizontal = 12.dp, vertical = 6.dp),
+        )
+    }
 }
 
 /**

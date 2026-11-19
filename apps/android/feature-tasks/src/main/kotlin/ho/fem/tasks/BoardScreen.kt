@@ -2,8 +2,8 @@ package ho.fem.tasks
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -31,7 +31,9 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import ho.fem.designsystem.CardAddForm
 import ho.fem.designsystem.CardList
 import ho.fem.designsystem.EmptyState
@@ -90,18 +92,18 @@ data class CardExtras(
 )
 
 private val ORDER = listOf(TaskStatus.INBOX, TaskStatus.TODO, TaskStatus.DOING, TaskStatus.DONE)
+private val BoardMargin = 8.dp
+private val NextColumnPreview = 32.dp
 
-/**
- * Una pàgina que ocupa una fracció de l'amplada.
- *
- * `PageSize.Fill` la faria sencera i no es veuria la columna següent, que és el que
- * convida a lliscar-hi. Compose no en porta cap de fraccionària, i són quatre línies.
- */
-private class FractionPageSize(private val fraction: Float) : PageSize {
-    override fun androidx.compose.ui.unit.Density.calculateMainAxisPageSize(
+private object BoardPageSize : PageSize {
+    override fun Density.calculateMainAxisPageSize(
         availableSpace: Int,
         pageSpacing: Int,
-    ): Int = ((availableSpace - pageSpacing) * fraction).toInt()
+    ): Int {
+        // El pager ja ha tret els marges d'availableSpace. El marge final i l'espai
+        // entre columnes són iguals, de manera que els 32dp que traiem queden a la vista.
+        return (availableSpace - NextColumnPreview.roundToPx()).coerceAtLeast(1)
+    }
 }
 
 @Composable
@@ -152,7 +154,7 @@ fun BoardScreen(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 12.dp, end = 12.dp, bottom = 6.dp)
+                .padding(start = BoardMargin, end = BoardMargin, bottom = 4.dp)
                 .selectableGroup()
                 .testTag("board-column-tabs"),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -160,7 +162,7 @@ fun BoardScreen(
         ) {
             ORDER.forEachIndexed { index, status ->
                 val selected = pager.currentPage == index
-                Box(
+                Column(
                     modifier = Modifier
                         .weight(1f)
                         .heightIn(min = FemhoSize.touch)
@@ -169,18 +171,28 @@ fun BoardScreen(
                         .selectable(selected = selected, role = Role.Tab) {
                             scope.launch { pager.animateScrollToPage(index) }
                         }
-                        .padding(horizontal = 4.dp, vertical = 5.dp)
+                        .padding(horizontal = 2.dp, vertical = 3.dp)
                         .testTag("board-column-${status.name.lowercase()}"),
-                    contentAlignment = Alignment.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
                 ) {
                     Text(
                         text = labels.columns[status].orEmpty(),
+                        modifier = Modifier.fillMaxWidth(),
                         color = if (selected) Femho.colors.ink else Femho.colors.inkSoft,
                         fontSize = FemhoText.meta,
+                        lineHeight = 14.sp,
                         fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
                         textAlign = TextAlign.Center,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = columns[status].orEmpty().size.toString(),
+                        color = Femho.colors.inkSoft,
+                        fontSize = FemhoText.meta,
+                        lineHeight = 13.sp,
+                        maxLines = 1,
                     )
                 }
             }
@@ -189,9 +201,9 @@ fun BoardScreen(
         HorizontalPager(
             state = pager,
             modifier = Modifier.weight(1f).fillMaxWidth().testTag("board-pager"),
-            pageSize = FractionPageSize(0.8f),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp),
-            pageSpacing = FemhoSize.columnGap,
+            pageSize = BoardPageSize,
+            contentPadding = PaddingValues(horizontal = BoardMargin),
+            pageSpacing = BoardMargin,
             verticalAlignment = Alignment.Top,
             key = { ORDER[it] },
         ) { page ->
@@ -199,10 +211,8 @@ fun BoardScreen(
             val ofColumn = columns[status].orEmpty()
 
             KanbanColumn(
-                label = labels.columns[status].orEmpty(),
-                count = ofColumn.size,
                 inbox = status == TaskStatus.INBOX,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().testTag("board-page-${status.name.lowercase()}"),
             ) {
                 LazyColumn(
                     // El camp de captura és un germà de la llista i queda accessible
@@ -263,6 +273,5 @@ fun BoardScreen(
                 footer(status)
             }
         }
-
     }
 }
