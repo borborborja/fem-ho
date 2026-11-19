@@ -111,8 +111,11 @@ jobs:
         env:
           API_LEVEL: ${{ matrix.api }}
         run: |
-          sdkmanager emulator "system-images;android-${API_LEVEL};google_apis;x86_64"
-          printf 'no\n' | avdmanager create avd --name femho-ci --package "system-images;android-${API_LEVEL};google_apis;x86_64" --device pixel_6
+          android_tools="$ANDROID_HOME/cmdline-tools/latest/bin"
+          system_image="system-images;android-${API_LEVEL};google_apis;x86_64"
+          "$android_tools/sdkmanager" emulator "$system_image"
+          "$android_tools/avdmanager" create avd --name femho-ci --package "$system_image" --device pixel_6 <<< 'no'
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
           sudo chmod a+rw /dev/kvm
       - name: Provar l'app amb un servidor aïllat
         env:
@@ -120,7 +123,7 @@ jobs:
         run: |
           "$ANDROID_HOME/emulator/emulator" -avd femho-ci -port 5554 -no-window -no-audio \
             -no-snapshot -no-boot-anim -gpu swiftshader_indirect -accel on > "$RUNNER_TEMP/femho-emulator.log" 2>&1 &
-          trap 'adb emu kill || true' EXIT
+          trap 'if [[ $? -ne 0 ]]; then tail -n 100 "$RUNNER_TEMP/femho-emulator.log"; fi; adb emu kill || true' EXIT
           timeout 180 adb wait-for-device
           for ((tries = 0; tries < 90; tries++)); do
             if [[ "$(adb shell getprop sys.boot_completed | tr -d '\r')" == 1 ]]; then break; fi
