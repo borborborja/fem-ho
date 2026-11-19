@@ -171,6 +171,40 @@ describe('el defecte per mena de font', () => {
   });
 });
 
+it('la bústia distingeix les dates de tot el dia dels instants en el fus del perfil', async () => {
+  const date = '2026-08-25';
+  const previous = '2026-08-24';
+  const allDay = 'dia-civil';
+  const timed = 'hora-al-vespre';
+  const original = (await api('GET', '/api/v1/auth/me')).json<{ timezone: string }>().timezone;
+  try {
+    const profile = await api('PATCH', '/api/v1/auth/me', { timezone: 'America/Los_Angeles' });
+    expect(profile.statusCode).toBe(200);
+    for (const [uid, starts, ends, allDayFlag] of [
+      [allDay, `${date}T00:00:00.000Z`, '2026-08-26T00:00:00.000Z', 1],
+      [timed, `${date}T06:30:00.000Z`, `${date}T06:45:00.000Z`, 0],
+    ] as const) {
+      await sql`
+        INSERT INTO events (id, calendar_id, uid, summary, starts_at, ends_at, all_day,
+                            status, transparency, sequence, etag, created_at, updated_at)
+        VALUES (${uuidv7()}, ${calendari}, ${uid}, ${uid}, ${starts}, ${ends}, ${allDayFlag},
+                'CONFIRMED', 'OPAQUE', 0, 'etag-1', ${NOW}, ${NOW})
+      `.execute(conn.db);
+    }
+    const on = async (day: string) =>
+      (await api('GET', `/api/v1/inbox?date=${day}`))
+        .json<InboxResposta>()
+        .events.map((event) => event.uid);
+    expect(await on(previous)).toEqual([timed]);
+    expect(await on(date)).toEqual([allDay]);
+  } finally {
+    await sql`DELETE FROM events WHERE calendar_id = ${calendari} AND uid IN (${allDay}, ${timed})`.execute(
+      conn.db,
+    );
+    await api('PATCH', '/api/v1/auth/me', { timezone: original });
+  }
+});
+
 describe("l'interruptor per font, des d'Ajustos", () => {
   it('encendre un RSS el fa entrar a la bústia', async () => {
     const res = await api('PATCH', `/api/v1/calendars/${canal}`, { inbox_visible: true });

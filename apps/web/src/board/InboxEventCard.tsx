@@ -34,6 +34,7 @@ import { SourceIcon } from './SourceIcon.js';
 import { InboxEyeToggle } from './InboxEyeToggle.js';
 
 export interface InboxEventCardProps {
+  timezone?: string | undefined;
   event: InboxEvent;
   /** El color de l'àmbit d'on ve, per lligar-lo amb la resta de la columna. */
   color?: string | undefined;
@@ -53,11 +54,17 @@ export function eventKey(event: InboxEvent): string {
   return `${event.calendar_id}:${event.uid}:${event.recurrence_id ?? ''}`;
 }
 
-export function InboxEventCard({ event, color, onToTask, onToggleInbox }: InboxEventCardProps) {
+export function InboxEventCard({
+  event,
+  color,
+  timezone,
+  onToTask,
+  onToggleInbox,
+}: InboxEventCardProps) {
   const locale = getLocale();
   const hora = event.all_day
     ? t('inbox.event.allDay')
-    : shortTime(locale, new Date(event.starts_at));
+    : shortTime(locale, new Date(event.starts_at), timezone);
 
   return (
     <div

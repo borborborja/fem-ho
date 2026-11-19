@@ -14,6 +14,7 @@ import { v7 as uuidv7 } from 'uuid';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { connect, type Connection } from '../db/connection.js';
 import { migrateToLatest } from '../db/migrator.js';
+import * as federation from '../services/federation.js';
 import type { PushSender } from '../services/notifications.js';
 import { TICK_MS, startScheduler, tick } from './scheduler.js';
 
@@ -201,6 +202,42 @@ describe('cap feina en tomba una altra', () => {
     // No hi ha cap subscripció a refrescar, però el tic ha d'acabar sencer i dir-ho.
     const result = await tick(options({ send }));
     expect(result.errors).toBeLessThanOrEqual(1);
+  });
+});
+
+describe('la federació al planificador', () => {
+  it('carrega el cursor sortint i els permisos en replicar un enllaç', async () => {
+    const id = uuidv7();
+    const remoteScopeId = uuidv7();
+    await sql`
+      INSERT INTO instance_links (id, scope_id, remote_scope_id, remote_role, base_url,
+                                  token_enc, cursor, local_seq, created_at, updated_at)
+      VALUES (${id}, ${scopeId}, ${remoteScopeId}, 'editor', 'https://femho.example.net',
+              'token-xifrat', '90', 42, ${NOW}, ${NOW})
+    `.execute(conn.db);
+
+    const pull = vi
+      .spyOn(federation, 'pullFromLink')
+      .mockResolvedValue({ applied: 1, pushed: 1, cursor: '91' });
+    try {
+      expect(await tick(options())).toMatchObject({ federated: 1, errors: 0 });
+      expect(pull).toHaveBeenCalledWith(
+        conn.db,
+        expect.objectContaining({
+          id,
+          remote_scope_id: remoteScopeId,
+          remote_role: 'editor',
+          cursor: '90',
+          local_seq: 42,
+        }),
+        SECRET,
+        NOW,
+        undefined,
+        conn.engine,
+      );
+    } finally {
+      pull.mockRestore();
+    }
   });
 });
 

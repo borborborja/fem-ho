@@ -2,7 +2,9 @@ package ho.fem.app
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import ho.fem.data.ActiveAccount
 import ho.fem.data.Container
+import ho.fem.data.normalizeServerUrl
 import ho.fem.model.Agent
 import ho.fem.model.AgentDetail
 import ho.fem.model.AgentScopeAvailability
@@ -28,7 +30,12 @@ import ho.fem.network.FemhoApi
 import ho.fem.network.certificateFingerprint
 import ho.fem.network.probeServerCertificate
 import java.util.UUID
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -123,6 +130,8 @@ class AppViewModel(private val container: Container) : ViewModel() {
     /** El nom de la instància, per a la confirmació del wipe (s'hi ha d'escriure). */
     private val _instanceName = MutableStateFlow("")
     val instanceName: StateFlow<String> = _instanceName.asStateFlow()
+    private val _instanceVersion = MutableStateFlow("")
+    val instanceVersion: StateFlow<String> = _instanceVersion.asStateFlow()
 
     private val _gravatarEnabled = MutableStateFlow(true)
     val gravatarEnabled: StateFlow<Boolean> = _gravatarEnabled.asStateFlow()
@@ -190,13 +199,13 @@ class AppViewModel(private val container: Container) : ViewModel() {
 
     /** Carrega totes les shares i els seus accessos, per a la pestanya Compartits. */
     fun loadAllShares() {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).shares() }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).shares() }
                 .onSuccess { shares ->
                     _allShares.value = shares
                     shares.forEach { share ->
-                        runCatching { container.api(base).shareAccesses(share.id) }
+                        runCatching { container.api(sessionAccount).shareAccesses(share.id) }
                             .onSuccess { _shareAccesses.value = _shareAccesses.value + (share.id to it) }
                     }
                 }
@@ -205,18 +214,18 @@ class AppViewModel(private val container: Container) : ViewModel() {
 
     /** Revoca una share des de la pestanya Compartits. DELETE /shares/{id}. */
     fun revokeShare(shareId: String) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).revokeShare(shareId) }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).revokeShare(shareId) }
                 .onSuccess { loadAllShares() }
         }
     }
 
     /** El preview d'un convit d'àmbit, per mirar-lo abans d'acceptar. */
     fun loadJoinPreview(token: String) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).joinPreview(token) }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).joinPreview(token) }
                 .onSuccess { _joinPreview.value = it }
                 .onFailure { _joinError.value = it.message }
         }
@@ -224,9 +233,9 @@ class AppViewModel(private val container: Container) : ViewModel() {
 
     /** Accepta un convit d'àmbit. POST /join/{token}. */
     fun acceptJoin(token: String) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).acceptJoin(token) }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).acceptJoin(token) }
                 .onSuccess {
                     _joinDone.value = true
                     loadEntityData()
@@ -275,23 +284,23 @@ class AppViewModel(private val container: Container) : ViewModel() {
 
     /** Carrega el dashboard global. El wordmark l'obre (docs/03 §3:50). */
     fun loadDashboard() {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
             // Les seccions que s'amaguen a Ajustos no es pinten (docs/02 §8).
             _showOverdueSection.value = container.settings.showOverdueSection.first()
             _showCalendarWidget.value = container.settings.showCalendarWidget.first()
-            runCatching { container.api(base).dashboard() }
+            runCatching { container.api(sessionAccount).dashboard() }
                 .onSuccess { _dashboard.value = it }
         }
     }
 
     /** Carrega les Estadístiques de dedicació. GET /api/v1/sessions/stats. */
     fun loadStats(from: String?, to: String?, userId: String?) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            val active = container.settings.activeScopes.first()
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            val active = container.settings.activeScopes(sessionAccount)
             runCatching {
-                container.api(base).sessionStats(
+                container.api(sessionAccount).sessionStats(
                     from = from,
                     to = to,
                     scopeIds = active,
@@ -303,11 +312,11 @@ class AppViewModel(private val container: Container) : ViewModel() {
 
     /** Carrega el Registre de dedicació. GET /api/v1/sessions amb els filtres. */
     fun loadSessions(from: String?, to: String?, projectId: String?, userId: String?, search: String?) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            val active = container.settings.activeScopes.first()
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            val active = container.settings.activeScopes(sessionAccount)
             runCatching {
-                container.api(base).sessions(
+                container.api(sessionAccount).sessions(
                     from = from,
                     to = to,
                     scopeIds = active,
@@ -321,9 +330,9 @@ class AppViewModel(private val container: Container) : ViewModel() {
 
     /** Mou o allarga un bloc del cronograma. PATCH /api/v1/sessions/{id}. */
     fun updateSession(id: String, startedAt: String?, endedAt: String?, onSaved: () -> Unit = {}) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).updateSession(id, startedAt = startedAt, endedAt = endedAt) }.onSuccess { onSaved() }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).updateSession(id, startedAt = startedAt, endedAt = endedAt) }.onSuccess { onSaved() }
         }
     }
 
@@ -336,11 +345,11 @@ class AppViewModel(private val container: Container) : ViewModel() {
         search: String?,
         onResult: (String) -> Unit,
     ) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            val active = container.settings.activeScopes.first()
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            val active = container.settings.activeScopes(sessionAccount)
             runCatching {
-                container.api(base).exportSessionsCsv(
+                container.api(sessionAccount).exportSessionsCsv(
                     from = from,
                     to = to,
                     scopeIds = active,
@@ -379,10 +388,10 @@ class AppViewModel(private val container: Container) : ViewModel() {
      * pantalla ja ha decidit que toca. `q` ja arriba retallada i amb mínim 2 caràcters.
      */
     fun search(q: String) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
             _searchLoading.value = true
-            runCatching { container.api(base).search(q, 8) }
+            runCatching { container.api(sessionAccount).search(q, 8) }
                 .onSuccess { _searchResults.value = it.data }
                 .onFailure { _searchResults.value = emptyList() }
             _searchLoading.value = false
@@ -406,9 +415,9 @@ class AppViewModel(private val container: Container) : ViewModel() {
 
     /** Carrega la llista d'usuaris de la pestanya Admin. */
     fun loadAdminUsers() {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).adminUsers() }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).adminUsers() }
                 .onSuccess { _adminUsers.value = it }
                 .onFailure { _adminError.value = it.message }
         }
@@ -416,9 +425,9 @@ class AppViewModel(private val container: Container) : ViewModel() {
 
     /** Convida un membre. L'enllaç només es veu un cop (server: InviteResult). */
     fun inviteAdminUser(email: String, name: String, role: String, onDone: () -> Unit) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).adminInvite(email, name, role) }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).adminInvite(email, name, role) }
                 .onSuccess {
                     _adminInviteUrl.value = it.inviteUrl
                     loadAdminUsers()
@@ -433,18 +442,18 @@ class AppViewModel(private val container: Container) : ViewModel() {
     }
 
     fun setAdminRole(id: String, role: String) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).adminUpdateRole(id, role) }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).adminUpdateRole(id, role) }
                 .onSuccess { loadAdminUsers() }
                 .onFailure { _adminError.value = it.message }
         }
     }
 
     fun deleteAdminUser(id: String) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).adminDeleteUser(id) }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).adminDeleteUser(id) }
                 .onSuccess { loadAdminUsers() }
                 .onFailure { _adminError.value = it.message }
         }
@@ -452,9 +461,9 @@ class AppViewModel(private val container: Container) : ViewModel() {
 
     /** Neteja la instància; el servidor també exigeix el nom exacte de confirmació. */
     fun wipeInstance(confirmation: String, onDone: () -> Unit) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).adminWipe(confirmation) }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).adminWipe(confirmation) }
                 .onSuccess {
                     _adminError.value = null
                     onDone()
@@ -486,8 +495,94 @@ class AppViewModel(private val container: Container) : ViewModel() {
     val pinned: StateFlow<List<Checklist>> = _pinned.asStateFlow()
 
     private var serverUrl: String? = null
+    private var activeAccount: ActiveAccount? = null
+    private var authentication: Job? = null
+    private var sessionScope = CoroutineScope(viewModelScope.coroutineContext + Job().also { it.cancel() })
+
+    private fun startSession(account: ActiveAccount) {
+        val base = account.identity.serverUrl
+        sessionScope.cancel()
+        sessionScope = CoroutineScope(viewModelScope.coroutineContext + SupervisorJob(viewModelScope.coroutineContext[Job]))
+        activeAccount = account
+        serverUrl = base
+        _session.value = Session.Ready(base)
+        observe(account)
+        refresh()
+        sessionScope.launch {
+            runCatching { container.api(account).info() }
+                .onSuccess {
+                    _instanceName.value = it.name
+                    _instanceVersion.value = it.version
+                }
+        }
+    }
+
+    private fun clearSessionData() {
+        _tasks.value = emptyList()
+        _scopes.value = emptyList()
+        _projects.value = emptyList()
+        _people.value = emptyList()
+        _labels.value = emptyList()
+        _taskTypes.value = emptyList()
+        _scopeSettings.value = emptyMap()
+        _pending.value = 0
+        _profile.value = null
+        _instanceVersion.value = ""
+        _needsScopeModeWizard.value = false
+        _gravatarEnabled.value = true
+        _tokens.value = emptyList()
+        _calendars.value = emptyList()
+        _mailAccounts.value = emptyList()
+        _mailRules.value = emptyList()
+        _openComments.value = emptyList()
+        _openActivity.value = emptyList()
+        _openShares.value = emptyList()
+        _openAttachments.value = emptyList()
+        _attachmentError.value = null
+        _allShares.value = emptyList()
+        _shareAccesses.value = emptyMap()
+        _joinPreview.value = null
+        _joinError.value = null
+        _joinDone.value = false
+        _createdShareUrl.value = null
+        _sessions.value = ho.fem.model.SessionReport()
+        _stats.value = ho.fem.model.SessionStats()
+        _dashboard.value = ho.fem.model.DashboardView()
+        _createdToken.value = null
+        _events.value = emptyList()
+        _inbox.value = null
+        _openTask.value = null
+        _taskSaveError.value = false
+        _taskSaving.value = false
+        _searchResults.value = emptyList()
+        _searchLoading.value = false
+        _adminUsers.value = emptyList()
+        _adminInviteUrl.value = null
+        _adminError.value = null
+        _openChecklists.value = emptyList()
+        _activeProjects.value = emptyList()
+        _pinned.value = emptyList()
+        _quickAddDraft.value = null
+        _aiEnabled.value = false
+        _aiBoard.value = false
+        _agentsDetail.value = emptyList()
+        _agentScopeAvailability.value = emptyMap()
+        _agentCredentials.value = emptyMap()
+        _createdAgentToken.value = null
+        _agentSkill.value = null
+        _expandedCards.value = emptySet()
+        _openCards.value = emptySet()
+        _cardLists.value = emptyMap()
+        _cardDrafts.value = emptyMap()
+        pendingOpen = null
+    }
 
     init {
+        viewModelScope.launch {
+            container.expiredAccounts.collect { account ->
+                if (activeAccount == account) logout()
+            }
+        }
         viewModelScope.launch {
             _theme.value = container.settings.theme.first()
             _accent.value = container.settings.accent.first()
@@ -495,35 +590,16 @@ class AppViewModel(private val container: Container) : ViewModel() {
             val saved = container.settings.serverUrl.first()
             if (saved == null) {
                 _session.value = Session.NeedsServer()
+                return@launch
+            }
+
+            serverUrl = saved
+            java.net.URI(saved).host?.let { container.settings.trustedCert(it) }
+            val account = withContext(Dispatchers.IO) { container.account(saved) }
+            if (account == null) {
+                _session.value = Session.NeedsLogin(saved, "")
             } else {
-                serverUrl = saved
-                // Amb testimoni desat s'entra directament; si ha caducat de debò, la
-                // primera petició ho dirà i es tornarà al login.
-                _session.value =
-                    if (container.tokens.refresh() != null) Session.Ready(saved)
-                    else Session.NeedsLogin(saved, "")
-                if (container.tokens.refresh() != null) {
-                    observe(saved)
-                    // El nom de la instància, per a la confirmació del wipe: també quan
-                    // la sessió ja era desada i no s'ha passat per la pantalla de login.
-                    viewModelScope.launch {
-                        runCatching { container.api(saved).info() }
-                            .onSuccess { _instanceName.value = it.name }
-                    }
-                    /**
-                     * **I es demana al servidor.**
-                     *
-                     * Abans només s'observava la base local: obrir l'app amb una sessió
-                     * desada ensenyava el que hi havia l'últim cop i no preguntava res.
-                     * El que ho tapava era la consulta periòdica de quinze minuts, que
-                     * acaba arribant — o sigui que el defecte es veia com "l'app va
-                     * endarrerida una estona" i no com "l'app no sincronitza en obrir-se".
-                     *
-                     * `docs/03` §7 ho demana explícitament: la sincronització es dispara
-                     * quan l'app passa a primer pla.
-                     */
-                    refresh()
-                }
+                startSession(account)
             }
         }
     }
@@ -549,7 +625,9 @@ class AppViewModel(private val container: Container) : ViewModel() {
              * vegades guanyés el clar per ser més ràpid, que és justament el que no ha
              * de passar mai.
              */
-            for (candidate in resolved.candidates) {
+            for (rawCandidate in resolved.candidates) {
+                val candidate = runCatching { normalizeServerUrl(rawCandidate) }.getOrNull() ?: continue
+                java.net.URI(candidate).host?.let { container.settings.trustedCert(it) }
                 val attempt = runCatching { container.api(candidate).info() }
                 val info = attempt.getOrNull()
                 if (info == null) {
@@ -622,33 +700,26 @@ class AppViewModel(private val container: Container) : ViewModel() {
     }
 
     fun login(email: String, password: String, onError: (String) -> Unit) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).login(email, password) }
-                .onSuccess {
-                    _session.value = Session.Ready(base)
-                    _instanceName.value = (container.api(base).runCatching { info() }.getOrNull()?.name).orEmpty()
-                    observe(base)
-                    refresh()
-                    refreshScopeModeWizard(base)
-                }
-                .onFailure { error ->
-                    onError((error as? FemhoApi.ApiException)?.detail.orEmpty())
-                }
-        }
+        authenticate(onError) { it.login(email, password) }
     }
 
     /** Registra un compte nou a una instància amb registre obert (docs/12 §3). */
     fun register(name: String, email: String, password: String, onError: (String) -> Unit) {
+        authenticate(onError) { it.register(name, email, password) }
+    }
+
+    private fun authenticate(
+        onError: (String) -> Unit,
+        login: suspend (FemhoApi) -> ho.fem.model.AuthTokens,
+    ) {
         val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).register(name, email, password) }
-                .onSuccess {
-                    _session.value = Session.Ready(base)
-                    _instanceName.value = (container.api(base).runCatching { info() }.getOrNull()?.name).orEmpty()
-                    observe(base)
-                    refresh()
-                    refreshScopeModeWizard(base)
+        if (authentication?.isActive == true) return
+        authentication = viewModelScope.launch {
+            runCatching { container.authenticate(base, login) }
+                .onSuccess { account ->
+                    startSession(account)
+                    refreshScopeModeWizard(account)
+                    ho.fem.app.widget.FemhoWidgets.updateAll(container.appContext)
                 }
                 .onFailure { error ->
                     onError((error as? FemhoApi.ApiException)?.detail.orEmpty())
@@ -662,11 +733,11 @@ class AppViewModel(private val container: Container) : ViewModel() {
      * La mateixa regla que la web (scope-mode.ts): `scope_mode` encara és `null` i la
      * instància deixa triar (`instance.scope_mode == 'both'`).
      */
-    private fun refreshScopeModeWizard(base: String) {
-        viewModelScope.launch {
-            val settings = runCatching { container.api(base).settings() }.getOrNull()
+    private fun refreshScopeModeWizard(sessionAccount: ActiveAccount) {
+        sessionScope.launch {
+            val settings = runCatching { container.api(sessionAccount).settings() }.getOrNull()
             settings?.settings?.scopeMode?.let { container.settings.setScopeMode(it) }
-            val instance = runCatching { container.api(base).info() }.getOrNull()
+            val instance = runCatching { container.api(sessionAccount).info() }.getOrNull()
             _needsScopeModeWizard.value =
                 settings?.settings?.scopeMode == null && (instance?.scopeMode ?: "both") == "both"
         }
@@ -683,9 +754,9 @@ class AppViewModel(private val container: Container) : ViewModel() {
     val preferenceInboxShowOverdue = container.settings.inboxShowOverdue
 
     fun setScopeMode(mode: String) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).updateSettings(scopeMode = mode) }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).updateSettings(scopeMode = mode) }
                 .onSuccess {
                     container.settings.setScopeMode(mode)
                     _needsScopeModeWizard.value = false
@@ -696,11 +767,24 @@ class AppViewModel(private val container: Container) : ViewModel() {
 
     fun logout() {
         val base = serverUrl ?: return
+        val account = activeAccount
+        sessionScope.cancel()
+        activeAccount = null
+        clearSessionData()
+        _session.value = Session.Checking
         viewModelScope.launch {
-            container.api(base).logout()
-            _session.value = Session.NeedsLogin(base, "")
-            ho.fem.app.widget.FemhoWidgets.updateAll(container.appContext)
+            val signedOut: suspend () -> Unit = {
+                _session.value = Session.NeedsLogin(base, _instanceName.value)
+                container.appContext.getSystemService(android.app.NotificationManager::class.java).cancelAll()
+                ho.fem.app.widget.FemhoWidgets.updateAll(container.appContext)
+            }
+            if (account != null) container.logout(account, signedOut) else signedOut()
         }
+    }
+
+    fun chooseAnotherServer() {
+        if (authentication?.isActive == true) return
+        _session.value = Session.NeedsServer()
     }
 
     /**
@@ -710,36 +794,38 @@ class AppViewModel(private val container: Container) : ViewModel() {
      * filtre s'aplica sobre el que hi ha, com a la web.
      */
     fun toggleProject(id: String) {
-        viewModelScope.launch {
-            val ara = container.settings.activeProjects.first()
-            container.settings.setActiveProjects(if (id in ara) ara - id else ara + id)
+        val account = activeAccount ?: return
+        sessionScope.launch {
+            val ara = container.settings.activeProjects(account).first()
+            container.settings.setActiveProjects(account, if (id in ara) ara - id else ara + id)
         }
     }
 
     /** Torna un àmbit a "tots els seus": treu del filtre els projectes que en són. */
     fun clearProjectsOfScope(scopeId: String) {
-        viewModelScope.launch {
+        val account = activeAccount ?: return
+        sessionScope.launch {
             val seus = _projects.value.filter { it.scopeId == scopeId }.map { it.id }.toSet()
             container.settings.setActiveProjects(
-                container.settings.activeProjects.first().filterNot { it in seus },
+                account, container.settings.activeProjects(account).first().filterNot { it in seus },
             )
         }
     }
 
     fun refresh() {
-        val base = serverUrl ?: return
+        val sessionAccount = activeAccount ?: return
         loadAgents()
         // L'idioma del perfil, cada cop que es refresca: si algú l'ha canviat des de la
         // web, el telèfon se n'assabenta al primer refresc i no al proper reinstal·lat.
-        viewModelScope.launch {
-            runCatching { container.api(base).profile() }
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).profile() }
                 .onSuccess { applyProfileLocale(it.locale) }
         }
-        viewModelScope.launch {
-            val active = container.settings.activeScopes.first()
-            runCatching { container.repository(base).refresh(active, null) }
+        sessionScope.launch {
+            val active = container.settings.activeScopes(sessionAccount)
+            runCatching { container.repository(sessionAccount).refresh(active, null) }
         }
-        viewModelScope.launch { runCatching { container.api(base).pinnedChecklists() }.onSuccess { _pinned.value = it } }
+        sessionScope.launch { runCatching { container.api(sessionAccount).pinnedChecklists() }.onSuccess { _pinned.value = it } }
     }
 
     /**
@@ -752,10 +838,10 @@ class AppViewModel(private val container: Container) : ViewModel() {
      * sense connexió.
      */
     fun loadCalendar(from: String, to: String, day: String) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            val active = container.settings.activeScopes.first()
-            val api = container.api(base)
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            val active = container.settings.activeScopes(sessionAccount)
+            val api = container.api(sessionAccount)
             runCatching { api.events(from, to, active) }.onSuccess { _events.value = it }
             runCatching { api.inbox(day, true, active) }.onSuccess { _inbox.value = it }
         }
@@ -776,10 +862,10 @@ class AppViewModel(private val container: Container) : ViewModel() {
      * implementació de la mateixa regla.
      */
     fun setEventInInbox(event: InboxEvent, visible: Boolean?, day: String) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            val active = container.settings.activeScopes.first()
-            val api = container.api(base)
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            val active = container.settings.activeScopes(sessionAccount)
+            val api = container.api(sessionAccount)
             runCatching {
                 api.setEventInInbox(event.calendarId, event.uid, event.recurrenceId, visible)
             }.onSuccess {
@@ -796,10 +882,10 @@ class AppViewModel(private val container: Container) : ViewModel() {
      * la bústia sola, perquè ara hi ha una tasca viva que hi apunta.
      */
     fun eventToTask(event: InboxEvent, day: String) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            val active = container.settings.activeScopes.first()
-            val api = container.api(base)
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            val active = container.settings.activeScopes(sessionAccount)
+            val api = container.api(sessionAccount)
             runCatching {
                 api.createTask(
                     id = java.util.UUID.randomUUID().toString(),
@@ -818,31 +904,32 @@ class AppViewModel(private val container: Container) : ViewModel() {
 
     fun open(task: Task) {
         _openTask.value = task
+        _taskSaveError.value = false
         _openChecklists.value = emptyList()
         _openComments.value = emptyList()
         _openActivity.value = emptyList()
 
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).checklists(task.id) }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).checklists(task.id) }
                 .onSuccess { _openChecklists.value = it }
-            runCatching { container.api(base).taskComments(task.id) }
+            runCatching { container.api(sessionAccount).taskComments(task.id) }
                 .onSuccess { _openComments.value = it }
-            runCatching { container.api(base).taskActivity(task.id) }
+            runCatching { container.api(sessionAccount).taskActivity(task.id) }
                 .onSuccess { _openActivity.value = it }
-            runCatching { container.api(base).shares() }
+            runCatching { container.api(sessionAccount).shares() }
                 .onSuccess { all -> _openShares.value = all.filter { it.taskId == task.id } }
-            runCatching { container.api(base).listTaskAttachments(task.id) }
+            runCatching { container.api(sessionAccount).listTaskAttachments(task.id) }
                 .onSuccess { _openAttachments.value = it }
         }
     }
 
     /** Puja un adjunt a la tasca oberta. POST /tasks/{id}/attachments (octet-stream). */
     fun uploadTaskAttachment(task: Task, filename: String, bytes: ByteArray) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
             runCatching {
-                container.api(base).uploadTaskAttachment(task.id, filename, bytes)
+                container.api(sessionAccount).uploadTaskAttachment(task.id, filename, bytes)
             }
                 .onSuccess {
                     _attachmentError.value = null
@@ -857,9 +944,9 @@ class AppViewModel(private val container: Container) : ViewModel() {
 
     /** El contingut d'un adjunt, per desar-lo i obrir-lo. GET /attachments/{id}/content. */
     fun downloadAttachment(attachmentId: String, onBytes: (ByteArray) -> Unit) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).attachmentContent(attachmentId) }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).attachmentContent(attachmentId) }
                 .onSuccess(onBytes)
                 .onFailure { e ->
                     _attachmentError.value = (e as? ho.fem.network.FemhoApi.ApiException)?.detail ?: e.message
@@ -869,9 +956,9 @@ class AppViewModel(private val container: Container) : ViewModel() {
 
     /** Esborra un adjunt. DELETE /attachments/{id}. */
     fun deleteTaskAttachment(task: Task, attachmentId: String) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).deleteAttachment(attachmentId) }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).deleteAttachment(attachmentId) }
                 .onSuccess { open(task) }
         }
     }
@@ -885,10 +972,10 @@ class AppViewModel(private val container: Container) : ViewModel() {
         expiresAt: String?,
         maxViews: String?,
     ) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
             runCatching {
-                container.api(base).createShare(
+                container.api(sessionAccount).createShare(
                     taskId = task.id,
                     permission = permission,
                     requireName = requireName,
@@ -905,10 +992,10 @@ class AppViewModel(private val container: Container) : ViewModel() {
 
     /** Revoca un enllaç compartit. DELETE /shares/{id}. */
     fun revokeTaskShare(shareId: String) {
-        val base = serverUrl ?: return
+        val sessionAccount = activeAccount ?: return
         val task = _openTask.value ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).revokeShare(shareId) }
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).revokeShare(shareId) }
                 .onSuccess { open(task) }
         }
     }
@@ -954,72 +1041,64 @@ class AppViewModel(private val container: Container) : ViewModel() {
     }
 
     fun rename(task: Task, title: String) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            val repository = container.repository(base)
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            val repository = container.repository(sessionAccount)
             repository.renameTask(task, title)
-            repository.flush()
-            _openTask.value = task.copy(title = title)
+            Notifications.requestSync(container.appContext)
+            runCatching { repository.flush() }
+            if (_openTask.value?.id == task.id) _openTask.value = task.copy(title = title)
         }
     }
 
     fun toggleItem(itemId: String, done: Boolean) {
-        val base = serverUrl ?: return
+        val sessionAccount = activeAccount ?: return
         val task = _openTask.value ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).setChecklistItem(itemId, done) }
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).setChecklistItem(itemId, done) }
             // Es rellegeix: la cascada amunt pot haver completat la subtasca i la tasca
             // (P1), i sense rellegir la pantalla ensenyaria l'ítem marcat i la resta no.
-            runCatching { container.api(base).checklists(task.id) }
+            runCatching { container.api(sessionAccount).checklists(task.id) }
                 .onSuccess { _openChecklists.value = it }
             refresh()
         }
     }
 
     fun setAiMode(task: Task, mode: AiMode) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).setAiMode(task.id, mode.wire) }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).setAiMode(task.id, mode.wire) }
                 .onSuccess { _openTask.value = it }
             refresh()
         }
     }
 
-    /**
-     * Desa els camps bàsics del detall (descripció, projecte, venciment, hora i deadline).
-     *
-     * PATCH /api/v1/tasks/{id}. Patró web: es desa amb «Desa», no a cada tecla.
-     * Els camps que arriben com a null no s'envien; per esborrar-ne un (projecte o
-     * venciment) cal passar-hi el valor buit que el servidor interpreta com a nul.
-     */
-    fun updateTaskDetails(
-        task: Task,
-        description: String?,
-        projectId: String?,
-        dueDate: String?,
-        dueTime: String?,
-        deadline: String?,
-        rrule: String?,
-        recurrenceMode: String?,
-    ) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching {
-                container.api(base).updateTask(
-                    task.id,
-                    buildMap {
-                        if (description != null) put("description", description)
-                        if (projectId != null) put("project_id", projectId)
-                        if (dueDate != null) put("due_date", dueDate)
-                        if (dueTime != null) put("due_time", dueTime)
-                        if (deadline != null) put("deadline", deadline)
-                        if (rrule != null) put("rrule", rrule)
-                        if (recurrenceMode != null) put("recurrence_mode", recurrenceMode)
-                    },
-                )
-            }.onSuccess { updated ->
-                _openTask.value = updated
+    private val _taskSaveError = MutableStateFlow(false)
+    val taskSaveError: StateFlow<Boolean> = _taskSaveError.asStateFlow()
+    private val _taskSaving = MutableStateFlow(false)
+    val taskSaving: StateFlow<Boolean> = _taskSaving.asStateFlow()
+
+    fun saveTaskDetails(task: Task, fields: Map<String, String?>, mode: AiMode?) {
+        val sessionAccount = activeAccount ?: return
+        if (_taskSaving.value) return
+        _taskSaving.value = true
+        _taskSaveError.value = false
+        sessionScope.launch {
+            val api = container.api(sessionAccount)
+            try {
+                if (fields.isNotEmpty()) {
+                    val updated = api.updateTask(task.id, fields)
+                    if (_openTask.value?.id == task.id) _openTask.value = updated
+                }
+                if (mode != null && mode != task.aiMode) api.setAiMode(task.id, mode.wire)
+                if (_openTask.value?.id == task.id) closeTask()
                 refresh()
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                if (activeAccount == sessionAccount && _openTask.value?.id == task.id) _taskSaveError.value = true
+            } finally {
+                if (activeAccount == sessionAccount) _taskSaving.value = false
             }
         }
     }
@@ -1046,83 +1125,68 @@ class AppViewModel(private val container: Container) : ViewModel() {
 
     fun setTheme(value: String) {
         _theme.value = value
-        viewModelScope.launch { container.settings.setTheme(value) }
+        sessionScope.launch { container.settings.setTheme(value) }
     }
 
     fun setAccent(value: String) {
         _accent.value = value
-        viewModelScope.launch { container.settings.setAccent(value) }
+        sessionScope.launch { container.settings.setAccent(value) }
     }
 
     fun setLocale(value: String) {
-        viewModelScope.launch {
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
             container.settings.setLocale(value)
             applyProfileLocale(value)
-            // Persistir al servidor si hi ha sessió
-            if (_session.value is Session.Ready) {
-                val base = (_session.value as Session.Ready).serverUrl
-                runCatching { container.api(base).updateProfile(locale = value) }
-            }
+            runCatching { container.api(sessionAccount).updateProfile(locale = value) }
         }
     }
 
     fun setWeekStart(value: String) {
-        viewModelScope.launch {
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
             container.settings.setWeekStart(value)
-            if (_session.value is Session.Ready) {
-                val base = (_session.value as Session.Ready).serverUrl
-                runCatching { container.api(base).updateSettings(weekStart = value) }
-            }
+            runCatching { container.api(sessionAccount).updateSettings(weekStart = value) }
         }
     }
 
     fun setEventTaskDeleted(value: String) {
-        viewModelScope.launch {
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
             container.settings.setEventTaskDeleted(value)
-            if (_session.value is Session.Ready) {
-                val base = (_session.value as Session.Ready).serverUrl
-                runCatching { container.api(base).updateSettings(eventTaskDeleted = value) }
-            }
+            runCatching { container.api(sessionAccount).updateSettings(eventTaskDeleted = value) }
         }
     }
 
     fun setShowCalendarWidget(value: Boolean) {
-        viewModelScope.launch {
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
             container.settings.setShowCalendarWidget(value)
-            if (_session.value is Session.Ready) {
-                val base = (_session.value as Session.Ready).serverUrl
-                runCatching { container.api(base).updateSettings(showCalendarWidget = value) }
-            }
+            runCatching { container.api(sessionAccount).updateSettings(showCalendarWidget = value) }
         }
     }
 
     fun setShowOverdueSection(value: Boolean) {
-        viewModelScope.launch {
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
             container.settings.setShowOverdueSection(value)
-            if (_session.value is Session.Ready) {
-                val base = (_session.value as Session.Ready).serverUrl
-                runCatching { container.api(base).updateSettings(showOverdueSection = value) }
-            }
+            runCatching { container.api(sessionAccount).updateSettings(showOverdueSection = value) }
         }
     }
 
     fun setInboxPosition(value: String) {
-        viewModelScope.launch {
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
             container.settings.setInboxPosition(value)
-            if (_session.value is Session.Ready) {
-                val base = (_session.value as Session.Ready).serverUrl
-                runCatching { container.api(base).updateSettings(inboxPosition = value) }
-            }
+            runCatching { container.api(sessionAccount).updateSettings(inboxPosition = value) }
         }
     }
 
     fun setInboxShowOverdue(value: Boolean) {
-        viewModelScope.launch {
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
             container.settings.setInboxShowOverdue(value)
-            if (_session.value is Session.Ready) {
-                val base = (_session.value as Session.Ready).serverUrl
-                runCatching { container.api(base).updateSettings(inboxShowOverdue = value) }
-            }
+            runCatching { container.api(sessionAccount).updateSettings(inboxShowOverdue = value) }
         }
     }
 
@@ -1132,9 +1196,9 @@ class AppViewModel(private val container: Container) : ViewModel() {
      * Es crida en iniciar sessió per tenir el nom, correu i timezone a mà.
      */
     fun loadProfile() {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).profile() }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).profile() }
                 .onSuccess { _profile.value = it }
         }
     }
@@ -1146,9 +1210,9 @@ class AppViewModel(private val container: Container) : ViewModel() {
      * la web, que fa el PATCH quan surt del camp.
      */
     fun setName(name: String) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).updateProfile(name = name) }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).updateProfile(name = name) }
                 .onSuccess { _profile.value = it }
         }
     }
@@ -1160,9 +1224,9 @@ class AppViewModel(private val container: Container) : ViewModel() {
      * sincronitza amb el servidor.
      */
     fun setGravatar(enabled: Boolean) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).updateSettings(gravatar = enabled) }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).updateSettings(gravatar = enabled) }
                 .onSuccess { _gravatarEnabled.value = enabled }
         }
     }
@@ -1179,9 +1243,9 @@ class AppViewModel(private val container: Container) : ViewModel() {
      * @param onSuccess callback si ha anat bé
      */
     fun changePassword(current: String, new: String, onError: (String) -> Unit, onSuccess: () -> Unit) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).changePassword(current, new) }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).changePassword(current, new) }
                 .onSuccess { onSuccess() }
                 .onFailure { error ->
                     onError((error as? FemhoApi.ApiException)?.detail.orEmpty())
@@ -1195,9 +1259,9 @@ class AppViewModel(private val container: Container) : ViewModel() {
      * GET /api/v1/tokens. Es crida en obrir la pestanya MCP i API d'Ajustos.
      */
     fun loadTokens() {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).apiTokens() }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).apiTokens() }
                 .onSuccess { _tokens.value = it }
         }
     }
@@ -1213,9 +1277,9 @@ class AppViewModel(private val container: Container) : ViewModel() {
      * @param capabilities les capacitats del token
      */
     fun createToken(name: String, capabilities: List<String>) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).createApiToken(name, capabilities) }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).createApiToken(name, capabilities) }
                 .onSuccess { result ->
                     // El token es mostra un sol cop
                     _createdToken.value = result["token"] as? String
@@ -1233,18 +1297,18 @@ class AppViewModel(private val container: Container) : ViewModel() {
      * @param id l'identificador del token a revocar
      */
     fun revokeToken(id: String) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).revokeApiToken(id) }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).revokeApiToken(id) }
                 .onSuccess { loadTokens() }
         }
     }
 
     /** Carrega els calendaris per a Ajustos ▸ Calendaris. GET /api/v1/calendars. */
     fun loadCalendars() {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).calendars() }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).calendars() }
                 .onSuccess { _calendars.value = it }
         }
     }
@@ -1260,10 +1324,10 @@ class AppViewModel(private val container: Container) : ViewModel() {
         sourceSecret: String? = null,
         inboxVisible: Boolean? = null,
     ) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
             runCatching {
-                container.api(base).createCalendar(
+                container.api(sessionAccount).createCalendar(
                     scopeId = scopeId,
                     name = name,
                     origin = origin,
@@ -1287,10 +1351,10 @@ class AppViewModel(private val container: Container) : ViewModel() {
         refreshInterval: Int? = null,
         inboxVisible: Boolean? = null,
     ) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
             runCatching {
-                container.api(base).updateCalendar(
+                container.api(sessionAccount).updateCalendar(
                     id,
                     name = name,
                     sourceUrl = sourceUrl,
@@ -1305,20 +1369,19 @@ class AppViewModel(private val container: Container) : ViewModel() {
 
     /** Esborra un calendari. DELETE /api/v1/calendars/{id}. */
     fun deleteCalendar(id: String) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).deleteCalendar(id) }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).deleteCalendar(id) }
                 .onSuccess { loadCalendars() }
         }
     }
 
     /** Carrega comptes i regles de correu per a Ajustos ▸ Correu. */
-    fun googleMailApi(): FemhoApi = container.api(checkNotNull(serverUrl))
+    fun googleMailApi(): FemhoApi = container.api(checkNotNull(activeAccount))
 
     private fun googleMailKey(): String? {
-        val base = serverUrl ?: return null
-        val user = profile.value?.id ?: return null
-        return "$base|$user"
+        val account = activeAccount ?: return null
+        return "${account.identity.serverUrl}|${account.identity.userId}"
     }
     fun pendingGoogleMail(): String? = googleMailKey()?.let {
         container.appContext.getSharedPreferences("mail_oauth", android.content.Context.MODE_PRIVATE).getString(it, null)
@@ -1331,47 +1394,47 @@ class AppViewModel(private val container: Container) : ViewModel() {
     }
 
     fun loadMailData() {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).mailAccounts() }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).mailAccounts() }
                 .onSuccess { _mailAccounts.value = it }
-            runCatching { container.api(base).mailRules() }
+            runCatching { container.api(sessionAccount).mailRules() }
                 .onSuccess { _mailRules.value = it }
         }
     }
 
     /** Crea un compte IMAP. POST /api/v1/mail/accounts. */
     fun createMailAccount(name: String, host: String, username: String, password: String, security: String) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).createMailAccount(name, host, username, password, security) }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).createMailAccount(name, host, username, password, security) }
                 .onSuccess { loadMailData() }
         }
     }
 
     /** Actualitza un compte IMAP. PATCH /api/v1/mail/accounts/{id}. */
     fun updateMailAccount(id: String, name: String? = null, host: String? = null, username: String? = null, password: String? = null, security: String? = null) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).updateMailAccount(id, name, host, username, password, security) }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).updateMailAccount(id, name, host, username, password, security) }
                 .onSuccess { loadMailData() }
         }
     }
 
     /** Esborra un compte IMAP. DELETE /api/v1/mail/accounts/{id}. */
     fun deleteMailAccount(id: String) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).deleteMailAccount(id) }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).deleteMailAccount(id) }
                 .onSuccess { loadMailData() }
         }
     }
 
     /** Prova la connexió d'un compte. POST /api/v1/mail/accounts/{id}/test — no desa res. */
     fun testMailAccount(id: String, onResult: (ho.fem.model.MailTestResult) -> Unit) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).testMailAccount(id) }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).testMailAccount(id) }
                 .onSuccess { onResult(it) }
                 .onFailure { onResult(ho.fem.model.MailTestResult(ok = false, error = it.message)) }
         }
@@ -1379,18 +1442,18 @@ class AppViewModel(private val container: Container) : ViewModel() {
 
     /** Crea una regla (mapa de carpeta). POST /api/v1/mail/rules. */
     fun createMailRule(accountId: String, folder: String, scopeId: String? = null, titleTemplate: String? = null) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).createMailRule(accountId, folder, scopeId = scopeId, titleTemplate = titleTemplate) }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).createMailRule(accountId, folder, scopeId = scopeId, titleTemplate = titleTemplate) }
                 .onSuccess { loadMailData() }
         }
     }
 
     /** Esborra una regla. DELETE /api/v1/mail/rules/{id}. */
     fun deleteMailRule(id: String) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).deleteMailRule(id) }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).deleteMailRule(id) }
                 .onSuccess { loadMailData() }
         }
     }
@@ -1413,9 +1476,9 @@ class AppViewModel(private val container: Container) : ViewModel() {
      * (D4), igual que a la creació de tasques: així un reintent no duplica res.
      */
     fun createScope(name: String, color: String, kind: String) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).createScope(name, color, kind) }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).createScope(name, color, kind) }
                 .onSuccess { refresh() }
         }
     }
@@ -1427,9 +1490,9 @@ class AppViewModel(private val container: Container) : ViewModel() {
      * si l'àmbit és buit (el servidor ho valida).
      */
     fun updateScope(id: String, name: String, color: String, kind: String) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).updateScope(id, name, color) }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).updateScope(id, name, color) }
                 .onSuccess { refresh() }
         }
     }
@@ -1441,9 +1504,9 @@ class AppViewModel(private val container: Container) : ViewModel() {
      * valida i retorna un error si té tasques, projectes o membres).
      */
     fun deleteScope(id: String) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).deleteScope(id) }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).deleteScope(id) }
                 .onSuccess { refresh() }
         }
     }
@@ -1455,16 +1518,16 @@ class AppViewModel(private val container: Container) : ViewModel() {
      * Es crida en obrir la pestanya Àmbits.
      */
     fun loadEntityData() {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).labels() }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).labels() }
                 .onSuccess { _labels.value = it }
-            runCatching { container.api(base).taskTypes() }
+            runCatching { container.api(sessionAccount).taskTypes() }
                 .onSuccess { _taskTypes.value = it }
-            val available = runCatching { container.api(base).scopes() }.getOrDefault(scopes.value)
+            val available = runCatching { container.api(sessionAccount).scopes() }.getOrDefault(scopes.value)
             _scopeSettings.value = _scopeSettings.value.filterKeys { id -> available.any { it.id == id } }
             available.forEach { scope ->
-                runCatching { container.api(base).scopeSettings(scope.id) }
+                runCatching { container.api(sessionAccount).scopeSettings(scope.id) }
                     .onSuccess { settings ->
                         _scopeSettings.value = _scopeSettings.value + (scope.id to settings)
                     }
@@ -1474,64 +1537,64 @@ class AppViewModel(private val container: Container) : ViewModel() {
 
     /** Crea un projecte dins d'un àmbit. POST /api/v1/projects. */
     fun createProject(scopeId: String, name: String) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).createProject(scopeId, name) }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).createProject(scopeId, name) }
                 .onSuccess { loadEntityData() }
         }
     }
 
     /** Esborra un projecte. DELETE /api/v1/projects/{id}. */
     fun deleteProject(id: String) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).deleteProject(id) }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).deleteProject(id) }
                 .onSuccess { loadEntityData() }
         }
     }
 
     /** Crea una etiqueta dins d'un àmbit. POST /api/v1/labels. */
     fun createLabel(scopeId: String, name: String) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).createLabel(scopeId, name) }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).createLabel(scopeId, name) }
                 .onSuccess { loadEntityData() }
         }
     }
 
     /** Esborra una etiqueta. DELETE /api/v1/labels/{id}. */
     fun deleteLabel(id: String) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).deleteLabel(id) }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).deleteLabel(id) }
                 .onSuccess { loadEntityData() }
         }
     }
 
     /** Assigna una persona a una tasca. POST /api/v1/tasks/{id}/assignees/{userId}. */
     fun addAssignee(task: Task, userId: String) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).addAssignee(task.id, userId) }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).addAssignee(task.id, userId) }
                 .onSuccess { refreshTask(task) }
         }
     }
 
     /** Treu una persona d'una tasca. DELETE /api/v1/tasks/{id}/assignees/{userId}. */
     fun removeAssignee(task: Task, userId: String) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).removeAssignee(task.id, userId) }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).removeAssignee(task.id, userId) }
                 .onSuccess { refreshTask(task) }
         }
     }
 
     /** Posa la tipologia d'una tasca (null per desassignar-la). PATCH /api/v1/tasks/{id}. */
     fun setTaskType(task: Task, taskTypeId: String?) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
             runCatching {
-                container.api(base).updateTask(
+                container.api(sessionAccount).updateTask(
                     task.id,
                     mapOf("task_type_id" to (taskTypeId ?: "")),
                 )
@@ -1544,39 +1607,39 @@ class AppViewModel(private val container: Container) : ViewModel() {
 
     /** Posa una etiqueta a una tasca. POST /api/v1/tasks/{id}/labels/{labelId}. */
     fun addTaskLabel(task: Task, labelId: String) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).addTaskLabel(task.id, labelId) }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).addTaskLabel(task.id, labelId) }
                 .onSuccess { refreshTask(task) }
         }
     }
 
     /** Treu una etiqueta d'una tasca. DELETE /api/v1/tasks/{id}/labels/{labelId}. */
     fun removeTaskLabel(task: Task, labelId: String) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).removeTaskLabel(task.id, labelId) }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).removeTaskLabel(task.id, labelId) }
                 .onSuccess { refreshTask(task) }
         }
     }
 
     /** Crea una etiqueta nova i la posa a la tasca que la demana. POST /api/v1/labels. */
     fun createTaskLabel(task: Task, name: String) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).createLabel(task.scopeId, name) }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).createLabel(task.scopeId, name) }
                 .onSuccess { label ->
                     loadEntityData()
-                    runCatching { container.api(base).addTaskLabel(task.id, label.id) }
+                    runCatching { container.api(sessionAccount).addTaskLabel(task.id, label.id) }
                         .onSuccess { refreshTask(task) }
                 }
         }
     }
 
     private fun refreshTask(task: Task) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).getTask(task.id) }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).getTask(task.id) }
                 .onSuccess { updated ->
                     _openTask.value = updated
                     refresh()
@@ -1586,36 +1649,36 @@ class AppViewModel(private val container: Container) : ViewModel() {
 
     /** Carrega els comentaris (i la conversa amb la IA) de la tasca oberta. */
     fun loadComments(taskId: String) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).taskComments(taskId) }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).taskComments(taskId) }
                 .onSuccess { _openComments.value = it }
         }
     }
 
     /** Afegeix un comentari a la tasca oberta. POST /api/v1/tasks/{id}/comments. */
     fun addComment(taskId: String, body: String) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).addComment(taskId, body) }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).addComment(taskId, body) }
                 .onSuccess { loadComments(taskId) }
         }
     }
 
     /** Carrega l'historial d'activitat de la tasca oberta. */
     fun loadActivity(taskId: String) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).taskActivity(taskId) }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).taskActivity(taskId) }
                 .onSuccess { _openActivity.value = it }
         }
     }
 
     /** Desfà un canvi autònom de la IA. POST /api/v1/activity/{id}/undo. */
     fun undoActivity(entryId: String) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).undoActivity(entryId) }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).undoActivity(entryId) }
                 .onSuccess {
                     _openTask.value?.let { task ->
                         loadActivity(task.id)
@@ -1626,27 +1689,27 @@ class AppViewModel(private val container: Container) : ViewModel() {
     }
 
     fun createTaskType(scopeId: String, name: String) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).createTaskType(scopeId, name) }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).createTaskType(scopeId, name) }
                 .onSuccess { loadEntityData() }
         }
     }
 
     /** Actualitza una tipologia. PATCH /api/v1/task-types/{id}. */
     fun updateTaskType(id: String, name: String? = null, required: Boolean? = null) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).updateTaskType(id, name = name, required = required) }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).updateTaskType(id, name = name, required = required) }
                 .onSuccess { loadEntityData() }
         }
     }
 
     /** Esborra una tipologia. DELETE /api/v1/task-types/{id}. */
     fun deleteTaskType(id: String) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).deleteTaskType(id) }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).deleteTaskType(id) }
                 .onSuccess { loadEntityData() }
         }
     }
@@ -1662,10 +1725,10 @@ class AppViewModel(private val container: Container) : ViewModel() {
         projectNoun: String? = null,
         taskTypesEnabled: Boolean? = null,
     ) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
             runCatching {
-                container.api(base).updateScopeSettings(
+                container.api(sessionAccount).updateScopeSettings(
                     scopeId,
                     timeTracking = timeTracking,
                     workStart = workStart,
@@ -1682,14 +1745,15 @@ class AppViewModel(private val container: Container) : ViewModel() {
     }
 
     fun move(task: Task, status: TaskStatus) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            val repository = container.repository(base)
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            val repository = container.repository(sessionAccount)
             // El veí és l'última targeta de la columna de destí: la posició es calcula
             // al client (D3) i el servidor l'accepta tal com ve.
             val last = _tasks.value.filter { it.status == status && it.id != task.id }
                 .maxByOrNull { it.position }?.position
             repository.moveTask(task, status, last to null)
+            Notifications.requestSync(container.appContext)
             // El moviment ja és a Room; sense xarxa queda pendent, no fa caure l’app.
             runCatching { repository.flush() }
             ho.fem.app.widget.FemhoWidgets.updateAll(container.appContext)
@@ -1698,9 +1762,9 @@ class AppViewModel(private val container: Container) : ViewModel() {
 
     /** El pany d'agent: l'usuari se l'emporta al seu tauler. POST /tasks/{id}/take-over. */
     fun takeOver(task: Task, status: String) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).takeOverTask(task.id, status) }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).takeOverTask(task.id, status) }
                 .onSuccess { updated ->
                     _openTask.value = updated
                     refresh()
@@ -1715,9 +1779,9 @@ class AppViewModel(private val container: Container) : ViewModel() {
      * bloquejaria per a l'usuari en comptes de tornar-li-la.
      */
     fun claim(task: Task) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).setAiMode(task.id, "manual") }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).setAiMode(task.id, "manual") }
                 .onSuccess {
                     refresh()
                     refreshTask(task)
@@ -1727,9 +1791,9 @@ class AppViewModel(private val container: Container) : ViewModel() {
 
     /** Esborra una tasca. DELETE /api/v1/tasks/{id}. */
     fun deleteTask(task: Task) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).deleteTask(task.id) }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).deleteTask(task.id) }
                 .onSuccess {
                     _openTask.value = null
                     refresh()
@@ -1757,9 +1821,9 @@ class AppViewModel(private val container: Container) : ViewModel() {
     }
 
     private fun loadAgents() {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            val agents: List<Agent> = runCatching { container.api(base).agents() }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            val agents: List<Agent> = runCatching { container.api(sessionAccount).agents() }
                 .getOrDefault(emptyList())
             _aiEnabled.value = agents.any { it.enabled }
             // Sense cap agent actiu no hi ha tauler de la IA on ser.
@@ -1796,15 +1860,15 @@ class AppViewModel(private val container: Container) : ViewModel() {
     val agentSkill: StateFlow<String?> = _agentSkill.asStateFlow()
 
     fun loadAgentManagement() {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).agentDetails() }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).agentDetails() }
                 .onSuccess { agents ->
                     _agentsDetail.value = agents
                     agents.forEach { agent ->
-                        runCatching { container.api(base).agentScopeAvailability(agent.id) }
+                        runCatching { container.api(sessionAccount).agentScopeAvailability(agent.id) }
                             .onSuccess { _agentScopeAvailability.value = _agentScopeAvailability.value + (agent.id to it) }
-                        runCatching { container.api(base).agentCredentials(agent.id) }
+                        runCatching { container.api(sessionAccount).agentCredentials(agent.id) }
                             .onSuccess { _agentCredentials.value = _agentCredentials.value + (agent.id to it) }
                     }
                 }
@@ -1813,17 +1877,17 @@ class AppViewModel(private val container: Container) : ViewModel() {
 
     /** Crea un agent. POST /api/v1/ai/agents. El servidor genera l'id. */
     fun createAgent(name: String) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).createAgent(name) }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).createAgent(name) }
                 .onSuccess { loadAgentManagement() }
         }
     }
 
     fun setAgentEnabled(agent: AgentDetail, enabled: Boolean) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).updateAgent(agent.id, enabled = enabled) }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).updateAgent(agent.id, enabled = enabled) }
                 .onSuccess {
                     loadAgentManagement()
                     loadAgents()
@@ -1832,18 +1896,18 @@ class AppViewModel(private val container: Container) : ViewModel() {
     }
 
     fun setAgentCanCreate(agent: AgentDetail, canCreate: Boolean) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).updateAgent(agent.id, canCreateTasks = canCreate) }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).updateAgent(agent.id, canCreateTasks = canCreate) }
                 .onSuccess { loadAgentManagement() }
         }
     }
 
     /** Desa el conjunt sencer d'àmbits, com la web: les caselles tal com han quedat. */
     fun setAgentScopes(agent: AgentDetail, scopeIds: List<String>, allScopes: Boolean) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).updateAgentScopes(agent.id, scopeIds, allScopes) }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).updateAgentScopes(agent.id, scopeIds, allScopes) }
                 .onSuccess {
                     loadAgentManagement()
                     loadAgents()
@@ -1853,9 +1917,9 @@ class AppViewModel(private val container: Container) : ViewModel() {
 
     /** Crea una credencial: el token surt una sola vegada (del hash no se'n pot treure). */
     fun createAgentCredential(agent: AgentDetail) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).createAgentCredential(agent.id) }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).createAgentCredential(agent.id) }
                 .onSuccess { result ->
                     _createdAgentToken.value = result["token"] as? String
                     loadAgentManagement()
@@ -1864,17 +1928,17 @@ class AppViewModel(private val container: Container) : ViewModel() {
     }
 
     fun revokeAgentCredential(tokenId: String) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).revokeApiToken(tokenId) }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).revokeApiToken(tokenId) }
                 .onSuccess { loadAgentManagement() }
         }
     }
 
     fun deleteAgent(agent: AgentDetail) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).deleteAgent(agent.id) }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).deleteAgent(agent.id) }
                 .onSuccess {
                     loadAgentManagement()
                     loadAgents()
@@ -1884,9 +1948,9 @@ class AppViewModel(private val container: Container) : ViewModel() {
 
     /** El full d'instruccions, en el teu idioma. text/markdown. */
     fun loadAgentSkill() {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).agentSkill() }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).agentSkill() }
                 .onSuccess { _agentSkill.value = it }
         }
     }
@@ -1943,9 +2007,9 @@ class AppViewModel(private val container: Container) : ViewModel() {
     }
 
     fun toggleCardSubtask(taskId: String, subtaskId: String, done: Boolean) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).setSubtask(subtaskId, done) }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).setSubtask(subtaskId, done) }
             loadCard(taskId)
             refresh()
         }
@@ -1953,19 +2017,19 @@ class AppViewModel(private val container: Container) : ViewModel() {
 
     /** Pineja o despineja una llista des de la targeta (P1: el pinejat és per usuari). */
     fun togglePinList(taskId: String, checklist: Checklist) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).setChecklistPin(checklist.id, !checklist.pinned) }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).setChecklistPin(checklist.id, !checklist.pinned) }
             // El menú de la xinxeta ha de dir la veritat de seguida, no al proper refresc.
-            _pinned.value = container.api(base).pinnedChecklists()
+            _pinned.value = container.api(sessionAccount).pinnedChecklists()
             loadCard(taskId)
         }
     }
 
     fun toggleCardItem(taskId: String, itemId: String, done: Boolean) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            runCatching { container.api(base).setChecklistItem(itemId, done) }
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            runCatching { container.api(sessionAccount).setChecklistItem(itemId, done) }
             loadCard(taskId)
             refresh()
         }
@@ -1983,7 +2047,7 @@ class AppViewModel(private val container: Container) : ViewModel() {
      * donar una llista, no dues de bessones.
      */
     fun submitCardAdd(task: Task) {
-        val base = serverUrl ?: return
+        val sessionAccount = activeAccount ?: return
         val raw = (_cardDrafts.value[task.id] ?: "").trim()
         if (raw.isEmpty()) return
         val sigil = Regex("^#(\\S+)\\s+(.+)$").find(raw)
@@ -1991,8 +2055,8 @@ class AppViewModel(private val container: Container) : ViewModel() {
         val text = (sigil?.groupValues?.get(2) ?: raw).trim()
         if (text.isEmpty()) return
 
-        viewModelScope.launch {
-            val api = container.api(base)
+        sessionScope.launch {
+            val api = container.api(sessionAccount)
             runCatching {
                 if (name.isEmpty()) {
                     api.createSubtask(task.id, UUID.randomUUID().toString(), text)
@@ -2015,9 +2079,9 @@ class AppViewModel(private val container: Container) : ViewModel() {
     }
 
     private fun loadCard(taskId: String) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            val api = container.api(base)
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            val api = container.api(sessionAccount)
             val subtasks = runCatching { api.subtasks(taskId) }.getOrDefault(emptyList())
             val checklists = runCatching { api.checklists(taskId) }.getOrDefault(emptyList())
             _cardLists.value = _cardLists.value + (taskId to CardLists(subtasks, checklists))
@@ -2025,30 +2089,31 @@ class AppViewModel(private val container: Container) : ViewModel() {
     }
 
     fun create(scopeId: String, title: String, status: TaskStatus = TaskStatus.INBOX) {
-        val base = serverUrl ?: return
-        viewModelScope.launch {
-            val repository = container.repository(base)
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            val repository = container.repository(sessionAccount)
             repository.createTask(scopeId, title, null, status)
-            repository.flush()
+            Notifications.requestSync(container.appContext)
+            runCatching { repository.flush() }
         }
     }
 
-    private fun observe(base: String) {
-        val repository = container.repository(base)
-        viewModelScope.launch {
+    private fun observe(account: ActiveAccount) {
+        val repository = container.repository(account)
+        sessionScope.launch {
             repository.tasks.collect {
                 _tasks.value = it
                 // Si algú ha demanat una tasca abans que la base respongués, ara ja hi és.
                 resolvePendingOpen()
             }
         }
-        viewModelScope.launch { repository.scopes.collect { _scopes.value = it } }
-        viewModelScope.launch {
-            container.settings.activeProjects.collect { _activeProjects.value = it }
+        sessionScope.launch { repository.scopes.collect { _scopes.value = it } }
+        sessionScope.launch {
+            container.settings.activeProjects(account).collect { _activeProjects.value = it }
         }
-        viewModelScope.launch { repository.projects.collect { _projects.value = it } }
-        viewModelScope.launch { repository.people.collect { _people.value = it } }
-        viewModelScope.launch { repository.pending.collect { _pending.value = it } }
+        sessionScope.launch { repository.projects.collect { _projects.value = it } }
+        sessionScope.launch { repository.people.collect { _people.value = it } }
+        sessionScope.launch { repository.pending.collect { _pending.value = it } }
         // Carrega el perfil per a la pestanya Perfil d'Ajustos
         loadProfile()
     }

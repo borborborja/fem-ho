@@ -12,7 +12,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  eventDateOf,
   getLocale,
+  localDateOf,
+  localDayBounds,
+  localTimeToInstant,
   longDay,
   monthName,
   resolveWeekStart,
@@ -27,14 +31,34 @@ import { v7 as uuidv7 } from 'uuid';
 import { useSession, useSessionData } from '../app/session.js';
 import { useApi } from '../app/useApi.js';
 import { useRouter } from '../app/router.js';
-import type { Calendar, EventOccurrence, Inbox, InboxMail, Task } from '../app/types.js';
+import type { Calendar, EventOccurrence, Inbox, InboxMail, Task, TaskPage } from '../app/types.js';
 import { InboxRail } from '../board/InboxRail.js';
 import { ColumnQuickAdd } from '../board/ColumnQuickAdd.js';
+import type { QuickAddProps } from '../board/QuickAdd.js';
 import { EventSheet } from './EventSheet.js';
 import { SourceIcon } from '../board/SourceIcon.js';
 import { ErrorBanner } from './BoardScreen.js';
 
 type Mode = 'month' | 'week' | 'day';
+
+async function loadTaskPages(path: string, signal: AbortSignal): Promise<Task[]> {
+  const tasks = new Map<string, Task>();
+  const cursors = new Set<string>();
+  let cursor: string | null = null;
+  do {
+    const page: TaskPage = await api.get(
+      cursor === null ? path : `${path}&cursor=${encodeURIComponent(cursor)}`,
+      signal,
+    );
+    for (const task of page.data) tasks.set(task.id, task);
+    cursor = page.next_cursor ?? null;
+    if (cursor !== null) {
+      if (cursors.has(cursor)) throw new Error('Repeated task cursor');
+      cursors.add(cursor);
+    }
+  } while (cursor !== null);
+  return [...tasks.values()];
+}
 
 /** `YYYY-MM-DD` d'una data local, sense passar per UTC. */
 function iso(date: Date): string {
@@ -75,7 +99,8 @@ export interface CalendarScreenProps {
 }
 
 export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: CalendarScreenProps) {
-  const { scopes, projects, people, settings } = useSessionData();
+  const { scopes, projects, people, settings, profile } = useSessionData();
+  const timezone = profile.timezone;
   const { updateSettings } = useSession();
   const mobile = useIsMobile();
   const [mode, setMode] = useState<Mode>('month');
@@ -100,7 +125,7 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
   const routeDay =
     parsedDay !== null && !Number.isNaN(parsedDay.getTime()) && iso(parsedDay) === fromUrl
       ? fromUrl!
-      : iso(new Date());
+      : localDateOf(timezone, new Date());
   const [selected, setSelectedState] = useState(routeDay);
   const setSelected = (day: string): void => {
     setSelectedState(day);
@@ -137,16 +162,7 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
   // setmana per a la setmanal, el dia per a la diària. Demanar sempre el mes seria
   // portar trenta dies de dades per pintar-ne un.
   const [from, to] = useMemo<[string, string]>(() => {
-    /**
-     * **El `to` és exclusiu i per això sempre porta un dia de més.**
-     *
-     * El servidor rep dues dates i les llegeix com a instants: `2026-08-11` és la
-     * mitjanit d'aquell dia. Amb `from` i `to` iguals, la finestra era de mitjanit a
-     * mitjanit —**buida**— i la vista diària no ensenyava mai cap esdeveniment; a la
-     * setmanal i a la mensual, l'últim dia hi queia a fora. No es notava perquè el rail
-     * del costat va per `/inbox`, que sí que resol el dia bé: la pantalla ensenyava les
-     * cites en un panell i "sense esdeveniments" a l'altre.
-     */
+    // La fi és el primer dia civil que queda fora de la finestra.
     const day = (date: string): string => iso(addDays(new Date(`${date}T12:00:00`), 1));
     if (mode === 'day') return [selected, day(selected)];
     if (mode === 'week') {
@@ -159,7 +175,14 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
   }, [mode, selected, cursor, start]);
 
   const scopeQuery = activeScopeIds.length > 0 ? `&scope_ids=${activeScopeIds.join(',')}` : '';
-  const events = useApi<EventOccurrence[]>(`/api/v1/events?from=${from}&to=${to}${scopeQuery}`);
+  const fromInstant = localDayBounds(timezone, from).startUTC;
+  const toInstant = localDayBounds(timezone, to).startUTC;
+  // La consulta ha d'incloure també les dates de tot el dia, desades a mitjanit UTC.
+  const firstCivil = `${from}T00:00:00.000Z`;
+  const lastCivil = `${to}T00:00:00.000Z`;
+  const events = useApi<EventOccurrence[]>(
+    `/api/v1/events?from=${fromInstant < firstCivil ? fromInstant : firstCivil}&to=${toInstant > lastCivil ? toInstant : lastCivil}${scopeQuery}`,
+  );
   /**
    * **`include_hidden` és la lent del calendari.**
    *
@@ -178,7 +201,9 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
    * graella d'un mes sencer. Un correu no té hora d'inici ni durada —és un instant, com un
    * ítem d'RSS—, i per això surt com una cosa de tot el dia.
    */
-  const mail = useApi<InboxMail[]>(`/api/v1/mail/messages?from=${from}&to=${to}${scopeQuery}`);
+  const mail = useApi<InboxMail[]>(
+    `/api/v1/mail/messages?from=${fromInstant}&to=${toInstant}${scopeQuery}`,
+  );
 
   /**
    * **Les tasques amb data.** El que faltava perquè això fos un calendari.
@@ -193,13 +218,17 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
    * mes s'ompliria del que ja no cal mirar. El que has fet es mira a la columna Fet, que
    * per a això té el seu selector de dia.
    */
-  const tasques = useApi<{ data: Task[] }>(
-    `/api/v1/tasks?due_from=${from}&due_to=${to}&status=inbox,todo,doing&limit=200${
-      activeScopeIds.length === 1 ? `&scope_id=${activeScopeIds[0] ?? ''}` : ''
-    }`,
+  const tasques = useApi(
+    `/api/v1/tasks?due_from=${from}&due_to=${iso(addDays(new Date(`${to}T12:00:00`), -1))}&status=inbox,todo,doing&limit=200${scopeQuery}`,
+    [],
+    loadTaskPages,
   );
-  const ambData = (tasques.data?.data ?? []).filter(
-    (task) => activeScopeIds.length === 0 || activeScopeIds.includes(task.scope_id),
+  const ambData = (tasques.data ?? []).filter(
+    (task) =>
+      task.due_date != null &&
+      task.due_date >= from &&
+      task.due_date < to &&
+      (activeScopeIds.length === 0 || activeScopeIds.includes(task.scope_id)),
   );
 
   /** De quina mena és la font d'un calendari. `null` si és d'aquesta casa. */
@@ -229,10 +258,14 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
       (activeScopeIds.length === 0 || activeScopeIds.includes(calendar.scope_id)),
   );
 
-  const occurrences = (events.data ?? []).filter(
-    (occurrence) =>
-      occurrence.calendar_id === undefined || !hidden.includes(occurrence.calendar_id),
-  );
+  const occurrences = (events.data ?? [])
+    .filter(
+      (event) =>
+        (event.calendar_id === undefined || !hidden.includes(event.calendar_id)) &&
+        (activeScopeIds.length === 0 || activeScopeIds.includes(event.scope_id)),
+    )
+    .map((event) => ({ ...event, day: eventDateOf(timezone, event.starts_at, event.all_day) }))
+    .filter(({ day }) => day >= from && day < to);
 
   const toggleSource = (id: string): void => {
     void updateSettings({
@@ -247,8 +280,9 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
     () =>
       (mail.data ?? [])
         .filter((item) => item.received_at !== null)
-        .map((item) => ({ item, day: item.received_at!.slice(0, 10) })),
-    [mail.data],
+        .map((item) => ({ item, day: localDateOf(timezone, new Date(item.received_at!)) }))
+        .filter(({ day }) => day >= from && day < to),
+    [mail.data, timezone, from, to],
   );
 
   /**
@@ -261,7 +295,7 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
     Record<string, { id: string; title: string; color: string; muted?: boolean }[]>
   >(() => {
     /** `quan` és l'instant de debò, no el text: ordenar títols posa les 15:00 abans de les 9:00. */
-    type Item = { id: string; title: string; color: string; muted?: boolean; quan: string };
+    type Item = { id: string; title: string; color: string; muted?: boolean; quan: number };
     const map: Record<string, Item[]> = {};
     const posa = (day: string, item: Item): void => {
       const list = map[day] ?? [];
@@ -270,12 +304,12 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
     };
 
     for (const occurrence of occurrences) {
-      posa(occurrence.starts_at.slice(0, 10), {
-        quan: occurrence.starts_at,
+      posa(occurrence.day, {
+        quan: occurrence.all_day ? -Infinity : Date.parse(occurrence.starts_at),
         id: `${occurrence.event_id}@${occurrence.starts_at}`,
         title: occurrence.all_day
           ? occurrence.summary
-          : `${shortTime(locale, new Date(occurrence.starts_at))} ${occurrence.summary}`,
+          : `${shortTime(locale, new Date(occurrence.starts_at), timezone)} ${occurrence.summary}`,
         color: colorOf(occurrence.scope_id),
         muted: !occurrence.in_inbox,
       });
@@ -283,7 +317,7 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
     for (const { item, day } of mailByDay) {
       posa(day, {
         // Un correu no té hora d'inici: va al final del dia, després del que sí que en té.
-        quan: item.received_at ?? `${day}T23:59:59.999Z`,
+        quan: Infinity,
         id: `mail:${item.id}`,
         title: `${item.from_name ?? item.from_address ?? ''} — ${item.subject ?? ''}`.trim(),
         color: colorOf(item.scope_id),
@@ -302,8 +336,10 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
          */
         quan:
           task.due_time === null || task.due_time === undefined
-            ? `${day}T00:00:00.000Z`
-            : `${day}T${task.due_time}:00.000Z`,
+            ? -Infinity
+            : /^\d{2}:\d{2}/u.test(task.due_time)
+              ? Date.parse(localTimeToInstant(timezone, day, task.due_time.slice(0, 5)))
+              : -Infinity,
         id: `task:${task.id}`,
         title:
           task.due_time === null || task.due_time === undefined
@@ -314,14 +350,14 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
     }
 
     // Per hora dins del dia: és l'ordre en què passaran les coses.
-    for (const day of Object.keys(map)) map[day]!.sort((a, b) => a.quan.localeCompare(b.quan));
+    for (const day of Object.keys(map)) map[day]!.sort((a, b) => a.quan - b.quan);
     return map;
-  }, [occurrences, mailByDay, ambData, scopes, locale]);
+  }, [occurrences, mailByDay, ambData, scopes, locale, timezone]);
 
   const dotsByDate = useMemo<Record<string, string[]>>(() => {
     const map: Record<string, string[]> = {};
     const punts: { day: string; scope_id: string }[] = [
-      ...occurrences.map((o) => ({ day: o.starts_at.slice(0, 10), scope_id: o.scope_id })),
+      ...occurrences.map(({ day, scope_id }) => ({ day, scope_id })),
       // El correu també hi posa punt: si no, un dia amb tres correus i cap cita es veuria
       // buit al mes, i el calendari deixaria de ser un mapa del que hi ha.
       ...mailByDay.map(({ item, day }) => ({ day, scope_id: item.scope_id })),
@@ -355,14 +391,16 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
   const weekdays = weekdayNames(locale, start);
 
   const dayItems = occurrences
-    .filter((occurrence) => occurrence.starts_at.slice(0, 10) === selected)
+    .filter((occurrence) => occurrence.day === selected)
     .map((occurrence) => ({
       // Una ocurrència no té identitat pròpia: la clau és l'esdeveniment més l'instant,
       // perquè dues ocurrències del mateix mestre comparteixen `event_id` (D8).
       id: `${occurrence.event_id}@${occurrence.starts_at}`,
       title: occurrence.summary,
       color: colorOf(occurrence.scope_id),
-      time: occurrence.all_day ? undefined : shortTime(locale, new Date(occurrence.starts_at)),
+      time: occurrence.all_day
+        ? undefined
+        : shortTime(locale, new Date(occurrence.starts_at), timezone),
       /**
        * **Un sol significat per a la vora discontínua: "això no és a la teva bústia".**
        *
@@ -453,10 +491,7 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
    * comptes de crear-la i haver-la d'arrossegar.
    */
   const crear = useCallback(
-    (
-      dueDate: string | null,
-      input: { title: string; scopeId: string; projectId: string | null; assigneeIds: string[] },
-    ) =>
+    (dueDate: string | null, input: Parameters<QuickAddProps['onCreate']>[0]) =>
       // Es torna la promesa: si peta, el camp recupera el que havies escrit.
       api
         .post('/api/v1/tasks', {
@@ -468,6 +503,7 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
           position: generatePosition(null, null),
           ...(dueDate === null ? {} : { due_date: dueDate }),
           assignee_ids: input.assigneeIds.length > 0 ? input.assigneeIds : undefined,
+          ai_mode: input.aiMode,
         })
         .then(() => {
           inbox.reload();
@@ -503,6 +539,7 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
 
   const rail = (
     <InboxRail
+      timezone={timezone}
       tasks={[...(inbox.data?.dated ?? []), ...(inbox.data?.overdue ?? [])].map((task) => ({
         id: task.id,
         title: task.title,
@@ -713,7 +750,7 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
               nextLabel: t('calendar.nextMonth'),
             }}
             selectedDate={selected}
-            today={iso(new Date())}
+            today={localDateOf(timezone, new Date())}
             dotsByDate={dotsByDate}
             /*
               **Al mòbil, punts.** Una columna del mes hi fa quaranta píxels d'ample: un
@@ -777,6 +814,7 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
       {openItem === undefined ? null : (
         <EventSheet
           occurrence={openItem}
+          timezone={timezone}
           onClose={() => setObert(null)}
           onToggleInbox={() => {
             void api

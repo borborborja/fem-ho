@@ -10,15 +10,30 @@ import { sql } from 'kysely';
 import type { TaskStatus } from '@fem-ho/contracts';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { auditedTransaction, type AuditContext } from '../audit/audited-transaction.js';
+import { dbBool, isTrue } from '../db/bool.js';
 import { PolicyError, notFound, unauthenticated } from '../policy/errors.js';
 import type { Principal } from '../policy/principal.js';
-import { assertScopeAccess } from '../services/scopes.js';
-import { createChecklist, createChecklistItem } from '../services/checklists.js';
-import { createSubtask } from '../services/subtasks.js';
+import {
+  createChecklist,
+  createChecklistItem,
+  deleteChecklist,
+  deleteChecklistItem,
+  updateChecklist,
+  updateChecklistItem,
+} from '../services/checklists.js';
+import { createSubtask, deleteSubtask, updateSubtask } from '../services/subtasks.js';
 import { createTask, moveTask, updateTask, deleteTask, type Task } from '../services/tasks.js';
 import { addComment } from '../services/comments.js';
-import { createProject } from '../services/scopes.js';
+import { createProject, deleteProject } from '../services/scopes.js';
 import { createEvent } from '../services/events.js';
+import {
+  assertSyncContentAccess,
+  assertSyncEditableFields,
+  assertSyncWriteCapability,
+  canReadSyncEntity,
+  SYNC_WRITES,
+  type SyncWritable,
+} from '../services/sync-access.js';
 import {
   decodeCursor,
   encodeCursor,
@@ -52,24 +67,6 @@ async function handle<T>(
     throw error;
   }
 }
-
-/**
- * Les taules on el sync pot escriure, per entitat.
- *
- * **Han de ser les mateixes que baixen.** Amb quatre aquí i vuit al `pull`, un comentari
- * o un esdeveniment creat en mode avió baixava però no pujava mai: es perdia sense dir
- * res. L'asimetria entre el que arriba i el que se'n pot enviar és, per definició, una
- * manera de perdre dades.
- */
-const TABLES: Record<string, string> = {
-  task: 'tasks',
-  subtask: 'subtasks',
-  checklist: 'checklists',
-  checklist_item: 'checklist_items',
-  comment: 'comments',
-  project: 'projects',
-  event: 'events',
-};
 
 export function registerSyncRoutes(app: FastifyInstance): void {
   app.get('/api/v1/sync', async (request, reply) =>
@@ -160,7 +157,6 @@ export function registerSyncRoutes(app: FastifyInstance): void {
       try {
         const delta = await pull(conn.db, principal, { cursor: encodeCursor(cursor) });
         for (const change of delta.changes) {
-          cursor = change.seq;
           reply.raw.write(
             `id: ${change.seq}\nevent: change\ndata: ${JSON.stringify({
               entity: change.entity,
@@ -170,6 +166,8 @@ export function registerSyncRoutes(app: FastifyInstance): void {
             })}\n\n`,
           );
         }
+        // Una pàgina filtrada encara fa avançar el cursor: pot no portar cap event SSE.
+        cursor = Math.max(cursor, decodeCursor(delta.next_cursor) ?? cursor);
       } catch {
         // Un cursor caducat al flux vol dir que el client ha de resincronitzar sencer.
         reply.raw.write('event: resync\ndata: {}\n\n');
@@ -242,10 +240,13 @@ async function createFromBatch(
     case 'comment': {
       const taskId = text('task_id');
       if (taskId === undefined) throw missingParent('comment', 'task_id');
-      return (await addComment(ctx, principal, taskId, text('body') ?? '')) as unknown as Record<
-        string,
-        unknown
-      >;
+      return (await addComment(
+        ctx,
+        principal,
+        taskId,
+        text('body') ?? '',
+        text('id'),
+      )) as unknown as Record<string, unknown>;
     }
     case 'project': {
       const { entity: project } = await createProject(ctx, principal, data as never);
@@ -276,13 +277,42 @@ function missingParent(entity: string, field: string): PolicyError {
   );
 }
 
+async function deleteFromBatch(
+  ctx: AuditContext,
+  principal: Principal,
+  entity: SyncWritable,
+  id: string,
+  scopeId: string,
+): Promise<void> {
+  switch (entity) {
+    case 'task':
+      await deleteTask(ctx, principal, id);
+      return;
+    case 'subtask':
+      await deleteSubtask(ctx, principal, id);
+      return;
+    case 'checklist':
+      await deleteChecklist(ctx, principal, id);
+      return;
+    case 'checklist_item':
+      await deleteChecklistItem(ctx, principal, id);
+      return;
+    case 'project':
+      await deleteProject(ctx, principal, id);
+      return;
+    case 'comment':
+    case 'event':
+      // El lot replica tombstones per fila, també les excepcions d'una sèrie.
+      await softDelete(ctx, entity, id, scopeId);
+  }
+}
+
 async function applyOne(
   app: FastifyInstance,
   principal: Principal,
   operation: BatchOperation,
 ): Promise<BatchResult> {
   // Idempotència: el mateix `op_id` reenviat torna el resultat d'abans.
-  const db = app.connection!.db;
   const now = new Date().toISOString();
 
   /**
@@ -301,21 +331,29 @@ async function applyOne(
     };
   }
 
-  const already = await recallOp(db, principal, operation.op_id);
-  if (already !== undefined) return already;
-
-  const table = TABLES[operation.entity];
-  if (table === undefined) {
-    const rejected: BatchResult = {
+  if (typeof operation.entity !== 'string' || !Object.hasOwn(SYNC_WRITES, operation.entity)) {
+    return {
       op_id: operation.op_id,
       status: 'rejected',
       error: { detail: `"${operation.entity}" no és una entitat que se sincronitzi.` },
     };
-    await rememberOp(db, principal, operation.op_id, rejected, now);
-    return rejected;
   }
+  if (
+    typeof operation.id !== 'string' ||
+    operation.id === '' ||
+    !['create', 'update', 'move', 'delete'].includes(operation.op)
+  ) {
+    return {
+      op_id: operation.op_id,
+      status: 'rejected',
+      error: { detail: 'A sync operation needs an entity identifier and a valid operation.' },
+    };
+  }
+  const entityType = operation.entity as SyncWritable;
+  const { table } = SYNC_WRITES[entityType];
 
   try {
+    assertSyncWriteCapability(principal, entityType, operation.op);
     const result = await auditedTransaction(
       app.connection!.db,
       principal,
@@ -324,50 +362,33 @@ async function applyOne(
           await sql`SELECT pg_advisory_xact_lock(851004, hashtext(${principal.userId + operation.op_id}))`.execute(
             ctx.tx,
           );
-        const previous = await recallOp(ctx.tx, principal, operation.op_id);
-        if (previous) {
-          ctx.noChange();
-          return previous;
-        }
         const apply = async (): Promise<BatchResult> => {
           const found = await sql`
           SELECT * FROM ${sql.raw(table)} WHERE id = ${operation.id}
         `.execute(ctx.tx);
           const server = found.rows[0] as Record<string, unknown> | undefined;
 
-          /**
-           * **L'àmbit es comprova AQUÍ, abans de qualsevol branca.**
-           *
-           * Estava trenta línies més avall, després del `return` de `delete` i del de
-           * `create` sobre una fila existent. El resultat era que **qualsevol autenticat
-           * podia esborrar per identificador una tasca d'un àmbit que no era seu**, i
-           * llegir-la amb `op: 'create'`. Comprovat contra el servidor amb dos comptes: la
-           * víctima passava a rebre 404 de la seva pròpia tasca.
-           *
-           * El `create` sobre una fila absent no hi passa a posta: allà encara no hi ha
-           * `scope_id` del servidor i qui comprova és el servei que la crea, amb el `scope_id`
-           * que porta la petició.
-           *
-           * Que no s'hagi vist abans té una explicació incòmoda: la guarda de la regla 4
-           * tapava la fuita de lectura —el `create` sobre una fila existent no registra res
-           * a l'historial i `auditedTransaction` llançava—, però l'esborrat sí que registra,
-           * i per tant passava net.
-           */
-          if (server !== undefined) {
-            const owner = server.scope_id as string | undefined;
-            if (owner !== undefined) await assertScopeAccess(ctx.tx, principal, owner);
+          if (server === undefined && operation.op !== 'create') {
+            throw notFound(operation.entity, operation.id);
+          }
+          // Un reintent o un conflicte també pot retornar dades. Cal comprovar els
+          // permisos actuals abans de llegir el rebut o de construir la resposta.
+          const scopeId = await assertSyncContentAccess(
+            ctx,
+            principal,
+            entityType,
+            server ?? { ...(operation.data ?? {}), deleted_at: null },
+            operation.op,
+          );
+          const previous = await recallOp(ctx.tx, principal, operation);
+          if (previous !== undefined) {
+            ctx.noChange();
+            return previous;
           }
 
           if (operation.op === 'delete') {
-            if (server === undefined) throw notFound(operation.entity, operation.id);
-            if (operation.entity === 'task') await deleteTask(ctx, principal, operation.id);
-            else
-              await softDelete(
-                ctx,
-                operation.entity,
-                operation.id,
-                (server.scope_id as string | undefined) ?? null,
-              );
+            if (server?.deleted_at != null) ctx.noChange();
+            else await deleteFromBatch(ctx, principal, entityType, operation.id, scopeId);
             return { op_id: operation.op_id, status: 'ok' };
           }
 
@@ -416,10 +437,17 @@ async function applyOne(
           // Una creació d'una fila que ja hi és: ja està feta. Es respon amb la de dins,
           // que és el que el client vol saber.
           if (operation.op === 'create') {
+            ctx.noChange();
             return { op_id: operation.op_id, status: 'ok', entity: server };
           }
 
-          const scopeId = server.scope_id as string | undefined;
+          if (entityType !== 'task')
+            assertSyncEditableFields(
+              entityType,
+              Object.keys(operation.data ?? {}).filter(
+                (field) => field !== 'id' && field !== 'version',
+              ),
+            );
 
           /**
            * Esborrat contra edició: **guanya l'esborrat** (docs/06 §5). L'edició es
@@ -430,7 +458,7 @@ async function applyOne(
             ctx.record({
               entityType: operation.entity,
               entityId: operation.id,
-              scopeId: scopeId ?? null,
+              scopeId,
               verb: 'updated',
               changes: Object.fromEntries(
                 Object.entries(operation.data ?? {}).map(([k, v]) => [k, { from: null, to: v }]),
@@ -502,44 +530,53 @@ async function applyOne(
               entity: task as unknown as Record<string, unknown>,
             };
           }
-          // Els noms de columna són identificadors, no SQL proporcionat pel client.
-          if (
-            fields.some(
-              (field) =>
-                !/^[a-z_]+$/.test(field) ||
-                [
-                  'scope_id',
-                  'task_id',
-                  'checklist_id',
-                  'created_by',
-                  'user_id',
-                  'created_at',
-                  'deleted_at',
-                ].includes(field),
-            )
-          )
-            throw new PolicyError(
-              'invalid-sync-field',
-              'Invalid sync field',
-              422,
-              'Immutable or invalid field.',
-            );
-          const assignments = fields.map((field) => sql`${sql.raw(field)} = ${apply[field]}`);
-          await sql`
-          UPDATE ${sql.raw(table)}
-          SET ${sql.join(assignments)}, updated_at = ${ctx.now}, version = version + 1
-          WHERE id = ${operation.id}
-        `.execute(ctx.tx);
-
-          ctx.record({
-            entityType: operation.entity,
-            entityId: operation.id,
-            scopeId: scopeId ?? null,
-            verb: operation.op === 'move' ? 'moved' : 'updated',
-            changes: Object.fromEntries(
-              fields.map((field) => [field, { from: server[field], to: apply[field] }]),
-            ),
-          });
+          const text = (field: string): string | undefined =>
+            typeof apply[field] === 'string' ? apply[field] : undefined;
+          const bool = (field: string): boolean | undefined =>
+            apply[field] === undefined ? undefined : isTrue(apply[field]);
+          if (entityType === 'subtask') {
+            await updateSubtask(ctx, principal, operation.id, {
+              title: text('title'),
+              done: bool('done'),
+              position: text('position'),
+            });
+          } else if (entityType === 'checklist') {
+            await updateChecklist(ctx, principal, operation.id, {
+              name: text('name'),
+              show_completed_inline: bool('show_completed_inline'),
+              subtask_id: apply.subtask_id === null ? null : text('subtask_id'),
+              position: text('position'),
+            });
+          } else if (entityType === 'checklist_item') {
+            await updateChecklistItem(ctx, principal, operation.id, {
+              text: text('text'),
+              done: bool('done'),
+              position: text('position'),
+            });
+          } else {
+            const assignments = fields.map((field) => {
+              const value = field === 'all_day' ? dbBool(isTrue(apply[field])) : apply[field];
+              return sql`${sql.ref(field)} = ${value}`;
+            });
+            await sql`
+              UPDATE ${sql.raw(table)}
+              SET ${sql.join(assignments)}, updated_at = ${ctx.now}, version = version + 1
+              WHERE id = ${operation.id}
+            `.execute(ctx.tx);
+            if (entityType === 'event') {
+              await sql`UPDATE calendars SET sync_seq = sync_seq + 1
+                WHERE id = ${server.calendar_id}`.execute(ctx.tx);
+            }
+            ctx.record({
+              entityType,
+              entityId: operation.id,
+              scopeId,
+              verb: operation.op === 'move' ? 'moved' : 'updated',
+              changes: Object.fromEntries(
+                fields.map((field) => [field, { from: server[field], to: apply[field] }]),
+              ),
+            });
+          }
 
           const updated = await sql`
           SELECT * FROM ${sql.raw(table)} WHERE id = ${operation.id}
@@ -552,11 +589,21 @@ async function applyOne(
           };
         };
         const outcome = await apply();
-        await rememberOp(ctx.tx, principal, operation.op_id, outcome, now);
+        await rememberOp(ctx.tx, principal, operation, outcome, now);
         return outcome;
       },
       { engine: app.connection!.engine },
     );
+    if (canReadSyncEntity(principal, entityType)) return result;
+    if (result.status === 'ok') return { op_id: result.op_id, status: 'ok' };
+    if (result.status === 'conflict') {
+      throw new PolicyError(
+        'version-conflict',
+        'Version conflict',
+        409,
+        'The entity changed. Refresh with a credential that can read it before retrying.',
+      );
+    }
     return result;
   } catch (error) {
     const rejected: BatchResult = {
@@ -567,7 +614,6 @@ async function applyOne(
           ? error.toProblem()
           : { detail: "No s'ha pogut aplicar aquesta operació." },
     };
-    await rememberOp(db, principal, operation.op_id, rejected, now);
     return rejected;
   }
 }

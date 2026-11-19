@@ -41,6 +41,7 @@ export async function addComment(
   principal: Principal,
   taskId: string,
   body: string,
+  id = uuidv7(),
 ): Promise<Comment> {
   if (!hasCapability(principal, 'comments:write')) throw missingCapability('comments:write');
 
@@ -61,7 +62,6 @@ export async function addComment(
 
   await assertScopeAccess(ctx.tx, principal, row.scope_id);
 
-  const id = uuidv7();
   await sql`
     INSERT INTO comments (id, task_id, author_id, author_agent_id, guest_name, body,
                           created_at, updated_at)

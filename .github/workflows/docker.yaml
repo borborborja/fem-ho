@@ -34,6 +34,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # La prova d'instal·lació substitueix la imatge i per això no detectava l'etiqueta :1.
+      - name: Comprovar la imatge per defecte als dos Compose
+        shell: bash
+        env:
+          POSTGRES_PASSWORD: compose-config-test
+        run: |
+          expected=ghcr.io/borborborja/fem-ho:latest
+          for compose_file in compose.yaml compose.postgres.yaml; do
+            image=$(docker compose --env-file /dev/null -f "$compose_file" config --format json \
+              | jq -er '.services.femho.image')
+            if [ "$image" != "$expected" ]; then
+              printf '%s · imatge esperada %s, trobada %s\n' "$compose_file" "$expected" "$image" >&2
+              exit 1
+            fi
+          done
+
       # `arm64` es construeix per emulació. És lent —uns quants minuts— i és el preu de
       # no tenir un runner ARM; l'alternativa és no publicar-la, que no és alternativa.
       - name: QEMU
@@ -82,28 +98,30 @@ jobs:
       # al `node_modules` del servidor i no al de l'arrel, i faltava el directori de
       # treball—, i es va descobrir el dia que va caldre fer una còpia de veritat abans
       # d'una migració. Un procediment de còpia trencat només es nota el pitjor dia.
-      - name: Comprovar que arrenca
+      - name: Comprovar que arrenca a amd64 i arm64
         if: github.event_name == 'pull_request'
         run: |
-          docker buildx build --load --platform linux/amd64 -t femho:ci .
-          docker run -d --name femho-ci -p 8080:8080 \
-            -e FEMHO_DATABASE_URL=sqlite:///data/femho.db femho:ci
+          trap 'docker rm -f femho-ci >/dev/null 2>&1 || true' EXIT
+          for arch in amd64 arm64; do
+            docker buildx build --load --platform "linux/$arch" -t "femho:ci-$arch" .
+            docker run -d --name femho-ci --platform "linux/$arch" -p 8080:8080 \
+              -e FEMHO_DATABASE_URL=sqlite:///data/femho.db "femho:ci-$arch"
 
-          arrencat=0
-          for i in $(seq 1 30); do
-            if curl -fsS http://localhost:8080/healthz; then echo; arrencat=1; break; fi
-            sleep 2
+            arrencat=0
+            for i in $(seq 1 60); do
+              if curl -fsS http://localhost:8080/healthz; then echo; arrencat=1; break; fi
+              sleep 2
+            done
+            if [ "$arrencat" != "1" ]; then
+              echo "La imatge $arch no ha arrencat:"
+              docker logs femho-ci
+              exit 1
+            fi
+
+            # Literalment la línia de `docs/BACKUP.md` amb un fitxer de prova.
+            docker exec -w /app/apps/server femho-ci \
+              node -e "new (require('better-sqlite3'))('/data/femho.db').backup('/data/backups/ci.db')"
+            docker exec femho-ci sh -c 'test -s /data/backups/ci.db'
+            echo "$arch · el comandament de còpia documentat funciona"
+            docker rm -f femho-ci
           done
-          if [ "$arrencat" != "1" ]; then
-            echo "La imatge no ha arrencat:"
-            docker logs femho-ci
-            exit 1
-          fi
-
-          # Literalment la línia de `docs/BACKUP.md`. Si algú la canvia i deixa d'anar,
-          # això falla aquí i no a casa de ningú. El `-w` és la meitat del que es comprova.
-          docker exec -w /app/apps/server femho-ci \
-            node -e "new (require('better-sqlite3'))('/data/femho.db').backup('/data/backups/ci.db')"
-          docker exec femho-ci sh -c 'test -s /data/backups/ci.db' \
-            || { echo "El comandament de còpia de docs/BACKUP.md no ha deixat cap fitxer"; exit 1; }
-          echo "Còpia de seguretat · el comandament documentat funciona"

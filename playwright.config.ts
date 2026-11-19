@@ -33,6 +33,11 @@ export default defineConfig({
   forbidOnly: process.env.CI !== undefined,
   retries: process.env.CI !== undefined ? 2 : 0,
   reporter: process.env.CI !== undefined ? 'github' : 'list',
+  expect: {
+    // Les captures de referència i el Chromium d’Ubuntu a CI difereixen entre 125 i
+    // 239 píxels a les tres pantalles. Les dimensions han de continuar coincidint.
+    toHaveScreenshot: { maxDiffPixels: 250 },
+  },
 
   use: {
     baseURL: 'http://localhost:4173',

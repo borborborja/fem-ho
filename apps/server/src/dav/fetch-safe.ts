@@ -18,7 +18,10 @@
  */
 
 import { lookup } from 'node:dns/promises';
+import { request as httpRequest, type IncomingMessage } from 'node:http';
+import { request as httpsRequest } from 'node:https';
 import { isIP } from 'node:net';
+import { checkServerIdentity } from 'node:tls';
 
 export class SsrfError extends Error {
   constructor(message: string) {
@@ -30,7 +33,7 @@ export class SsrfError extends Error {
 export interface SafeFetchOptions {
   method?: string;
   headers?: Record<string, string>;
-  body?: string;
+  body?: string | Buffer;
   /** Mitigació 6. */
   timeoutMs?: number;
   maxBytes?: number;
@@ -56,6 +59,8 @@ const DEFAULTS = {
   maxBytes: 10 * 1024 * 1024,
   maxRedirects: 3,
 };
+
+const REDIRECTS = new Set([301, 302, 303, 307, 308]);
 
 /** Mitigació 1. `file:`, `gopher:` i `ftp:` no arriben ni a resoldre's. */
 export function assertScheme(url: URL): void {
@@ -116,21 +121,18 @@ function isBlockedV4(address: string): boolean {
 }
 
 function isBlockedV6(address: string): boolean {
-  const normalized = address.toLowerCase().replace(/^\[|\]$/gu, '');
-
-  if (normalized === '::' || normalized === '::1') return true;
-  if (normalized.startsWith('fe80')) return true; // enllaç local
-  if (/^f[cd]/u.test(normalized)) return true; // úniques locals, fc00::/7
-  if (normalized.startsWith('ff')) return true; // multicast
-
-  /**
-   * `::ffff:127.0.0.1` és loopback disfressat d'IPv6. Sense aquesta línia, l'adreça
-   * mapada passaria totes les comprovacions d'IPv6 i cap de les d'IPv4.
-   */
-  const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/u.exec(normalized);
-  if (mapped?.[1] !== undefined) return isBlockedV4(mapped[1]);
-
-  return false;
+  if (address.includes('%')) return true;
+  const normalized = new URL(`http://[${address}]/`).hostname.slice(1, -1);
+  const mapped = /^::ffff:([a-f0-9]{1,4}):([a-f0-9]{1,4})$/u.exec(normalized);
+  if (mapped) {
+    const hi = Number.parseInt(mapped[1]!, 16);
+    const lo = Number.parseInt(mapped[2]!, 16);
+    return isBlockedV4([hi >> 8, hi & 255, lo >> 8, lo & 255].join('.'));
+  }
+  // L'espai global és 2000::/3. Els blocs de transició i documentació en són excepcions.
+  return (
+    !/^[23][0-9a-f]{3}:/u.test(normalized) || /^(?:2001:(?:0|2|db8):|2002:|3fff:)/u.test(normalized)
+  );
 }
 
 /** Mitigacions 2, 3, 4 i 7 juntes: què hi ha darrere d'aquesta URL i s'hi pot anar? */
@@ -247,9 +249,17 @@ export async function safeFetch(
     throw new SsrfError(`"${rawUrl}" no és una URL.`);
   }
 
-  const started = Date.now();
+  const started = performance.now();
+  const remaining = (): number => timeoutMs - (performance.now() - started);
+  let method = (options.method ?? 'GET').toUpperCase();
+  let body = options.body;
+  let headers = new Headers(options.headers);
 
   for (let hop = 0; hop <= maxRedirects; hop += 1) {
+    assertScheme(url);
+    if (url.username !== '' || url.password !== '') {
+      throw new SsrfError("L'URL no pot incloure credencials.");
+    }
     /**
      * Mitigació 5: cada salt es torna a validar sencer, no només el primer.
      *
@@ -263,98 +273,132 @@ export async function safeFetch(
      */
     const { address } = await withTimeout(
       (options.guard ?? resolveSafely)(url, options),
-      timeoutMs - (Date.now() - started),
+      remaining(),
       `No s'ha pogut resoldre "${url.hostname}" a temps.`,
     );
+    if (isIP(address) === 0) throw new SsrfError('La resolució no ha retornat cap IP.');
 
-    const restant = timeoutMs - (Date.now() - started);
+    const restant = remaining();
     if (restant <= 0) throw new SsrfError("S'ha exhaurit el temps màxim.");
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), restant);
 
-    let response: Response;
     try {
-      response = await fetch(connectionUrl(url, address), {
-        // El verb en MAJÚSCULES.
-        method: (options.method ?? 'GET').toUpperCase(),
-        headers: {
-          ...options.headers,
-          /**
-           * Mitigació 4: es connecta a la **IP validada** i el nom real viatja a `Host`.
-           * Tornar a resoldre el nom deixaria una finestra perquè el DNS canviés entre
-           * la validació i la connexió, que és exactament la reassignació de DNS.
-           */
-          Host: url.host,
-        },
-        ...(options.body === undefined ? {} : { body: options.body }),
-        redirect: 'manual',
-        signal: controller.signal,
-      });
+      const response = await requestAt(url, address, method, headers, body, controller.signal);
+      const status = response.statusCode ?? 0;
+      const responseHeaders = new Headers();
+      for (const [name, value] of Object.entries(response.headers)) {
+        if (typeof value === 'string') responseHeaders.set(name, value);
+        else value?.forEach((item) => responseHeaders.append(name, item));
+      }
+      if (REDIRECTS.has(status)) {
+        // Importen les capçaleres i prou, i el cos no ha d'endarrerir el salt.
+        response.destroy();
+        const location = responseHeaders.get('location');
+        if (location === null) throw new SsrfError('Una redirecció sense Location.');
+        const target = new URL(location, url);
+        if (url.protocol === 'https:' && target.protocol !== 'https:') {
+          throw new SsrfError('Una redirecció HTTPS ha de conservar HTTPS.');
+        }
+        if (target.origin !== url.origin) {
+          if (body !== undefined || (method !== 'GET' && method !== 'HEAD')) {
+            throw new SsrfError('Una petició amb dades no pot canviar d’origen.');
+          }
+          // L'origen nou pot rebre la consulta pública, mai credencials o capçaleres privades.
+          headers = new Headers();
+        }
+        if (
+          (status === 303 && method !== 'HEAD') ||
+          ([301, 302].includes(status) && method === 'POST')
+        ) {
+          method = 'GET';
+          body = undefined;
+          headers.delete('content-type');
+          headers.delete('content-length');
+        }
+        url = target;
+        continue;
+      }
+      const bytes = await readCapped(response, maxBytes, method !== 'HEAD' && status !== 304);
+      return {
+        status,
+        headers: responseHeaders,
+        body: bytes.toString('utf8'),
+        bytes,
+        url: url.toString(),
+      };
     } catch (error) {
-      clearTimeout(timer);
       if (controller.signal.aborted) throw new SsrfError("S'ha exhaurit el temps màxim.");
+      if (error instanceof SsrfError) throw error;
       throw new SsrfError(`No s'ha pogut connectar: ${String(error)}`);
+    } finally {
+      clearTimeout(timer);
     }
-    clearTimeout(timer);
-
-    const bytes = await readCapped(response, maxBytes);
-
-    if (response.status >= 300 && response.status < 400) {
-      const location = response.headers.get('location');
-      if (location === null) throw new SsrfError('Una redirecció sense Location.');
-      url = new URL(location, url);
-      continue;
-    }
-
-    return {
-      status: response.status,
-      headers: response.headers,
-      body: bytes.toString('utf8'),
-      bytes,
-      url: url.toString(),
-    };
   }
 
   throw new SsrfError(`Més de ${String(maxRedirects)} redireccions.`);
 }
 
-/**
- * L'URL per on es connecta de debò: la IP validada al lloc de l'amfitrió.
- *
- * Amb HTTPS això trencaria la verificació del certificat, que es fa contra el nom. Per a
- * `https` es deixa el nom i s'accepta la finestra —petita— entre validar i connectar:
- * canviar-ho voldria dir un agent de connexió propi amb `servername`, i això és feina
- * per a M14 quan es toqui el desplegament.
- */
-function connectionUrl(url: URL, address: string): string {
-  if (url.protocol === 'https:') return url.toString();
-  const clone = new URL(url.toString());
-  clone.hostname = isIP(address) === 6 ? `[${address}]` : address;
-  return clone.toString();
+/** El DNS només decideix la IP. TLS i Host segueixen comprovant l'origen que es demana. */
+function requestAt(
+  url: URL,
+  address: string,
+  method: string,
+  headers: Headers,
+  body: SafeFetchOptions['body'],
+  signal: AbortSignal,
+): Promise<IncomingMessage> {
+  const requestHeaders = Object.fromEntries(headers);
+  requestHeaders.host = url.host;
+  requestHeaders['accept-encoding'] = 'identity';
+  if (body !== undefined) requestHeaders['content-length'] = String(Buffer.byteLength(body));
+  const hostname = url.hostname.replace(/^\[|\]$/gu, '');
+  const request = url.protocol === 'https:' ? httpsRequest : httpRequest;
+  return new Promise((resolve, reject) => {
+    const outgoing = request(
+      {
+        hostname: address,
+        port: url.port,
+        path: `${url.pathname}${url.search}`,
+        method,
+        headers: requestHeaders,
+        signal,
+        agent: false,
+        servername: isIP(hostname) === 0 ? hostname : '',
+        checkServerIdentity: (_name, certificate) => checkServerIdentity(hostname, certificate),
+      },
+      resolve,
+    );
+    outgoing.on('error', reject);
+    outgoing.end(body);
+  });
 }
 
 /** Mitigació 6: es talla en arribar al límit, no després de baixar-ho tot. */
-async function readCapped(response: Response, maxBytes: number): Promise<Buffer> {
-  const declared = Number(response.headers.get('content-length') ?? '0');
-  if (declared > maxBytes) throw new SsrfError('La resposta passa de la mida màxima.');
-
-  const reader = response.body?.getReader();
-  if (reader === undefined) return Buffer.alloc(0);
-
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    size += value.length;
-    if (size > maxBytes) {
-      await reader.cancel();
-      throw new SsrfError('La resposta passa de la mida màxima.');
-    }
-    chunks.push(value);
+async function readCapped(
+  response: IncomingMessage,
+  maxBytes: number,
+  hasBody: boolean,
+): Promise<Buffer> {
+  const declared = Number(response.headers['content-length'] ?? '0');
+  if (hasBody && declared > maxBytes) {
+    response.destroy();
+    throw new SsrfError('La resposta passa de la mida màxima.');
   }
 
-  return Buffer.concat(chunks);
+  const chunks: Buffer[] = [];
+  let size = 0;
+
+  for await (const chunk of response) {
+    const bytes: Buffer = chunk;
+    size += bytes.length;
+    if (size > maxBytes) {
+      response.destroy();
+      throw new SsrfError('La resposta passa de la mida màxima.');
+    }
+    chunks.push(bytes);
+  }
+
+  return Buffer.concat(chunks, size);
 }

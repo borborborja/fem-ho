@@ -18,7 +18,7 @@ import {
   useIsMobile,
 } from '@fem-ho/design-system/femho';
 import { BoardCard } from './BoardCard.js';
-import { BoardDnd, DraggableCard, DroppableColumn } from './dnd.js';
+import { BoardDnd, DraggableCard, DroppableColumn, type DropPlacement } from './dnd.js';
 import { InboxRail } from './InboxRail.js';
 import type { InboxEvent, InboxMail } from '../app/types.js';
 
@@ -95,6 +95,7 @@ export interface BoardScope {
 
 export interface KanbanBoardProps {
   tasks: BoardTask[];
+  timezone?: string | undefined;
   scopes: BoardScope[];
   /** Àmbits plegats, per columna. Persisteix a les preferències de l'usuari. */
   collapsed?: Record<string, boolean>;
@@ -149,7 +150,7 @@ export interface KanbanBoardProps {
    * Arrossegar entre columnes canvia `status`. La crida ha de fer l'actualització
    * optimista i revertir si el servidor rebutja (docs/02 §4).
    */
-  onDrop?: (taskId: string, status: TaskStatus) => void;
+  onDrop?: (taskId: string, status: TaskStatus, placement?: DropPlacement) => void;
   /**
    * El peu de cada columna. docs/02 §4: "Camp de text al peu de cada columna".
    *
@@ -224,12 +225,16 @@ export function KanbanBoard({
   doneHeaderActions,
   doneEmptyLabel,
   onDrop,
+  timezone,
   renderFooter,
   onChanged,
   aiBoard = false,
   flip,
 }: KanbanBoardProps) {
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [placement, setPlacement] = useState<DropPlacement>();
+  const insertEdge = (id: string) =>
+    placement?.targetId === id ? (placement.after ? 'bottom' : 'top') : undefined;
   /**
    * Quins epígrafs ensenyen les tasques d'altres.
    *
@@ -251,7 +256,14 @@ export function KanbanBoard({
     const ofColumn = tasks.filter((task) => task.status === column.status);
 
     const cardFor = (task: BoardTask) => (
-      <DraggableCard key={task.id} id={task.id} testId={`task-${task.id}`}>
+      <DraggableCard
+        key={task.id}
+        id={task.id}
+        testId={`task-${task.id}`}
+        scopeId={task.scope_id}
+        status={task.status}
+        insertEdge={insertEdge(task.id)}
+      >
         <BoardCard
           task={task}
           progress={task.progress ?? { done: 0, total: 0, lists: 0 }}
@@ -390,6 +402,7 @@ export function KanbanBoard({
       titleOf={titleOf}
       labelOf={labelOf}
       onDragStart={setDraggingId}
+      onPlacement={setPlacement}
       /**
        * La targeta que segueix el cursor.
        *
@@ -414,11 +427,11 @@ export function KanbanBoard({
           </div>
         );
       }}
-      onDragEnd={(taskId, status) => {
+      onDragEnd={(taskId, status, target) => {
         setDraggingId(null);
         // `status` nul vol dir que s'ha deixat anar fora de qualsevol columna, o que
         // s'ha cancel·lat amb Escape. En cap dels dos casos es mou res.
-        if (status !== null && taskId !== '') onDrop?.(taskId, status);
+        if (status !== null && taskId !== '') onDrop?.(taskId, status, target);
       }}
     >
       <div
@@ -474,6 +487,7 @@ export function KanbanBoard({
             {() => (
               <InboxRail
                 tasks={inboxTasks}
+                timezone={timezone}
                 scopes={scopes}
                 placement="column"
                 collapsed={Object.fromEntries(
@@ -496,7 +510,14 @@ export function KanbanBoard({
                 header={inboxHeader}
                 headerExtra={inboxHeaderExtra}
                 wrapCard={(task, card) => (
-                  <DraggableCard key={task.id} id={task.id} testId={`task-${task.id}`}>
+                  <DraggableCard
+                    key={task.id}
+                    id={task.id}
+                    testId={`task-${task.id}`}
+                    scopeId={task.scope_id}
+                    status={task.status}
+                    insertEdge={insertEdge(task.id)}
+                  >
                     {card}
                   </DraggableCard>
                 )}

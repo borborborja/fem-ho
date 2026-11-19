@@ -675,6 +675,11 @@ paths:
           in: query
           schema:
             type: string
+        - name: scope_ids
+          in: query
+          description: Àmbits separats per comes, intersectats amb els permisos i amb scope_id.
+          schema:
+            type: string
         - name: project_id
           in: query
           schema:
@@ -6337,6 +6342,9 @@ components:
           type: string
           enum: [manual, assisted, delegated]
           description: Delegar no és assignar (D5).
+        ai_instructions:
+          type: [string, 'null']
+          description: Instruccions internes per a l'agent. Els enllaços públics reben `null`.
         delegate_agent_id: { type: [string, 'null'] }
         rrule:
           type: [string, 'null']
@@ -6851,6 +6859,11 @@ components:
         position: { type: string }
         due_date: { type: string }
         due_time: { type: string }
+        deadline: { type: string, format: date-time }
+        rrule: { type: string, description: 'RFC 5545.' }
+        recurrence_mode: { type: string, enum: [schedule, completion], default: schedule }
+        ai_mode: { type: string, enum: [manual, assisted, delegated], default: manual }
+        ai_instructions: { type: string }
         assignee_ids:
           type: array
           items: { type: string }

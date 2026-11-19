@@ -5,7 +5,6 @@ import android.content.Context
 import android.content.Intent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -20,7 +19,8 @@ class NotificationActionReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
         val action = intent.action ?: return
-        val taskId = intent.getStringExtra("task_id") ?: return
+        val taskId = intent.getStringExtra(EXTRA_TASK_ID) ?: return
+        val accountKey = intent.getStringExtra(EXTRA_ACCOUNT_KEY) ?: return
         val container = (context.applicationContext as FemhoApplication).container
         // El sistema pot matar el procés quan onReceive torna: goAsync allarga la vida
         // fins que la feina de segon pla acaba.
@@ -28,12 +28,13 @@ class NotificationActionReceiver : BroadcastReceiver() {
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val base = container.settings.serverUrl.first() ?: return@launch
+                val account = container.account()?.takeIf { it.identity.key == accountKey } ?: return@launch
+                val api = container.api(account)
                 when (action) {
-                    ACTION_DONE -> runCatching { container.api(base).completeTask(taskId) }
+                    ACTION_DONE -> runCatching { api.completeTask(taskId) }
                     ACTION_SNOOZE -> runCatching {
-                        val task = container.api(base).getTask(taskId)
-                        container.api(base).updateTask(taskId, snoozeFields(task.dueDate, task.dueTime))
+                        val task = api.getTask(taskId)
+                        api.updateTask(taskId, snoozeFields(task.dueDate, task.dueTime))
                     }
                 }
             } finally {
@@ -59,5 +60,6 @@ class NotificationActionReceiver : BroadcastReceiver() {
         const val ACTION_DONE = "ho.fem.notification.DONE"
         const val ACTION_SNOOZE = "ho.fem.notification.SNOOZE"
         const val EXTRA_TASK_ID = "task_id"
+        const val EXTRA_ACCOUNT_KEY = "account_key"
     }
 }

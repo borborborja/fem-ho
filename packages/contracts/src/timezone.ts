@@ -125,6 +125,11 @@ export function localDateOf(timezone: string, at: Date): PlainDate {
   return fmt.format(at);
 }
 
+/** Les cites de tot el dia conserven la data civil amb què es van desar. */
+export function eventDateOf(timezone: string, startsAt: Instant, allDay: boolean): PlainDate {
+  return allDay ? startsAt.slice(0, 10) : localDateOf(timezone, new Date(startsAt));
+}
+
 /** Quantes hores té un dia local. 23 o 25 als diumenges de canvi d'hora. */
 export function localDayLengthHours(timezone: string, date: PlainDate): number {
   const { startUTC, endUTC } = localDayBounds(timezone, date);

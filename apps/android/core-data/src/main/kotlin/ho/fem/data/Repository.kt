@@ -95,14 +95,19 @@ class Repository(
     /**
      * Només una confirmació de l'op_id retira una operació.
      *
-     * Un rebuig o un conflicte conserva la intenció local i atura les dependents.
-     * Llançar també impedeix que refresh sobreescrigui les tasques que no s'han pujat.
+     * Un rebuig o un conflicte conserva la intenció local i atura els canvis posteriors
+     * de la mateixa entitat. El tauler preserva aquestes files amb operacions pendents
+     * quan aplica la instantània, i la resta de tasques continua sincronitzant-se.
+     * Un problema de transport o de protocol no permet confirmar cap ordre posterior.
      * El pany evita que el refresc de pantalla i el de fons enviïn la mateixa cua alhora.
      */
     suspend fun flush() = flushLock.withLock { flushPending() }
 
     private suspend fun flushPending() {
+        val blocked = mutableSetOf<Pair<String, String>>()
         for (operation in dao.outbox()) {
+            val entity = operation.entity to operation.entityId
+            if (entity in blocked) continue
             val response = try {
                 api.syncBatch(
                     """{"operations":[{"op_id":"${operation.opId}","entity":"${operation.entity}",""" +
@@ -116,11 +121,17 @@ class Repository(
                 throw error
             }
 
-            if (batchStatus(response, operation.opId) != "ok") {
-                dao.failed(operation.opId)
-                throw IOException("Sync operation was not confirmed: ${operation.opId}")
+            when (batchStatus(response, operation.opId)) {
+                "ok" -> dao.dequeue(operation.opId)
+                "conflict", "rejected" -> {
+                    dao.failed(operation.opId)
+                    blocked.add(entity)
+                }
+                else -> {
+                    dao.failed(operation.opId)
+                    throw IOException("Sync operation was not confirmed: ${operation.opId}")
+                }
             }
-            dao.dequeue(operation.opId)
         }
     }
 

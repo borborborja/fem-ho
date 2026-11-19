@@ -68,7 +68,7 @@ fi
 # i la URL pública que hi correspon. Si calgués tocar res més, voldria dir que el fitxer
 # que publiquem no és el que provem.
 sed \
-  -e "s|image: ghcr.io/borborborja/fem-ho:1|image: $IMAGE|" \
+  -e "s|image: ghcr.io/borborborja/fem-ho:latest|image: $IMAGE|" \
   -e "s|'8080:8080'|'$PORT:8080'|" \
   -e "s|'8081:8081'|'$DAV_PORT:8081'|" \
   -e "s|https://femho.example.com|http://localhost:$PORT|" \

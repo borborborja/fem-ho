@@ -123,7 +123,7 @@ Aquesta és la regla estesa, i és la que mana a Fem-ho:
 
 **5. Els àmbits creats per l'usuari no fan servir la tríada.** Reben color d'una paleta ampliada de 8 tons, escollits per contrast suficient amb `--ink` en els dos temes i distingibles amb les formes més comunes de daltonisme. La tríada queda per als tres àmbits inicials.
 
-**6. Els accents pastel manen sobre el color d'àmbit.** Amb `soft`, `--on-brand` passa a fosc; els chips actius han de fer servir `var(--on-brand)` per al text, mai blanc literal.
+**6. El text de marca segueix el contrast del fons.** Els xips actius i els botons amb gradient usen `var(--on-brand)`. Els ajustos de contrast són a `femho/tokens.css` i s'exporten també a Compose.
 
 ---
 
@@ -225,7 +225,7 @@ Els gradients es fan amb `Brush.linearGradient` amb les mateixes parades i el ma
 El readme de Plou reconeix que el focus **no està definit**: *"el codi font no en defineix cap, afegeix-ne un si ho publiques de veritat"*. Fem-ho l'ha de definir.
 
 - **Focus visible**: anell de 2px amb `var(--plou-blue)` i 2px de separació, a tot element interactiu. En elements amb gradient, l'anell va per fora.
-- **Contrast**: text normal 4.5:1, text gran 3:1, en els dos temes i els quatre accents. L'accent `soft` és el que menys marge té: `--on-brand` hi passa a fosc precisament per això.
+- **Contrast**: text normal 4.5:1, text gran 3:1, en els dos temes i els quatre accents. El control permanent comprova la cascada de tokens que utilitza l'aplicació i cada parada del gradient de marca.
 - **Objectius tàctils**: 44px mínim al mòbil.
 - **El kanban és navegable amb teclat**, incloent-hi moure targetes (veure [`02-ui-web.md`](02-ui-web.md) §4).
 - **El color no és mai l'únic senyal**: l'àmbit sempre porta text a més de color; el mode IA porta icona a més de color.

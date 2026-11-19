@@ -58,9 +58,7 @@ test('un projecte creat a Ajustos surt al desplegable del xip sense recarregar',
   ).toBeVisible({ timeout: 10_000 });
 });
 
-test("encendre el registre de dedicació fa aparèixer l'entrada del menú sense recarregar", async ({
-  page,
-}) => {
+test('el registre d’Informes rep el canvi de dedicació sense recarregar', async ({ page }) => {
   await enterAsNew(page, MEU);
   await page.goto('/settings');
   await page.locator('[data-testid="settings-tab-scopes"]').click();
@@ -73,14 +71,20 @@ test("encendre el registre de dedicació fa aparèixer l'entrada del menú sense
   const scope = scopes[0]!;
 
   await page.locator(`[data-testid="scope-tracking-${scope.id}"]`).click();
+  const saved = page.waitForResponse(
+    (response) =>
+      response.request().method() === 'PATCH' &&
+      new URL(response.url()).pathname === `/api/v1/scopes/${scope.id}/settings` &&
+      response.ok(),
+  );
   await page.locator(`[data-testid="tracking-on-${scope.id}"]`).click();
+  await saved;
 
   // De sortida d'Ajustos: la còpia que mana el menú s'ha de refrescar sola.
   await page.locator('[data-testid="settings-back"]').click();
   await expect(page.locator('[data-testid="inbox-rail"]')).toBeVisible({ timeout: 10_000 });
 
-  await page.locator('[data-testid="topbar-profile"]').click();
-  await expect(page.getByRole('menuitem', { name: 'Registre' })).toBeVisible({
-    timeout: 10_000,
-  });
+  await page.getByTestId('view-reports').click();
+  await page.getByTestId('reports-tabs-register').click();
+  await expect(page.getByTestId('reports-export')).toBeEnabled();
 });

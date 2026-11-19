@@ -13,6 +13,7 @@
  */
 
 import { expect, test } from '@playwright/test';
+import { passaElWizard } from './entrar.js';
 
 test.describe.configure({ mode: 'serial' });
 
@@ -30,6 +31,7 @@ async function login(page: import('@playwright/test').Page): Promise<void> {
   await page.locator('[data-testid="login-email"]').fill(ADMIN.email);
   await page.locator('[data-testid="login-password"]').fill(ADMIN.password);
   await page.locator('[data-testid="login-submit"]').click();
+  await passaElWizard(page);
   await expect(page.locator('[data-testid="topbar"]')).toBeVisible();
 }
 
@@ -98,7 +100,13 @@ test("l'afegida ràpida crea una tasca de veritat", async ({ page }) => {
 
   await camp.fill(`#${nom} Comprar pa`);
   await camp.press('Escape');
+  const saved = page.waitForResponse(
+    (response) =>
+      response.request().method() === 'POST' &&
+      new URL(response.url()).pathname === '/api/v1/tasks',
+  );
   await camp.press('Enter');
+  expect((await saved).status()).toBe(201);
 
   // Ha d'aparèixer a l'Inbox sense recarregar la pàgina.
   await expect(page.locator('[data-testid="inbox-rail"]')).toContainText('Comprar pa', {

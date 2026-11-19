@@ -16,7 +16,9 @@ Requisits que no es negocien:
 - **Multi-arquitectura**: `amd64` i `arm64`. Molta gent ho posarà en un ARM petit.
 - Sense compiladors ni eines de construcció a la imatge final.
 
-Etiquetatge: `latest`, la versió sencera (`1.4.2`), i la major (`1`). Qui vulgui actualitzacions automàtiques fixa la major; qui vulgui control fixa la sencera.
+Els fitxers Compose apunten a `latest`, que es publica des de la branca principal. Cada versió
+etiquetada publica també la versió sencera (`0.19.0`) i la sèrie (`0.19`). Fixa la versió sencera
+per controlar quan actualitzes.
 
 ---
 
@@ -29,7 +31,7 @@ Un sol contenidor. És el cas recomanat per a una casa.
 ```yaml
 services:
   femho:
-    image: ghcr.io/<owner>/fem-ho:1
+    image: ghcr.io/borborborja/fem-ho:latest
     restart: unless-stopped
     ports:
       - "8080:8080"

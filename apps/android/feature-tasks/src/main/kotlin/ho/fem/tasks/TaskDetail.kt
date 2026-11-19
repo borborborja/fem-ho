@@ -17,6 +17,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -127,8 +128,9 @@ fun TaskDetail(
     comments: List<ho.fem.model.Comment>,
     activity: List<ho.fem.model.ActivityEntry>,
     labels: TaskDetailLabels,
-    onSave: (title: String, aiMode: AiMode) -> Unit,
-    onUpdateDetails: (description: String?, projectId: String?, dueDate: String?, dueTime: String?, deadline: String?, rrule: String?, recurrenceMode: String?) -> Unit,
+    onSave: (fields: Map<String, String?>, aiMode: AiMode?) -> Unit,
+    saveError: String? = null,
+    saving: Boolean = false,
     onStatus: (TaskStatus) -> Unit,
     onToggleItem: (itemId: String, done: Boolean) -> Unit,
     onAddAssignee: (String) -> Unit,
@@ -158,15 +160,23 @@ fun TaskDetail(
     onDeleteAttachment: (ho.fem.model.Attachment) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
-    var title by remember(task.id) { mutableStateOf(task.title) }
-    var aiMode by remember(task.id) { mutableStateOf(task.aiMode) }
-    var description by remember(task.id) { mutableStateOf(task.description.orEmpty()) }
-    var projectId by remember(task.id) { mutableStateOf(task.projectId) }
-    var dueDate by remember(task.id) { mutableStateOf(task.dueDate.orEmpty()) }
-    var dueTime by remember(task.id) { mutableStateOf(task.dueTime.orEmpty()) }
-    var deadline by remember(task.id) { mutableStateOf(task.deadline.orEmpty()) }
-    var rrule by remember(task.id) { mutableStateOf(task.rrule.orEmpty()) }
-    var recurrenceMode by remember(task.id) { mutableStateOf(task.recurrenceMode?.name?.lowercase() ?: "schedule") }
+    val edits = remember(task.id) { mutableStateMapOf<String, String?>() }
+    var modeEdit by remember(task.id) { mutableStateOf<AiMode?>(null) }
+    fun field(name: String, value: String?): String? =
+        if (edits.containsKey(name)) edits[name] else value
+    fun edit(name: String, value: String?, initial: String?) {
+        if (value == initial) edits.remove(name) else edits[name] = value
+    }
+    val title = field("title", task.title).orEmpty()
+    val description = field("description", task.description).orEmpty()
+    val projectId = field("project_id", task.projectId)
+    val dueDate = field("due_date", task.dueDate).orEmpty()
+    val dueTime = field("due_time", task.dueTime).orEmpty()
+    val deadline = field("deadline", task.deadline).orEmpty()
+    val rrule = field("rrule", task.rrule).orEmpty()
+    val initialRecurrence = task.recurrenceMode?.name?.lowercase() ?: "schedule"
+    val recurrenceMode = field("recurrence_mode", initialRecurrence).orEmpty()
+    val aiMode = modeEdit ?: task.aiMode
     var newLabelName by remember(task.id) { mutableStateOf<String?>(null) }
     var commentDraft by remember(task.id) { mutableStateOf("") }
     var confirmingDelete by remember(task.id) { mutableStateOf(false) }
@@ -211,7 +221,7 @@ fun TaskDetail(
 
         OutlinedTextField(
             value = title,
-            onValueChange = { title = it },
+            onValueChange = { edit("title", it, task.title) },
             singleLine = false,
             label = { Text(labels.title) },
             modifier = Modifier.fillMaxWidth().testTag("task-title"),
@@ -219,7 +229,7 @@ fun TaskDetail(
 
         OutlinedTextField(
             value = description,
-            onValueChange = { description = it },
+            onValueChange = { edit("description", it.ifBlank { null }, task.description) },
             minLines = 2,
             label = { Text(labels.description) },
             modifier = Modifier.fillMaxWidth().testTag("task-description"),
@@ -239,7 +249,7 @@ fun TaskDetail(
                     modifier = Modifier
                         .clip(RoundedCornerShape(FemhoShape.pill))
                         .background(if (projectId == optionId) Femho.colors.plouBlue else Femho.colors.ghostBg)
-                        .clickable { projectId = optionId }
+                        .clickable { edit("project_id", optionId, task.projectId) }
                         .heightIn(min = FemhoSize.touch)
                         .padding(horizontal = 12.dp, vertical = 12.dp)
                         .testTag(tag),
@@ -250,14 +260,14 @@ fun TaskDetail(
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             OutlinedTextField(
                 value = dueDate,
-                onValueChange = { dueDate = it },
+                onValueChange = { edit("due_date", it.ifBlank { null }, task.dueDate) },
                 singleLine = true,
                 label = { Text(labels.dueDate) },
                 modifier = Modifier.weight(1f).testTag("task-due-date"),
             )
             OutlinedTextField(
                 value = dueTime,
-                onValueChange = { dueTime = it },
+                onValueChange = { edit("due_time", it.ifBlank { null }, task.dueTime) },
                 singleLine = true,
                 label = { Text(labels.dueTime) },
                 modifier = Modifier.weight(1f).testTag("task-due-time"),
@@ -266,7 +276,7 @@ fun TaskDetail(
 
         OutlinedTextField(
             value = deadline,
-            onValueChange = { deadline = it },
+            onValueChange = { edit("deadline", it.ifBlank { null }, task.deadline) },
             singleLine = true,
             label = { Text(labels.deadline) },
             modifier = Modifier.fillMaxWidth().testTag("task-deadline"),
@@ -290,7 +300,7 @@ fun TaskDetail(
                     modifier = Modifier
                         .clip(RoundedCornerShape(FemhoShape.pill))
                         .background(if (rrule == rule) Femho.colors.plouBlue else Femho.colors.ghostBg)
-                        .clickable { rrule = rule }
+                        .clickable { edit("rrule", rule.ifBlank { null }, task.rrule) }
                         .heightIn(min = FemhoSize.touch)
                         .padding(horizontal = 12.dp, vertical = 12.dp)
                         .testTag("task-recurrence-${rule.ifEmpty { "none" }.substringAfter("FREQ=").lowercase()}"),
@@ -326,7 +336,7 @@ fun TaskDetail(
                 androidx.compose.material3.Switch(
                     checked = recurrenceMode == "completion",
                     onCheckedChange = { on ->
-                        recurrenceMode = if (on) "completion" else "schedule"
+                        edit("recurrence_mode", if (on) "completion" else "schedule", initialRecurrence)
                     },
                 )
             }
@@ -559,7 +569,7 @@ fun TaskDetail(
                     modifier = Modifier
                         .clip(RoundedCornerShape(FemhoShape.pill))
                         .background(if (aiMode == mode) Femho.colors.plouPink else Femho.colors.ghostBg)
-                        .clickable { aiMode = mode }
+                        .clickable { modeEdit = mode.takeIf { it != task.aiMode } }
                         .heightIn(min = FemhoSize.touch)
                         .padding(horizontal = 12.dp, vertical = 12.dp)
                         .testTag("ai-${mode.wire}"),
@@ -962,6 +972,9 @@ fun TaskDetail(
                 .testTag("task-add-attachment"),
         )
 
+        saveError?.let {
+            Text(it, color = Femho.colors.dangerText, modifier = Modifier.testTag("task-save-error"))
+        }
         Text(
             text = labels.save,
             color = Femho.onBrand,
@@ -971,17 +984,8 @@ fun TaskDetail(
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(FemhoShape.pill))
                 .background(Femho.brandGradient2)
-                .clickable {
-                    onSave(title, aiMode)
-                    onUpdateDetails(
-                        description.ifBlank { null },
-                        projectId,
-                        dueDate.ifBlank { null },
-                        dueTime.ifBlank { null },
-                        deadline.ifBlank { null },
-                        rrule.ifBlank { null },
-                        recurrenceMode,
-                    )
+                .clickable(enabled = !saving && title.isNotBlank()) {
+                    onSave(edits.toMap(), modeEdit)
                 }
                 .heightIn(min = FemhoSize.touch)
                 .padding(vertical = 14.dp)

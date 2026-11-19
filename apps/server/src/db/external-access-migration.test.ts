@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { sql } from 'kysely';
 import { it, expect } from 'vitest';
 import { connect } from './connection.js';
-import { migrateDown, migrateToLatest } from './migrator.js';
+import { MIGRATIONS, migrateDown, migrateToLatest } from './migrator.js';
 import { readExternalAccess } from '../services/external-access.js';
 
 it('congela els àmbits dels tokens personals antics sense incorporar els futurs', async () => {
@@ -12,6 +12,10 @@ it('congela els àmbits dels tokens personals antics sense incorporar els futurs
   const conn = connect(`sqlite://${join(temp, 'db')}`);
   try {
     await migrateToLatest(conn.db, { engine: 'sqlite' });
+    for (const migration of [...MIGRATIONS].reverse()) {
+      if (migration.name === '024-external-access') break;
+      await migrateDown(conn.db, 'sqlite');
+    }
     expect(await migrateDown(conn.db, 'sqlite')).toBe('024-external-access');
     const now = new Date().toISOString();
     await sql`INSERT INTO users (id,email,name,kind,role,created_at,updated_at) VALUES ('u','migration@example.com','Migration','human','member',${now},${now})`.execute(

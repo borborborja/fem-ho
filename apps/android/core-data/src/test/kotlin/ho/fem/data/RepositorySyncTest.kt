@@ -21,7 +21,10 @@ import kotlin.test.assertFailsWith
 class RepositorySyncTest {
     private val operation = OutboxEntity("a", "task", "create", "task-a", 0, "{}", 1L)
 
-    private fun repository(queue: MutableList<OutboxEntity>, body: String, requests: MutableList<String>): Repository {
+    private fun repository(queue: MutableList<OutboxEntity>, body: String, requests: MutableList<String>): Repository =
+        repository(queue, { body }, requests)
+
+    private fun repository(queue: MutableList<OutboxEntity>, response: (Int) -> String, requests: MutableList<String>): Repository {
         val dao = Proxy.newProxyInstance(
             FemhoDao::class.java.classLoader, arrayOf(FemhoDao::class.java),
         ) { _, method, args ->
@@ -37,6 +40,7 @@ class RepositorySyncTest {
             }
         } as FemhoDao
         val client = OkHttpClient.Builder().addInterceptor { chain ->
+            val body = response(requests.size)
             requests += chain.request().url.encodedPath
             Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
                 .code(200).message("OK").body(body.toResponseBody()).build()
@@ -56,14 +60,29 @@ class RepositorySyncTest {
         for (body in listOf(
             "no és JSON", """{"results":[]}""",
             """{"results":[{"op_id":"other","status":"ok"}]}""",
-            """{"results":[{"op_id":"a","status":"conflict"}]}""",
-            """{"results":[{"op_id":"a","status":"rejected"}]}""",
         )) {
             val queue = mutableListOf(operation, operation.copy(opId = "b", op = "update"))
             val requests = mutableListOf<String>()
             assertFailsWith<IOException> { repository(queue, body, requests).flush() }
             assertEquals(2, queue.size, body)
             assertEquals(1, requests.size, body)
+        }
+    }
+
+    @Test
+    fun `els conflictes conserven una tasca i deixen sincronitzar les altres`() = runBlocking {
+        for (status in listOf("conflict", "rejected")) {
+            val dependent = operation.copy(opId = "b", op = "update")
+            val independent = operation.copy(opId = "c", entityId = "task-c")
+            val queue = mutableListOf(operation, dependent, independent)
+            val requests = mutableListOf<String>()
+            val responses = listOf(
+                """{"results":[{"op_id":"a","status":"$status"}]}""",
+                """{"results":[{"op_id":"c","status":"ok"}]}""",
+            )
+            repository(queue, responses::get, requests).flush()
+            assertEquals(listOf(operation, dependent), queue)
+            assertEquals(2, requests.size)
         }
     }
 

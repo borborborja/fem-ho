@@ -1,7 +1,6 @@
 # Fem-ho amb SQLite: **el cas recomanat per a una casa** (docs/12 §2, D11).
 #
-# Un sol contenidor, un sol volum. No cal cap base de dades a part, i les còpies de
-# seguretat són copiar un fitxer.
+# Un sol contenidor i un sol volum. El procediment de còpia i restauració és a docs/BACKUP.md.
 #
 #   docker compose up -d
 #
@@ -10,7 +9,7 @@
 
 services:
   femho:
-    image: ghcr.io/borborborja/fem-ho:1
+    image: ghcr.io/borborborja/fem-ho:latest
     restart: unless-stopped
     ports:
       - '8080:8080'

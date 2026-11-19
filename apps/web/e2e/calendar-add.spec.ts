@@ -33,7 +33,7 @@ test('el commutador porta el calendari a l’esquerra', async ({ page }) => {
 
   const botons = page.locator('[data-testid="view-switch"] button');
   await expect(botons.first()).toHaveAttribute('data-testid', 'view-calendar');
-  await expect(botons.last()).toHaveAttribute('data-testid', 'view-tasks');
+  await expect(botons.nth(1)).toHaveAttribute('data-testid', 'view-tasks');
 });
 
 test('passar per sobre d’un dia el contorna i hi ofereix un +', async ({ page }) => {

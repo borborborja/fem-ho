@@ -38,8 +38,8 @@ class TaskBoardWidget : GlanceAppWidget() {
             return withContext(Dispatchers.IO) {
                 val container = Container.get(context)
                 TaskBoardFrame(widget,
-                    if (widget.signedIn) container.local.taskBoard(widget.activeScopes) else null,
-                    if (widget.signedIn) widgetAccount(container) else "")
+                    widget.account?.let { container.local(it).taskBoard(widget.activeScopes) },
+                    widget.account?.identity?.key.orEmpty())
             }
         }
         val initial = read()

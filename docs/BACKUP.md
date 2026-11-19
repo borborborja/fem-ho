@@ -49,8 +49,11 @@ consolidat. Una còpia així es descobreix el dia que es restaura.
 
 ### Amb el servidor engegat
 
-L'API de còpia en línia de SQLite. Fem-ho ja la fa servir abans de cada migració
-(`apps/server/src/db/migrator.ts`), i es pot invocar a mà:
+Fem-ho fa servir l'API de còpia en línia de SQLite abans d'aplicar migracions
+pendents. La còpia inclou les transaccions confirmades que encara són al WAL.
+El servidor publica el fitxer quan la còpia és completa, conserva la còpia actual
+i les quatre anteriors més recents, i atura la migració si no la pot crear. La
+mateixa API es pot invocar a mà:
 
 ```sh
 docker compose exec -w /app/apps/server femho \

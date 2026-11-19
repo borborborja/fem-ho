@@ -326,8 +326,8 @@ async function runFederationPulls(options: SchedulerOptions, now: string): Promi
   const log = options.log ?? (() => undefined);
 
   const found = await sql<InstanceLinkRow & { token_enc: string }>`
-    SELECT id, scope_id, base_url, name, token_enc, cursor, last_sync_at, last_error,
-           last_error_at, created_at, updated_at
+    SELECT id, scope_id, base_url, name, token_enc, remote_scope_id, remote_role,
+           cursor, local_seq, last_sync_at, last_error, last_error_at, created_at, updated_at
     FROM instance_links
   `.execute(db);
 
@@ -336,7 +336,7 @@ async function runFederationPulls(options: SchedulerOptions, now: string): Promi
     if (!federationDue(link, Date.parse(now))) continue;
 
     try {
-      await pullFromLink(db, link, options.secret, now);
+      await pullFromLink(db, link, options.secret, now, undefined, options.connection.engine);
       pulled += 1;
     } catch (error) {
       log(`No s'ha pogut replicar "${link.name ?? link.base_url}"`, error);

@@ -27,6 +27,7 @@ import type { BoardScope, BoardTask } from './KanbanBoard.js';
 
 export interface InboxRailProps {
   tasks: BoardTask[];
+  timezone?: string | undefined;
   /**
    * La secció "SENSE DIA" (docs/02 §5).
    *
@@ -94,6 +95,7 @@ export interface InboxRailProps {
 
 export function InboxRail({
   tasks,
+  timezone,
   undated,
   dayLabel,
   events,
@@ -216,6 +218,7 @@ export function InboxRail({
                 <InboxEventCard
                   key={eventKey(event)}
                   event={event}
+                  timezone={timezone}
                   color={scopes.find((scope) => scope.id === event.scope_id)?.color}
                   onToTask={onEventToTask === undefined ? undefined : () => onEventToTask(event)}
                   onToggleInbox={

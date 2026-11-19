@@ -300,7 +300,10 @@ export function buildTokens() {
   const accentNames = [...accents.matchAll(/\[data-accent=["']([a-z-]+)["']\]/gu)].map((m) => m[1]);
   const accentBlocks = { default: {} };
   for (const name of [...new Set(accentNames)]) {
-    accentBlocks[name] = colorsOf(readBlock(accents, `[data-accent="${name}"]`));
+    accentBlocks[name] = colorsOf({
+      ...readBlock(accents, `[data-accent="${name}"]`),
+      ...readBlock(femho, `[data-accent="${name}"]`),
+    });
   }
 
   const lightRaw = {

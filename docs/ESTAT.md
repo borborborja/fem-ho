@@ -3,9 +3,29 @@
 Què hi ha, què s'ha verificat i **què encara no hi és**. Es manté al dia amb el codi:
 una llista d'estat que exagera és pitjor que no tenir-ne cap.
 
-Data de l'última verificació completa: **2026-08-12**.
+Data de l'última verificació completa: **2026-11-19**.
 
 ---
+
+## Integritat, sincronització i treball fora de línia · 0.19.1
+
+La sincronització comprova els permisos vigents de cada operació i del seu àmbit.
+Les còpies abans de migrar SQLite incorporen les transaccions confirmades del WAL.
+La migració 025 afegeix la procedència dels canvis federats i el receptor desa els
+canvis i el cursor junts. L'edició web conserva els camps que la persona no ha modificat.
+
+El tauler web desa esborranys, captures ràpides i moviments sense connexió. En recuperar
+la xarxa, reenvia les operacions amb el mateix identificador. El calendari respecta el fus
+del perfil, i el tauler permet reordenar targetes amb el teclat i el ratolí.
+
+Android separa la base local i la cua per compte i servidor, i torna a sincronitzar quan
+recupera la xarxa. Les sessions antigues demanen tornar a entrar. El fitxer `femho.db`
+anterior es conserva. Les seves operacions queden fora de la sincronització automàtica
+perquè el fitxer no identifica el compte ni el servidor que les va crear.
+
+Verificat amb 271 proves de Chromium, 1.308 de SQLite i PostgreSQL amb Radicale i Xandikos,
+i 126 d'Android. L'APK amb R8 ha arrencat en un emulador Android 14. La imatge `amd64` ha
+arrencat i la còpia restaurable de SQLite ha superat la comprovació d'integritat.
 
 ## MCP i API per usuari amb OAuth · 2026-09-15
 
@@ -377,7 +397,7 @@ Les dotze seccions de `docs/02`:
 | §10 Responsive | fet; el kanban del mòbil es va **arreglar** en ajustar-se al disseny, i a P19 la pàgina va deixar de moure's de costat i Ajustos va passar a ser usable al telèfon |
 | §11 Dreceres de teclat | fet, amb la paleta d'ordres |
 | §13 La primera pregunta | fet: surt un cop a qui no ho ha dit mai, i no si `FEMHO_SCOPE_MODE` ja ho decideix |
-| §12 Estats buits, càrrega i error | fet. **La cua de sortida (`sync/outbox.ts`) no la fa servir cap pantalla de debò**, només la de prova: el tauler no enqueua res sense xarxa. El que sí que està tancat és que no es perdi el que escrius (P21) |
+| §12 Estats buits, càrrega i error | fet. El tauler web desa les captures ràpides i els moviments en una cua IndexedDB separada per compte, conserva els esborranys i reenvia les operacions quan torna la connexió. Les vistes del tauler visitades es poden reobrir sense xarxa. L'edició completa i el registre manual de temps continuen fent servir l'API en línia. |
 
 ### Els adjunts (§7), que abans hi faltaven
 
@@ -775,10 +795,6 @@ Res de cara a l'usuari. Queden els registres del servidor i els missatges d'arre
 
 ## Decisions obertes
 
-- **El deute de contrast heretat de Plou.** Blanc sobre el gradient de marca dona
-  1,88–2,61:1 en tres dels quatre accents, i `docs/04` §8 en demana 4,5:1. `docs/04` §1
-  diu que Plou no es reescriu, o sigui que està registrat a `contrast-baseline.json`
-  per bloquejar violacions noves sense tocar les heretades. **És una decisió teva.**
 - **El formulari de tasca nova a Android.** El disseny mòbil posa un botó rodó al costat
   de cada afegida ràpida que obre l'edició completa. A Android el detall de tasca només
   edita una que ja existeix, i el botó necessitaria un formulari de creació que ara no hi

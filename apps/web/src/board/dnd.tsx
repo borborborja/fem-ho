@@ -12,13 +12,15 @@
  * sentir català.
  */
 
-import { useState, type ReactNode } from 'react';
+import { useCallback, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import {
   DndContext,
   DragOverlay,
   KeyboardSensor,
   PointerSensor,
+  pointerWithin,
+  rectIntersection,
   useDraggable,
   useDroppable,
   useSensor,
@@ -30,10 +32,48 @@ import {
 import { t } from '@fem-ho/contracts';
 import type { TaskStatus } from '@fem-ho/contracts';
 
+export interface DropPlacement {
+  targetId: string;
+  after: boolean;
+}
+
+type ColumnData = { node: RefObject<HTMLDivElement | null> };
+
+function cardsIn(column: ColumnData | undefined, scope: string): HTMLElement[] {
+  const cards = column?.node.current?.querySelectorAll<HTMLElement>('[data-draggable-id]');
+  return Array.from(cards ?? []).filter((card) => card.dataset.scopeId === scope);
+}
+
+function placementAt(
+  event: Pick<DragEndEvent, 'active' | 'over' | 'activatorEvent' | 'delta'>,
+): DropPlacement | undefined {
+  if (event.over === null) return undefined;
+  const { active, activatorEvent, delta, over } = event;
+  const translated = active.rect.current.translated;
+  const y =
+    'clientY' in activatorEvent
+      ? Number(activatorEvent.clientY) + delta.y
+      : translated === null
+        ? undefined
+        : translated.top + translated.height / 2;
+  if (y === undefined) return undefined;
+  const cards = cardsIn(
+    over.data.current as ColumnData | undefined,
+    String(active.data.current?.scopeId),
+  ).filter((card) => card.dataset.draggableId !== String(active.id));
+  const next = cards.find((card) => {
+    const rect = card.getBoundingClientRect();
+    return y < rect.top + rect.height / 2;
+  });
+  const targetId = (next ?? cards.at(-1))?.dataset.draggableId;
+  return targetId === undefined ? undefined : { targetId, after: next === undefined };
+}
+
 export interface BoardDndProps {
   children: ReactNode;
   onDragStart?: (taskId: string) => void;
-  onDragEnd?: (taskId: string, status: TaskStatus | null) => void;
+  onDragEnd?: (taskId: string, status: TaskStatus | null, placement?: DropPlacement) => void;
+  onPlacement?: (placement?: DropPlacement) => void;
   /** Per als anuncis: cal poder dir el títol de la targeta i el nom de la columna. */
   titleOf: (taskId: string) => string;
   labelOf: (status: TaskStatus) => string;
@@ -57,8 +97,32 @@ export interface BoardDndProps {
  * que docs/02 §4 vol dir amb "fletxes mouen". Es torna el centre de la columna veïna.
  */
 const jumpBetweenColumns: KeyboardCoordinateGetter = (event, { context }) => {
-  const { droppableContainers, droppableRects, collisionRect } = context;
+  const { active, over, droppableContainers, droppableRects, collisionRect } = context;
   if (collisionRect === null) return undefined;
+
+  const vertical = event.code === 'ArrowDown' ? 1 : event.code === 'ArrowUp' ? -1 : 0;
+  if (vertical !== 0 && active !== null) {
+    const columnId = over?.id ?? active.data.current?.status;
+    const column = columnId === undefined ? undefined : droppableContainers.get(columnId);
+    const cards = cardsIn(
+      column?.data.current as ColumnData | undefined,
+      String(active.data.current?.scopeId),
+    );
+    const centre = collisionRect.top + collisionRect.height / 2;
+    const rects = cards
+      .filter((card) => card.dataset.draggableId !== String(active.id))
+      .map((card) => card.getBoundingClientRect());
+    const next =
+      vertical > 0
+        ? rects.find((rect) => centre < rect.top + rect.height / 2)
+        : rects.findLast((rect) => centre > rect.top + rect.height / 2);
+    if (next === undefined) return undefined;
+    event.preventDefault();
+    return {
+      x: collisionRect.left,
+      y: next.top + next.height * (vertical > 0 ? 0.75 : 0.25) - collisionRect.height / 2,
+    };
+  }
 
   const horizontal = event.code === 'ArrowRight' ? 1 : event.code === 'ArrowLeft' ? -1 : 0;
   if (horizontal === 0) return undefined;
@@ -117,11 +181,12 @@ export function BoardDnd({
   children,
   onDragStart,
   onDragEnd,
+  onPlacement,
   titleOf,
   labelOf,
   renderOverlay,
 }: BoardDndProps) {
-  const [active, setActive] = useState<string | null>(null);
+  const [active, setActive] = useState<{ id: string; pointer: boolean } | null>(null);
   const sensors = useSensors(
     // Amb 6px de marge, clicar una targeta no compta com a arrossegar-la: sense això,
     // obrir el modal amb el ratolí es converteix en una loteria.
@@ -132,6 +197,7 @@ export function BoardDnd({
   return (
     <DndContext
       sensors={sensors}
+      collisionDetection={active?.pointer === true ? pointerWithin : rectIntersection}
       accessibility={{
         // Els anuncis van a la regió aria-live que munta dnd-kit. En català, del
         // catàleg, perquè és el que sentirà qui faci servir un lector de pantalla.
@@ -156,16 +222,21 @@ export function BoardDnd({
         },
       }}
       onDragStart={(event: DragStartEvent) => {
-        setActive(String(event.active.id));
-        onDragStart?.(String(event.active.id));
+        const id = String(event.active.id);
+        setActive({ id, pointer: 'clientY' in event.activatorEvent });
+        onDragStart?.(id);
       }}
+      onDragMove={(event) => onPlacement?.(placementAt(event))}
+      onDragOver={(event) => onPlacement?.(placementAt(event))}
       onDragEnd={(event: DragEndEvent) => {
         setActive(null);
+        onPlacement?.(undefined);
         const status = event.over === null ? null : (String(event.over.id) as TaskStatus);
-        onDragEnd?.(String(event.active.id), status);
+        onDragEnd?.(String(event.active.id), status, placementAt(event));
       }}
       onDragCancel={() => {
         setActive(null);
+        onPlacement?.(undefined);
         onDragEnd?.('', null);
       }}
     >
@@ -179,7 +250,7 @@ export function BoardDnd({
             <DragOverlay dropAnimation={null} zIndex={60}>
               {active === null ? null : (
                 <div data-testid="drag-overlay" style={{ cursor: 'grabbing' }}>
-                  {renderOverlay(active)}
+                  {renderOverlay(active.id)}
                 </div>
               )}
             </DragOverlay>,
@@ -200,19 +271,30 @@ export function BoardDnd({
 export function DraggableCard({
   id,
   testId,
+  scopeId,
+  status,
+  insertEdge,
   children,
 }: {
   id: string;
   testId?: string | undefined;
+  scopeId: string;
+  status: TaskStatus;
+  insertEdge?: 'top' | 'bottom' | undefined;
   children: ReactNode;
 }) {
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id });
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id,
+    data: { scopeId, status },
+  });
 
   return (
     <div
       ref={setNodeRef}
       data-testid={testId}
       data-draggable-id={id}
+      data-scope-id={scopeId}
+      data-insert-edge={insertEdge}
       // Marca que aquest node l'injecta l'amfitrió pel punt d'extensió `wrapCard`, i
       // que per tant NO és part del que renderitza el component compartit. La prova de
       // P4 el salta per poder comparar només el que InboxRail pinta.
@@ -227,6 +309,19 @@ export function DraggableCard({
       {...attributes}
     >
       {children}
+      {insertEdge === undefined ? null : (
+        <div
+          aria-hidden="true"
+          style={{
+            position: 'absolute',
+            insetInline: 0,
+            [insertEdge]: -4,
+            height: 3,
+            background: 'var(--drop-indicator)',
+            pointerEvents: 'none',
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -239,9 +334,17 @@ export function DroppableColumn({
   status: TaskStatus;
   children: (over: boolean) => ReactNode;
 }) {
-  const { setNodeRef, isOver } = useDroppable({ id: status });
+  const node = useRef<HTMLDivElement | null>(null);
+  const { setNodeRef, isOver } = useDroppable({ id: status, data: { node } });
+  const setColumnNode = useCallback(
+    (element: HTMLDivElement | null) => {
+      node.current = element;
+      setNodeRef(element);
+    },
+    [setNodeRef],
+  );
   return (
-    <div ref={setNodeRef} style={{ display: 'flex', flex: 1, minWidth: 0 }}>
+    <div ref={setColumnNode} style={{ display: 'flex', flex: 1, minWidth: 0 }}>
       {children(isOver)}
     </div>
   );

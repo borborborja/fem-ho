@@ -8,7 +8,7 @@
 -->
 <resources>
     <color name="femho_ink">#FF14151A</color>
-    <color name="femho_ink_soft">#8C14161E</color>
+    <color name="femho_ink_soft">#9E14161E</color>
     <color name="femho_dialog_bg">#FFFFFFFF</color>
     <color name="femho_panel_bg">#FFFFFFFF</color>
     <color name="femho_card_bg">#FFFFFFFF</color>

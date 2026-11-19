@@ -14,7 +14,9 @@ import { sql } from 'kysely';
 import { v7 as uuidv7 } from 'uuid';
 import webpush from 'web-push';
 import type { AuditContext } from '../audit/audited-transaction.js';
+import { safeFetch } from '../dav/fetch-safe.js';
 import type { MigrationDb } from '../db/migration-db.js';
+import { PolicyError } from '../policy/errors.js';
 
 export const VAPID_PUBLIC_KEY = 'vapid_public_key';
 export const VAPID_PRIVATE_KEY = 'vapid_private_key';
@@ -89,6 +91,19 @@ export interface SubscriptionInput {
   user_agent?: string | undefined;
 }
 
+function pushEndpoint(raw: string): URL {
+  const url = URL.parse(raw);
+  if (url?.protocol !== 'https:' || url.username !== '' || url.password !== '' || url.hash !== '') {
+    throw new PolicyError(
+      'invalid-push-endpoint',
+      'Invalid push endpoint',
+      422,
+      'The push service needs an HTTPS address without credentials or a fragment.',
+    );
+  }
+  return url;
+}
+
 /**
  * Guarda una subscripció.
  *
@@ -101,6 +116,7 @@ export async function subscribe(
   userId: string,
   input: SubscriptionInput,
 ): Promise<{ id: string; created: boolean }> {
+  pushEndpoint(input.endpoint);
   const found = await sql<{ id: string }>`
     SELECT id FROM push_subscriptions WHERE endpoint = ${input.endpoint}
   `.execute(ctx.tx);
@@ -355,5 +371,25 @@ export function pushAvailability(capabilities: {
 }
 
 /** L'enviador real. Es passa des de fora perquè les proves no en necessitin cap. */
-export const realSender: PushSender = async (subscription, payload, options) =>
-  webpush.sendNotification(subscription, payload, options) as Promise<{ statusCode: number }>;
+export const realSender: PushSender = async (subscription, payload, options) => {
+  pushEndpoint(subscription.endpoint);
+  const request = webpush.generateRequestDetails(subscription, payload, options);
+  // Les subscripcions desades també es tornen a resoldre. El transport només fa servir
+  // la IP validada i el sobre xifrat i signat mai segueix una redirecció.
+  const response = await safeFetch(request.endpoint, {
+    method: request.method,
+    headers: Object.fromEntries(
+      Object.entries(request.headers).map(([name, value]) => [name, String(value)]),
+    ),
+    ...(request.body === null ? {} : { body: request.body }),
+    maxRedirects: 0,
+    timeoutMs: 5_000,
+    maxBytes: 16_384,
+  });
+  if (response.status < 200 || response.status >= 300) {
+    throw Object.assign(new Error('El servei de notificacions ha rebutjat el missatge.'), {
+      statusCode: response.status,
+    });
+  }
+  return { statusCode: response.status };
+};

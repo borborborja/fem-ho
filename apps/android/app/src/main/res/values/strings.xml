@@ -299,6 +299,7 @@
     <string name="login_certfingerprint">Empremta</string>
     <string name="login_certreject">Cancel·la</string>
     <string name="login_certtitle">Certificat no reconegut</string>
+    <string name="login_changeserver">Canviar de servidor</string>
     <string name="login_checkserver">Comprovar</string>
     <string name="login_email">Correu</string>
     <string name="login_error">Correu o contrasenya incorrectes.</string>
@@ -832,6 +833,7 @@
     <string name="task_attachments">Adjunts</string>
     <string name="task_attachmenttoobig">El fitxer passa del límit de {limit_mb} MB.</string>
     <string name="task_checklists">Llistes senzilles</string>
+    <string name="task_choosescope">Tria un àmbit</string>
     <string name="task_comments">Comentaris</string>
     <string name="task_deadline">Data límit</string>
     <string name="task_deleteconfirm">Vols esborrar definitivament «{title}»? També s’esborraran les seves subtasques i llistes. Si prové d’un esdeveniment del calendari, l’esdeveniment es conservarà.</string>
