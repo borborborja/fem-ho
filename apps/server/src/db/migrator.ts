@@ -13,8 +13,9 @@
  * d'esquema portable.
  */
 
-import { copyFileSync, mkdirSync, readdirSync, statSync, unlinkSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, renameSync, rmSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import SQLite from 'better-sqlite3';
 import { sql } from 'kysely';
 import type { Engine } from './dialect.js';
 import type { MigrationDb } from './migration-db.js';
@@ -153,40 +154,54 @@ async function appliedMigrations(db: MigrationDb): Promise<Set<string>> {
  * les seves eines, i intentar-ho des d'aquí seria pitjor que no fer-ho. Es diu clarament
  * al log en comptes de callar.
  *
- * Es fa amb l'API de còpia en línia de better-sqlite3 i no amb `cp`: amb WAL, copiar el
- * fitxer amb el servidor engegat dona una còpia corrupta (docs/12 §6).
+ * L'API de còpia en línia inclou les transaccions confirmades que encara són al WAL.
+ * El nom definitiu només apareix quan la còpia és completa, abans de podar les antigues.
  */
-export function backupBeforeMigrate(
-  engine: Engine,
+async function backupBeforeMigrate(
   databasePath: string,
   dataDir: string,
   now: string,
-  keep = 5,
-): string | null {
-  if (engine !== 'sqlite') return null;
-  if (databasePath === ':memory:') return null;
-
-  try {
-    statSync(databasePath);
-  } catch {
-    // Base nova: no hi ha res a copiar.
+): Promise<string | null> {
+  if (
+    databasePath === ':memory:' ||
+    statSync(databasePath, { throwIfNoEntry: false }) === undefined
+  )
     return null;
-  }
 
   const backupsDir = join(dataDir, 'backups');
   mkdirSync(backupsDir, { recursive: true });
 
   const stamp = now.replace(/[:.]/g, '-');
-  const destination = join(backupsDir, `femho-${stamp}.db`);
-  copyFileSync(databasePath, destination);
+  const backupName = `femho-${stamp}.db`;
+  const destination = join(backupsDir, backupName);
+  const temporaryDir = mkdtempSync(join(backupsDir, '.femho-'));
+  try {
+    const snapshot = join(temporaryDir, 'snapshot.db');
+    const source = new SQLite(databasePath, { readonly: true, fileMustExist: true });
+    try {
+      await source.backup(snapshot);
+    } finally {
+      source.close();
+    }
+    renameSync(snapshot, destination);
+  } finally {
+    rmSync(temporaryDir, { recursive: true, force: true });
+  }
 
-  // Es conserven les últimes `keep`. Sense podar, un volum domèstic s'omple sol.
-  const existing = readdirSync(backupsDir)
-    .filter((f) => f.startsWith('femho-') && f.endsWith('.db'))
+  // La còpia d'aquesta migració es conserva encara que el rellotge hagi fet un salt enrere.
+  const previous = readdirSync(backupsDir, { withFileTypes: true })
+    .filter(
+      (file) =>
+        file.isFile() &&
+        file.name !== backupName &&
+        file.name.startsWith('femho-') &&
+        file.name.endsWith('.db'),
+    )
+    .map((file) => file.name)
     .sort()
     .reverse();
-  for (const stale of existing.slice(keep)) {
-    unlinkSync(join(backupsDir, stale));
+  for (const stale of previous.slice(4)) {
+    rmSync(join(backupsDir, stale), { force: true });
   }
 
   return destination;
@@ -230,14 +245,13 @@ export async function migrateToLatest(
   }
 
   let backup: string | null = null;
-  if (options.databasePath !== undefined && options.dataDir !== undefined) {
-    backup = backupBeforeMigrate(options.engine, options.databasePath, options.dataDir, now);
+  if (options.engine === 'postgres') {
+    log(
+      "migracions · amb Postgres la còpia prèvia la fa qui administra la base. No se n'ha fet cap.",
+    );
+  } else if (options.databasePath !== undefined && options.dataDir !== undefined) {
+    backup = await backupBeforeMigrate(options.databasePath, options.dataDir, now);
     if (backup !== null) log(`migracions · còpia prèvia a ${backup}`);
-    else if (options.engine === 'postgres') {
-      log(
-        "migracions · amb Postgres la còpia prèvia la fa qui administra la base. No se n'ha fet cap.",
-      );
-    }
   }
 
   const applied: string[] = [];
