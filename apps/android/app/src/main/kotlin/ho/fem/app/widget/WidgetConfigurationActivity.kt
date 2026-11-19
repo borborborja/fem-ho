@@ -64,7 +64,7 @@ class WidgetConfigurationActivity : ComponentActivity() {
                                 lifecycleScope.launch {
                                     try {
                                     updateAppWidgetState(this@WidgetConfigurationActivity, glanceId) { it[WIDGET_COLUMN] = chosen.name }
-                                    FemhoWidgets.updateAll(this@WidgetConfigurationActivity)
+                                    BoardWidget().update(this@WidgetConfigurationActivity, glanceId)
                                     setResult(Activity.RESULT_OK, Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId))
                                     finish()
                                     } catch (cancelled: CancellationException) {

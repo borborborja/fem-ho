@@ -16,8 +16,10 @@ import ho.fem.model.Calendar
 import ho.fem.model.Checklist
 import ho.fem.model.Comment
 import ho.fem.model.CredentialEnvelope
+import ho.fem.model.CreatedApiToken
 import ho.fem.model.DashboardView
 import ho.fem.model.EventOccurrence
+import ho.fem.model.ExternalAccess
 import ho.fem.model.Inbox
 import ho.fem.model.InboxMark
 import ho.fem.model.InstanceInfo
@@ -51,8 +53,13 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.longOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -218,6 +225,29 @@ class FemhoApi(
 
     private suspend inline fun <reified T> put(path: String, body: Any? = null): T =
         json.decodeFromString(raw("PUT", path, body?.let { encode(it) }, authenticated = true))
+
+    /** Els consumidors antics usen mapes, però `Any` no té serialitzador JSON. */
+    private suspend fun legacyObject(method: String, path: String, body: Any? = null): Map<String, Any> {
+        val response = raw(method, path, body?.let(::encode), authenticated = true)
+        return if (response.isBlank()) emptyMap() else json.decodeFromString<JsonObject>(response).legacyValues()
+    }
+
+    private fun JsonObject.legacyValues(): Map<String, Any> = buildMap {
+        for ((key, value) in this@legacyValues) value.legacyValue()?.let { put(key, it) }
+    }
+
+    private fun JsonElement.legacyValue(): Any? = when (this) {
+        JsonNull -> null
+        is JsonObject -> legacyValues()
+        is JsonArray -> map { it.legacyValue() }
+        is JsonPrimitive -> when {
+            isString -> content
+            else -> booleanOrNull ?: intOrNull ?: longOrNull ?: doubleOrNull ?: content
+        }
+    }
+
+    private suspend fun legacyList(path: String): List<Map<String, Any>> =
+        get<List<JsonObject>>(path).map { it.legacyValues() }
 
     private fun encode(body: Any): String = when (body) {
         is String -> body
@@ -624,9 +654,9 @@ class FemhoApi(
 
     // ------------------------------------------------------------------ Convits i membres
 
-    suspend fun scopeInvites(scopeId: String): List<Map<String, Any>> = get("/api/v1/scopes/$scopeId/invites")
+    suspend fun scopeInvites(scopeId: String): List<Map<String, Any>> = legacyList("/api/v1/scopes/$scopeId/invites")
 
-    suspend fun createScopeInvite(scopeId: String): Map<String, Any> = post("/api/v1/scopes/$scopeId/invites", emptyMap<String, Any>())
+    suspend fun createScopeInvite(scopeId: String): Map<String, Any> = legacyObject("POST", "/api/v1/scopes/$scopeId/invites", "{}")
 
     suspend fun revokeScopeInvite(scopeId: String, grantId: String) {
         raw("DELETE", "/api/v1/scopes/$scopeId/invites/$grantId", null, authenticated = true)
@@ -648,10 +678,10 @@ class FemhoApi(
         raw("POST", "/invite/$token", encode(mapOf("password" to password)), authenticated = false)
     }
 
-    suspend fun scopeMembers(scopeId: String): List<Map<String, Any>> = get("/api/v1/scopes/$scopeId/members")
+    suspend fun scopeMembers(scopeId: String): List<Map<String, Any>> = legacyList("/api/v1/scopes/$scopeId/members")
 
     suspend fun updateMember(scopeId: String, memberId: String, role: String): Map<String, Any> =
-        patch("/api/v1/scopes/$scopeId/members/$memberId", mapOf("role" to role))
+        legacyObject("PATCH", "/api/v1/scopes/$scopeId/members/$memberId", mapOf("role" to role))
 
     suspend fun removeMember(scopeId: String, memberId: String) {
         raw("DELETE", "/api/v1/scopes/$scopeId/members/$memberId", null, authenticated = true)
@@ -693,7 +723,9 @@ class FemhoApi(
     suspend fun testMailAccount(id: String, password: String? = null): MailTestResult =
         post("/api/v1/mail/accounts/$id/test", if (password != null) mapOf("password" to password) else emptyMap())
 
-    suspend fun mailFolders(id: String): List<Map<String, Any>> = get("/api/v1/mail/accounts/$id/folders")
+    suspend fun mailFolders(id: String): List<Map<String, Any>> =
+        get<JsonObject>("/api/v1/mail/accounts/$id/folders")["folders"]?.jsonArray.orEmpty()
+            .map { it.jsonObject.legacyValues() }
 
     suspend fun mailRules(): List<MailRule> = get("/api/v1/mail/rules")
 
@@ -726,17 +758,17 @@ class FemhoApi(
             add("to=$to")
             if (scopeIds != null && scopeIds.isNotEmpty()) add("scope_ids=" + scopeIds.joinToString(","))
         }.joinToString("&")
-        return get("/api/v1/mail/messages?$query")
+        return legacyList("/api/v1/mail/messages?$query")
     }
 
-    suspend fun convertMailMessage(id: String): Map<String, Any> = post("/api/v1/mail/messages/$id/convert", emptyMap<String, Any>())
+    suspend fun convertMailMessage(id: String): Map<String, Any> = legacyObject("POST", "/api/v1/mail/messages/$id/convert", "{}")
 
     suspend fun dismissMailMessage(id: String) {
         raw("DELETE", "/api/v1/mail/messages/$id", null, authenticated = true)
     }
 
     suspend fun setMailInInbox(messageId: String, visible: Boolean?): Map<String, Any> =
-        post("/api/v1/inbox/mail", mapOf("message_id" to messageId, "visible" to visible))
+        legacyObject("POST", "/api/v1/inbox/mail", mapOf("message_id" to messageId, "visible" to visible))
 
     // ------------------------------------------------------------------ Calendaris
 
@@ -884,10 +916,23 @@ class FemhoApi(
 
     // ------------------------------------------------------------------ Tokens d'API
 
-    suspend fun apiTokens(): List<ApiTokenSummary> = get("/api/v1/tokens")
+    suspend fun externalAccess(): ExternalAccess = get("/api/v1/external-access")
 
-    suspend fun createApiToken(name: String, capabilities: List<String>): Map<String, Any> =
-        post("/api/v1/tokens", mapOf("name" to name, "capabilities" to capabilities))
+    suspend fun setExternalAccess(channel: String, enabled: Boolean): ExternalAccess =
+        patch("/api/v1/external-access", mapOf("${channel}_enabled" to enabled))
+
+    suspend fun apiTokens(): List<ApiTokenSummary> = get<CredentialEnvelope>("/api/v1/tokens").data
+
+    suspend fun createApiToken(name: String, capabilities: List<String>, scopeIds: List<String>, channels: List<String>): CreatedApiToken =
+        post("/api/v1/tokens", mapOf("name" to name, "capabilities" to capabilities, "scope_ids" to scopeIds, "channels" to channels))
+
+    suspend fun updateApiToken(id: String, name: String?, capabilities: List<String>, scopeIds: List<String>, channels: List<String>?): ApiTokenSummary =
+        patch("/api/v1/tokens/$id", buildMap {
+            if (name != null) put("name", name)
+            if (channels != null) put("channels", channels)
+            put("capabilities", capabilities)
+            put("scope_ids", scopeIds)
+        })
 
     suspend fun revokeApiToken(id: String) {
         raw("DELETE", "/api/v1/tokens/$id", null, authenticated = true)
@@ -896,14 +941,14 @@ class FemhoApi(
     // ------------------------------------------------------------------ IA / Agents
 
     suspend fun updateAgentScopes(agentId: String, scopeIds: List<String>, allScopes: Boolean): Map<String, Any> =
-        put("/api/v1/ai/agents/$agentId/scopes", mapOf("scope_ids" to scopeIds, "all_scopes" to allScopes))
+        legacyObject("PUT", "/api/v1/ai/agents/$agentId/scopes", mapOf("scope_ids" to scopeIds, "all_scopes" to allScopes))
 
     suspend fun createAgentCredential(agentId: String): Map<String, Any> =
-        post("/api/v1/ai/agents/$agentId/credentials", emptyMap<String, Any>())
+        legacyObject("POST", "/api/v1/ai/agents/$agentId/credentials", "{}")
 
     suspend fun agentSkill(): String = raw("GET", "/api/v1/ai/skill", null, authenticated = true)
 
-    suspend fun aiAttention(): Map<String, Any> = get("/api/v1/ai/attention")
+    suspend fun aiAttention(): Map<String, Any> = legacyObject("GET", "/api/v1/ai/attention")
 
     /** Els agents estesos (àmbits, permisos), per a Ajustos ▸ Usuari IA. */
     suspend fun agentDetails(): List<AgentDetail> = get("/api/v1/ai/agents")
@@ -932,9 +977,9 @@ class FemhoApi(
     suspend fun agentCredentials(agentId: String): List<ApiTokenSummary> =
         get<CredentialEnvelope>("/api/v1/ai/agents/$agentId/credentials").data
 
-    suspend fun aiCoverage(): Map<String, Any> = get("/api/v1/ai/coverage")
+    suspend fun aiCoverage(): Map<String, Any> = legacyObject("GET", "/api/v1/ai/coverage")
 
-    suspend fun aiStatus(): Map<String, Any> = get("/api/v1/ai/status")
+    suspend fun aiStatus(): Map<String, Any> = legacyObject("GET", "/api/v1/ai/status")
 
     suspend fun takeOverTask(taskId: String, status: String): Task =
         post("/api/v1/tasks/$taskId/take-over", mapOf("status" to status))
@@ -944,7 +989,7 @@ class FemhoApi(
     suspend fun releaseTask(taskId: String): Task = post("/api/v1/tasks/$taskId/release", emptyMap<String, Any>())
 
     suspend fun askUser(taskId: String, question: String): Map<String, Any> =
-        post("/api/v1/tasks/$taskId/ask-user", mapOf("question" to question))
+        legacyObject("POST", "/api/v1/tasks/$taskId/ask-user", mapOf("question" to question))
 
     suspend fun resumeTask(taskId: String, learned: String): Task =
         post("/api/v1/tasks/$taskId/resume", mapOf("learned" to learned))
@@ -975,7 +1020,7 @@ class FemhoApi(
     suspend fun taskActivity(taskId: String): List<ho.fem.model.ActivityEntry> =
         get<ActivityEnvelope>("/api/v1/tasks/$taskId/activity").data
 
-    suspend fun undoActivity(id: String): Map<String, Any> = post("/api/v1/activity/$id/undo", emptyMap<String, Any>())
+    suspend fun undoActivity(id: String): Map<String, Any> = legacyObject("POST", "/api/v1/activity/$id/undo", "{}")
 
     // ------------------------------------------------------------------ Admin
 
@@ -998,7 +1043,7 @@ class FemhoApi(
 
     /** Neteja la instància; el servidor també comprova el nom de confirmació. */
     suspend fun adminWipe(confirmation: String): Map<String, Any> =
-        post("/api/v1/admin/wipe", mapOf("confirmation" to confirmation))
+        legacyObject("POST", "/api/v1/admin/wipe", mapOf("confirmation" to confirmation))
 
     // ------------------------------------------------------------------ Cerca
 
@@ -1016,10 +1061,10 @@ class FemhoApi(
     // ------------------------------------------------------------------ Admin
 
     suspend fun inviteAdminUser(email: String, name: String): Map<String, Any> =
-        post("/api/v1/admin/users/invite", mapOf("email" to email, "name" to name))
+        legacyObject("POST", "/api/v1/admin/users/invite", mapOf("email" to email, "name" to name))
 
     suspend fun updateAdminUser(id: String, name: String? = null, role: String? = null): Map<String, Any> =
-        patch("/api/v1/admin/users/$id", buildMap {
+        legacyObject("PATCH", "/api/v1/admin/users/$id", buildMap {
             if (name != null) put("name", name)
             if (role != null) put("role", role)
         })
@@ -1029,12 +1074,12 @@ class FemhoApi(
     }
 
     suspend fun wipeInstance(confirmation: String): Map<String, Any> =
-        post("/api/v1/admin/wipe", mapOf("confirmation" to confirmation))
+        adminWipe(confirmation)
 
     // ------------------------------------------------------------------ Auth
 
     suspend fun changePassword(current: String, new: String): Map<String, Any> =
-        post("/api/v1/auth/password", mapOf("current_password" to current, "new_password" to new))
+        legacyObject("POST", "/api/v1/auth/password", mapOf("current_password" to current, "new_password" to new))
 
     suspend fun updateProfile(name: String? = null, locale: String? = null, theme: String? = null, accent: String? = null): UserProfile =
         patch("/api/v1/auth/me", buildMap {

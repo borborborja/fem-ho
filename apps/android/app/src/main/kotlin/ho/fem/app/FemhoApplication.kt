@@ -35,7 +35,7 @@ class FemhoApplication : Application() {
         getSystemService(ConnectivityManager::class.java).registerDefaultNetworkCallback(
             object : ConnectivityManager.NetworkCallback() {
                 override fun onAvailable(network: Network) {
-                    if (container.account() != null) Notifications.requestSync(this@FemhoApplication)
+                    container.account()?.let { Notifications.requestSync(this@FemhoApplication, it) }
                 }
             },
         )

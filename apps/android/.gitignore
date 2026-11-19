@@ -1,6 +1,7 @@
 # Sortides de compilació. L'APK es construeix, no es compromet.
 build/
 .gradle/
+.kotlin/
 local.properties
 *.apk
 *.aab

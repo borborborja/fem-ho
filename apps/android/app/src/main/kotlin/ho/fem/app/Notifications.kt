@@ -10,7 +10,10 @@ import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import androidx.work.workDataOf
 import ho.fem.app.widget.FemhoWidgets
+import ho.fem.data.ActiveAccount
+import kotlinx.coroutines.CancellationException
 import java.util.concurrent.TimeUnit
 
 /**
@@ -28,6 +31,7 @@ import java.util.concurrent.TimeUnit
 object Notifications {
     const val CHANNEL_REMINDERS = "reminders"
     private const val SYNC_WORK = "femho-periodic-sync"
+    internal const val SYNC_ACCOUNT = "account"
 
     fun ensureChannel(context: Context) {
         val manager = context.getSystemService(NotificationManager::class.java)
@@ -49,10 +53,17 @@ object Notifications {
      * posta: demanar-ne menys no en dona menys, dona el mateix amb una promesa que el
      * sistema no complirà.
      */
-    fun requestSync(context: Context) {
-        WorkManager.getInstance(context).enqueueUniqueWork("widget-sync", androidx.work.ExistingWorkPolicy.KEEP,
+    fun requestSync(context: Context, account: ActiveAccount) {
+        val key = account.identity.key
+        WorkManager.getInstance(context).enqueueUniqueWork(
+            "femho-sync-$key",
+            // Una operació nova pot arribar mentre el worker acaba de llegir la cua.
+            androidx.work.ExistingWorkPolicy.APPEND_OR_REPLACE,
             androidx.work.OneTimeWorkRequestBuilder<SyncWorker>()
-                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()).build())
+                .setInputData(workDataOf(SYNC_ACCOUNT to key))
+                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+                .build(),
+        )
     }
 
     fun schedulePolling(context: Context) {
@@ -79,8 +90,9 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
     override suspend fun doWork(): Result {
         val container = (applicationContext as FemhoApplication).container
         val account = container.account() ?: return Result.success()
-        val active = container.settings.activeScopes(account)
-        return runCatching { container.repository(account).refresh(active, null) }
+        val expected = inputData.getString(Notifications.SYNC_ACCOUNT)
+        if (expected != null && expected != account.identity.key) return Result.success()
+        return runCatching { container.repository(account).refresh(emptyList(), null) }
             .fold(
                 // Un error de xarxa és `retry`, no `failure`: la feina segueix sent
                 // vàlida i el sistema la tornarà a provar amb espera creixent.
@@ -91,7 +103,10 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
                     FemhoWidgets.updateAll(applicationContext)
                     Result.success()
                 },
-                onFailure = { Result.retry() },
+                onFailure = {
+                    if (it is CancellationException) throw it
+                    if (container.account() == account) Result.retry() else Result.success()
+                },
             )
     }
 }

@@ -25,8 +25,8 @@ android {
         applicationId = "ho.fem"
         minSdk = 26
         targetSdk = 36
-        versionCode = 23
-        versionName = "0.20.0"
+        versionCode = 24
+        versionName = "0.20.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -120,5 +120,6 @@ dependencies {
     androidTestImplementation(composeBom)
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     androidTestImplementation("androidx.test.ext:junit:1.3.0")
+    androidTestImplementation("androidx.room:room-runtime:2.8.4")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }

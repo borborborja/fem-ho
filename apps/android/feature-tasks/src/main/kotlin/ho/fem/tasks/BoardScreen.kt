@@ -1,34 +1,44 @@
 package ho.fem.tasks
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PageSize
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import ho.fem.designsystem.CardAddForm
 import ho.fem.designsystem.CardList
 import ho.fem.designsystem.EmptyState
 import ho.fem.designsystem.Femho
+import ho.fem.designsystem.FemhoShape
 import ho.fem.designsystem.FemhoSize
+import ho.fem.designsystem.FemhoText
 import ho.fem.designsystem.KanbanColumn
 import ho.fem.designsystem.TaskCard
 import ho.fem.model.AiMode
@@ -39,11 +49,8 @@ import kotlinx.coroutines.launch
 /**
  * El tauler a Android. docs/03 §4.
  *
- * **Pager horitzontal al 80% d'amplada, i moviment per botons, pulsació llarga i
- * lliscament — no arrossegament lliure.** El document ho diu i la raó és física: un
- * arrossegament lliure competeix amb el gest del pager, i el resultat és que ni
- * s'arrossega ni es canvia de columna. Els botons "→ Per fer" i "→ Fent" de les
- * targetes de l'Inbox fan la feina sense gest ambigu.
+ * El pager horitzontal deixa entreveure la columna següent. Els botons de la
+ * targeta permeten moure-la sense competir amb el gest del pager.
  *
  * Les columnes són les mateixes quatre i en el mateix ordre que a la web: `inbox`,
  * `todo`, `doing`, `done`. L'ordre és del producte i no es reordena.
@@ -127,6 +134,11 @@ fun BoardScreen(
 ) {
     val pager = rememberPagerState(pageCount = { ORDER.size })
     val scope = rememberCoroutineScope()
+    val columns = remember(tasks, aiBoard) {
+        tasks.filter { task ->
+            task.status == TaskStatus.INBOX || (task.aiMode != AiMode.MANUAL) == aiBoard
+        }.groupBy { it.status }
+    }
     LaunchedEffect(requestedStatus) {
         requestedStatus?.let {
             pager.scrollToPage(ORDER.indexOf(it))
@@ -137,40 +149,72 @@ fun BoardScreen(
     Column(
         modifier = modifier.fillMaxSize(),
     ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 12.dp, end = 12.dp, bottom = 6.dp)
+                .selectableGroup()
+                .testTag("board-column-tabs"),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ORDER.forEachIndexed { index, status ->
+                val selected = pager.currentPage == index
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = FemhoSize.touch)
+                        .clip(RoundedCornerShape(FemhoShape.pill))
+                        .background(if (selected) Femho.colors.ghostBg else Color.Transparent)
+                        .selectable(selected = selected, role = Role.Tab) {
+                            scope.launch { pager.animateScrollToPage(index) }
+                        }
+                        .padding(horizontal = 4.dp, vertical = 5.dp)
+                        .testTag("board-column-${status.name.lowercase()}"),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = labels.columns[status].orEmpty(),
+                        color = if (selected) Femho.colors.ink else Femho.colors.inkSoft,
+                        fontSize = FemhoText.meta,
+                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                        textAlign = TextAlign.Center,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        }
+
         HorizontalPager(
             state = pager,
             modifier = Modifier.weight(1f).fillMaxWidth().testTag("board-pager"),
-            // 80% d'amplada: la columna següent s'endevina i convida a lliscar-hi.
             pageSize = FractionPageSize(0.8f),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp),
             pageSpacing = FemhoSize.columnGap,
+            verticalAlignment = Alignment.Top,
+            key = { ORDER[it] },
         ) { page ->
             val status = ORDER[page]
-            val ofColumn = tasks
-                .filter { it.status == status }
-                .filter {
-                    if (status == TaskStatus.INBOX) {
-                        true
-                    } else {
-                        val delegada = it.aiMode != AiMode.MANUAL
-                        if (aiBoard) delegada else !delegada
-                    }
-                }
+            val ofColumn = columns[status].orEmpty()
 
             KanbanColumn(
                 label = labels.columns[status].orEmpty(),
                 count = ofColumn.size,
                 inbox = status == TaskStatus.INBOX,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxSize(),
             ) {
-                Column(
-                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                LazyColumn(
+                    // El camp de captura és un germà de la llista i queda accessible
+                    // quan una columna és llarga o s'obre el teclat.
+                    modifier = Modifier.weight(1f).fillMaxWidth()
+                        .testTag("board-list-${status.name.lowercase()}"),
                     verticalArrangement = Arrangement.spacedBy(FemhoSize.cardGap),
                 ) {
                     if (ofColumn.isEmpty()) {
-                        EmptyState(labels.empty[status].orEmpty())
+                        item { EmptyState(labels.empty[status].orEmpty()) }
                     } else {
-                        ofColumn.forEach { task ->
+                        items(ofColumn, key = { it.id }) { task ->
                             val extra = extras(task)
                             // El pany de l'agent: locked_until al futur bloqueja la targeta
                             val locked = task.lockedUntil?.let { until ->
@@ -180,6 +224,8 @@ fun BoardScreen(
                             TaskCard(
                                 title = task.title,
                                 time = task.dueTime,
+                                checklistProgress = task.progress?.takeIf { it.total > 0 }
+                                    ?.let { "${it.done}/${it.total}" },
                                 done = task.status == TaskStatus.DONE,
                                 toggleLabel = labels.toggle,
                                 // Amb el pany, la casella no mou: mostra el motiu (el 409
@@ -208,7 +254,7 @@ fun BoardScreen(
                                 listsToggleLabel = extra?.toggleLabel,
                                 onToggleLists = { extra?.onToggleLists?.invoke() },
                                 addForm = extra?.addForm,
-                                modifier = Modifier.padding(bottom = 0.dp),
+                                modifier = Modifier.testTag("board-task-${task.id}"),
                             )
                         }
                     }
@@ -218,34 +264,5 @@ fun BoardScreen(
             }
         }
 
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 16.dp)
-                .testTag("pager-dots"),
-            // `spacedBy` amb `CenterHorizontally`: separa els punts 8dp i centra el grup
-            // sencer. Abans el `padding(end = 8.dp)` anava darrere de `size(8.dp)`, que el
-            // feia no-op — els punts es tocaven.
-            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            ORDER.forEachIndexed { index, _ ->
-                val isActive = pager.currentPage == index
-                Box(
-                    modifier = Modifier
-                        .size(8.dp)
-                        .clip(CircleShape)
-                        .then(
-                            if (isActive) Modifier.background(Femho.brandGradient2, CircleShape)
-                            else Modifier.background(Femho.colors.inkFaint)
-                        )
-                        .clickable {
-                            scope.launch {
-                                pager.animateScrollToPage(index)
-                            }
-                        },
-                )
-            }
-        }
     }
 }

@@ -1,29 +1,41 @@
 package ho.fem.tasks
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.mapSaver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import ho.fem.designsystem.ChecklistRow
@@ -36,19 +48,6 @@ import ho.fem.model.AiMode
 import ho.fem.model.Checklist
 import ho.fem.model.Task
 import ho.fem.model.TaskStatus
-
-/**
- * El detall d'una tasca. docs/03 §6, docs/02 §7.
- *
- * **És un full, no una pàgina**: al mòbil, un modal centrat deixa el contingut en una
- * franja i el teclat el tapa. El full puja des de baix i deixa el títol a l'abast del
- * polze.
- *
- * Té menys camps que el modal de la web, i és deliberat: `docs/03` §6 diu que al mòbil
- * s'edita el que es toca sovint —títol, estat, data, mode d'IA, subtasques i llistes— i
- * la resta es fa des de la web. Un formulari de disset camps en una pantalla de 5,5
- * polzades no s'omple; s'abandona.
- */
 
 data class TaskDetailLabels(
     val title: String,
@@ -114,6 +113,16 @@ data class TaskDetailLabels(
     val save: String,
     val close: String,
     val emptyChecklists: String,
+    val discardDraftTitle: String,
+    val discardDraftMessage: String,
+    val discardDraft: String,
+    val commentError: String,
+)
+
+// Un valor nul forma part de l'esborrany: treu un camp existent en desar.
+private val TaskEditsSaver = mapSaver<Map<String, String?>>(
+    save = { it },
+    restore = { values -> values.mapValues { (_, value) -> value as String? } },
 )
 
 @Composable
@@ -139,7 +148,7 @@ fun TaskDetail(
     onAddLabel: (String) -> Unit,
     onRemoveLabel: (String) -> Unit,
     onCreateLabel: (String) -> Unit,
-    onAddComment: (String) -> Unit,
+    onAddComment: (String, onPersisted: (Boolean) -> Unit) -> Unit,
     onUndoActivity: (String) -> Unit,
     onDelete: () -> Unit,
     onTakeOver: (String) -> Unit,
@@ -160,12 +169,14 @@ fun TaskDetail(
     onDeleteAttachment: (ho.fem.model.Attachment) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
-    val edits = remember(task.id) { mutableStateMapOf<String, String?>() }
-    var modeEdit by remember(task.id) { mutableStateOf<AiMode?>(null) }
+    var edits by rememberSaveable(task.id, stateSaver = TaskEditsSaver) {
+        mutableStateOf<Map<String, String?>>(emptyMap())
+    }
+    var modeEdit by rememberSaveable(task.id) { mutableStateOf<AiMode?>(null) }
     fun field(name: String, value: String?): String? =
         if (edits.containsKey(name)) edits[name] else value
     fun edit(name: String, value: String?, initial: String?) {
-        if (value == initial) edits.remove(name) else edits[name] = value
+        edits = if (value == initial) edits - name else edits + (name to value)
     }
     val title = field("title", task.title).orEmpty()
     val description = field("description", task.description).orEmpty()
@@ -177,9 +188,12 @@ fun TaskDetail(
     val initialRecurrence = task.recurrenceMode?.name?.lowercase() ?: "schedule"
     val recurrenceMode = field("recurrence_mode", initialRecurrence).orEmpty()
     val aiMode = modeEdit ?: task.aiMode
-    var newLabelName by remember(task.id) { mutableStateOf<String?>(null) }
-    var commentDraft by remember(task.id) { mutableStateOf("") }
-    var confirmingDelete by remember(task.id) { mutableStateOf(false) }
+    var newLabelName by rememberSaveable(task.id) { mutableStateOf<String?>(null) }
+    var commentDraft by rememberSaveable(task.id) { mutableStateOf("") }
+    var commentFailed by rememberSaveable(task.id) { mutableStateOf(false) }
+    var postingComment by remember(task.id) { mutableStateOf(false) }
+    var confirmingDiscard by rememberSaveable(task.id) { mutableStateOf(false) }
+    var confirmingDelete by rememberSaveable(task.id) { mutableStateOf(false) }
     // El diàleg de compartir: com el de la web, no es tanca en crear sinó que passa
     // a mostrar l'URL (docs/10 §6: del token no se'n pot treure).
     var sharing by remember(task.id) { mutableStateOf(false) }
@@ -196,29 +210,44 @@ fun TaskDetail(
         runCatching { java.time.Instant.parse(until) }.getOrNull()?.isAfter(java.time.Instant.now()) ?: false
     } ?: false
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            // El full d'edició és una superfície a pantalla completa. `cardBg` és semi-transparent
-            // en mode fosc (blanc al 6%) i deixaria veure el tauler de fons, barrejant els textos.
-            // `dialogBg` és el token opac per a superfícies de diàleg i fulls.
-            .background(Femho.colors.dialogBg)
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp)
-            .testTag("task-detail"),
-        verticalArrangement = Arrangement.spacedBy(FemhoSize.columnGap),
-    ) {
-        Text(
-            text = labels.close,
-            color = Femho.colors.inkSoft,
-            fontSize = FemhoText.body,
-            modifier = Modifier
-                .clickable(onClick = onClose)
-                .heightIn(min = FemhoSize.touch)
-                .padding(vertical = 12.dp)
-                .testTag("task-close"),
+    val edited = edits.isNotEmpty() || modeEdit != null
+    fun close() {
+        if (saving || postingComment) return
+        if (edited || commentDraft.isNotBlank() || !newLabelName.isNullOrBlank()) {
+            confirmingDiscard = true
+        } else {
+            onClose()
+        }
+    }
+    BackHandler { close() }
+    if (confirmingDiscard) {
+        AlertDialog(
+            onDismissRequest = { confirmingDiscard = false },
+            title = { Text(labels.discardDraftTitle) },
+            text = { Text(labels.discardDraftMessage) },
+            confirmButton = {
+                TextButton(onClick = onClose, modifier = Modifier.testTag("task-discard-draft")) {
+                    Text(labels.discardDraft)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmingDiscard = false }, modifier = Modifier.testTag("task-keep-draft")) {
+                    Text(labels.cancel)
+                }
+            },
         )
+    }
 
+    TaskDetailLayout(
+        taskId = task.id,
+        labels = labels,
+        saveEnabled = !saving && edited && title.isNotBlank(),
+        closeEnabled = !saving && !postingComment,
+        saveError = saveError,
+        onSave = { onSave(edits, modeEdit) },
+        onClose = ::close,
+        modifier = modifier,
+    ) {
         OutlinedTextField(
             value = title,
             onValueChange = { edit("title", it, task.title) },
@@ -236,7 +265,7 @@ fun TaskDetail(
         )
 
         Text(labels.project, color = Femho.colors.inkSoft, fontSize = FemhoText.meta)
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             val scopeProjects = projects.filter { it.scopeId == task.scopeId }
             val options = listOf<Triple<String?, String, String>>(Triple(null, labels.noProject, "task-project-none")) +
                 scopeProjects.map { Triple(it.id, it.name, "task-project-${it.id}") }
@@ -290,7 +319,7 @@ fun TaskDetail(
             "FREQ=MONTHLY" to labels.recurrenceMonthly,
             "FREQ=YEARLY" to labels.recurrenceYearly,
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             recurrences.forEach { (rule, ruleLabel) ->
                 Text(
                     text = ruleLabel,
@@ -345,7 +374,7 @@ fun TaskDetail(
         // Assignats (només àmbits col·lectius; la web no ofereix assignació en els individuals)
         if (isCollectiveScope && people.isNotEmpty()) {
             Text(labels.assignees, color = Femho.colors.inkSoft, fontSize = FemhoText.meta)
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 people.forEach { person ->
                     val assigned = task.assigneeIds.contains(person.id)
                     Text(
@@ -371,7 +400,7 @@ fun TaskDetail(
         val scopeTypes = taskTypes.filter { it.scopeId == task.scopeId }
         if (scopeTypes.isNotEmpty()) {
             Text(labels.taskType, color = Femho.colors.inkSoft, fontSize = FemhoText.meta)
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 val options = listOf<Triple<String?, String, String>>(Triple(null, labels.noType, "task-type-none")) +
                     scopeTypes.map { Triple(it.id, "$${it.name}", "task-type-${it.id}") }
                 options.forEach { (optionId, optionLabel, tag) ->
@@ -399,7 +428,7 @@ fun TaskDetail(
         if (scopeLabels.isEmpty() && newLabelName == null) {
             Text(labels.emptyLabels, color = Femho.colors.inkFaint, fontSize = FemhoText.meta)
         } else {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 scopeLabels.forEach { entry ->
                     val posada = task.labelIds.contains(entry.id)
                     Text(
@@ -519,7 +548,7 @@ fun TaskDetail(
                     color = Femho.colors.inkSoft,
                     fontSize = FemhoText.meta,
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     listOf("todo" to TaskStatus.TODO, "doing" to TaskStatus.DOING).forEach { (wire, status) ->
                         Text(
                             text = labels.status[status].orEmpty(),
@@ -539,19 +568,26 @@ fun TaskDetail(
             }
         }
 
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        FlowRow(
+            modifier = Modifier.selectableGroup(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
             TaskStatus.entries.forEach { status ->
+                val selected = task.status == status
                 Text(
                     text = labels.status[status].orEmpty(),
-                    color = if (task.status == status) Femho.onBrand else Femho.colors.inkSoft,
+                    color = if (selected) Femho.onBrand else Femho.colors.inkSoft,
                     fontSize = FemhoText.meta,
-                    fontWeight = if (task.status == status) FontWeight.Bold else FontWeight.Medium,
+                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
                     modifier = Modifier
                         .clip(RoundedCornerShape(FemhoShape.pill))
                         .background(
-                            if (task.status == status) Femho.colors.plouBlue else Femho.colors.ghostBg,
+                            if (selected) Femho.colors.plouBlue else Femho.colors.ghostBg,
                         )
-                        .clickable(enabled = !locked) { onStatus(status) }
+                        .selectable(selected = selected, enabled = !locked, role = Role.RadioButton) {
+                            if (!selected) onStatus(status)
+                        }
                         .heightIn(min = FemhoSize.touch)
                         .padding(horizontal = 12.dp, vertical = 12.dp)
                         .testTag("status-${status.name.lowercase()}"),
@@ -559,7 +595,11 @@ fun TaskDetail(
             }
         }
 
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        FlowRow(
+            modifier = Modifier.selectableGroup(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
             AiMode.entries.forEach { mode ->
                 Text(
                     text = labels.aiMode[mode].orEmpty(),
@@ -569,7 +609,9 @@ fun TaskDetail(
                     modifier = Modifier
                         .clip(RoundedCornerShape(FemhoShape.pill))
                         .background(if (aiMode == mode) Femho.colors.plouPink else Femho.colors.ghostBg)
-                        .clickable { modeEdit = mode.takeIf { it != task.aiMode } }
+                        .selectable(selected = aiMode == mode, role = Role.RadioButton) {
+                            modeEdit = mode.takeIf { it != task.aiMode }
+                        }
                         .heightIn(min = FemhoSize.touch)
                         .padding(horizontal = 12.dp, vertical = 12.dp)
                         .testTag("ai-${mode.wire}"),
@@ -622,30 +664,33 @@ fun TaskDetail(
         }
         OutlinedTextField(
             value = commentDraft,
-            onValueChange = { commentDraft = it },
+            onValueChange = {
+                commentDraft = it
+                commentFailed = false
+            },
             singleLine = false,
             placeholder = { Text(labels.commentPlaceholder) },
             modifier = Modifier.fillMaxWidth().testTag("task-comment-input"),
         )
-        Text(
-            text = labels.save,
-            color = Femho.onBrand,
-            fontSize = FemhoText.body,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier
-                .clip(RoundedCornerShape(FemhoShape.pill))
-                .background(Femho.brandGradient2)
-                .clickable {
-                    val body = commentDraft.trim()
-                    if (body.isNotEmpty()) {
-                        onAddComment(body)
-                        commentDraft = ""
-                    }
+        Button(
+            enabled = commentDraft.isNotBlank() && !postingComment,
+            onClick = {
+                val draft = commentDraft
+                postingComment = true
+                commentFailed = false
+                onAddComment(draft.trim()) { saved ->
+                    postingComment = false
+                    commentFailed = !saved
+                    if (saved && commentDraft == draft) commentDraft = ""
                 }
-                .heightIn(min = FemhoSize.touch)
-                .padding(horizontal = 16.dp, vertical = 10.dp)
-                .testTag("task-comment-send"),
-        )
+            },
+            modifier = Modifier.testTag("task-comment-send"),
+        ) {
+            Text(labels.save)
+        }
+        if (commentFailed) {
+            Text(labels.commentError, color = Femho.colors.dangerText, modifier = Modifier.testTag("task-comment-error"))
+        }
 
         // Historial d'activitat, amb desfer per als canvis autònoms de la IA
         Text(labels.activity, color = Femho.colors.ink, fontWeight = FontWeight.ExtraBold)
@@ -971,25 +1016,67 @@ fun TaskDetail(
                 .padding(vertical = 10.dp)
                 .testTag("task-add-attachment"),
         )
+    }
+}
 
-        saveError?.let {
-            Text(it, color = Femho.colors.dangerText, modifier = Modifier.testTag("task-save-error"))
+/** Manté les accions visibles encara que el formulari sigui llarg o hi hagi teclat. */
+@Composable
+private fun TaskDetailLayout(
+    taskId: String,
+    labels: TaskDetailLabels,
+    saveEnabled: Boolean,
+    closeEnabled: Boolean,
+    saveError: String?,
+    onSave: () -> Unit,
+    onClose: () -> Unit,
+    modifier: Modifier,
+    content: @Composable () -> Unit,
+) {
+    val scroll = key(taskId) { rememberScrollState() }
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .background(Femho.colors.dialogBg)
+            .imePadding()
+            .testTag("task-detail"),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            TextButton(
+                enabled = closeEnabled,
+                onClick = onClose,
+                modifier = Modifier.testTag("task-close"),
+            ) {
+                Text(labels.close)
+            }
+            Button(
+                enabled = saveEnabled,
+                onClick = onSave,
+                modifier = Modifier.testTag("task-save"),
+            ) {
+                Text(labels.save)
+            }
         }
-        Text(
-            text = labels.save,
-            color = Femho.onBrand,
-            fontSize = FemhoText.body,
-            fontWeight = FontWeight.Bold,
+        saveError?.let {
+            Text(
+                text = it,
+                color = Femho.colors.dangerText,
+                modifier = Modifier.padding(horizontal = 16.dp).testTag("task-save-error"),
+            )
+        }
+        Column(
             modifier = Modifier
+                .weight(1f)
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(FemhoShape.pill))
-                .background(Femho.brandGradient2)
-                .clickable(enabled = !saving && title.isNotBlank()) {
-                    onSave(edits.toMap(), modeEdit)
-                }
-                .heightIn(min = FemhoSize.touch)
-                .padding(vertical = 14.dp)
-                .testTag("task-save"),
-        )
+                .verticalScroll(scroll)
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .testTag("task-detail-content"),
+            verticalArrangement = Arrangement.spacedBy(FemhoSize.columnGap),
+        ) {
+            content()
+        }
     }
 }

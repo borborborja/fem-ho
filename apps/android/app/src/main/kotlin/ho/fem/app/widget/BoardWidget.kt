@@ -3,6 +3,7 @@ package ho.fem.app.widget
 import android.content.Context
 import android.content.Intent
 import android.appwidget.AppWidgetManager
+import android.net.Uri
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -18,13 +19,13 @@ import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.appwidget.lazy.LazyColumn
 import androidx.glance.appwidget.lazy.items
-import androidx.glance.appwidget.state.getAppWidgetState
 import androidx.glance.layout.*
 import androidx.glance.text.*
 import ho.fem.app.MainActivity
 import ho.fem.app.R
 import ho.fem.app.Notifications
 import ho.fem.data.Container
+import ho.fem.data.TaskBoardSnapshot
 import ho.fem.model.Task
 import ho.fem.model.TaskStatus
 import ho.fem.widget.*
@@ -53,11 +54,9 @@ class BoardWidget : GlanceAppWidget() {
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         suspend fun read(): BoardFrame = withContext(Dispatchers.IO) {
             val widget = widgetContext(context)
-            val prefs = getAppWidgetState<Preferences>(context, id)
-            val column = widgetColumn(prefs[WIDGET_COLUMN])
             val container = Container.get(context)
-            BoardFrame(widget, column,
-                widget.account?.let { container.local(it).column(column, widget.activeScopes) }.orEmpty(),
+            BoardFrame(widget,
+                widget.account?.let { container.local(it).taskBoard(widget.activeScopes) },
                 (widget.account?.let { container.repository(it).pending.first() } ?: 0) > 0,
                 widget.account?.identity?.key.orEmpty())
         }
@@ -65,7 +64,9 @@ class BoardWidget : GlanceAppWidget() {
         val frames = FemhoWidgets.snapshots.observe { read() }.flowOn(Dispatchers.IO)
         provideContent {
             val frame by frames.collectAsState(initial)
-            val (widget, column, data, pending, account) = frame
+            val (widget, snapshot, pending, account) = frame
+            val column = widgetColumn(currentState<Preferences>()[WIDGET_COLUMN])
+            val data = snapshot?.columns?.get(column).orEmpty()
             FemhoGlance(widget.palette) {
                 WidgetSurface {
                     if (!widget.signedIn) {
@@ -74,6 +75,7 @@ class BoardWidget : GlanceAppWidget() {
                         }
                     } else {
                         Column(GlanceModifier.fillMaxSize()) {
+                            val widgetId = GlanceAppWidgetManager(context).getAppWidgetId(id)
                             Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                                 Text(context.getString(COLUMNS.first { it.status == column }.label),
                                     style = TextStyle(color = FemhoWidget.palette.color { ink }, fontSize = WidgetText.title, fontWeight = FontWeight.Bold),
@@ -82,7 +84,8 @@ class BoardWidget : GlanceAppWidget() {
                                     style = TextStyle(color = FemhoWidget.palette.color { inkSoft }, fontSize = WidgetText.meta),
                                     modifier = GlanceModifier.padding(8.dp).clickable(actionStartActivity(
                                         Intent(context, WidgetConfigurationActivity::class.java)
-                                            .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, GlanceAppWidgetManager(context).getAppWidgetId(id)))))
+                                            .setData(Uri.Builder().scheme("femho").authority("widget-configure").appendPath(widgetId.toString()).build())
+                                            .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId))))
                             }
                             if (pending) {
                                 Text(context.getString(R.string.widget_pendingsync), style = TextStyle(color = FemhoWidget.palette.color { inkSoft }, fontSize = WidgetText.meta))
@@ -101,8 +104,7 @@ class BoardWidget : GlanceAppWidget() {
 
 private data class BoardFrame(
     val widget: WidgetContext,
-    val column: TaskStatus,
-    val tasks: List<Task>,
+    val snapshot: TaskBoardSnapshot?,
     val pending: Boolean,
     val account: String,
 )
@@ -138,7 +140,7 @@ class AdvanceTaskAction : ActionCallback {
             val last = repository.tasks.first().filter { it.scopeId == task.scopeId && it.status == next }.maxByOrNull { it.position }?.position
             repository.moveTask(task, next, last to null)
             // El worker conserva el reintent encara que el sistema mati el callback.
-            Notifications.requestSync(context)
+            Notifications.requestSync(context, account)
             FemhoWidgets.updateAll(context)
         }
     }

@@ -87,12 +87,64 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+  emulator:
+    name: Emulador Android ${{ matrix.api }}
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [34, 36]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Instal·lar l'emulador i la imatge
+        env:
+          API_LEVEL: ${{ matrix.api }}
+        run: |
+          android_tools="$ANDROID_HOME/cmdline-tools/latest/bin"
+          system_image="system-images;android-${API_LEVEL};google_apis;x86_64"
+          export ANDROID_AVD_HOME="$RUNNER_TEMP/femho-avd"
+          mkdir -p "$ANDROID_AVD_HOME"
+          "$android_tools/sdkmanager" emulator "$system_image"
+          "$android_tools/avdmanager" create avd --name femho-ci --package "$system_image" --device pixel_6 <<< 'no'
+          "$ANDROID_HOME/emulator/emulator" -list-avds | grep -Fx femho-ci
+          echo "ANDROID_AVD_HOME=$ANDROID_AVD_HOME" >> "$GITHUB_ENV"
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+          sudo chmod a+rw /dev/kvm
+      - name: Provar l'app amb un servidor aïllat
+        env:
+          ANDROID_SERIAL: emulator-5554
+        run: |
+          "$ANDROID_HOME/emulator/emulator" -avd femho-ci -port 5554 -no-window -no-audio \
+            -no-snapshot -no-boot-anim -gpu swiftshader_indirect -accel on > "$RUNNER_TEMP/femho-emulator.log" 2>&1 &
+          trap 'if [[ $? -ne 0 ]]; then tail -n 100 "$RUNNER_TEMP/femho-emulator.log"; fi; adb emu kill || true' EXIT
+          timeout 180 adb wait-for-device
+          for ((tries = 0; tries < 90; tries++)); do
+            if [[ "$(adb shell getprop sys.boot_completed | tr -d '\r')" == 1 ]]; then break; fi
+            sleep 2
+          done
+          [[ "$(adb shell getprop sys.boot_completed | tr -d '\r')" == 1 ]]
+          adb shell settings put global window_animation_scale 0
+          adb shell settings put global transition_animation_scale 0
+          adb shell settings put global animator_duration_scale 0
+          bash tools/android-emulator/smoke.sh
+
   # La signada va a part i **només a les etiquetes**: necessita la clau, i una clau que
   # s'usa a cada push d'una branca qualsevol és una clau que acaba signant coses que
   # ningú ha revisat.
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: build
+    needs: [build, emulator]
     runs-on: ubuntu-latest
     permissions:
       contents: write

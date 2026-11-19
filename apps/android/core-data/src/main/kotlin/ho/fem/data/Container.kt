@@ -50,7 +50,7 @@ class Container(context: Context) {
             // L'antic femho.db no té cap marca de propietat. Es conserva sencer i
             // no s'obre en nom de cap compte: una cua antiga no es pot atribuir amb seguretat.
             Workspace(Room.databaseBuilder(app, FemhoDatabase::class.java, "femho-${account.identity.key}.db")
-                .addMigrations(FemhoDatabase.MIGRATION_1_2, FemhoDatabase.MIGRATION_2_3)
+                .addMigrations(FemhoDatabase.MIGRATION_1_2, FemhoDatabase.MIGRATION_2_3, FemhoDatabase.MIGRATION_3_4)
                 .build())
         }
 
@@ -159,7 +159,32 @@ class Settings(private val context: Context) {
     private fun readAccountList(name: String, account: ActiveAccount): Flow<List<String>> =
         read(accountKey(name, account)).map { it?.split(",")?.filter(String::isNotEmpty).orEmpty() }
 
-    suspend fun activeScopes(account: ActiveAccount): List<String> = readAccountList(scopesKey, account).first()
+    fun activeScopeSelection(account: ActiveAccount): Flow<List<String>> =
+        readAccountList(scopesKey, account)
+
+    suspend fun activeScopes(account: ActiveAccount): List<String> = activeScopeSelection(account).first()
+
+    suspend fun toggleActiveScope(account: ActiveAccount, id: String) {
+        val key = accountKey(scopesKey, account)
+        context.dataStore.edit { preferences ->
+            val selected = preferences[key]?.split(",")?.filter(String::isNotBlank).orEmpty()
+            val next = if (id in selected) selected - id else selected + id
+            preferences[key] = next.joinToString(",")
+        }
+    }
+
+    suspend fun cachedLocale(account: ActiveAccount): String? =
+        read(accountKey("profile_locale", account)).first()
+
+    suspend fun cachedTimezone(account: ActiveAccount): String? =
+        read(accountKey("profile_timezone", account)).first()
+
+    suspend fun cacheProfilePresentation(account: ActiveAccount, locale: String, timezone: String) {
+        context.dataStore.edit {
+            it[accountKey("profile_locale", account)] = locale
+            it[accountKey("profile_timezone", account)] = timezone
+        }
+    }
 
     fun activeProjects(account: ActiveAccount): Flow<List<String>> = readAccountList(projectsKey, account)
     val theme: Flow<String> = read(themeKey).map { it ?: "system" }

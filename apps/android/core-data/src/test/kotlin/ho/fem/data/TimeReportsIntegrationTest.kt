@@ -29,7 +29,17 @@ class TimeReportsIntegrationTest {
         val dao = Proxy.newProxyInstance(FemhoDao::class.java.classLoader, arrayOf(FemhoDao::class.java)) { _, method, args ->
             when (method.name) {
                 "outbox" -> queue.toList()
+                "operation" -> queue.find { it.opId == args!![0] }
                 "dequeue" -> { queue.removeAll { it.opId == args!![0] }; Unit }
+                "acknowledgeTask" -> {
+                    queue.removeAll { it.opId == args!![0] }
+                    (args!![1] as List<*>).filterIsInstance<OutboxEntity>().forEach { updated ->
+                        val index = queue.indexOfFirst { it.opId == updated.opId }
+                        queue[index] = updated
+                    }
+                    current = args[2] as TaskEntity
+                    Unit
+                }
                 "failed" -> Unit
                 "lastPosition" -> null
                 "task" -> flowOf(current)

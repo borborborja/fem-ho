@@ -53,6 +53,7 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
+import java.time.ZoneId
 
 /**
  * El que venç avui. `docs/03` §9, la línia que porta des del primer dia sense fer.
@@ -80,11 +81,15 @@ class TodayWidget : GlanceAppWidget() {
 
             val data = widget.account?.let { account ->
                 withContext(Dispatchers.IO) {
-                    val local = Container.get(context).local(account)
-                    val today = LocalDate.now().toString()
+                    val container = Container.get(context)
+                    val local = container.local(account)
+                    val zone = container.settings.cachedTimezone(account)
+                        ?.let { runCatching { ZoneId.of(it) }.getOrNull() }
+                        ?: ZoneId.systemDefault()
+                    val date = LocalDate.now(zone)
+                    val today = date.toString()
                     val scopes = local.scopes().associate { it.id to it.color }
                     val locale = context.resources.configuration.locales[0]?.language ?: "ca"
-                    val date = LocalDate.parse(today)
                     TodayData(
                         tasks = local.due(today, widget.activeScopes),
                         overdue = local.overdue(today, widget.activeScopes),
