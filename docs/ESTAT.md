@@ -7,6 +7,21 @@ Data de l'última verificació completa: **2026-11-19**.
 
 ---
 
+## Fiabilitat d'Android · 0.20.1
+
+Android desa les tasques i les accions habituals de llistes en local i permet
+revisar els conflictes de la cua. La migració de Room v3 a v4 conserva les
+operacions pendents. El tauler manté la captura a mà i el detall conserva
+l'esborrany quan gira la pantalla.
+
+El calendari inclou tasques datades i aplica els àmbits i el fus del perfil.
+Ajustos gestiona tokens manuals i connexions MCP per OAuth. S'han comprovat els
+tres ginys al llançador d'Android 14.
+
+Han passat 133 proves JVM i set proves instrumentades a cadascun dels emuladors
+API 34 i 36. La prova amb l'APK R8 conserva una tasca pendent de v0.20.0 i la
+sincronitza una sola vegada després de reconnectar. [Auditoria i proves d'Android](auditoria-android-2026-09-10.md#reparació-del-flux-diari--19-de-novembre-de-2026).
+
 ## Lliurament de tasques i connexions MCP · 0.20.0
 
 L'API i MCP permeten crear tasques a qualsevol columna, inclosa la bústia, i
