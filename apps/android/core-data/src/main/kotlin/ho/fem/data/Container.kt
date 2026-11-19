@@ -1,6 +1,7 @@
 package ho.fem.data
 
 import android.content.Context
+import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
@@ -128,7 +129,9 @@ private val Context.dataStore by preferencesDataStore(name = "femho")
  * Les preferències que **no** són secretes: la URL del servidor, els àmbits actius, el
  * tema. Els testimonis van a un altre lloc, xifrats.
  */
-class Settings(private val context: Context) {
+class Settings internal constructor(private val dataStore: DataStore<Preferences>) {
+    constructor(context: Context) : this(context.dataStore)
+
     private val serverKey = stringPreferencesKey("server_url")
     private val scopesKey = "active_scopes"
 
@@ -156,8 +159,11 @@ class Settings(private val context: Context) {
     private fun accountKey(name: String, account: ActiveAccount): Preferences.Key<String> =
         stringPreferencesKey("${name}_${account.identity.key}")
 
+    private fun decodeAccountList(value: String?): List<String> =
+        value?.split(",")?.filter(String::isNotEmpty).orEmpty()
+
     private fun readAccountList(name: String, account: ActiveAccount): Flow<List<String>> =
-        read(accountKey(name, account)).map { it?.split(",")?.filter(String::isNotEmpty).orEmpty() }
+        read(accountKey(name, account)).map(::decodeAccountList)
 
     fun activeScopeSelection(account: ActiveAccount): Flow<List<String>> =
         readAccountList(scopesKey, account)
@@ -166,7 +172,7 @@ class Settings(private val context: Context) {
 
     suspend fun toggleActiveScope(account: ActiveAccount, id: String) {
         val key = accountKey(scopesKey, account)
-        context.dataStore.edit { preferences ->
+        dataStore.edit { preferences ->
             val selected = preferences[key]?.split(",")?.filter(String::isNotBlank).orEmpty()
             val next = if (id in selected) selected - id else selected + id
             preferences[key] = next.joinToString(",")
@@ -180,7 +186,7 @@ class Settings(private val context: Context) {
         read(accountKey("profile_timezone", account)).first()
 
     suspend fun cacheProfilePresentation(account: ActiveAccount, locale: String, timezone: String) {
-        context.dataStore.edit {
+        dataStore.edit {
             it[accountKey("profile_locale", account)] = locale
             it[accountKey("profile_timezone", account)] = timezone
         }
@@ -200,16 +206,32 @@ class Settings(private val context: Context) {
     val inboxShowOverdue: Flow<Boolean> = readBoolean(inboxShowOverdueKey).map { it ?: true }
 
     private fun read(key: Preferences.Key<String>): Flow<String?> =
-        context.dataStore.data.map { it[key] }
+        dataStore.data.map { it[key] }
 
     private fun readBoolean(key: Preferences.Key<Boolean>): Flow<Boolean?> =
-        context.dataStore.data.map { it[key] }
+        dataStore.data.map { it[key] }
 
     suspend fun setServerUrl(value: String) = write(serverKey, value)
     suspend fun setActiveScopes(account: ActiveAccount, value: List<String>) =
         write(accountKey(scopesKey, account), value.joinToString(","))
-    suspend fun setActiveProjects(account: ActiveAccount, value: List<String>) =
-        write(accountKey(projectsKey, account), value.joinToString(","))
+
+    suspend fun toggleActiveProject(account: ActiveAccount, id: String) {
+        updateActiveProjects(account) { selected -> if (id in selected) selected - id else selected + id }
+    }
+
+    suspend fun clearActiveProjects(account: ActiveAccount, ids: Set<String>) {
+        if (ids.isNotEmpty()) updateActiveProjects(account) { selected -> selected.filterNot { it in ids } }
+    }
+
+    private suspend fun updateActiveProjects(account: ActiveAccount, update: (List<String>) -> List<String>) {
+        val key = accountKey(projectsKey, account)
+        // Dos tocs seguits han de llegir la tria dins de la mateixa transacció que l'escriu.
+        dataStore.edit { preferences ->
+            val selected = decodeAccountList(preferences[key])
+            preferences[key] = update(selected).joinToString(",")
+        }
+    }
+
     suspend fun setTheme(value: String) = write(themeKey, value)
     suspend fun setAccent(value: String) = write(accentKey, value)
     // Preferències de la pestanya General
@@ -243,10 +265,10 @@ class Settings(private val context: Context) {
     }
 
     private suspend fun write(key: Preferences.Key<String>, value: String) {
-        context.dataStore.edit { it[key] = value }
+        dataStore.edit { it[key] = value }
     }
 
     private suspend fun writeBoolean(key: Preferences.Key<Boolean>, value: Boolean) {
-        context.dataStore.edit { it[key] = value }
+        dataStore.edit { it[key] = value }
     }
 }

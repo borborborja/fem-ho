@@ -291,12 +291,6 @@ class AppViewModel(private val container: Container) : ViewModel() {
         _createdShareUrl.value = null
     }
 
-    private val _sessions = MutableStateFlow<ho.fem.model.SessionReport>(ho.fem.model.SessionReport())
-    val sessions: StateFlow<ho.fem.model.SessionReport> = _sessions.asStateFlow()
-
-    private val _stats = MutableStateFlow<ho.fem.model.SessionStats>(ho.fem.model.SessionStats())
-    val stats: StateFlow<ho.fem.model.SessionStats> = _stats.asStateFlow()
-
     // ------------------------------------------------------------------ Dashboard
 
     private val _dashboard = MutableStateFlow<ho.fem.model.DashboardView>(ho.fem.model.DashboardView())
@@ -317,73 +311,6 @@ class AppViewModel(private val container: Container) : ViewModel() {
             _showCalendarWidget.value = container.settings.showCalendarWidget.first()
             runCatching { container.api(sessionAccount).dashboard() }
                 .onSuccess { _dashboard.value = it }
-        }
-    }
-
-    /** Carrega les Estadístiques de dedicació. GET /api/v1/sessions/stats. */
-    fun loadStats(from: String?, to: String?, userId: String?) {
-        val sessionAccount = activeAccount ?: return
-        sessionScope.launch {
-            val active = container.settings.activeScopes(sessionAccount)
-            runCatching {
-                container.api(sessionAccount).sessionStats(
-                    from = from,
-                    to = to,
-                    scopeIds = active,
-                    userId = userId,
-                )
-            }.onSuccess { _stats.value = it }
-        }
-    }
-
-    /** Carrega el Registre de dedicació. GET /api/v1/sessions amb els filtres. */
-    fun loadSessions(from: String?, to: String?, projectId: String?, userId: String?, search: String?) {
-        val sessionAccount = activeAccount ?: return
-        sessionScope.launch {
-            val active = container.settings.activeScopes(sessionAccount)
-            runCatching {
-                container.api(sessionAccount).sessions(
-                    from = from,
-                    to = to,
-                    scopeIds = active,
-                    projectId = projectId,
-                    userId = userId,
-                    search = search,
-                )
-            }.onSuccess { _sessions.value = it }
-        }
-    }
-
-    /** Mou o allarga un bloc del cronograma. PATCH /api/v1/sessions/{id}. */
-    fun updateSession(id: String, startedAt: String?, endedAt: String?, onSaved: () -> Unit = {}) {
-        val sessionAccount = activeAccount ?: return
-        sessionScope.launch {
-            runCatching { container.api(sessionAccount).updateSession(id, startedAt = startedAt, endedAt = endedAt) }.onSuccess { onSaved() }
-        }
-    }
-
-    /** Exporta el Registre en CSV. GET /api/v1/sessions/export.csv amb els filtres. */
-    fun exportSessionsCsv(
-        from: String?,
-        to: String?,
-        projectId: String?,
-        userId: String?,
-        search: String?,
-        onResult: (String) -> Unit,
-    ) {
-        val sessionAccount = activeAccount ?: return
-        sessionScope.launch {
-            val active = container.settings.activeScopes(sessionAccount)
-            runCatching {
-                container.api(sessionAccount).exportSessionsCsv(
-                    from = from,
-                    to = to,
-                    scopeIds = active,
-                    projectId = projectId,
-                    userId = userId,
-                    search = search,
-                )
-            }.onSuccess { onResult(it) }
         }
     }
 
@@ -599,8 +526,6 @@ class AppViewModel(private val container: Container) : ViewModel() {
         _joinError.value = null
         _joinDone.value = false
         _createdShareUrl.value = null
-        _sessions.value = ho.fem.model.SessionReport()
-        _stats.value = ho.fem.model.SessionStats()
         _dashboard.value = ho.fem.model.DashboardView()
         _createdToken.value = null
         calendarLoad?.cancel()
@@ -879,20 +804,15 @@ class AppViewModel(private val container: Container) : ViewModel() {
      */
     fun toggleProject(id: String) {
         val account = activeAccount ?: return
-        sessionScope.launch {
-            val ara = container.settings.activeProjects(account).first()
-            container.settings.setActiveProjects(account, if (id in ara) ara - id else ara + id)
-        }
+        sessionScope.launch { container.settings.toggleActiveProject(account, id) }
     }
 
     /** Torna un àmbit a "tots els seus": treu del filtre els projectes que en són. */
     fun clearProjectsOfScope(scopeId: String) {
         val account = activeAccount ?: return
         sessionScope.launch {
-            val seus = _projects.value.filter { it.scopeId == scopeId }.map { it.id }.toSet()
-            container.settings.setActiveProjects(
-                account, container.settings.activeProjects(account).first().filterNot { it in seus },
-            )
+            val ids = _projects.value.filter { it.scopeId == scopeId }.map { it.id }.toSet()
+            container.settings.clearActiveProjects(account, ids)
         }
     }
 

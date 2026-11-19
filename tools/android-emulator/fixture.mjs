@@ -42,11 +42,29 @@ async function account(address, name, locale) {
 
 const first = await account(email, 'Android Primary', 'en');
 const second = await account(otherEmail, 'Android Secondary', 'es');
+await api(`/api/v1/scopes/${first.scope}/settings`, {
+  method: 'PATCH',
+  token: first.token,
+  body: { time_tracking: true },
+});
+async function project(scope, name) {
+  return api('/api/v1/projects', {
+    method: 'POST',
+    token: first.token,
+    body: { scope_id: scope, name },
+  });
+}
+const firstProject = await project(first.scope, 'Personal project A');
+const secondProject = await project(first.scope, 'Personal project B');
+for (let index = 1; index <= 8; index += 1) {
+  await project(first.scope, `Long project name for the scrollable project menu ${index}`);
+}
 const task = await api('/api/v1/tasks', {
   method: 'POST',
   token: first.token,
   body: {
     scope_id: first.scope,
+    project_id: firstProject.id,
     title: 'Android fixture task',
     description: 'Initial description',
     due_date: today,
@@ -61,11 +79,13 @@ const team = await api('/api/v1/scopes', {
   token: first.token,
   body: { name: 'Android fixture team', kind: 'collective', color: '--plou-blue' },
 });
+const teamProject = await project(team.id, 'Team project');
 await api('/api/v1/tasks', {
   method: 'POST',
   token: first.token,
   body: {
     scope_id: team.id,
+    project_id: teamProject.id,
     title: 'Team calendar fixture task',
     status: 'todo',
     due_date: today,
@@ -134,6 +154,10 @@ process.stdout.write(
     otherEmail,
     password,
     scopeId: first.scope,
+    teamScopeId: team.id,
+    firstProjectId: firstProject.id,
+    secondProjectId: secondProject.id,
+    teamProjectId: teamProject.id,
     taskId: task.id,
     today,
     oauthGrantId: oauthGrant.id,

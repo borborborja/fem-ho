@@ -7,6 +7,18 @@ Data de l'última verificació completa: **2026-11-19**.
 
 ---
 
+## Interfície compacta d'Android · 0.20.2
+
+La capçalera passa de Tasques a Calendari. Els informes de dedicació es consulten
+a la web. Les pestanyes del tauler mostren el recompte i la columna següent treu
+el cap 32 dp. Els àmbits continuen a la vista i el selector de projectes té un fons
+opac. Es poden marcar diversos projectes abans de tancar-lo i la tria es desa per
+compte i servidor.
+
+Han passat onze proves instrumentades a cadascun dels emuladors API 34 i 36.
+S'ha comparat l'APK amb R8 amb la versió 0.20.1, en clar i fosc i amb la lletra al
+100 % i al 140 %. [Interfície d'Android](03-ui-android.md#3--estructura).
+
 ## Fiabilitat d'Android · 0.20.1
 
 Android desa les tasques i les accions habituals de llistes en local i permet

@@ -6,12 +6,15 @@ import android.net.ConnectivityManager
 import android.os.ParcelFileDescriptor
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.isFocused
+import androidx.compose.ui.test.isOn
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
@@ -57,9 +60,14 @@ class AndroidDailyFlowTest {
         tag("server-check").performClick()
         signIn(email, password)
         awaitLocale("en")
+        compose.onAllNodes(
+            hasAnyAncestor(hasTestTag("primary-view-tabs")) and hasClickAction(),
+            useUnmergedTree = true,
+        ).assertCountEquals(2)
         tag("board-task-$task").performClick()
         tag("task-deadline").assertTextContains(date, substring = true)
         tag("task-close").performClick()
+        verifyProjectFilter(task, scope)
 
         tag("view-calendar").performClick()
         tag("calendar-date-$date").performClick()
@@ -167,11 +175,77 @@ class AndroidDailyFlowTest {
         tag("board-column-inbox")
     }
 
+    private fun verifyProjectFilter(task: String, personalScope: String) {
+        val first = "project-${argument("firstProjectId")}"
+        val second = "project-${argument("secondProjectId")}"
+        val team = "project-${argument("teamProjectId")}"
+        val allPersonal = "projects-all-$personalScope"
+        val allTeam = "projects-all-${argument("teamScopeId")}"
+
+        tag("projects-toggle").performClick()
+        tag(allPersonal).performScrollTo().assertIsOn()
+        tag(second).performScrollTo().performClick()
+        waitForProjectSelection(second)
+        dismissProjectMenu()
+        waitForText("Projects (1)")
+        compose.onNodeWithTag("board-task-$task").assertDoesNotExist()
+
+        tag("projects-toggle").performClick()
+        tag(first).performScrollTo().performClick()
+        tag(team).performScrollTo().performClick()
+        waitForProjectSelection(first)
+        waitForProjectSelection(second)
+        waitForProjectSelection(team)
+        dismissProjectMenu()
+        waitForText("Projects (3)")
+        tag("board-task-$task")
+
+        tag("scope-chip-$personalScope").performClick()
+        waitForText("Projects (2)")
+        tag("scope-chip-$personalScope").performClick()
+        waitForText("Projects (3)")
+        compose.activityRule.scenario.recreate()
+        waitForText("Projects (3)")
+
+        tag("projects-toggle").performClick()
+        tag(allPersonal).performScrollTo().performClick()
+        waitForProjectSelection(allPersonal)
+        waitForProjectSelection(team)
+        tag(allTeam).performScrollTo().performClick()
+        waitForProjectSelection(allTeam)
+        dismissProjectMenu()
+        waitForText("Projects")
+    }
+
+    private fun waitForProjectSelection(tag: String) = compose.waitUntil(15_000) {
+        compose.onAllNodes(hasTestTag(tag) and isOn(), useUnmergedTree = true)
+            .fetchSemanticsNodes().isNotEmpty()
+    }
+
+    private fun dismissProjectMenu() {
+        val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
+        ParcelFileDescriptor.AutoCloseInputStream(automation.executeShellCommand("input keyevent KEYCODE_BACK"))
+            .use { it.readBytes() }
+        compose.waitUntil(15_000) {
+            compose.onAllNodes(hasTestTag("projects-menu"), useUnmergedTree = true)
+                .fetchSemanticsNodes().isEmpty()
+        }
+    }
+
     private fun argument(key: String): String = requireNotNull(args.getString(key)) { key }
 
     private fun awaitLocale(language: String) {
         val manager = target.getSystemService(LocaleManager::class.java)
-        compose.waitUntil(15_000) { manager.applicationLocales[0]?.language == language }
+        compose.waitUntil(15_000) {
+            if (manager.applicationLocales[0]?.toLanguageTag() != language) return@waitUntil false
+            // El perfil pot canviar l'idioma abans que la nova Activity tingui finestra.
+            var ready = false
+            compose.activityRule.scenario.onActivity { activity ->
+                ready = activity.resources.configuration.locales[0]?.toLanguageTag() == language &&
+                    activity.hasWindowFocus()
+            }
+            ready
+        }
     }
 
     private fun tag(name: String, enabled: Boolean = false): SemanticsNodeInteraction {
