@@ -4,13 +4,15 @@ import android.app.LocaleManager
 import android.content.Context
 import android.net.ConnectivityManager
 import android.os.ParcelFileDescriptor
-import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.assertIsOn
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -109,9 +111,11 @@ class AndroidDailyFlowTest {
 
         tag("open-settings").performClick()
         tag("settings-tab-mcp").performScrollTo().performClick()
-        tag("mcp-channel-mcp").performScrollTo().performClick()
+        tag("mcp-channel-mcp", enabled = true).performScrollTo().performClick()
         val oauthGrantId = argument("oauthGrantId")
-        tag("mcp-edit-$oauthGrantId").performScrollTo().performClick()
+        val restrictGrant = tag("mcp-edit-$oauthGrantId", enabled = true)
+        tag("mcp-channel-mcp").assertIsOn()
+        restrictGrant.performScrollTo().performClick()
         tag("mcp-choose-operation-tasks:move").performScrollTo().performClick()
         tag("mcp-save-token").performScrollTo().performClick()
         compose.waitUntil(15_000) {
@@ -121,14 +125,14 @@ class AndroidDailyFlowTest {
                     it.getJSONArray("capabilities").getString(0) == "tasks:read"
             }
         }
-        tag("mcp-new-token").performScrollTo().performClick()
+        tag("mcp-new-token", enabled = true).performScrollTo().performClick()
         tag("mcp-token-name").performScrollTo().performTextReplacement("Android smoke token")
         tag("mcp-choose-scope-$scope").performScrollTo().performClick()
         tag("mcp-save-token").performScrollTo().performClick()
         tag("mcp-created-token")
         val created = grants(base, token).single { it.getString("name") == "Android smoke token" }
         val tokenId = created.getString("id")
-        tag("mcp-revoke-$tokenId").performScrollTo().performClick()
+        tag("mcp-revoke-$tokenId", enabled = true).performScrollTo().performClick()
         tag("mcp-confirm-revoke").performClick()
         compose.waitUntil(15_000) {
             grants(base, token).any {
@@ -170,12 +174,14 @@ class AndroidDailyFlowTest {
         compose.waitUntil(15_000) { manager.applicationLocales[0]?.language == language }
     }
 
-    private fun tag(name: String) =
-        compose.onNodeWithTag(name, useUnmergedTree = true).also {
-            compose.waitUntil(25_000) {
-                compose.onAllNodesWithTag(name, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
-            }
+    private fun tag(name: String, enabled: Boolean = false): SemanticsNodeInteraction {
+        val tagged = hasTestTag(name)
+        val matcher = if (enabled) tagged and isEnabled() else tagged
+        compose.waitUntil(25_000) {
+            compose.onAllNodes(matcher, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
         }
+        return compose.onNode(matcher, useUnmergedTree = true)
+    }
 
     private fun waitForText(text: String) = compose.waitUntil(25_000) {
         compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty()
