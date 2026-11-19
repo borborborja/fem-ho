@@ -125,7 +125,8 @@ function AppRoute() {
 
   if (state.status === 'loading') return <LoadingScreen />;
 
-  if (state.status === 'anonymous') return <LoginScreen />;
+  if (state.status === 'anonymous')
+    return <LoginScreen mcpConnection={route.path === '/connect/mcp'} />;
   if (route.path === '/connect/mcp') {
     const requestId = route.query.get('request') ?? '';
     return <McpConsentScreen key={requestId} requestId={requestId} />;

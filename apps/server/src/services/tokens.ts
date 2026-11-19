@@ -35,6 +35,12 @@ export interface ApiTokenSummary {
   expires_at: string | null;
   last_used_at: string | null;
   revoked_at: string | null;
+  oauth?: OAuthStatus;
+}
+
+interface OAuthStatus {
+  status: 'pending' | 'active' | 'expired' | 'revoked';
+  expires_at: string | null;
 }
 
 interface TokenRow {
@@ -50,9 +56,36 @@ interface TokenRow {
   expires_at: string | null;
   last_used_at: string | null;
   revoked_at: string | null;
+  access_expires_at: string | null;
+  refresh_expires_at: string | null;
+  session_revoked_at: string | null;
+  code_expires_at: string | null;
 }
 
-function toSummary(row: TokenRow): ApiTokenSummary {
+const tokenSelect = sql<TokenRow>`
+  SELECT t.id, t.name, t.token_prefix, t.capabilities, t.ai_agent_id, t.scope_ids,
+         t.created_at, t.expires_at, t.last_used_at, t.revoked_at, t.channels, t.credential_type,
+         s.access_expires_at, s.refresh_expires_at, s.revoked_at AS session_revoked_at,
+         c.expires_at AS code_expires_at
+  FROM api_tokens t
+  LEFT JOIN mcp_oauth_sessions s ON t.credential_type = 'oauth' AND s.token_id = t.id
+  LEFT JOIN mcp_oauth_codes c ON t.credential_type = 'oauth' AND c.token_id = t.id
+    AND s.id IS NULL AND c.used = 0
+`;
+
+function oauthStatus(row: TokenRow, now: number): OAuthStatus {
+  const sessionExpiry = [row.refresh_expires_at, row.access_expires_at]
+    .filter((date): date is string => date !== null)
+    .sort((a, b) => Date.parse(b) - Date.parse(a))[0];
+  const expires_at = sessionExpiry ?? row.code_expires_at;
+  if (row.revoked_at !== null || row.session_revoked_at !== null)
+    return { status: 'revoked', expires_at };
+  if (expires_at === null || Date.parse(expires_at) <= now)
+    return { status: 'expired', expires_at };
+  return { status: sessionExpiry === undefined ? 'pending' : 'active', expires_at };
+}
+
+function toSummary(row: TokenRow, now: number): ApiTokenSummary {
   return {
     channels: JSON.parse(row.channels) as string[],
     credential_type: row.credential_type,
@@ -73,6 +106,7 @@ function toSummary(row: TokenRow): ApiTokenSummary {
     expires_at: row.expires_at,
     last_used_at: row.last_used_at,
     revoked_at: row.revoked_at,
+    ...(row.credential_type === 'oauth' ? { oauth: oauthStatus(row, now) } : {}),
   };
 }
 
@@ -84,13 +118,11 @@ export async function listTokens(
   if (!hasCapability(principal, 'tokens:manage')) throw missingCapability('tokens:manage');
 
   const found = await sql<TokenRow>`
-    SELECT id, name, token_prefix, capabilities, ai_agent_id, scope_ids, created_at,
-           expires_at, last_used_at, revoked_at, channels, credential_type
-    FROM api_tokens WHERE user_id = ${principal.userId}
-    ORDER BY created_at DESC
+    ${tokenSelect} WHERE t.user_id = ${principal.userId} ORDER BY t.created_at DESC
   `.execute(db);
 
-  return found.rows.map(toSummary);
+  const now = Date.now();
+  return found.rows.map((row) => toSummary(row, now));
 }
 
 export interface CreateTokenInput {
@@ -316,14 +348,20 @@ export async function updateToken(
   input: Partial<CreateTokenInput>,
 ): Promise<ApiTokenSummary> {
   requireHumanSession(principal);
-  const before = (await listTokens(ctx.tx, principal)).find((t) => t.id === id);
-  if (!before) throw new PolicyError('not-found', 'Not found', 404, 'Unknown credential.');
-  if (before.revoked_at !== null || before.credential_type === 'oauth')
+  if (!hasCapability(principal, 'tokens:manage')) throw missingCapability('tokens:manage');
+  const { rows } = await sql<TokenRow>`
+    ${tokenSelect} WHERE t.user_id = ${principal.userId} AND t.id = ${id}
+  `.execute(ctx.tx);
+  const row = rows[0];
+  if (!row) throw new PolicyError('not-found', 'Not found', 404, 'Unknown credential.');
+  const before = toSummary(row, Date.parse(ctx.now));
+  if (before.oauth) return narrowOAuthToken(ctx, principal, row, before, input);
+  if (before.revoked_at !== null)
     throw new PolicyError(
       'credential-not-editable',
-      'Reconnect required',
+      'Credential revoked',
       409,
-      'Reconnect OAuth clients to change their consent.',
+      'A revoked credential cannot be edited.',
     );
   if (input.ai_agent_id !== undefined || input.credential_type !== undefined)
     throw new PolicyError(
@@ -359,6 +397,87 @@ export async function updateToken(
     changes: { permissions: { from: before, to: after } },
   });
   return after;
+}
+
+function narrowSelection(input: unknown, current: string[]): string[] {
+  if (input === undefined) return current;
+  if (!Array.isArray(input) || input.length === 0 || input.some((item) => typeof item !== 'string'))
+    throw new PolicyError(
+      'invalid-token',
+      'Invalid token',
+      422,
+      'Keep at least one permission and one scope, or revoke the connection.',
+    );
+  if (input.some((item) => !current.includes(item)))
+    throw new PolicyError(
+      'oauth-consent-required',
+      'Reconnect required',
+      409,
+      'Reload the existing grant. Adding permissions or scopes requires a new consent.',
+    );
+  return current.filter((item) => input.includes(item));
+}
+
+async function narrowOAuthToken(
+  ctx: AuditContext,
+  principal: Principal,
+  row: TokenRow,
+  before: ApiTokenSummary,
+  input: Partial<CreateTokenInput>,
+): Promise<ApiTokenSummary> {
+  if (before.oauth?.status !== 'active' && before.oauth?.status !== 'pending')
+    throw new PolicyError(
+      'credential-not-editable',
+      'OAuth connection ended',
+      409,
+      'Start a new connection from the MCP client.',
+    );
+
+  if (
+    (!Object.hasOwn(input, 'capabilities') && !Object.hasOwn(input, 'scope_ids')) ||
+    Object.keys(input).some((key) => key !== 'capabilities' && key !== 'scope_ids')
+  )
+    throw new PolicyError(
+      'invalid-token',
+      'Invalid token',
+      422,
+      'Only permissions and scopes can be reduced for an OAuth connection.',
+    );
+  const capabilities = narrowSelection(input.capabilities, before.capabilities);
+  const scopeIds = narrowSelection(input.scope_ids, before.scope_ids);
+  if (
+    capabilities.length === before.capabilities.length &&
+    scopeIds.length === before.scope_ids.length
+  ) {
+    ctx.noChange();
+    return before;
+  }
+
+  // Comparar les dues seleccions evita reintroduir permisos retirats per una edició concurrent.
+  const updated = await sql<{ id: string }>`
+    UPDATE api_tokens SET capabilities = ${JSON.stringify(capabilities)},
+      scope_ids = ${JSON.stringify(scopeIds)}
+    WHERE id = ${row.id} AND user_id = ${principal.userId} AND revoked_at IS NULL
+      AND capabilities = ${row.capabilities} AND scope_ids = ${row.scope_ids}
+    RETURNING id
+  `.execute(ctx.tx);
+  if (updated.rows.length !== 1)
+    throw new PolicyError(
+      'oauth-grant-conflict',
+      'Connection changed',
+      409,
+      'Reload the connection before changing the grant.',
+    );
+  ctx.record({
+    entityType: 'api_token',
+    entityId: row.id,
+    verb: 'updated',
+    changes: {
+      capabilities: { from: before.capabilities, to: capabilities },
+      scope_ids: { from: before.scope_ids, to: scopeIds },
+    },
+  });
+  return { ...before, capabilities, scope_ids: scopeIds };
 }
 
 export async function revokeToken(

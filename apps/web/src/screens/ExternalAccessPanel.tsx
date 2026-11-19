@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { t, type components, type operations } from '@fem-ho/contracts';
-import { api, failureText } from '../app/api.js';
+import { api, ApiError, failureText } from '../app/api.js';
 import { useApi, useMutation } from '../app/useApi.js';
 import { useSessionData } from '../app/session.js';
 import type { ApiTokenSummary, Scope } from '../app/types.js';
@@ -9,6 +9,9 @@ type Access = components['schemas']['ExternalAccess'];
 type TokenInput = NonNullable<
   operations['createApiToken']['requestBody']
 >['content']['application/json'];
+type TokenUpdate = operations['updateApiToken']['requestBody']['content']['application/json'];
+type ConsentInput =
+  operations['consentMcpAuthorization']['requestBody']['content']['application/json'];
 
 const TASK_OPERATIONS = [
   ['tasks:read', 'external.operation.read'],
@@ -21,6 +24,31 @@ const TASK_OPERATIONS = [
 type TaskOperation = (typeof TASK_OPERATIONS)[number][0];
 type Permission = 'read_only' | 'read_write' | 'custom';
 const DELETE_CAPABILITIES = ['tasks:delete', 'events:delete'];
+const OAUTH_CAPABILITIES: Record<string, string> = {
+  'tasks:write': 'external.capability.tasksWrite',
+  'events:read': 'external.capability.eventsRead',
+  'events:write': 'external.capability.eventsWrite',
+  'projects:read': 'external.capability.projectsRead',
+  'projects:write': 'external.capability.projectsWrite',
+  'scopes:read': 'external.capability.scopesRead',
+  'checklists:read': 'external.capability.checklistsRead',
+  'checklists:write': 'external.capability.checklistsWrite',
+  'comments:read': 'external.capability.commentsRead',
+  'comments:write': 'external.capability.commentsWrite',
+  'attachments:read': 'external.capability.attachmentsRead',
+  'attachments:write': 'external.capability.attachmentsWrite',
+};
+
+function capabilityLabel(capability: string): string {
+  const key =
+    TASK_OPERATIONS.find(([operation]) => operation === capability)?.[1] ??
+    OAUTH_CAPABILITIES[capability];
+  return key ? t(key) : capability;
+}
+
+function scopeName(scopes: Scope[], id: string): string {
+  return scopes.find((scope) => scope.id === id)?.name ?? t('external.unavailableScope');
+}
 
 function operationsOf(capabilities: readonly string[]): TaskOperation[] {
   return TASK_OPERATIONS.map(([operation]) => operation).filter(
@@ -92,21 +120,30 @@ export function ScopeSelection({
   scopes,
   selected,
   onChange,
+  allowSelectAll = true,
 }: {
-  scopes: Scope[];
+  scopes: Pick<Scope, 'id' | 'name'>[];
   selected: string[];
   onChange: (ids: string[]) => void;
+  allowSelectAll?: boolean;
 }) {
   return (
     <fieldset style={{ border: 0, padding: 0, display: 'grid', gap: 8 }}>
       <legend>{t('external.scopes')}</legend>
-      <button type="button" className="plou-btn" onClick={() => onChange(scopes.map((s) => s.id))}>
-        {t('external.selectAll')}
-      </button>
+      {allowSelectAll ? (
+        <button
+          type="button"
+          className="plou-btn"
+          onClick={() => onChange(scopes.map((s) => s.id))}
+        >
+          {t('external.selectAll')}
+        </button>
+      ) : null}
       {scopes.map((scope) => (
         <label key={scope.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <input
             type="checkbox"
+            data-testid={`credential-scope-${scope.id}`}
             checked={selected.includes(scope.id)}
             onChange={(e) =>
               onChange(
@@ -119,7 +156,7 @@ export function ScopeSelection({
           {scope.name}
         </label>
       ))}
-      <small>{t('external.futureScopes')}</small>
+      {allowSelectAll ? <small>{t('external.futureScopes')}</small> : null}
     </fieldset>
   );
 }
@@ -140,6 +177,7 @@ function TaskOperationSelection({
         <label key={operation} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <input
             type="checkbox"
+            data-testid={`credential-operation-${operation}`}
             checked={selected.includes(operation)}
             onChange={(e) =>
               onChange(
@@ -383,6 +421,98 @@ async function probe(token: string) {
   return identity;
 }
 
+function OAuthRestrictionEditor({
+  token,
+  scopes,
+  onDone,
+  onCancel,
+}: {
+  token: ApiTokenSummary;
+  scopes: Scope[];
+  onDone: () => void;
+  onCancel: () => void;
+}) {
+  const grantedCapabilities = [...new Set(token.capabilities)];
+  const grantedScopes = [...new Set(token.scope_ids)];
+  const [capabilities, setCapabilities] = useState(grantedCapabilities);
+  const [scopeIds, setScopeIds] = useState(grantedScopes);
+  const save = useMutation(async () => {
+    const input: TokenUpdate = { capabilities, scope_ids: scopeIds };
+    await api.patch(`/api/v1/tokens/${token.id}`, input);
+    onDone();
+  });
+  const changed =
+    capabilities.length < grantedCapabilities.length || scopeIds.length < grantedScopes.length;
+  const stale = save.error instanceof ApiError && save.error.status === 409;
+  return (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        void save.run();
+      }}
+      style={{ display: 'grid', gap: 12 }}
+    >
+      <p style={{ margin: 0 }}>{t('external.restrictHelp')}</p>
+      <fieldset style={{ border: 0, padding: 0, display: 'grid', gap: 8 }}>
+        <legend>{t('external.permission')}</legend>
+        {grantedCapabilities.map((capability) => (
+          <label key={capability} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <input
+              type="checkbox"
+              data-testid={`oauth-restrict-capability-${capability}`}
+              checked={capabilities.includes(capability)}
+              onChange={(e) =>
+                setCapabilities(
+                  e.target.checked
+                    ? [...capabilities, capability]
+                    : capabilities.filter((item) => item !== capability),
+                )
+              }
+            />
+            {capabilityLabel(capability)}
+          </label>
+        ))}
+      </fieldset>
+      <ScopeSelection
+        scopes={grantedScopes.map((id) => ({ id, name: scopeName(scopes, id) }))}
+        selected={scopeIds}
+        onChange={setScopeIds}
+        allowSelectAll={false}
+      />
+      <ErrorText error={stale ? t('external.connectionChanged') : save.error} />
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        {stale ? (
+          <button type="button" className="plou-btn plou-btn-primary" onClick={onDone}>
+            {t('external.reloadConnections')}
+          </button>
+        ) : (
+          <button
+            className="plou-btn plou-btn-primary"
+            data-testid="oauth-restrict-save"
+            disabled={save.busy || !changed || capabilities.length === 0 || scopeIds.length === 0}
+          >
+            {t('external.save')}
+          </button>
+        )}
+        <button type="button" className="plou-btn" disabled={save.busy} onClick={onCancel}>
+          {t('external.cancel')}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function credentialStatus(token: ApiTokenSummary, access: Access) {
+  if (token.oauth) {
+    return token.oauth.status === 'active' && !access.mcp_enabled ? 'paused' : token.oauth.status;
+  }
+  if (token.revoked_at) return 'revoked';
+  if (token.expires_at && Date.parse(token.expires_at) <= Date.now()) return 'expired';
+  return (token.channels ?? ['api', 'mcp']).some((channel) => access[`${channel}_enabled`])
+    ? 'active'
+    : 'paused';
+}
+
 export function ExternalAccessPanel({ onGoToAgent }: { onGoToAgent: () => void }) {
   const access = useApi<Access>('/api/v1/external-access');
   const tokens = useApi<{ data: ApiTokenSummary[] }>('/api/v1/tokens');
@@ -507,99 +637,111 @@ export function ExternalAccessPanel({ onGoToAgent }: { onGoToAgent: () => void }
       <Box>
         <h3>{t('external.credentials')}</h3>
         <ErrorText error={tokens.error ?? revoke.error} />
-        {(tokens.data?.data ?? []).map((token) => (
-          <article
-            data-testid={`credential-${token.id}`}
-            key={token.id}
-            style={{
-              display: 'grid',
-              gap: 6,
-              padding: '12px 0',
-              borderBottom: '1px solid var(--card-border)',
-            }}
-          >
-            <strong>{token.name}</strong>
-            <span>
-              {token.ai_agent_id
-                ? t('external.agentCredential')
-                : token.credential_type === 'oauth'
-                  ? t('external.oauthCredential')
-                  : token.token_prefix}
-            </span>
-            <span>
-              {(token.channels ?? ['api', 'mcp']).map((c) => t(`external.${c}`)).join(' · ')} ·{' '}
-              {permissionSummary(token.capabilities)}
-            </span>
-            <span>
-              {token.scope_ids.length
-                ? token.scope_ids
-                    .map(
-                      (id) =>
-                        scopes.find((s) => s.id === id)?.name ?? t('external.unavailableScope'),
-                    )
-                    .join(' · ')
-                : t(token.ai_agent_id ? 'external.inheritedScopes' : 'external.emptyScopes')}
-            </span>
-            <details>
-              <summary>{t('external.permissionsDetail')}</summary>
-              <p>{token.capabilities.join(' · ')}</p>
-            </details>
-            <small>
-              {t('external.lastUsed', {
-                date: token.last_used_at
-                  ? new Date(token.last_used_at).toLocaleString()
-                  : t('tokens.never'),
-              })}{' '}
-              ·{' '}
-              {t('external.expires', {
-                date: token.expires_at
-                  ? new Date(token.expires_at).toLocaleDateString()
-                  : t('external.never'),
-              })}
-            </small>
-            <span>
-              {t(
-                token.revoked_at
-                  ? 'external.revoked'
-                  : token.expires_at && Date.parse(token.expires_at) <= Date.now()
-                    ? 'external.expired'
-                    : !(token.channels ?? ['api', 'mcp']).some((c) =>
-                          c === 'api' ? config.api_enabled : config.mcp_enabled,
-                        )
-                      ? 'external.paused'
-                      : 'external.active',
-              )}
-            </span>
-            {!token.revoked_at ? (
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {token.ai_agent_id ? (
-                  <button className="plou-btn" onClick={onGoToAgent}>
-                    {t('tokens.aiOwnedGo')}
+        {(tokens.data?.data ?? []).map((token) => {
+          const oauth = token.credential_type === 'oauth';
+          const status = credentialStatus(token, config);
+          const canRestrict =
+            oauth && (status === 'active' || status === 'paused' || status === 'pending');
+          const expiry = oauth ? token.oauth?.expires_at : token.expires_at;
+          return (
+            <article
+              data-testid={`credential-${token.id}`}
+              key={token.id}
+              style={{
+                display: 'grid',
+                gap: 6,
+                padding: '12px 0',
+                borderBottom: '1px solid var(--card-border)',
+                overflowWrap: 'anywhere',
+              }}
+            >
+              <strong>{token.name}</strong>
+              <span>
+                {token.ai_agent_id
+                  ? t('external.agentCredential')
+                  : oauth
+                    ? t('external.oauthCredential')
+                    : t('external.manualCredential', { prefix: token.token_prefix })}
+              </span>
+              <span>
+                {(token.channels ?? ['api', 'mcp']).map((c) => t(`external.${c}`)).join(' · ')} ·{' '}
+                {permissionSummary(token.capabilities)}
+              </span>
+              <span>
+                {token.scope_ids.length
+                  ? token.scope_ids.map((id) => scopeName(scopes, id)).join(' · ')
+                  : t(token.ai_agent_id ? 'external.inheritedScopes' : 'external.emptyScopes')}
+              </span>
+              <details>
+                <summary>{t('external.permissionsDetail')}</summary>
+                <p>{token.capabilities.map(capabilityLabel).join(' · ')}</p>
+              </details>
+              <small>
+                {t('external.lastUsed', {
+                  date: token.last_used_at
+                    ? new Date(token.last_used_at).toLocaleString()
+                    : t('tokens.never'),
+                })}{' '}
+                ·{' '}
+                {expiry
+                  ? t('external.expires', {
+                      date: oauth
+                        ? new Date(expiry).toLocaleString()
+                        : new Date(expiry).toLocaleDateString(),
+                    })
+                  : t(oauth ? 'external.noConnectionExpiry' : 'external.never')}
+              </small>
+              <span data-testid={oauth ? `oauth-status-${token.id}` : undefined}>
+                {t(`external.${status}`)}
+              </span>
+              {status !== 'revoked' ? (
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {token.ai_agent_id ? (
+                    <button className="plou-btn" onClick={onGoToAgent}>
+                      {t('tokens.aiOwnedGo')}
+                    </button>
+                  ) : !oauth ? (
+                    <button className="plou-btn" onClick={() => setEditing(token)}>
+                      {t('external.edit')}
+                    </button>
+                  ) : canRestrict ? (
+                    <button
+                      className="plou-btn"
+                      data-testid={`oauth-restrict-${token.id}`}
+                      onClick={() => setEditing(token)}
+                    >
+                      {t('external.restrict')}
+                    </button>
+                  ) : null}
+                  <button
+                    className="plou-btn"
+                    data-testid={`token-revoke-${token.id}`}
+                    disabled={revoke.busy}
+                    onClick={() => void revoke.run(token.id)}
+                  >
+                    {t('tokens.revoke')}
                   </button>
-                ) : token.credential_type !== 'oauth' ? (
-                  <button className="plou-btn" onClick={() => setEditing(token)}>
-                    {t('external.edit')}
-                  </button>
-                ) : (
-                  <small>{t('external.reconnect')}</small>
-                )}
-                <button
-                  className="plou-btn"
-                  data-testid={`token-revoke-${token.id}`}
-                  disabled={revoke.busy}
-                  onClick={() => void revoke.run(token.id)}
-                >
-                  {t('tokens.revoke')}
-                </button>
-              </div>
-            ) : null}
-          </article>
-        ))}
+                </div>
+              ) : null}
+              {canRestrict && editing && editing !== 'new' && editing.id === token.id ? (
+                <OAuthRestrictionEditor
+                  token={editing}
+                  scopes={scopes}
+                  onCancel={() => setEditing(null)}
+                  onDone={() => {
+                    setEditing(null);
+                    tokens.reload();
+                  }}
+                />
+              ) : null}
+            </article>
+          );
+        })}
         <button className="plou-btn plou-btn-primary" onClick={() => setEditing('new')}>
           {t('tokens.create')}
         </button>
       </Box>
-      {editing ? (
+      {editing && (editing === 'new' || editing.credential_type !== 'oauth') ? (
         <TokenEditor
           key={typeof editing === 'string' ? editing : editing.id}
           access={config}
@@ -650,10 +792,16 @@ export function McpConsentScreen({ requestId }: { requestId: string }) {
   type Request = operations['getMcpAuthorization']['responses'][200]['content']['application/json'];
   const request = useApi<Request>(`/api/v1/mcp/authorization/${encodeURIComponent(requestId)}`);
   const access = useApi<Access>('/api/v1/external-access');
-  const { scopes } = useSessionData();
+  const { profile, scopes } = useSessionData();
+  const account =
+    profile.email && profile.email !== profile.name
+      ? `${profile.name} (${profile.email})`
+      : profile.name;
   const [selected, setSelected] = useState<string[]>([]);
   const [permission, setPermission] = useState<Permission>('custom');
-  const [selectedOperations, setOperations] = useState<TaskOperation[]>(['tasks:read']);
+  const [selectedOperations, setOperations] = useState<TaskOperation[]>(() =>
+    TASK_OPERATIONS.map(([operation]) => operation),
+  );
   const [enable, setEnable] = useState(false);
   const readRequested = request.data?.read_requested !== false;
   const writeRequested = request.data?.write_requested === true;
@@ -661,58 +809,74 @@ export function McpConsentScreen({ requestId }: { requestId: string }) {
     operation === 'tasks:read' ? readRequested : writeRequested;
   const capabilities = selectedOperations.filter(canChoose);
   const submit = useMutation(async (approve: boolean) => {
-    if (approve && !access.data?.mcp_enabled && enable)
-      await api.patch('/api/v1/external-access', { mcp_enabled: true });
+    const input: ConsentInput = approve
+      ? {
+          approve,
+          permission,
+          scope_ids: selected,
+          ...(permission === 'custom' ? { capabilities } : {}),
+          ...(!access.data?.mcp_enabled && enable ? { enable_mcp: true } : {}),
+        }
+      : { approve };
     const result = await api.post<{ redirect_url: string }>(
       `/api/v1/mcp/authorization/${encodeURIComponent(requestId)}`,
-      approve
-        ? {
-            approve,
-            permission,
-            scope_ids: selected,
-            ...(permission === 'custom' ? { capabilities } : {}),
-          }
-        : { approve },
+      input,
     );
     window.location.assign(result.redirect_url);
   });
   return (
-    <main style={{ maxWidth: 640, margin: '40px auto', padding: 20 }}>
+    <main data-testid="mcp-consent" style={{ maxWidth: 640, margin: '40px auto', padding: 20 }}>
       <Box>
-        <h1>{t('external.authorize')}</h1>
+        <h1 style={{ margin: 0 }}>{t('external.authorize')}</h1>
         <ErrorText error={request.error ?? access.error ?? submit.error} />
         {request.data ? (
           <>
-            <h2>{request.data.client_name}</h2>
-            <p style={{ overflowWrap: 'anywhere' }}>{new URL(request.data.redirect_uri).origin}</p>
-            <p>{t('external.consentHelp')}</p>
+            <header style={{ display: 'grid', gap: 6, overflowWrap: 'anywhere' }}>
+              <h2 style={{ margin: 0 }}>{request.data.client_name}</h2>
+              <p data-testid="mcp-consent-account" style={{ margin: 0 }}>
+                {t('external.consentAccount', { account })}
+              </p>
+              <p style={{ margin: 0 }}>
+                {t('external.consentDestination', {
+                  origin: new URL(request.data.redirect_uri).origin,
+                })}
+              </p>
+            </header>
+            <p style={{ margin: 0 }}>{t('external.consentHelp')}</p>
             <ScopeSelection scopes={scopes} selected={selected} onChange={setSelected} />
-            <label>
-              {t('external.permission')}
-              <select
-                className="plou-input"
-                aria-label={t('external.permission')}
-                value={permission}
-                onChange={(e) => setPermission(e.target.value as Permission)}
-              >
-                {readRequested ? <option value="read_only">{t('external.readOnly')}</option> : null}
-                {readRequested && writeRequested ? (
-                  <option value="read_write">{t('external.readWrite')}</option>
-                ) : null}
-                <option value="custom">{t('external.custom')}</option>
-              </select>
-            </label>
+            {readRequested ? (
+              <label>
+                {t('external.permission')}
+                <select
+                  className="plou-input"
+                  aria-label={t('external.permission')}
+                  value={permission}
+                  onChange={(e) => setPermission(e.target.value as Permission)}
+                >
+                  <option value="read_only">{t('external.readOnly')}</option>
+                  {writeRequested ? (
+                    <option value="read_write">{t('external.readWrite')}</option>
+                  ) : null}
+                  <option value="custom">{t('external.custom')}</option>
+                </select>
+              </label>
+            ) : null}
             {permission === 'custom' ? (
               <TaskOperationSelection
                 selected={capabilities}
                 onChange={setOperations}
                 canChoose={canChoose}
               />
+            ) : access.data ? (
+              <p style={{ margin: 0 }}>
+                {access.data.presets[permission].map(capabilityLabel).join(' · ')}
+              </p>
             ) : null}
             {access.data && !access.data.mcp_enabled ? (
               <label>
                 <input
                   type="checkbox"
+                  data-testid="mcp-consent-enable"
                   checked={enable}
                   onChange={(e) => setEnable(e.target.checked)}
                 />

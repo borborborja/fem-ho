@@ -21,9 +21,9 @@ import { dbBool, isTrue } from '../db/bool.js';
 import type { AuditContext } from '../audit/audited-transaction.js';
 import type { MigrationDb } from '../db/migration-db.js';
 import { PolicyError, missingCapability, notFound } from '../policy/errors.js';
-import { hasCapability, type Principal } from '../policy/principal.js';
+import { canSeeScope, hasCapability, type Principal } from '../policy/principal.js';
 import type { Mailbox } from '../policy/mailbox.js';
-import { visibleScopesPredicate } from '../policy/scope-visibility.js';
+import { visibleScopeIds, visibleScopesPredicate } from '../policy/scope-visibility.js';
 import { visibleCalendarIds } from '../policy/calendar-visibility.js';
 import { normalizeForSearch, normalizeQuery } from '../text/search-text.js';
 import { clampInt } from '../util/clamp.js';
@@ -325,14 +325,14 @@ export async function listTasks(
 ): Promise<TaskPage> {
   if (!hasCapability(principal, 'tasks:read')) throw missingCapability('tasks:read');
 
-  const scopes = await listScopes(db, principal);
-  const allowed = scopes
-    .map((s) => s.id)
-    .filter(
-      (id) =>
-        (filters.scopeId === undefined || id === filters.scopeId) &&
-        (filters.scopeIds === undefined || filters.scopeIds.includes(id)),
-    );
+  // Poder llegir tasques d'un àmbit no ha d'exigir accés al seu catàleg.
+  const scopes = await visibleScopeIds(db, principal.userId);
+  const allowed = [...scopes].filter(
+    (id) =>
+      canSeeScope(principal, id) &&
+      (filters.scopeId === undefined || id === filters.scopeId) &&
+      (filters.scopeIds === undefined || filters.scopeIds.includes(id)),
+  );
   if (allowed.length === 0) return { data: [], next_cursor: null, has_more: false };
 
   const statuses = filters.statuses ?? [...TASK_STATUSES];

@@ -13,8 +13,9 @@ incloses les dels seus agents IA, sense tancar les sessions de la web ni d'Andro
   eliminar-les. Les eliminacions REST de tasques i esdeveniments són un permís avançat.
 - **Personalitzat:** tria **Consultar**, **Crear**, **Moure i completar**, **Editar** i
   **Adjuntar fitxers** per separat. Els permisos s'apliquen als àmbits seleccionats i al
-  rol que hi tens. El consentiment OAuth mostra les operacions de lectura i escriptura
-  que ha demanat el client. Les autoritzacions existents conserven els seus permisos.
+  rol que hi tens. El consentiment OAuth marca per defecte les operacions de tasques
+  que ha demanat el client. Les pots desmarcar. Tria els àmbits que vols compartir o
+  selecciona'ls tots amb **Tots els actuals**.
 - **Canals:** API, MCP o tots dos, en els tokens manuals. OAuth concedeix només MCP.
 - **Caducitat:** els tokens manuals proposen 90 dies, editables. El secret es mostra
   només una vegada; al servidor només se'n guarda el hash.
@@ -26,10 +27,23 @@ encara més l'abast i triar només lectura. Un token no pot superar el propietar
 concedir-se permisos a si mateix. La configuració de comptes, tokens, correu, compartits
 i instància exigeix sessió de l'app; no queda oberta pel fet de tenir un token.
 
-La llista mostra l'estat, l'últim ús, la caducitat, els canals i els àmbits. Revocar és
-immediat. Editar un token manual conserva el secret i aplica els nous límits a la
-petició següent. Per canviar una autorització OAuth, revoca-la i torna a connectar:
-cal consentiment nou. L'historial identifica el canal, el nom i l'ID de la credencial.
+A **Ajustos → MCP i API**, la llista mostra els tokens manuals i les connexions OAuth
+amb l'estat, l'últim ús, la caducitat, els canals i els àmbits. Pots editar o revocar un
+token manual, i reduir els permisos o els àmbits d'una connexió OAuth o revocar-la.
+Els canvis s'apliquen a la petició següent. Per ampliar una connexió OAuth, torna a
+connectar des del client i confirma el consentiment. L'historial identifica el canal,
+el nom i l'ID de la credencial.
+
+## Connectar amb OAuth
+
+Enganxa la URL de MCP al client i tria OAuth. El navegador obre Fem-ho. Si no hi tens
+sessió, inicia-la amb el teu correu i contrasenya de Fem-ho. Comprova el compte i el
+client que mostra el consentiment, tria els àmbits i revisa els permisos marcats.
+Si MCP està desactivat, pots activar-lo en confirmar la connexió.
+
+Fem-ho ofereix lectura i escriptura per defecte. Si el client en demana només una,
+el consentiment mostra les operacions de tasques que hi corresponen. El client rep
+una credencial pròpia per a MCP.
 
 ## Enviar una tasca des d'un LLM
 
@@ -87,7 +101,7 @@ a la instància. Conserva l'identificador si has de reintentar un fitxer.
 1. Copia la URL MCP que mostra Fem-ho, per exemple `https://tasques.example.net/mcp`.
 2. Activa el mode desenvolupador de ChatGPT si el compte i l'espai de treball ho
    permeten. Afegeix el servidor a l'apartat de plugins/connectors amb autenticació OAuth.
-3. Quan s'obri Fem-ho, inicia sessió i selecciona explícitament àmbits i permisos.
+3. Quan s'obri Fem-ho, segueix els passos de **Connectar amb OAuth**.
 4. Comprova la connexió demanant la identitat (`whoami`) i una lectura (`list_tasks`).
 
 [Instruccions oficials de ChatGPT](https://developers.openai.com/plugins/deploy/connect-chatgpt).
@@ -96,9 +110,8 @@ Els noms i la disponibilitat dels menús depenen del compte i de la política de
 ## Claude
 
 A **Settings → Connectors → Add custom connector**, posa la URL MCP de Fem-ho i
-connecta. El navegador obre el consentiment de Fem-ho, on tries àmbits i permisos.
-El registre del client OAuth és automàtic; no cal crear un client de Google ni cap
-proveïdor extern.
+connecta. El navegador obre el consentiment de Fem-ho. Fem-ho registra el client
+OAuth automàticament.
 
 [Connectors remots de Claude](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp).
 
@@ -160,8 +173,8 @@ OAuth persisteix a la mateixa base de dades. Els codis duren 2 minuts i només e
 bescanviar una vegada amb PKCE S256. L'accés dura 15 minuts i el refresc, 30 dies des de
 l'última rotació. Reutilitzar un refresc gastat revoca la sessió. El recurs MCP, client,
 redirecció exacta i consentiment es comproven al servidor; ni els scopes OAuth ni
-l'entrada de l'eina poden ampliar l'autorització. La revocació i els interruptors es
-consulten a cada petició, també abans de renovar.
+l'entrada de l'eina poden ampliar l'autorització. Els permisos, la revocació i els
+interruptors es consulten a cada petició, també abans de renovar.
 
 ### Verificar sense modificar dades
 

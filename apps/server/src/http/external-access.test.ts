@@ -5,8 +5,16 @@ import { randomBytes, createHash } from 'node:crypto';
 import { sql } from 'kysely';
 import { v7 as uuidv7 } from 'uuid';
 import { beforeAll, afterAll, beforeEach, describe, it, expect } from 'vitest';
+import {
+  UnauthorizedError,
+  type OAuthClientProvider,
+} from '@modelcontextprotocol/sdk/client/auth.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import type {
+  OAuthClientInformationMixed,
+  OAuthTokens,
+} from '@modelcontextprotocol/sdk/shared/auth.js';
 import { buildApp } from '../app.js';
 import { loadConfig } from '../config.js';
 import { connect } from '../db/connection.js';
@@ -98,7 +106,7 @@ async function token(capabilities = MCP_READ, scope_ids = [personal], channels =
   expect(response.statusCode, response.body).toBe(201);
   return response.json() as { token: string; summary: { id: string } };
 }
-async function oauth(write: boolean | 'femho:write' = false) {
+async function oauth(scope: string | null = 'femho:read') {
   const registration = await app.inject({
     method: 'POST',
     url: '/oauth/register',
@@ -119,8 +127,8 @@ async function oauth(write: boolean | 'femho:write' = false) {
     response_type: 'code',
     code_challenge_method: 'S256',
     code_challenge: createHash('sha256').update(verifier).digest('base64url'),
-    scope: typeof write === 'string' ? write : write ? 'femho:read femho:write' : 'femho:read',
   });
+  if (scope !== null) query.set('scope', scope);
   const start = await app.inject({ method: 'GET', url: `/oauth/authorize?${query}` });
   expect(start.statusCode, start.body).toBe(302);
   const id = new URL(start.headers.location!).searchParams.get('request')!;
@@ -406,10 +414,18 @@ describe('OAuth MCP', () => {
     const mcp = await app.inject({ method: 'POST', url: '/mcp', payload: {} });
     expect(mcp.statusCode).toBe(401);
     expect(mcp.headers['www-authenticate']).toContain('/.well-known/oauth-protected-resource');
-    expect(
-      (await app.inject({ method: 'GET', url: '/.well-known/oauth-protected-resource' })).json()
-        .resource,
-    ).toBe(resource);
+    expect(mcp.headers['www-authenticate']).toContain('scope="femho:read femho:write"');
+    const scopes = ['femho:read', 'femho:write'];
+    const protectedResource = await app.inject({
+      method: 'GET',
+      url: '/.well-known/oauth-protected-resource',
+    });
+    expect(protectedResource.json()).toMatchObject({ resource, scopes_supported: scopes });
+    const authorizationServer = await app.inject({
+      method: 'GET',
+      url: '/.well-known/oauth-authorization-server',
+    });
+    expect(authorizationServer.json()).toMatchObject({ issuer, scopes_supported: scopes });
     const bad = await app.inject({
       method: 'POST',
       url: '/oauth/register',
@@ -417,8 +433,145 @@ describe('OAuth MCP', () => {
     });
     expect(bad.statusCode).toBe(400);
   });
+  it('demana lectura i escriptura quan el client omet scope', async () => {
+    const flow = await oauth(null);
+    const query = new URLSearchParams(flow.query);
+    query.set('scope', '');
+    const empty = await app.inject({ method: 'GET', url: `/oauth/authorize?${query}` });
+    expect(empty.statusCode, empty.body).toBe(302);
+    const emptyId = new URL(empty.headers.location!).searchParams.get('request');
+    for (const id of [flow.id, emptyId]) {
+      const info = await request('GET', `/api/v1/mcp/authorization/${id}`);
+      expect(info.json()).toMatchObject({ read_requested: true, write_requested: true });
+    }
+    query.set('scope', 'femho:unknown');
+    const invalid = await app.inject({ method: 'GET', url: `/oauth/authorize?${query}` });
+    expect(invalid.statusCode).toBe(400);
+  });
+  it('el client SDK descobreix OAuth i demana els permisos de tasques a partir del repte', async () => {
+    const redirectUrl = 'http://127.0.0.1:8123/sdk-callback';
+    const capabilities = [
+      'tasks:read',
+      'tasks:create',
+      'tasks:move',
+      'tasks:update',
+      'tasks:attach',
+    ];
+    let information: OAuthClientInformationMixed | undefined;
+    let tokens: OAuthTokens | undefined;
+    let verifier = '';
+    let authorizationUrl: URL | undefined;
+    const provider: OAuthClientProvider = {
+      redirectUrl,
+      clientMetadata: {
+        client_name: 'OAuth discovery SDK',
+        redirect_uris: [redirectUrl],
+        token_endpoint_auth_method: 'none',
+      },
+      state: () => 'sdk-state',
+      clientInformation: () => information,
+      saveClientInformation: (value) => {
+        information = value;
+      },
+      tokens: () => tokens,
+      saveTokens: (value) => {
+        tokens = value;
+      },
+      codeVerifier: () => verifier,
+      saveCodeVerifier: (value) => {
+        verifier = value;
+      },
+      redirectToAuthorization: (url) => {
+        authorizationUrl = url;
+      },
+    };
+    const transportFor = () =>
+      new StreamableHTTPClientTransport(new URL(resource), {
+        authProvider: provider,
+        // L'emissor canònic de la prova és fix; el servidor HTTP escolta en un port lliure.
+        fetch: (input, init) => {
+          const target = new URL(input);
+          expect(target.origin).toBe(issuer);
+          return fetch(`${address}${target.pathname}${target.search}`, init);
+        },
+      });
+    const transport = transportFor();
+    const client = new Client({ name: 'OAuth discovery SDK', version: '1' });
+    await expect(client.connect(transport as never)).rejects.toBeInstanceOf(UnauthorizedError);
+    expect(authorizationUrl?.searchParams.get('scope')).toBe('femho:read femho:write');
+    const start = await app.inject({
+      method: 'GET',
+      url: authorizationUrl!.pathname + authorizationUrl!.search,
+    });
+    expect(start.statusCode, start.body).toBe(302);
+    const authorization = new URL(start.headers.location!);
+    const approved = await request(
+      'POST',
+      `/api/v1/mcp/authorization/${authorization.searchParams.get('request')}`,
+      { approve: true, permission: 'custom', scope_ids: [personal], capabilities },
+    );
+    expect(approved.statusCode, approved.body).toBe(200);
+    const callback = new URL(approved.json().redirect_url);
+    expect(callback.searchParams.get('state')).toBe('sdk-state');
+    await transport.finishAuth(callback.searchParams.get('code')!);
+    expect(tokens?.scope).toBe('femho:read femho:write');
+    await client.connect(transportFor() as never);
+    try {
+      const { tools } = await client.listTools();
+      expect(tools.map((tool) => tool.name)).toEqual(
+        expect.arrayContaining([
+          'list_tasks',
+          'create_task',
+          'move_task',
+          'update_task',
+          'add_task_attachment',
+        ]),
+      );
+    } finally {
+      await client.close();
+    }
+  });
+  it('activa només MCP amb consentiment vàlid i desfà l’activació si l’àmbit és aliè', async () => {
+    const accessUrl = '/api/v1/external-access';
+    const disabled = { api_enabled: false, mcp_enabled: false };
+    expect((await request('PATCH', accessUrl, disabled)).json()).toEqual(disabled);
+    const flow = await oauth('femho:read femho:write');
+    const url = `/api/v1/mcp/authorization/${flow.id}`;
+    const consent = { approve: true, permission: 'read_only', scope_ids: [personal] };
+    const grantsBefore = (await request('GET', '/api/v1/tokens')).json().data.length;
+    expect((await request('POST', url, { ...consent, enable_mcp: 'true' })).statusCode).toBe(400);
+    expect((await request('POST', url, { ...consent, enable_mcp: false })).statusCode).toBe(403);
+    expect(
+      (await request('POST', url, { ...consent, enable_mcp: true, scope_ids: [foreign] }))
+        .statusCode,
+    ).toBe(422);
+    expect((await request('GET', accessUrl)).json()).toMatchObject(disabled);
+    expect((await request('GET', '/api/v1/tokens')).json().data).toHaveLength(grantsBefore);
+
+    const deniedStart = await app.inject({ method: 'GET', url: `/oauth/authorize?${flow.query}` });
+    const deniedId = new URL(deniedStart.headers.location!).searchParams.get('request');
+    const denied = await request('POST', `/api/v1/mcp/authorization/${deniedId}`, {
+      approve: false,
+      enable_mcp: true,
+    });
+    expect(new URL(denied.json().redirect_url).searchParams.get('error')).toBe('access_denied');
+    expect((await request('GET', accessUrl)).json()).toMatchObject(disabled);
+    expect((await request('GET', '/api/v1/tokens')).json().data).toHaveLength(grantsBefore);
+
+    const approved = await request('POST', url, { ...consent, enable_mcp: true });
+    expect(approved.statusCode, approved.body).toBe(200);
+    expect((await request('GET', accessUrl)).json()).toMatchObject({
+      api_enabled: false,
+      mcp_enabled: true,
+    });
+    expect((await request('GET', '/api/v1/tokens')).json().data).toHaveLength(grantsBefore + 1);
+    const code = new URL(approved.json().redirect_url).searchParams.get('code')!;
+    const issued = await flow.exchange(code);
+    expect(issued.statusCode, issued.body).toBe(200);
+    expect(issued.json().scope).toBe('femho:read');
+  });
   it('consentiment, PKCE, lectura, renovació i revocació passen per HTTP', async () => {
-    const flow = await oauth(true);
+    const flow = await oauth('femho:read femho:write');
     const info = await request('GET', `/api/v1/mcp/authorization/${flow.id}`);
     expect(info.json()).toMatchObject({ client_name: 'Test MCP client', write_requested: true });
     const approved = await request('POST', `/api/v1/mcp/authorization/${flow.id}`, {
@@ -515,7 +668,7 @@ describe('OAuth MCP', () => {
 });
 
 it('pausa i revoca OAuth sense afectar la sessió humana, i verifica caducitats', async () => {
-  const flow = await oauth(true);
+  const flow = await oauth('femho:read femho:write');
   const approved = await request('POST', `/api/v1/mcp/authorization/${flow.id}`, {
     approve: true,
     scope_ids: [personal],

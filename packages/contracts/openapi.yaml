@@ -128,7 +128,7 @@ paths:
             required: true,
             schema: { type: string, enum: [S256] },
           }
-        - { name: scope, in: query, schema: { type: string, default: 'femho:read' } }
+        - { name: scope, in: query, schema: { type: string, default: 'femho:read femho:write' } }
       responses:
         '302':
           description: Continua a la pantalla de consentiment, amb login si cal.
@@ -1396,7 +1396,7 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [client_name, client_id, redirect_uri, write_requested]
+                required: [client_name, client_id, redirect_uri, read_requested, write_requested]
                 properties:
                   client_name: { type: string }
                   client_id: { type: string }
@@ -1415,6 +1415,9 @@ paths:
               required: [approve]
               properties:
                 approve: { type: boolean }
+                enable_mcp:
+                  type: boolean
+                  description: Activa el canal MCP en confirmar el consentiment.
                 scope_ids: { type: array, items: { type: string } }
                 permission: { type: string, enum: [read_only, read_write, custom] }
                 capabilities:
@@ -1507,7 +1510,10 @@ paths:
   /tokens/{id}:
     patch:
       operationId: updateApiToken
-      summary: Editar una credencial manual
+      summary: Editar un token manual o reduir l'accés d'una connexió OAuth
+      description: |
+        Per a OAuth, només s'accepten `capabilities` i `scope_ids` amb subconjunts
+        no buits del consentiment vigent. Ampliar l'accés requereix un consentiment nou.
       parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
       requestBody:
         required: true
@@ -1524,10 +1530,18 @@ paths:
                 expires_at: { type: [string, 'null'], format: date-time }
       responses:
         '200':
-          description: Token manual actualitzat; OAuth requereix un nou consentiment.
+          description: Credencial actualitzada.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ApiTokenSummary' }
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: La credencial està revocada o ha canviat mentre s'editava.
+        '422':
+          description: Camps o permisos no vàlids per a la credencial.
     delete:
       tags: [tokens]
       operationId: revokeApiToken
@@ -5863,6 +5877,13 @@ components:
       properties:
         channels: { type: array, items: { type: string, enum: [api, mcp] } }
         credential_type: { type: string, enum: [pat, oauth] }
+        oauth:
+          type: object
+          description: Estat del codi o de la sessió OAuth. L'interruptor MCP pot pausar l'accés.
+          required: [status, expires_at]
+          properties:
+            status: { type: string, enum: [pending, active, expired, revoked] }
+            expires_at: { type: [string, 'null'], format: date-time }
         id: { type: string }
         name: { type: string }
         token_prefix:

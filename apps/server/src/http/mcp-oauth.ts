@@ -3,6 +3,7 @@ import { auditedTransaction } from '../audit/audited-transaction.js';
 import { setupPrincipal } from '../services/setup.js';
 import { PolicyError } from '../policy/errors.js';
 import {
+  MCP_OAUTH_SCOPES,
   authorizationRequest,
   clientOf,
   consent,
@@ -70,7 +71,7 @@ export function registerMcpOAuthRoutes(app: FastifyInstance) {
   app.get('/.well-known/oauth-protected-resource', async () => ({
     resource,
     authorization_servers: [issuer],
-    scopes_supported: ['femho:read', 'femho:write'],
+    scopes_supported: MCP_OAUTH_SCOPES,
   }));
   app.get('/.well-known/oauth-authorization-server', async () => ({
     issuer,
@@ -82,7 +83,7 @@ export function registerMcpOAuthRoutes(app: FastifyInstance) {
     grant_types_supported: ['authorization_code', 'refresh_token'],
     code_challenge_methods_supported: ['S256'],
     token_endpoint_auth_methods_supported: ['none', 'client_secret_post', 'client_secret_basic'],
-    scopes_supported: ['femho:read', 'femho:write'],
+    scopes_supported: MCP_OAUTH_SCOPES,
     authorization_response_iss_parameter_supported: true,
   }));
   app.get('/oauth/authorize', async (request, reply) =>

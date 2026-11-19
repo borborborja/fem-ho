@@ -814,7 +814,11 @@ export interface paths {
         delete: operations["revokeApiToken"];
         options?: never;
         head?: never;
-        /** Editar una credencial manual */
+        /**
+         * Editar un token manual o reduir l'accés d'una connexió OAuth
+         * @description Per a OAuth, només s'accepten `capabilities` i `scope_ids` amb subconjunts
+         *     no buits del consentiment vigent. Ampliar l'accés requereix un consentiment nou.
+         */
         patch: operations["updateApiToken"];
         trace?: never;
     };
@@ -3724,6 +3728,13 @@ export interface components {
             channels?: ("api" | "mcp")[];
             /** @enum {string} */
             credential_type?: "pat" | "oauth";
+            /** @description Estat del codi o de la sessió OAuth. L'interruptor MCP pot pausar l'accés. */
+            oauth?: {
+                /** @enum {string} */
+                status: "pending" | "active" | "expired" | "revoked";
+                /** Format: date-time */
+                expires_at: string | null;
+            };
             id: string;
             name: string;
             /** @description Els primers caràcters, per poder-lo reconèixer a la llista. */
@@ -6292,7 +6303,7 @@ export interface operations {
                         client_name: string;
                         client_id: string;
                         redirect_uri: string;
-                        read_requested?: boolean;
+                        read_requested: boolean;
                         write_requested: boolean;
                     };
                 };
@@ -6312,6 +6323,8 @@ export interface operations {
             content: {
                 "application/json": {
                     approve: boolean;
+                    /** @description Activa el canal MCP en confirmar el consentiment. */
+                    enable_mcp?: boolean;
                     scope_ids?: string[];
                     /** @enum {string} */
                     permission?: "read_only" | "read_write" | "custom";
@@ -6439,7 +6452,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Token manual actualitzat; OAuth requereix un nou consentiment. */
+            /** @description Credencial actualitzada. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6447,6 +6460,22 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ApiTokenSummary"];
                 };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description La credencial està revocada o ha canviat mentre s'editava. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Camps o permisos no vàlids per a la credencial. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

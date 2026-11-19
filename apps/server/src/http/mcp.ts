@@ -16,6 +16,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { buildMcpServer } from '../mcp/server.js';
 import { PolicyError } from '../policy/errors.js';
 import type { Principal } from '../policy/principal.js';
+import { MCP_OAUTH_SCOPES } from '../services/mcp-oauth.js';
 import { principalOf } from './auth.js';
 
 /**
@@ -124,7 +125,7 @@ async function authenticate(
         .code(401)
         .header(
           'WWW-Authenticate',
-          `Bearer realm="${REALM}", resource_metadata="${(app.config.baseUrl ?? `http://localhost:${app.config.port}`).replace(/\/$/, '')}/.well-known/oauth-protected-resource", scope="femho:read"`,
+          `Bearer realm="${REALM}", resource_metadata="${(app.config.baseUrl ?? `http://localhost:${app.config.port}`).replace(/\/$/, '')}/.well-known/oauth-protected-resource", scope="${MCP_OAUTH_SCOPES.join(' ')}"`,
         )
         .type('application/problem+json')
         .send(error.toProblem(request.url));

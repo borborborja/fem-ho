@@ -9,8 +9,13 @@ import { TASK_OPERATIONS } from '../policy/capabilities.js';
 import { PolicyError, unauthenticated } from '../policy/errors.js';
 import { resolveTokenId } from '../policy/resolve.js';
 import { createToken } from './tokens.js';
-import { assertExternalChannel, requireHumanSession } from './external-access.js';
+import {
+  assertExternalChannel,
+  requireHumanSession,
+  updateExternalAccess,
+} from './external-access.js';
 
+export const MCP_OAUTH_SCOPES = ['femho:read', 'femho:write'] as const;
 export const MCP_READ = [
   'tasks:read',
   'events:read',
@@ -173,8 +178,8 @@ export async function startAuthorization(
   resource: string,
 ) {
   const client = await clientOf(ctx.tx, String(input.client_id ?? ''));
-  const scope =
-    typeof input.scope === 'string' && input.scope.trim() ? input.scope.trim() : 'femho:read';
+  let scope = typeof input.scope === 'string' ? input.scope.trim() : input.scope;
+  if (scope === undefined || scope === '') scope = MCP_OAUTH_SCOPES.join(' ');
   if (
     input.response_type !== 'code' ||
     input.resource !== resource ||
@@ -182,7 +187,8 @@ export async function startAuthorization(
     !/^[A-Za-z0-9_-]{43}$/.test(String(input.code_challenge)) ||
     typeof input.state !== 'string' ||
     input.state.length > 2048 ||
-    !scope.split(/\s+/).every((s) => ['femho:read', 'femho:write'].includes(s)) ||
+    typeof scope !== 'string' ||
+    !scope.split(/\s+/).every((s) => MCP_OAUTH_SCOPES.some((supported) => supported === s)) ||
     !(JSON.parse(client.redirect_uris) as string[]).includes(String(input.redirect_uri))
   )
     throw oauthError();
@@ -213,6 +219,8 @@ export async function consent(
   issuer: string,
 ) {
   requireHumanSession(principal);
+  if (input.enable_mcp !== undefined && typeof input.enable_mcp !== 'boolean')
+    throw oauthError('Use a boolean value to enable MCP.');
   const request = await authorizationRequest(ctx.tx, id);
   const consumed =
     await sql`UPDATE mcp_oauth_requests SET consumed = 1 WHERE id = ${id} AND consumed = 0 RETURNING id`.execute(
@@ -228,8 +236,10 @@ export async function consent(
     return { redirect_url: redirect.href };
   }
   if (input.approve !== true) throw oauthError();
-  await assertExternalChannel(ctx.tx, principal.userId, 'mcp', ['mcp']);
   const capabilities = consentCapabilities(input, request.scope);
+  // Si la concessió falla, el canal i la sol·licitud tornen al seu estat anterior.
+  if (input.enable_mcp === true) await updateExternalAccess(ctx, principal, { mcp_enabled: true });
+  await assertExternalChannel(ctx.tx, principal.userId, 'mcp', ['mcp']);
   const client = await clientOf(ctx.tx, request.client_id);
   const created = await createToken(ctx, principal, {
     name: client.name,

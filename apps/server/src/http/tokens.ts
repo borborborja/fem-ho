@@ -58,13 +58,17 @@ export function registerTokenRoutes(app: FastifyInstance): void {
   );
   app.patch<{ Params: { id: string } }>('/api/v1/tokens/:id', async (request, reply) =>
     handle(app, request, reply, (principal) =>
-      auditedTransaction(app.connection!.db, principal, (ctx) =>
-        updateToken(
-          ctx,
-          principal,
-          request.params.id,
-          (request.body ?? {}) as Parameters<typeof updateToken>[3],
-        ),
+      auditedTransaction(
+        app.connection!.db,
+        principal,
+        (ctx) =>
+          updateToken(
+            ctx,
+            principal,
+            request.params.id,
+            (request.body ?? {}) as Parameters<typeof updateToken>[3],
+          ),
+        { engine: app.connection!.engine },
       ),
     ),
   );
