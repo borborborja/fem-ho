@@ -761,6 +761,7 @@
   "task.recurrence.yearly": "Every year",
   "task.removeAttachment": "Remove",
   "task.scope": "Scope",
+  "task.chooseScope": "Choose a scope",
   "task.send": "Send",
   "task.share": "Share",
   "task.status": "Status",

@@ -18,6 +18,7 @@ import { PolicyError, missingCapability } from '../policy/errors.js';
 import { hasCapability, type Principal } from '../policy/principal.js';
 import { visibleCalendarIds } from '../policy/calendar-visibility.js';
 import { listScopes } from './scopes.js';
+import { canReadSyncEntity } from './sync-access.js';
 import { clampInt } from '../util/clamp.js';
 
 /** Les tombstones es conserven 90 dies (docs/01 §12). */
@@ -170,6 +171,7 @@ export async function pull(
 
   const changes: SyncChange[] = [];
   for (const row of page) {
+    if (!canReadSyncEntity(principal, row.entity_type)) continue;
     if (
       row.entity_type === 'event' ||
       row.entity_type === 'calendar' ||
@@ -466,13 +468,21 @@ export const OP_RETENTION_DAYS = 7;
  * genera el client i no és cap secret: viatja al cos de cada lot.
  */
 function opKey(principal: Principal): string {
+  if (
+    (principal.credentialType === 'pat' || principal.credentialType === 'oauth') &&
+    principal.credentialId !== undefined
+  ) {
+    return `${principal.kind}:${principal.userId}:${principal.credentialType}:${principal.credentialId}`;
+  }
   return `${principal.kind}:${principal.userId}`;
 }
+
+type BatchIdentity = Pick<BatchOperation, 'op_id' | 'entity' | 'id' | 'op'>;
 
 export async function rememberOp(
   db: MigrationDb,
   principal: Principal,
-  opId: string,
+  operation: BatchIdentity,
   result: BatchResult,
   now: string,
 ): Promise<void> {
@@ -480,32 +490,61 @@ export async function rememberOp(
   // Reenviar el mateix lot no ha de petar amb una violació de clau primària: el que hi
   // havia ja era la resposta bona.
   const existing = await sql<{ op_id: string }>`
-    SELECT op_id FROM sync_op_ids WHERE op_id = ${opId} AND principal_key = ${key}
+    SELECT op_id FROM sync_op_ids WHERE op_id = ${operation.op_id} AND principal_key = ${key}
   `.execute(db);
   if (existing.rows.length > 0) return;
 
   await sql`
     INSERT INTO sync_op_ids (op_id, principal_key, result, created_at)
-    VALUES (${opId}, ${key}, ${JSON.stringify(result)}, ${now})
+    VALUES (${operation.op_id}, ${key}, ${JSON.stringify({
+      entity: operation.entity,
+      id: operation.id,
+      op: operation.op,
+      result,
+    })}, ${now})
   `.execute(db);
 }
 
 export async function recallOp(
   db: MigrationDb,
   principal: Principal,
-  opId: string,
+  operation: BatchIdentity,
 ): Promise<BatchResult | undefined> {
-  const found = await sql<{ result: string }>`
-    SELECT result FROM sync_op_ids WHERE op_id = ${opId} AND principal_key = ${opKey(principal)}
+  const key = opKey(principal);
+  const legacyKey = `${principal.kind}:${principal.userId}`;
+  const found = await sql<{ result: string; principal_key: string }>`
+    SELECT result, principal_key FROM sync_op_ids
+    WHERE op_id = ${operation.op_id} AND principal_key IN (${key}, ${legacyKey})
+    ORDER BY CASE WHEN principal_key = ${key} THEN 0 ELSE 1 END
+    LIMIT 1
   `.execute(db);
   const row = found.rows[0];
   if (row === undefined) return undefined;
+  let saved: (Omit<BatchIdentity, 'op_id'> & { result: BatchResult }) | BatchResult;
   try {
-    return JSON.parse(row.result) as BatchResult;
+    saved = JSON.parse(row.result) as typeof saved;
   } catch {
     // Una fila malmesa no ha de tombar el lot: es tracta com si no hi fos i s'aplica.
     return undefined;
   }
+
+  if (typeof saved !== 'object' || saved === null) return undefined;
+  if ('result' in saved) {
+    if (row.principal_key !== key) return undefined;
+    if (saved.entity === operation.entity && saved.id === operation.id && saved.op === operation.op)
+      return saved.result;
+  } else if (saved.status === 'ok') {
+    // Els rebuts vells no diuen a quina fila pertanyen. L'ACK evita duplicar-la;
+    // el contingut es torna a baixar amb els permisos actuals del client.
+    return { op_id: operation.op_id, status: 'ok' };
+  }
+
+  throw new PolicyError(
+    'sync-op-reused',
+    'Sync operation already used',
+    409,
+    'This operation identifier already has a result. Refresh before retrying the change.',
+  );
 }
 
 /** Poda les operacions velles. La crida el planificador amb la resta de neteges. */
@@ -538,8 +577,17 @@ export async function softDelete(
   }
 
   await sql`
-    UPDATE ${sql.raw(table)} SET deleted_at = ${ctx.now} WHERE id = ${id}
+    UPDATE ${sql.raw(table)}
+    SET deleted_at = ${ctx.now}, updated_at = ${ctx.now}, version = version + 1
+    WHERE id = ${id}
   `.execute(ctx.tx);
+
+  if (entityType === 'event') {
+    await sql`
+      UPDATE calendars SET sync_seq = sync_seq + 1
+      WHERE id = (SELECT calendar_id FROM events WHERE id = ${id})
+    `.execute(ctx.tx);
+  }
 
   ctx.record({ entityType, entityId: id, scopeId, verb: 'deleted' });
 }

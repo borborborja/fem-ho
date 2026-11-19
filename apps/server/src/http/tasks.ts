@@ -59,6 +59,7 @@ import {
   takeOverTask,
   updateTask,
 } from '../services/tasks.js';
+import type { Task } from '../services/tasks.js';
 import { PolicyError } from '../policy/errors.js';
 import { isMailbox, type Mailbox } from '../policy/mailbox.js';
 import { getProfile, getSettings } from '../services/users.js';
@@ -72,6 +73,14 @@ function parseStatuses(raw: unknown): TaskStatus[] | undefined {
     (TASK_STATUSES as readonly string[]).includes(s),
   );
   return valid.length > 0 ? valid : undefined;
+}
+
+function parseAiMode(raw: unknown): Task['ai_mode'] | undefined {
+  return raw === 'manual' || raw === 'assisted' || raw === 'delegated' ? raw : undefined;
+}
+
+function parseRecurrenceMode(raw: unknown): 'schedule' | 'completion' | undefined {
+  return raw === 'schedule' || raw === 'completion' ? raw : undefined;
 }
 
 function parseSeriesMode(raw: unknown): SeriesMode {
@@ -137,6 +146,11 @@ export function registerTaskRoutes(app: FastifyInstance): void {
             position: str(input.position),
             due_date: str(input.due_date),
             due_time: str(input.due_time),
+            deadline: str(input.deadline),
+            rrule: str(input.rrule),
+            recurrence_mode: parseRecurrenceMode(input.recurrence_mode),
+            ai_mode: parseAiMode(input.ai_mode),
+            ai_instructions: str(input.ai_instructions),
             assignee_ids: Array.isArray(input.assignee_ids)
               ? input.assignee_ids.filter((v): v is string => typeof v === 'string')
               : undefined,
@@ -170,16 +184,8 @@ export function registerTaskRoutes(app: FastifyInstance): void {
           project_id: nullable(input, 'project_id'),
           task_type_id: nullable(input, 'task_type_id'),
           rrule: nullable(input, 'rrule'),
-          recurrence_mode:
-            input.recurrence_mode === 'schedule' || input.recurrence_mode === 'completion'
-              ? input.recurrence_mode
-              : undefined,
-          ai_mode:
-            input.ai_mode === 'manual' ||
-            input.ai_mode === 'assisted' ||
-            input.ai_mode === 'delegated'
-              ? input.ai_mode
-              : undefined,
+          recurrence_mode: parseRecurrenceMode(input.recurrence_mode),
+          ai_mode: parseAiMode(input.ai_mode),
           ai_instructions: nullable(input, 'ai_instructions'),
         }),
       );

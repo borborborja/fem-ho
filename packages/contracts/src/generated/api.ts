@@ -4133,6 +4133,8 @@ export interface components {
              * @enum {string}
              */
             ai_mode: "manual" | "assisted" | "delegated";
+            /** @description Instruccions internes per a l'agent. Els enllaços públics reben `null`. */
+            ai_instructions?: string | null;
             delegate_agent_id?: string | null;
             /** @description RFC 5545, o `null` si no es repeteix. */
             rrule?: string | null;
@@ -4451,6 +4453,21 @@ export interface components {
             position?: string;
             due_date?: string;
             due_time?: string;
+            /** Format: date-time */
+            deadline?: string;
+            /** @description RFC 5545. */
+            rrule?: string;
+            /**
+             * @default schedule
+             * @enum {string}
+             */
+            recurrence_mode: "schedule" | "completion";
+            /**
+             * @default manual
+             * @enum {string}
+             */
+            ai_mode: "manual" | "assisted" | "delegated";
+            ai_instructions?: string;
             assignee_ids?: string[];
             task_type_id?: string;
             /**

@@ -17,7 +17,6 @@ import { installShortcuts } from './shortcuts.js';
 import { ToastProvider, useToasts } from './toasts.js';
 import { TopBar } from './TopBar.js';
 import type { Agent, Checklist } from './types.js';
-import type { TaskStatus } from '@fem-ho/contracts';
 import { useApi } from './useApi.js';
 import { BoardScreen } from '../screens/BoardScreen.js';
 import { CalendarScreen } from '../screens/CalendarScreen.js';
@@ -34,7 +33,7 @@ import { ReportsScreen } from '../screens/ReportsScreen.js';
 import { SearchScreen } from '../screens/SearchScreen.js';
 import { SettingsScreen } from '../screens/SettingsScreen.js';
 import { WelcomeScreen } from '../screens/WelcomeScreen.js';
-import { TaskModal } from '../screens/TaskModal.js';
+import { TaskModal, type TaskModalProps } from '../screens/TaskModal.js';
 import { ShareTaskDialog } from '../screens/ShareTaskDialog.js';
 import { ProofRoute } from '../proof/ProofRoute.js';
 import { McpConsentScreen } from '../screens/ExternalAccessPanel.js';
@@ -153,12 +152,7 @@ function AppShell() {
   const { notify, dismiss, clear: clearToasts } = useToasts();
   const [openTask, setOpenTask] = useState<string | null>(null);
   /** Una tasca nova des de l'edició completa: quina columna, i si és per a la IA. */
-  const [newTask, setNewTask] = useState<{
-    status: TaskStatus;
-    forAi: boolean;
-    /** El dia que ha de portar posat, quan es crea des del peu d'un dia del calendari. */
-    dueDate?: string | null;
-  } | null>(null);
+  const [newTask, setNewTask] = useState<NonNullable<TaskModalProps['create']> | null>(null);
   const [aiBoard, setAiBoard] = useState(false);
   const [flip, setFlip] = useState<{ transform: string; transition: string } | undefined>(
     undefined,
@@ -477,7 +471,13 @@ function AppShell() {
         ) : route.path === '/dashboard' ? (
           <DashboardScreen
             onOpenTask={setOpenTask}
-            onNewTask={() => setNewTask({ status: 'inbox', forAi: false })}
+            onNewTask={() =>
+              setNewTask({
+                status: 'inbox',
+                forAi: false,
+                scopeIds: scopes.map((scope) => scope.id),
+              })
+            }
             onPickScope={(scopeId) => {
               navigate(`/?scopes=${scopeId}`);
             }}
@@ -486,7 +486,9 @@ function AppShell() {
           <CalendarScreen
             activeScopeIds={activeScopeIds}
             onOpenTask={setOpenTask}
-            onNewTask={(dueDate) => setNewTask({ status: 'inbox', forAi: false, dueDate })}
+            onNewTask={(dueDate) =>
+              setNewTask({ status: 'inbox', forAi: false, dueDate, scopeIds: activeScopeIds })
+            }
           />
         ) : (
           <BoardScreen
@@ -494,7 +496,9 @@ function AppShell() {
             activeScopeIds={activeScopeIds}
             projectIds={projectIds}
             onOpenTask={setOpenTask}
-            onNewTask={(status, forAi) => setNewTask({ status, forAi })}
+            onNewTask={(status, forAi) =>
+              setNewTask({ status, forAi, scopeIds: activeScopeIds, projectIds })
+            }
             aiBoard={aiBoard}
             flip={flip}
           />
@@ -527,6 +531,7 @@ function AppShell() {
 
       {openTask === null ? null : (
         <TaskModal
+          key={openTask}
           taskId={openTask}
           onClose={() => setOpenTask(null)}
           onChanged={() => setReloadKey((value) => value + 1)}

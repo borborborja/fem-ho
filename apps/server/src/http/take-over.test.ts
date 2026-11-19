@@ -35,7 +35,7 @@ let scopeId: string;
 let agentId: string;
 
 async function api(
-  method: 'GET' | 'POST' | 'PUT',
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH',
   url: string,
   payload?: Record<string, unknown>,
   headers = auth,
@@ -162,6 +162,61 @@ describe('reclamar una tasca a mig fer', () => {
     expect(files.rows).toHaveLength(1);
     // Una persona, no la IA: qui se l'ha enduta importa.
     expect(files.rows[0]?.actor_type).toBe('user');
+  });
+});
+
+describe('dedicació en reprendre una tasca', () => {
+  const sessions = (id: string) =>
+    sql<{ ended_at: string | null }>`
+      SELECT ended_at FROM task_sessions WHERE task_id = ${id} AND deleted_at IS NULL
+    `.execute(conn.db);
+
+  beforeAll(async () => {
+    const res = await api('PATCH', `/api/v1/scopes/${scopeId}/settings`, { time_tracking: true });
+    expect(res.statusCode, res.body).toBe(200);
+  });
+
+  it('obre un sol tram en passar de Per fer a Fent', async () => {
+    const created = await api('POST', '/api/v1/tasks', {
+      scope_id: scopeId,
+      title: 'Obrir un tram',
+      status: 'todo',
+    });
+    const { id } = created.json<{ id: string }>();
+    await api('POST', `/api/v1/tasks/${id}/ai-mode`, { ai_mode: 'delegated' });
+
+    const res = await api('POST', `/api/v1/tasks/${id}/take-over`, { status: 'doing' });
+    expect(res.statusCode, res.body).toBe(200);
+    expect((await sessions(id)).rows).toEqual([{ ended_at: null }]);
+
+    await api('POST', `/api/v1/tasks/${id}/take-over`, { status: 'doing' });
+    expect((await sessions(id)).rows).toEqual([{ ended_at: null }]);
+  });
+
+  it('tanca el tram obert en tornar de Fent a Per fer', async () => {
+    const id = await aMigFer('Tancar un tram');
+    expect((await sessions(id)).rows).toEqual([{ ended_at: null }]);
+    await api('POST', `/api/v1/ai/tasks/${id}/ask-user`, { question: 'Continuo?' }, comAgent);
+
+    const res = await api('POST', `/api/v1/tasks/${id}/take-over`, { status: 'todo' });
+    expect(res.statusCode, res.body).toBe(200);
+    expect((await sessions(id)).rows).toEqual([{ ended_at: expect.any(String) }]);
+  });
+
+  it('treu el segell de Fet quan la tasca es reobre', async () => {
+    const created = await api('POST', '/api/v1/tasks', {
+      scope_id: scopeId,
+      title: 'Reobrir una tasca feta',
+      status: 'todo',
+    });
+    const { id } = created.json<{ id: string }>();
+    await api('POST', `/api/v1/tasks/${id}/ai-mode`, { ai_mode: 'delegated' });
+    const completed = await api('POST', `/api/v1/tasks/${id}/move`, { status: 'done' });
+    expect(completed.json()).toMatchObject({ status: 'done', completed_at: expect.any(String) });
+
+    const res = await api('POST', `/api/v1/tasks/${id}/take-over`, { status: 'todo' });
+    expect(res.statusCode, res.body).toBe(200);
+    expect(res.json()).toMatchObject({ status: 'todo', completed_at: null });
   });
 });
 

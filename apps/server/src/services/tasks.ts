@@ -50,6 +50,7 @@ export interface TaskRow {
   completed_at: string | null;
   view_mode: 'card' | 'simple';
   ai_mode: 'manual' | 'assisted' | 'delegated';
+  ai_instructions: string | null;
   delegate_agent_id: string | null;
   /** RFC 5545, o `null` si no es repeteix. */
   rrule: string | null;
@@ -124,7 +125,7 @@ export interface Task extends TaskRow {
 
 const TASK_COLUMNS = sql`
   id, scope_id, project_id, title, description, status, position, due_date, due_time,
-  deadline, completed_at, view_mode, ai_mode, delegate_agent_id,
+  deadline, completed_at, view_mode, ai_mode, ai_instructions, delegate_agent_id,
   rrule, recurrence_mode, recurrence_parent_id, source_kind,
   needs_attention, attention_asked_at, last_activity_at, ai_last_read_at, ai_last_read_by,
   task_type_id, created_by,
@@ -269,7 +270,8 @@ export async function getTask(db: MigrationDb, principal: Principal, id: string)
 
   const [task] = await withAssignees(db, [row]);
   if (task === undefined) throw notFound('task', id);
-  return task;
+  // L'enllaç públic dóna accés a la tasca, no a les instruccions internes per a l'agent.
+  return principal.kind === 'guest' ? { ...task, ai_instructions: null } : task;
 }
 
 export interface ListTasksFilters {
@@ -411,6 +413,11 @@ export interface CreateTaskInput {
   position?: string | undefined;
   due_date?: string | undefined;
   due_time?: string | undefined;
+  deadline?: string | undefined;
+  rrule?: string | undefined;
+  recurrence_mode?: 'schedule' | 'completion' | undefined;
+  ai_mode?: TaskRow['ai_mode'] | undefined;
+  ai_instructions?: string | undefined;
   assignee_ids?: string[] | undefined;
   /** En què es va anar el temps. Obligatòria als àmbits que ho demanin. */
   task_type_id?: string | undefined;
@@ -434,6 +441,15 @@ export interface CreateTaskInput {
  * un de sol.
  */
 const POSITION_LOCK_ID = 851_002_027;
+
+function deadlineInstant(value: string | null): string | null {
+  if (value === null) return null;
+  const time = Date.parse(value);
+  if (!Number.isFinite(time)) {
+    throw new PolicyError('invalid-deadline', 'Invalid deadline', 422, 'Use an ISO date and time.');
+  }
+  return new Date(time).toISOString();
+}
 
 export async function createTask(
   ctx: AuditContext,
@@ -546,6 +562,8 @@ export async function createTask(
   }
 
   const status = input.status ?? 'inbox';
+  const mode = input.ai_mode ?? 'manual';
+  const deadline = deadlineInstant(input.deadline ?? null);
 
   /**
    * La posició la calcula el client (D3). Si no en dona —clients simples, o creació des
@@ -578,12 +596,14 @@ export async function createTask(
 
   const inserted = await sql`
     INSERT INTO tasks (id, scope_id, project_id, title, description, status, position,
-                       due_date, due_time, view_mode, ai_mode, origin, search_text,
+                       due_date, due_time, deadline, rrule, recurrence_mode,
+                       view_mode, ai_mode, ai_instructions, origin, search_text,
                        event_calendar_id, event_uid, event_recurrence_id, source_kind,
                        task_type_id, created_by, created_at, updated_at, version)
     VALUES (${id}, ${input.scope_id}, ${input.project_id ?? null}, ${input.title.trim()},
             ${input.description ?? null}, ${status}, ${position}, ${input.due_date ?? null},
-            ${input.due_time ?? null}, 'card', 'manual', 'native',
+            ${input.due_time ?? null}, ${deadline}, ${input.rrule ?? null},
+            ${input.recurrence_mode ?? 'schedule'}, 'card', ${mode}, ${input.ai_instructions ?? null}, 'native',
             ${normalizeForSearch(input.title, input.description)},
             ${input.source_event?.calendar_id ?? null}, ${input.source_event?.uid ?? null},
             ${input.source_event?.recurrence_id ?? null}, ${sourceKind},
@@ -689,8 +709,8 @@ export interface MoveTaskInput {
  * que hi porta la reserva viva i el nom de l'agent, que és el que fa que el missatge sigui
  * llegible per a qui el rep.
  */
-async function assertWritable(
-  ctx: AuditContext,
+export async function assertWritable(
+  ctx: Pick<AuditContext, 'tx' | 'now'>,
   principal: Principal,
   task: { id: string; ai_mode: TaskRow['ai_mode'] },
   intent: WriteIntent,
@@ -736,6 +756,18 @@ async function completeSubtasks(ctx: AuditContext, taskId: string, scopeId: stri
       changes: { done: { from: false, to: true } },
     });
   }
+}
+
+async function trackStatusTransition(
+  ctx: AuditContext,
+  userId: string,
+  current: TaskRow,
+  status: TaskStatus,
+  occurredAt = ctx.now,
+): Promise<void> {
+  if (status === current.status) return;
+  if (status === 'doing') await openSession(ctx, userId, current, occurredAt);
+  else if (current.status === 'doing') await closeSession(ctx, current.id, occurredAt);
 }
 
 export async function moveTask(
@@ -934,19 +966,7 @@ export async function moveTask(
     },
   });
 
-  /**
-   * **La dedicació s'anota aquí i enlloc més.**
-   *
-   * Entrar a Fent obre un bloc i sortir-ne el tanca. Va a `moveTask` perquè és l'únic camí
-   * pel qual una tasca canvia de columna —el tauler, la fletxa de la targeta, el commutador
-   * i l'MCP hi passen tots—, i posar-ho a cada cridador seria posar-ho a quatre llocs perquè
-   * un dia en falti un.
-   */
-  if (status === 'doing' && current.status !== 'doing') {
-    await openSession(ctx, principal.userId, current, occurredAt);
-  } else if (status !== 'doing' && current.status === 'doing') {
-    await closeSession(ctx, id, occurredAt);
-  }
+  await trackStatusTransition(ctx, principal.userId, current, status, occurredAt);
 
   if (entraAFet) {
     // La resta del que vol dir «feta», i el mateix ordre que a `completeTask`: les
@@ -1001,12 +1021,16 @@ export async function takeOverTask(
   await assertScopeAccess(ctx.tx, principal, current.scope_id, { type: 'La tasca', id });
   await assertWritable(ctx, principal, current, 'take-over');
 
+  const reopened = current.status === 'done';
   await sql`
     UPDATE tasks
-    SET ai_mode = 'manual', status = ${status}, updated_at = ${ctx.now}, version = version + 1
+    SET ai_mode = 'manual', status = ${status},
+        completed_at = ${reopened ? null : current.completed_at},
+        updated_at = ${ctx.now}, version = version + 1
     WHERE id = ${id}
   `.execute(ctx.tx);
 
+  await trackStatusTransition(ctx, principal.userId, current, status);
   await clearAttention(ctx, id);
   await releaseIfHeld(ctx, id, 'Una persona ha assumit la tasca.');
 
@@ -1023,6 +1047,7 @@ export async function takeOverTask(
     changes: {
       ai_mode: { from: current.ai_mode, to: 'manual' },
       status: { from: current.status, to: status },
+      ...(reopened ? { completed_at: { from: current.completed_at, to: null } } : {}),
     },
   });
 
@@ -1142,13 +1167,13 @@ async function createNextOccurrence(
 
   await sql`
     INSERT INTO tasks (id, scope_id, project_id, title, description, status, position,
-                       due_date, due_time, view_mode, ai_mode, origin, search_text,
+                       due_date, due_time, view_mode, ai_mode, ai_instructions, origin, search_text,
                        rrule, recurrence_mode, recurrence_parent_id,
                        created_by, created_at, updated_at, version)
     VALUES (${nextId}, ${current.scope_id}, ${current.project_id}, ${current.title},
             ${current.description}, 'todo',
             ${generatePosition(last.rows[0]?.position ?? null, null)},
-            ${nextDate}, ${current.due_time}, ${current.view_mode}, ${current.ai_mode},
+            ${nextDate}, ${current.due_time}, ${current.view_mode}, ${current.ai_mode}, ${current.ai_instructions},
             'native', ${normalizeForSearch(current.title, current.description)},
             ${rrule}, ${mode}, ${id},
             ${principal.userId}, ${ctx.now}, ${ctx.now}, 1)
@@ -1359,12 +1384,12 @@ export async function updateTask(
     }
     fields.task_type_id = input.task_type_id === '' ? null : input.task_type_id;
   }
+  if (input.deadline !== undefined) fields.deadline = deadlineInstant(input.deadline);
 
   for (const key of [
     'description',
     'due_date',
     'due_time',
-    'deadline',
     'rrule',
     'recurrence_mode',
     'ai_mode',
@@ -1411,7 +1436,7 @@ export async function updateTask(
   // El text de cerca es refà amb els valors NOUS, no amb els que hi havia.
   fields.search_text = normalizeForSearch(
     (fields.title as string | undefined) ?? before.title,
-    (fields.description as string | null | undefined) ?? before.description,
+    input.description === undefined ? before.description : input.description,
   );
 
   const assignments = Object.entries(fields).map(

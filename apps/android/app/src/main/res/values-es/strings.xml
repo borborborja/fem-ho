@@ -832,6 +832,7 @@
     <string name="task_attachments">Adjuntos</string>
     <string name="task_attachmenttoobig">El archivo supera el límite de {limit_mb} MB.</string>
     <string name="task_checklists">Listas sencillas</string>
+    <string name="task_choosescope">Elige un ámbito</string>
     <string name="task_comments">Comentarios</string>
     <string name="task_deadline">Fecha límite</string>
     <string name="task_deleteconfirm">¿Quieres borrar definitivamente «{title}»? También se borrarán sus subtareas y listas. Si procede de un evento del calendario, el evento se conservará.</string>

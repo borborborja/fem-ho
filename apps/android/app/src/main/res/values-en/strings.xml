@@ -832,6 +832,7 @@
     <string name="task_attachments">Attachments</string>
     <string name="task_attachmenttoobig">The file is over the {limit_mb} MB limit.</string>
     <string name="task_checklists">Simple lists</string>
+    <string name="task_choosescope">Choose a scope</string>
     <string name="task_comments">Comments</string>
     <string name="task_deadline">Deadline</string>
     <string name="task_deleteconfirm">Permanently delete “{title}”? Its subtasks and lists will also be deleted. If it came from a calendar event, the event will be kept.</string>

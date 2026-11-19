@@ -684,6 +684,80 @@ describe('el lot cobreix el mateix que el pull', () => {
     const projectes = await api('GET', '/api/v1/projects');
     expect(projectes.body).toContain('La reforma');
   });
+
+  it('editar el text d’un ítem conserva la data i l’autora que el van completar', async () => {
+    const taskId = await novaTasca('Compra acabada');
+    const checklistId = uuidv7();
+    const itemId = uuidv7();
+    const send = (operations: unknown[]) => api('POST', '/api/v1/sync/batch', { operations });
+    const initial = await send([
+      {
+        op_id: uuidv7(),
+        entity: 'checklist',
+        op: 'create',
+        id: checklistId,
+        data: { task_id: taskId, name: 'Compra' },
+      },
+      {
+        op_id: uuidv7(),
+        entity: 'checklist_item',
+        op: 'create',
+        id: itemId,
+        data: { checklist_id: checklistId, text: 'Pa' },
+      },
+      { op_id: uuidv7(), entity: 'checklist_item', op: 'update', id: itemId, data: { done: true } },
+    ]);
+    expect(
+      initial.json<{ results: { status: string }[] }>().results.map((r) => r.status),
+      initial.body,
+    ).toEqual(['ok', 'ok', 'ok']);
+
+    await sql`UPDATE checklist_items SET done_at = ${NOW} WHERE id = ${itemId}`.execute(conn.db);
+    const edited = await send([
+      {
+        op_id: uuidv7(),
+        entity: 'checklist_item',
+        op: 'update',
+        id: itemId,
+        data: { text: 'Pa integral' },
+      },
+    ]);
+    expect(edited.json<{ results: { status: string }[] }>().results[0]?.status, edited.body).toBe(
+      'ok',
+    );
+    const row =
+      await sql`SELECT text, done, done_at, done_by FROM checklist_items WHERE id = ${itemId}`.execute(
+        conn.db,
+      );
+    expect(row.rows[0]).toEqual({ text: 'Pa integral', done: 1, done_at: NOW, done_by: userId });
+  });
+
+  it('confirma l’esborrat d’una subtasca que ja havia caigut amb la tasca', async () => {
+    const taskId = await novaTasca('Tasca amb esborrat en cascada');
+    const id = uuidv7();
+    const created = await api('POST', '/api/v1/sync/batch', {
+      operations: [
+        {
+          op_id: uuidv7(),
+          entity: 'subtask',
+          op: 'create',
+          id,
+          data: { task_id: taskId, title: 'Subtasca' },
+        },
+      ],
+    });
+    expect(created.json<{ results: { status: string }[] }>().results[0]?.status).toBe('ok');
+    const deleted = await api('POST', '/api/v1/sync/batch', {
+      operations: [
+        { op_id: uuidv7(), entity: 'task', op: 'delete', id: taskId },
+        { op_id: uuidv7(), entity: 'subtask', op: 'delete', id },
+      ],
+    });
+    expect(
+      deleted.json<{ results: { status: string }[] }>().results.map((r) => r.status),
+      deleted.body,
+    ).toEqual(['ok', 'ok']);
+  });
 });
 
 /**

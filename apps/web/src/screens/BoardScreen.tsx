@@ -647,6 +647,7 @@ export function BoardScreen({
       status,
       assignee_ids: input.assigneeIds.length > 0 ? input.assigneeIds : undefined,
       task_type_id: input.taskTypeId ?? undefined,
+      ai_mode: input.aiMode,
     });
     refresh();
   };

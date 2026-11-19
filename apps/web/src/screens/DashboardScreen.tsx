@@ -154,6 +154,8 @@ export function DashboardScreen({ onOpenTask, onPickScope, onNewTask }: Dashboar
                   scope_id: task.scopeId,
                   project_id: task.projectId ?? undefined,
                   title: task.title,
+                  assignee_ids: task.assigneeIds.length > 0 ? task.assigneeIds : undefined,
+                  ai_mode: task.aiMode,
                 })
                 .then(() => {
                   dashboard.reload();

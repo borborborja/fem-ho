@@ -94,7 +94,9 @@ function toCalendarRow(row: CalendarRow): CalendarRow {
  * fer de menys una cosa que l'usuari ha configurat expressament. Un `.ics` publicat i
  * un RSS no ho poden ser mai: són documents, no col·leccions.
  */
-export function assertWritable(calendar: CalendarRow): void {
+export function assertWritable(
+  calendar: Pick<CalendarRow, 'origin' | 'writable' | 'source_kind' | 'name'>,
+): void {
   if (calendar.origin !== 'subscription') return;
   if (isTrue(calendar.writable) && calendar.source_kind === 'caldav') return;
 

@@ -140,6 +140,20 @@ async function taskOfChecklist(
   return { checklist: row, taskId: row.task_id, scopeId: row.scope_id };
 }
 
+async function assertChecklistAnchor(
+  db: MigrationDb,
+  taskId: string,
+  subtaskId: string | null | undefined,
+): Promise<void> {
+  if (subtaskId == null) return;
+  // La cascada escriu a la subtasca ancorada. Ha de viure a la mateixa tasca.
+  const anchor = await sql<{ id: string }>`
+    SELECT id FROM subtasks
+    WHERE id = ${subtaskId} AND task_id = ${taskId} AND deleted_at IS NULL
+  `.execute(db);
+  if (anchor.rows.length === 0) throw notFound('subtask', subtaskId);
+}
+
 export async function listChecklists(
   db: MigrationDb,
   principal: Principal,
@@ -231,14 +245,7 @@ export async function createChecklist(
   if (scopeId === undefined) throw notFound('task', taskId);
   await assertScopeAccess(ctx.tx, principal, scopeId, { type: 'La tasca', id: taskId });
 
-  // La cascada escriu a la subtasca ancorada: ha de pertànyer a aquesta mateixa tasca.
-  if (input.subtask_id != null) {
-    const anchor = await sql<{ id: string }>`
-      SELECT id FROM subtasks
-      WHERE id = ${input.subtask_id} AND task_id = ${taskId} AND deleted_at IS NULL
-    `.execute(ctx.tx);
-    if (anchor.rows.length === 0) throw notFound('subtask', input.subtask_id);
-  }
+  await assertChecklistAnchor(ctx.tx, taskId, input.subtask_id);
 
   const id = input.id ?? uuidv7();
   const last = await sql<{ position: string }>`
@@ -342,6 +349,13 @@ export interface CascadeResult {
   suggest_unpin: boolean;
 }
 
+const NO_CASCADE: CascadeResult = {
+  checklist_completed: false,
+  subtask_completed: false,
+  task_completed: false,
+  suggest_unpin: false,
+};
+
 /**
  * Marca o desmarca un ítem, i aplica **la cascada amunt**.
  *
@@ -366,15 +380,17 @@ export async function updateChecklistItem(
   const { checklist, taskId, scopeId } = await taskOfChecklist(ctx.tx, item.checklist_id);
   await assertScopeAccess(ctx.tx, principal, scopeId);
 
-  const done = input.done ?? isTrue(item.done);
+  const wasDone = isTrue(item.done);
+  const done = input.done ?? wasDone;
+  const doneChanged = done !== wasDone;
 
   await sql`
     UPDATE checklist_items SET
       text = COALESCE(${input.text ?? null}, text),
       position = COALESCE(${input.position ?? null}, position),
       done = ${dbBool(done)},
-      done_at = ${done ? ctx.now : null},
-      done_by = ${done ? principal.userId : null},
+      done_at = ${doneChanged ? (done ? ctx.now : null) : item.done_at},
+      done_by = ${doneChanged ? (done ? principal.userId : null) : item.done_by},
       updated_at = ${ctx.now},
       version = version + 1
     WHERE id = ${itemId}
@@ -384,11 +400,20 @@ export async function updateChecklistItem(
     entityType: 'checklist_item',
     entityId: itemId,
     scopeId,
-    verb: done ? 'completed' : 'reopened',
-    changes: { done: { from: isTrue(item.done), to: done } },
+    verb: doneChanged ? (done ? 'completed' : 'reopened') : 'updated',
+    changes: {
+      ...(doneChanged ? { done: { from: wasDone, to: done } } : {}),
+      ...(input.text === undefined ? {} : { text: { from: item.text, to: input.text } }),
+      ...(input.position === undefined
+        ? {}
+        : { position: { from: item.position, to: input.position } }),
+    },
   });
 
-  const cascade = await applyCascade(ctx, principal, checklist, taskId, scopeId);
+  const cascade =
+    input.done === undefined
+      ? NO_CASCADE
+      : await applyCascade(ctx, principal, checklist, taskId, scopeId);
   const updated = await sql<ChecklistItemRow>`
     SELECT id, checklist_id, text, done, done_at, done_by, position
     FROM checklist_items WHERE id = ${itemId}
@@ -411,12 +436,7 @@ async function applyCascade(
   taskId: string,
   scopeId: string,
 ): Promise<CascadeResult> {
-  const result: CascadeResult = {
-    checklist_completed: false,
-    subtask_completed: false,
-    task_completed: false,
-    suggest_unpin: false,
-  };
+  const result = { ...NO_CASCADE };
 
   const pending = await sql<{ n: number }>`
     SELECT COUNT(*) AS n FROM checklist_items
@@ -559,8 +579,9 @@ export async function updateChecklist(
 ): Promise<ChecklistView> {
   if (!hasCapability(principal, 'checklists:write')) throw missingCapability('checklists:write');
 
-  const { checklist, scopeId } = await taskOfChecklist(ctx.tx, checklistId);
+  const { checklist, taskId, scopeId } = await taskOfChecklist(ctx.tx, checklistId);
   await assertScopeAccess(ctx.tx, principal, scopeId);
+  await assertChecklistAnchor(ctx.tx, taskId, input.subtask_id);
 
   if (input.name !== undefined && input.name.trim() === '') {
     throw new PolicyError('name-required', 'Name required', 422, 'La llista necessita un nom.');

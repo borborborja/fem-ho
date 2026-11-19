@@ -30,6 +30,7 @@ import { useRouter } from '../app/router.js';
 import type { Calendar, EventOccurrence, Inbox, InboxMail, Task } from '../app/types.js';
 import { InboxRail } from '../board/InboxRail.js';
 import { ColumnQuickAdd } from '../board/ColumnQuickAdd.js';
+import type { QuickAddProps } from '../board/QuickAdd.js';
 import { EventSheet } from './EventSheet.js';
 import { SourceIcon } from '../board/SourceIcon.js';
 import { ErrorBanner } from './BoardScreen.js';
@@ -453,10 +454,7 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
    * comptes de crear-la i haver-la d'arrossegar.
    */
   const crear = useCallback(
-    (
-      dueDate: string | null,
-      input: { title: string; scopeId: string; projectId: string | null; assigneeIds: string[] },
-    ) =>
+    (dueDate: string | null, input: Parameters<QuickAddProps['onCreate']>[0]) =>
       // Es torna la promesa: si peta, el camp recupera el que havies escrit.
       api
         .post('/api/v1/tasks', {
@@ -468,6 +466,7 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
           position: generatePosition(null, null),
           ...(dueDate === null ? {} : { due_date: dueDate }),
           assignee_ids: input.assigneeIds.length > 0 ? input.assigneeIds : undefined,
+          ai_mode: input.aiMode,
         })
         .then(() => {
           inbox.reload();

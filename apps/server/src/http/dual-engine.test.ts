@@ -110,6 +110,45 @@ describe.each(MOTORS)('motor $engine', (motor) => {
     return res.json<{ id: string }>().id;
   }
 
+  it('desa els camps d’una tasca delegada des de la creació i manté les instruccions en repetir-la', async () => {
+    const fields = {
+      ai_mode: 'delegated',
+      ai_instructions: 'Comprova les dades abans de respondre.',
+      due_date: '2031-05-04',
+      due_time: '09:35',
+      deadline: '2031-05-05T14:37:15.000Z',
+      rrule: 'FREQ=WEEKLY',
+      recurrence_mode: 'schedule',
+    };
+    const created = await api('POST', '/api/v1/tasks', {
+      scope_id: scopeId,
+      title: 'Una tasca amb instruccions i dates',
+      ...fields,
+    });
+    expect(created.statusCode, created.body).toBe(201);
+    expect(created.json()).toMatchObject(fields);
+    const id = created.json<{ id: string }>().id;
+
+    const edited = await api('PATCH', `/api/v1/tasks/${id}`, { title: 'Nom corregit' });
+    expect(edited.statusCode, edited.body).toBe(200);
+    const stored = await api('GET', `/api/v1/tasks/${id}`);
+    expect(stored.json()).toMatchObject({ ...fields, title: 'Nom corregit' });
+
+    const done = await api('POST', `/api/v1/tasks/${id}/complete`);
+    expect(done.statusCode, done.body).toBe(200);
+    const following = await api('GET', '/api/v1/tasks?due_from=2031-05-11&due_to=2031-05-11');
+    expect(following.json()).toMatchObject({
+      data: [
+        {
+          recurrence_parent_id: id,
+          due_date: '2031-05-11',
+          ai_mode: 'delegated',
+          ai_instructions: fields.ai_instructions,
+        },
+      ],
+    });
+  });
+
   describe('llistes senzilles', () => {
     it('crear una llista i un ítem no peta a cap motor', async () => {
       const taskId = await novaTasca('Amb llista');
@@ -249,6 +288,26 @@ describe.each(MOTORS)('motor $engine', (motor) => {
   });
 
   describe('enllaços compartits', () => {
+    it("l'enllaç mostra la tasca i reserva les instruccions per als usuaris autoritzats", async () => {
+      const title = 'Per mostrar en un enllaç';
+      const created = await api('POST', '/api/v1/tasks', {
+        scope_id: scopeId,
+        title,
+        ai_instructions: 'Notes internes de la tasca.',
+      });
+      expect(created.statusCode, created.body).toBe(201);
+      const taskId = created.json<{ id: string }>().id;
+      const share = await api('POST', '/api/v1/shares', { task_id: taskId, permission: 'view' });
+      expect(share.statusCode, share.body).toBe(201);
+
+      const opened = await app.inject({
+        method: 'POST',
+        url: `/s/${share.json<{ token: string }>().token}`,
+      });
+      expect(opened.statusCode, opened.body).toBe(200);
+      expect(opened.json()).toMatchObject({ task: { id: taskId, title, ai_instructions: null } });
+    });
+
     it('un enllaç que demana nom es crea sense petar', async () => {
       const taskId = await novaTasca('Per compartir');
       const res = await api('POST', '/api/v1/shares', {

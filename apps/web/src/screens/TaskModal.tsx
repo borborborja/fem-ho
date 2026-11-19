@@ -12,7 +12,7 @@ import { useTimeCompletion } from '../board/useTimeCompletion.js';
  * comentari—, que es desen soles perquè no formen part del formulari.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffectEvent, useLayoutEffect, useState } from 'react';
 import {
   dateTime,
   getLocale,
@@ -76,6 +76,8 @@ export interface TaskModalProps {
   create?: {
     status: TaskStatus;
     forAi: boolean;
+    scopeIds: string[];
+    projectIds?: string[];
     /**
      * El dia que ha de portar posat.
      *
@@ -100,7 +102,19 @@ type Draft = {
   recurrence_mode: 'schedule' | 'completion';
   ai_mode: Task['ai_mode'];
   ai_instructions: string;
+  scope_id: string;
+  project_id: string;
+  task_type_id: string;
 };
+
+function emptyToNull(value: string | undefined): string | null | undefined {
+  return value === '' ? null : value;
+}
+
+function deadlineForDay(value: string | undefined): string | null | undefined {
+  if (value === undefined) return undefined;
+  return value === '' ? null : `${value}T23:59:59.000Z`;
+}
 
 /**
  * Les repeticions que una tasca domèstica fa servir.
@@ -141,8 +155,8 @@ export function TaskModal({
     creating ? null : `/api/v1/tasks/${taskId ?? ''}/activity`,
   );
 
-  const [draft, setDraft] = useState<Draft | null>(null);
-  const [dirty, setDirty] = useState(false);
+  const [edits, setEdits] = useState<Partial<Draft>>({});
+  const [newTaskId] = useState(() => uuidv7());
   const [confirming, setConfirming] = useState(false);
   /**
    * L'esborrat demana confirmació i **no és desfés-ho**.
@@ -171,70 +185,93 @@ export function TaskModal({
   /** El nom que s'està escrivint per a una etiqueta nova; `null` si no n'hi ha cap. */
   const [newLabel, setNewLabel] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (creating && draft === null) {
-      setDraft({
+  const data = task.data;
+  const createScopes = scopes.filter((scope) => create?.scopeIds.includes(scope.id));
+  const defaultScopeId = createScopes.length === 1 ? (createScopes[0]?.id ?? '') : '';
+  const selectedScopeId = edits.scope_id ?? defaultScopeId;
+  const scopeProjects = projects.filter(
+    (project) => project.scope_id === (creating ? selectedScopeId : data?.scope_id),
+  );
+  const selectedProjects = scopeProjects.filter((project) =>
+    create?.projectIds?.includes(project.id),
+  );
+  const base: Draft | null = creating
+    ? {
         title: '',
         description: '',
-        due_date: create?.dueDate ?? '',
+        due_date: create.dueDate ?? '',
         due_time: '',
         deadline: '',
         rrule: '',
         recurrence_mode: 'schedule',
-        // La creada des del tauler de la IA neix delegada; la resta, manual.
         ai_mode: create.forAi ? 'delegated' : 'manual',
         ai_instructions: '',
-      });
-      return;
-    }
-    if (task.data === undefined || draft !== null) return;
-    setDraft({
-      title: task.data.title,
-      description: task.data.description ?? '',
-      due_date: task.data.due_date ?? '',
-      due_time: task.data.due_time ?? '',
-      deadline: (task.data.deadline ?? '').slice(0, 10),
-      rrule: task.data.rrule ?? '',
-      recurrence_mode: task.data.recurrence_mode === 'completion' ? 'completion' : 'schedule',
-      ai_mode: task.data.ai_mode,
-      ai_instructions: '',
-    });
-  }, [task.data, draft]);
+        scope_id: defaultScopeId,
+        project_id: selectedProjects.length === 1 ? (selectedProjects[0]?.id ?? '') : '',
+        task_type_id: '',
+      }
+    : data === undefined
+      ? null
+      : {
+          title: data.title,
+          description: data.description ?? '',
+          due_date: data.due_date ?? '',
+          due_time: data.due_time ?? '',
+          deadline: (data.deadline ?? '').slice(0, 10),
+          rrule: data.rrule ?? '',
+          recurrence_mode: data.recurrence_mode === 'completion' ? 'completion' : 'schedule',
+          ai_mode: data.ai_mode,
+          ai_instructions: data.ai_instructions ?? '',
+          scope_id: data.scope_id,
+          project_id: data.project_id ?? '',
+          task_type_id: data.task_type_id ?? '',
+        };
+  const draft = base === null ? null : { ...base, ...edits };
+  const scope = scopes.find((candidate) => candidate.id === draft?.scope_id);
+  const changed = <K extends keyof Draft>(key: K): Draft[K] | undefined =>
+    edits[key] === base?.[key] ? undefined : edits[key];
+  const dirty = (Object.keys(edits) as (keyof Draft)[]).some((key) => changed(key) !== undefined);
 
   const save = useMutation(async () => {
     if (draft === null) return;
 
     if (creating) {
-      const scopeId = scopes[0]?.id;
-      if (scopeId === undefined) return;
+      if (scope === undefined) return;
       await api.post('/api/v1/tasks', {
-        id: uuidv7(),
-        scope_id: scopeId,
+        id: newTaskId,
+        scope_id: scope.id,
+        project_id: draft.project_id || undefined,
+        task_type_id: draft.task_type_id || undefined,
         title: draft.title.trim() === '' ? t('task.new') : draft.title,
         status: create.status,
         description: draft.description === '' ? undefined : draft.description,
         due_date: draft.due_date === '' ? undefined : draft.due_date,
+        due_time: draft.due_time || undefined,
+        deadline: deadlineForDay(draft.deadline) ?? undefined,
+        rrule: draft.rrule || undefined,
+        recurrence_mode: draft.rrule === '' ? undefined : draft.recurrence_mode,
+        ai_mode: draft.ai_mode,
+        ai_instructions: draft.ai_instructions || undefined,
       });
-      setDirty(false);
       onChanged();
       onClose();
       return;
     }
 
-    await api.patch(`/api/v1/tasks/${taskId ?? ''}`, {
-      title: draft.title,
-      description: draft.description === '' ? null : draft.description,
-      due_date: draft.due_date === '' ? null : draft.due_date,
-      due_time: draft.due_time === '' ? null : draft.due_time,
-      // Una data límit sense hora és tot el dia: es tanca al final, no al principi.
-      deadline: draft.deadline === '' ? null : `${draft.deadline}T23:59:59.000Z`,
-      rrule: draft.rrule === '' ? null : draft.rrule,
-      recurrence_mode: draft.recurrence_mode,
-      ai_mode: draft.ai_mode,
-      ai_instructions: draft.ai_instructions === '' ? null : draft.ai_instructions,
-    });
-    setDirty(false);
-    onChanged();
+    if (dirty) {
+      // Un camp que no s'ha editat es deixa al servidor, amb tota la seva precisió.
+      await api.patch(`/api/v1/tasks/${taskId ?? ''}`, {
+        title: changed('title'),
+        description: emptyToNull(changed('description')),
+        due_date: emptyToNull(changed('due_date')),
+        due_time: emptyToNull(changed('due_time')),
+        deadline: deadlineForDay(changed('deadline')),
+        rrule: emptyToNull(changed('rrule')),
+        recurrence_mode: changed('recurrence_mode'),
+        ai_instructions: emptyToNull(changed('ai_instructions')),
+      });
+      onChanged();
+    }
     onClose();
   });
 
@@ -243,31 +280,30 @@ export function TaskModal({
     else onClose();
   };
 
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        tryClose();
-      }
-      if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
-        event.preventDefault();
-        void save.run();
-      }
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
+  const handleModalKey = useEffectEvent((event: KeyboardEvent): void => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      tryClose();
+    }
+    if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+      event.preventDefault();
+      void save.run();
+    }
   });
+  useLayoutEffect(() => {
+    // El teclat ha de continuar actiu mentre arriben les dades i es redibuixa la fitxa.
+    const listener = (event: KeyboardEvent): void => handleModalKey(event);
+    document.addEventListener('keydown', listener);
+    return () => document.removeEventListener('keydown', listener);
+  }, []);
 
   const patch = (values: Partial<Draft>): void => {
-    setDraft((current) => (current === null ? current : { ...current, ...values }));
-    setDirty(true);
+    setEdits((current) => ({ ...current, ...values }));
   };
 
-  const data = task.data;
-  const scope = scopes.find((candidate) => candidate.id === data?.scope_id);
   const scopeLabels = (labels.data ?? []).filter((entry) => entry.scope_id === data?.scope_id);
   const scopeTypes = (taskTypes.data?.data ?? []).filter(
-    (type) => type.scope_id === data?.scope_id,
+    (type) => type.scope_id === draft?.scope_id,
   );
 
   /**
@@ -379,15 +415,44 @@ export function TaskModal({
                   desplegable enmig d'un formulari és massa fàcil de fer sense voler. El
                   servidor tampoc ho accepta a `PATCH /tasks/{id}`.
                 */}
-                <span style={{ fontSize: 13, color: 'var(--ink)' }}>{scope?.name ?? ''}</span>
+                {creating ? (
+                  <select
+                    className="plou-input"
+                    data-testid="task-scope"
+                    value={draft.scope_id}
+                    onChange={(event) => {
+                      const scopeId = event.target.value;
+                      setEdits(({ project_id: _project, task_type_id: _type, ...current }) => ({
+                        ...current,
+                        scope_id: scopeId,
+                      }));
+                    }}
+                  >
+                    <option value="" disabled>
+                      {t('task.chooseScope')}
+                    </option>
+                    {createScopes.map((option) => (
+                      <option key={option.id} value={option.id}>
+                        {option.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <span style={{ fontSize: 13, color: 'var(--ink)' }}>{scope?.name ?? ''}</span>
+                )}
               </label>
               <label style={{ display: 'grid', gap: 5 }}>
                 {label(t('task.project'))}
                 <select
                   className="plou-input"
                   data-testid="task-project"
-                  value={data?.project_id ?? ''}
+                  value={draft.project_id}
+                  disabled={creating && scope === undefined}
                   onChange={(event) => {
+                    if (creating) {
+                      patch({ project_id: event.target.value });
+                      return;
+                    }
                     // Es desa de seguida: moure de projecte és un gest, com assignar.
                     void api
                       .patch(`/api/v1/tasks/${taskId}`, {
@@ -400,13 +465,11 @@ export function TaskModal({
                   }}
                 >
                   <option value="">{t('task.noProject')}</option>
-                  {projects
-                    .filter((project) => project.scope_id === data?.scope_id)
-                    .map((project) => (
-                      <option key={project.id} value={project.id}>
-                        {project.name}
-                      </option>
-                    ))}
+                  {scopeProjects.map((project) => (
+                    <option key={project.id} value={project.id}>
+                      {project.name}
+                    </option>
+                  ))}
                 </select>
               </label>
             </div>
@@ -670,8 +733,12 @@ export function TaskModal({
                 <select
                   className="plou-input"
                   data-testid="task-type-select"
-                  value={data?.task_type_id ?? ''}
+                  value={draft.task_type_id}
                   onChange={(event) => {
+                    if (creating) {
+                      patch({ task_type_id: event.target.value });
+                      return;
+                    }
                     void api
                       .patch(`/api/v1/tasks/${taskId ?? ''}`, {
                         task_type_id: event.target.value === '' ? null : event.target.value,
@@ -1239,7 +1306,7 @@ export function TaskModal({
                   type="button"
                   data-testid="task-save"
                   className="plou-btn plou-btn-primary"
-                  disabled={save.busy}
+                  disabled={save.busy || (creating && scope === undefined)}
                   onClick={() => void save.run()}
                 >
                   {t('nav.save')}
