@@ -34,6 +34,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # La prova d'instal·lació substitueix la imatge i per això no detectava l'etiqueta :1.
+      - name: Comprovar la imatge per defecte als dos Compose
+        shell: bash
+        env:
+          POSTGRES_PASSWORD: compose-config-test
+        run: |
+          expected=ghcr.io/borborborja/fem-ho:latest
+          for compose_file in compose.yaml compose.postgres.yaml; do
+            image=$(docker compose --env-file /dev/null -f "$compose_file" config --format json \
+              | jq -er '.services.femho.image')
+            if [ "$image" != "$expected" ]; then
+              printf '%s · imatge esperada %s, trobada %s\n' "$compose_file" "$expected" "$image" >&2
+              exit 1
+            fi
+          done
+
       # `arm64` es construeix per emulació. És lent —uns quants minuts— i és el preu de
       # no tenir un runner ARM; l'alternativa és no publicar-la, que no és alternativa.
       - name: QEMU

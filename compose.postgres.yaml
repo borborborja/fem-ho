@@ -8,7 +8,7 @@
 
 services:
   femho:
-    image: ghcr.io/borborborja/fem-ho:1
+    image: ghcr.io/borborborja/fem-ho:latest
     restart: unless-stopped
     depends_on:
       postgres:
