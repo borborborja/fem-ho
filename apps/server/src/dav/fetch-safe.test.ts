@@ -172,6 +172,20 @@ describe('mitigacions 5 i 6 · contra un servidor viu', () => {
         return;
       }
 
+      if (path === '/lent-amb-capcaleres') {
+        response.writeHead(200, { 'Content-Type': 'text/plain' });
+        response.write('primer ');
+        const timer = setTimeout(() => response.end('i últim'), 600);
+        response.on('close', () => clearTimeout(timer));
+        return;
+      }
+
+      if (path === '/condicional') {
+        response.writeHead(304, { ETag: '"versio-1"' });
+        response.end();
+        return;
+      }
+
       response.writeHead(200, { 'Content-Type': 'text/calendar' });
       response.end('BEGIN:VCALENDAR\r\nVERSION:2.0\r\nEND:VCALENDAR');
     });
@@ -231,6 +245,19 @@ describe('mitigacions 5 i 6 · contra un servidor viu', () => {
     await expect(safeFetch(`${base}/lent`, { ...permetLoopback, timeoutMs: 300 })).rejects.toThrow(
       /temps màxim/u,
     );
+  });
+
+  it('el temps màxim inclou la lectura del cos', async () => {
+    await expect(
+      safeFetch(`${base}/lent-amb-capcaleres`, { ...permetLoopback, timeoutMs: 250 }),
+    ).rejects.toThrow(/temps màxim/u);
+  });
+
+  it('una resposta condicional conserva l’estat i les capçaleres', async () => {
+    const result = await safeFetch(`${base}/condicional`, permetLoopback);
+    expect(result.status).toBe(304);
+    expect(result.headers.get('etag')).toBe('"versio-1"');
+    expect(result.body).toBe('');
   });
 
   it('una petició normal funciona', async () => {

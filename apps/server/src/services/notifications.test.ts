@@ -6,6 +6,7 @@
  * n'assabenta fins que algú es queixa que ja no li arriben els recordatoris.
  */
 
+import { createECDH, randomBytes } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -13,6 +14,7 @@ import { sql } from 'kysely';
 import { v7 as uuidv7 } from 'uuid';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { auditedTransaction } from '../audit/audited-transaction.js';
+import * as outbound from '../dav/fetch-safe.js';
 import { connect, type Connection } from '../db/connection.js';
 import { migrateToLatest } from '../db/migrator.js';
 import { capabilitiesForRole } from '../policy/capabilities.js';
@@ -22,6 +24,7 @@ import {
   ensureVapidKeys,
   fireDueReminders,
   pushAvailability,
+  realSender,
   sendToUser,
   subscribe,
   unsubscribe,
@@ -79,6 +82,43 @@ beforeEach(async () => {
   await sql`DELETE FROM reminders`.execute(conn.db);
 });
 
+describe('el transport push', () => {
+  it('passa el missatge xifrat i el límit de redireccions al transport segur', async () => {
+    const endpoint = 'https://push.example.net/avisos';
+    const receiver = createECDH('prime256v1');
+    const keys = await ensureVapidKeys(conn.db, NOW);
+    const request = vi.spyOn(outbound, 'safeFetch').mockResolvedValue({
+      status: 201,
+      headers: new Headers(),
+      body: '',
+      bytes: Buffer.alloc(0),
+      url: endpoint,
+    });
+    try {
+      const result = await realSender(
+        {
+          endpoint,
+          keys: {
+            p256dh: receiver.generateKeys().toString('base64url'),
+            auth: randomBytes(16).toString('base64url'),
+          },
+        },
+        'Un recordatori de prova',
+        { TTL: 60, vapidDetails: { ...keys, subject: 'mailto:avisos@example.net' } },
+      );
+      expect(result.statusCode).toBe(201);
+      const [url, options] = request.mock.calls[0]!;
+      expect(url).toBe(endpoint);
+      expect(options).toMatchObject({ method: 'POST', maxRedirects: 0 });
+      expect(new Headers(options?.headers).get('content-encoding')).toBe('aes128gcm');
+      expect(Buffer.isBuffer(options?.body)).toBe(true);
+      expect(options?.body?.includes('Un recordatori de prova')).toBe(false);
+    } finally {
+      request.mockRestore();
+    }
+  });
+});
+
 describe('AQUESTA és la que trenca instal·lacions: les claus VAPID', () => {
   it('es generen un sol cop i es persisteixen', async () => {
     const primera = await ensureVapidKeys(conn.db, NOW);
@@ -119,6 +159,14 @@ describe('AQUESTA és la que trenca instal·lacions: les claus VAPID', () => {
 });
 
 describe('subscripcions', () => {
+  it('requereix HTTPS per als dos clients', async () => {
+    for (const platform of ['web', 'android'] as const) {
+      await expect(
+        write(async (ctx) => subscribe(ctx, userId, { ...subscripcio('http://push/1'), platform })),
+      ).rejects.toMatchObject({ status: 422 });
+    }
+  });
+
   it('el mateix endpoint actualitza, no duplica', async () => {
     const primera = await write(async (ctx) =>
       subscribe(ctx, userId, subscripcio('https://push/1')),
