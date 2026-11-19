@@ -7,6 +7,20 @@ Data de l'última verificació completa: **2026-11-19**.
 
 ---
 
+## Lliurament de tasques i connexions MCP · 0.20.0
+
+L'API i MCP permeten crear tasques a qualsevol columna, inclosa la bústia, i
+moure-les. Es poden enviar subtasques, llistes, comentaris i adjunts. Els clients
+poden consultar els àmbits i les dades necessàries per emplenar una tasca.
+
+El consentiment OAuth de Fem-ho marca les operacions de tasques demanades pel
+client. La persona inicia sessió quan cal i tria els àmbits que vol compartir.
+Ajustos mostra l'estat de les connexions, permet restringir o revocar l'accés OAuth
+i conserva l'edició dels tokens manuals. El canvi s'aplica a la petició següent.
+
+Verificat amb l'SDK oficial de MCP, 273 proves de Chromium i les suites de SQLite i
+PostgreSQL. Consulta la [guia de connexió](mcp-access.md) per configurar un client.
+
 ## Integritat, sincronització i treball fora de línia · 0.19.1
 
 La sincronització comprova els permisos vigents de cada operació i del seu àmbit.
