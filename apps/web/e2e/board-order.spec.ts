@@ -2,10 +2,12 @@ import { expect, test } from '@playwright/test';
 import { enterAsNew, token } from './entrar.js';
 
 for (const gesture of ['pointer', 'keyboard'] as const) {
-  test(`reordenar amb ${gesture} conserva els veïns després de recarregar`, async ({ page }) => {
+  test(`reordenar amb ${gesture} conserva els veïns després de recarregar`, async ({
+    page,
+  }, info) => {
     await enterAsNew(page, {
       name: 'Ordre del tauler',
-      email: `board-order-${gesture}@example.com`,
+      email: `board-order-${gesture}-${info.repeatEachIndex}-${info.retry}@example.com`,
       password: 'la-contrasenya-de-prova',
     });
     const headers = { authorization: `Bearer ${await token(page)}` };
@@ -41,6 +43,7 @@ for (const gesture of ['pointer', 'keyboard'] as const) {
       await third.focus();
       await page.keyboard.press('Space');
       await expect(page.getByTestId('drag-overlay')).toBeVisible();
+      await expect(column).toHaveAttribute('data-drop-target', 'true');
       await page.keyboard.press('ArrowUp');
       await expect(second).toHaveAttribute('data-insert-edge', 'top');
       await page.keyboard.press('Space');
