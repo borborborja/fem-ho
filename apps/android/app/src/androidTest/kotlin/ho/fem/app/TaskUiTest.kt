@@ -10,6 +10,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
@@ -19,6 +20,7 @@ import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -33,6 +35,8 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import ho.fem.designsystem.CardAddForm
 import ho.fem.designsystem.FemhoTheme
 import ho.fem.model.AiMode
+import ho.fem.model.McpActivity
+import ho.fem.model.McpCreation
 import ho.fem.model.QuickAddContext
 import ho.fem.model.QuickAddPerson
 import ho.fem.model.QuickAddProject
@@ -44,6 +48,7 @@ import ho.fem.model.TaskStatus
 import ho.fem.tasks.BoardLabels
 import ho.fem.tasks.BoardScreen
 import ho.fem.tasks.CardExtras
+import ho.fem.tasks.McpProvenanceLabels
 import ho.fem.tasks.QuickAddField
 import ho.fem.tasks.TaskMenuLabels
 import org.junit.Assert.assertEquals
@@ -174,6 +179,46 @@ class TaskUiTest {
         compose.onNodeWithTag("capture-inbox").assertIsDisplayed()
         compose.onNodeWithTag("board-column-todo").performClick().assertIsSelected()
         compose.onNodeWithTag("capture-todo").assertIsDisplayed()
+    }
+
+    @Test
+    fun mcpBadgeOpensProvenanceWithoutOpeningTheTask() {
+        val provenance = mutableStateOf(McpActivity(origin = "Revisor", creation = McpCreation()))
+        val touched = Task(id = "mcp-task", scopeId = "work", title = "Tasca MCP", position = "a1")
+        val ordinary = Task(id = "other-task", scopeId = "work", title = "Tasca manual", position = "a2")
+        val mcpLabels = McpProvenanceLabels(
+            badge = "MCP",
+            details = "Origen MCP",
+            creation = "Creada per MCP",
+            lastChange = "Últim canvi per MCP",
+            unspecified = "Automatització sense nom",
+        )
+        var openedTask = false
+        compose.setContent {
+            FemhoTheme {
+                BoardScreen(
+                    tasks = listOf(touched.copy(mcpActivity = provenance.value), ordinary),
+                    labels = boardLabels,
+                    mcpLabels = mcpLabels,
+                    onOpen = { openedTask = true },
+                    onMove = { _, _ -> },
+                    onToggle = {},
+                )
+            }
+        }
+        compose.onAllNodesWithTag("task-mcp-badge").assertCountEquals(1)
+        compose.onNodeWithTag("task-mcp-badge").performTouchInput { click() }
+        compose.onNodeWithTag("task-mcp-details").assertIsDisplayed()
+        compose.onNodeWithText(mcpLabels.creation).assertIsDisplayed()
+        compose.onNodeWithText(mcpLabels.lastChange).assertIsDisplayed()
+        compose.onNodeWithText(mcpLabels.unspecified).assertIsDisplayed()
+        compose.onNodeWithText("Revisor").assertIsDisplayed()
+        compose.runOnIdle {
+            assertFalse(openedTask)
+            provenance.value = McpActivity(origin = "Revisor", creation = McpCreation("Revisor"))
+        }
+        compose.onNodeWithText(mcpLabels.creation).assertIsDisplayed()
+        compose.onNodeWithText(mcpLabels.lastChange).assertDoesNotExist()
     }
 
     @Test

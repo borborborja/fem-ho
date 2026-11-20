@@ -38,6 +38,9 @@ next_task  →  move_task(doing)  →  trabajar  →  add_comment  →  complete
    principal para reportar, y lo que leerá una persona dentro de tres días.
 5. **`complete_task`** cuando esté hecha.
 
+Si un cambio viene de una fuente externa identificable, indícala con el argumento opcional
+`origin`. Por ejemplo, `"WhatsApp"` o `"Correo electrónico"`. Se guarda con el cambio en el historial.
+
 ## La reserva es un cerrojo
 
 Mientras la tengas reservada, **la tarea está bloqueada para la persona**: no la puede mover

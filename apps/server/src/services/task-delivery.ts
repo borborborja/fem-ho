@@ -137,7 +137,7 @@ export async function createDeliveredTask(
       subtask_id: subtaskId,
     });
     for (const item of items ?? [])
-      await insertChecklistItem(ctx, principal, list.id, scopeId, item);
+      await insertChecklistItem(ctx, principal, list.id, { scopeId, taskId }, item);
   };
   for (const labelId of new Set(label_ids))
     await setTaskLabelInScope(ctx, taskId, scopeId, labelId, true);

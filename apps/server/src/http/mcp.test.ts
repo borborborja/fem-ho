@@ -11,19 +11,26 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { sql } from 'kysely';
 import { v7 as uuidv7 } from 'uuid';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../app.js';
 import { loadConfig } from '../config.js';
+import { hashPassword } from '../auth/password.js';
 import { generateApiToken } from '../auth/tokens.js';
+import * as download from '../dav/fetch-safe.js';
 import { connect, type Connection } from '../db/connection.js';
 import { migrateToLatest } from '../db/migrator.js';
+import { connectTestSchema, postgresUrl, type TestSchema } from '../db/test-postgres.js';
 import { TOOLS, assertCatalogue } from '../mcp/tools.js';
 
 const tmp = mkdtempSync(join(tmpdir(), 'femho-mcp-'));
 const NOW = '2026-08-06T09:00:00.000Z';
+const PASSWORD = 'contrasenya-de-prova';
+const pg = postgresUrl();
 
 let conn: Connection;
+let schema: TestSchema | undefined;
 let app: FastifyInstance;
 let token: string;
 let scopeId: string;
@@ -63,13 +70,17 @@ function result(body: string): Record<string, unknown> {
   return json.result ?? json.error ?? {};
 }
 
-async function credential(capabilities: string[]): Promise<string> {
+async function credential(
+  capabilities: string[],
+  allowedScope = scopeId,
+  owner = userId,
+): Promise<string> {
   const generated = generateApiToken();
   await sql`
     INSERT INTO api_tokens (id, user_id, name, token_prefix, token_hash, capabilities,
                             scope_ids, created_at)
-    VALUES (${uuidv7()}, ${userId}, 'Integració', ${generated.prefix}, ${generated.hash},
-            ${JSON.stringify(capabilities)}, ${JSON.stringify([scopeId])}, ${NOW})
+    VALUES (${uuidv7()}, ${owner}, 'Integració', ${generated.prefix}, ${generated.hash},
+            ${JSON.stringify(capabilities)}, ${JSON.stringify([allowedScope])}, ${NOW})
   `.execute(conn.db);
   return `Bearer ${generated.token}`;
 }
@@ -90,13 +101,14 @@ beforeAll(async () => {
     if (key.startsWith('FEMHO_')) delete process.env[key];
   }
 
-  conn = connect(`sqlite://${join(tmp, 'test.db')}`);
-  await migrateToLatest(conn.db, { engine: 'sqlite' });
+  if (pg !== undefined) schema = await connectTestSchema(pg, 'mcp_http');
+  conn = schema ?? connect(`sqlite://${join(tmp, 'test.db')}`);
+  await migrateToLatest(conn.db, { engine: conn.engine });
 
   userId = uuidv7();
   await sql`
-    INSERT INTO users (id, email, name, kind, role, created_at, updated_at)
-    VALUES (${userId}, 'borja@example.com', 'Borja', 'human', 'admin', ${NOW}, ${NOW})
+    INSERT INTO users (id, email, name, password_hash, kind, role, created_at, updated_at)
+    VALUES (${userId}, 'borja@example.com', 'Borja', ${await hashPassword(PASSWORD)}, 'human', 'admin', ${NOW}, ${NOW})
   `.execute(conn.db);
 
   scopeId = uuidv7();
@@ -119,13 +131,13 @@ beforeAll(async () => {
 
   app = buildApp(
     { ...loadConfig('0.1.0-test'), dataDir: tmp, logLevel: 'silent' },
-    { connection: conn },
+    { connection: conn, secret: 'secret-de-prova-de-la-instancia-mcp' },
   );
 });
 
 afterAll(async () => {
-  await app.close();
-  await conn.close();
+  await app?.close();
+  await (schema === undefined ? conn?.close() : schema.drop());
   rmSync(tmp, { recursive: true, force: true });
 });
 
@@ -256,6 +268,317 @@ describe('tools/list', () => {
 
     const whoami = tools.find((tool) => tool.name === 'whoami');
     expect(whoami?.annotations?.readOnlyHint).toBe(true);
+  });
+
+  it('totes les eines que escriuen declaren un origen opcional', () => {
+    for (const tool of TOOLS) {
+      const { origin } = tool.inputSchema;
+      if (tool.annotations.readOnlyHint) expect(origin, tool.name).toBeUndefined();
+      else
+        expect(
+          origin === undefined ? false : z.safeParse(origin, undefined).success,
+          tool.name,
+        ).toBe(true);
+    }
+  });
+});
+
+describe('la provinença d’MCP', () => {
+  const headers = () => ({ authorization: `Bearer ${token}` });
+  const sessionHeaders = async () => {
+    const login = await app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/login',
+      payload: { email: 'borja@example.com', password: PASSWORD },
+    });
+    expect(login.statusCode).toBe(200);
+    return { authorization: `Bearer ${login.json<{ access_token: string }>().access_token}` };
+  };
+
+  it('conserva a la targeta i a l’historial l’origen de cada crida', async () => {
+    const id = uuidv7();
+    const creation = {
+      id,
+      scope_id: scopeId,
+      title: 'Planificar la trobada',
+      origin: ' WhatsApp ',
+    };
+    expect(toolData(await callTool('create_task', creation))).toMatchObject({ created: true });
+    expect(
+      toolData(await callTool('create_task', { ...creation, origin: 'Reintent' })),
+    ).toMatchObject({ created: false });
+    toolData(
+      await callTool('update_task', { task_id: id, description: 'Dia acordat', origin: 'Correu' }),
+    );
+    toolData(await callTool('move_task', { task_id: id, status: 'doing' }));
+    const edit = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/tasks/${id}`,
+      headers: headers(),
+      payload: { title: 'Trobada confirmada' },
+    });
+    expect(edit.statusCode, edit.body).toBe(200);
+
+    const response = await app.inject({
+      method: 'GET',
+      url: `/api/v1/tasks/${id}`,
+      headers: headers(),
+    });
+    expect(response.statusCode).toBe(200);
+    const badge = { origin: null, creation: { origin: 'WhatsApp' } };
+    expect(response.json()).toMatchObject({ source_kind: null, mcp_activity: badge });
+    const board = await app.inject({ method: 'GET', url: '/api/v1/board', headers: headers() });
+    expect(board.statusCode).toBe(200);
+    const tasks = board
+      .json<{
+        columns: { groups: { tasks: { id: string }[] }[] }[];
+      }>()
+      .columns.flatMap((column) => column.groups.flatMap((group) => group.tasks));
+    expect(tasks.find((task) => task.id === id)).toMatchObject({ mcp_activity: badge });
+    expect(toolData(await callTool('get_task', { task_id: id }))).toMatchObject({
+      mcp_activity: badge,
+    });
+
+    const history = await app.inject({
+      method: 'GET',
+      url: `/api/v1/tasks/${id}/activity`,
+      headers: headers(),
+    });
+    expect(history.statusCode).toBe(200);
+    const entries = history.json<{
+      data: { verb: string; source: string; mcp_origin?: string | null }[];
+    }>().data;
+    expect(entries.map(({ verb, source, mcp_origin }) => ({ verb, source, mcp_origin }))).toEqual([
+      { verb: 'created', source: 'mcp', mcp_origin: 'WhatsApp' },
+      { verb: 'updated', source: 'mcp', mcp_origin: 'Correu' },
+      { verb: 'moved', source: 'mcp', mcp_origin: null },
+      { verb: 'updated', source: 'api', mcp_origin: undefined },
+    ]);
+  });
+
+  it('mostra l’origen dels canvis d’ítems i adjunts a la tasca mare', async () => {
+    const { task } = toolData<{ task: { id: string } }>(
+      await callTool('create_task', {
+        scope_id: scopeId,
+        title: 'Preparar el viatge',
+        checklists: [{ name: 'Logística', items: [{ text: 'Bitllets' }, { text: 'Reserva' }] }],
+      }),
+    );
+    const item = (
+      await sql<{ id: string }>`
+      SELECT i.id FROM checklist_items i JOIN checklists c ON c.id = i.checklist_id
+      WHERE c.task_id = ${task.id} AND i.text = 'Bitllets'
+    `.execute(conn.db)
+    ).rows[0]!;
+    toolData(
+      await callTool('update_checklist_item', { item_id: item.id, done: true, origin: 'Xat' }),
+    );
+    toolData(
+      await callTool('update_checklist_item', {
+        item_id: item.id,
+        done: true,
+        origin: 'Sense canvi',
+      }),
+    );
+    expect(toolData(await callTool('get_task', { task_id: task.id }))).toMatchObject({
+      mcp_activity: { origin: 'Xat', creation: { origin: null } },
+    });
+    const upload = {
+      task_id: task.id,
+      id: uuidv7(),
+      filename: 'bitllets.txt',
+      url: 'https://files.example.net/bitllets.txt',
+      origin: 'Correu',
+    };
+    const fetch = vi.spyOn(download, 'safeFetch').mockResolvedValueOnce({
+      bytes: Buffer.from('Bitllets'),
+      body: 'Bitllets',
+      status: 200,
+      headers: new Headers(),
+      url: upload.url,
+    });
+    try {
+      expect(toolData(await callTool('add_task_attachment', upload))).toMatchObject({
+        created: true,
+      });
+      expect(
+        toolData(await callTool('add_task_attachment', { ...upload, origin: 'Reintent' })),
+      ).toMatchObject({ created: false });
+      expect(fetch).toHaveBeenCalledTimes(1);
+    } finally {
+      fetch.mockRestore();
+    }
+
+    const history = await app.inject({
+      method: 'GET',
+      url: `/api/v1/tasks/${task.id}/activity`,
+      headers: headers(),
+    });
+    expect(history.statusCode).toBe(200);
+    expect(history.json().data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          entity_id: item.id,
+          entity_type: 'checklist_item',
+          verb: 'completed',
+          mcp_origin: 'Xat',
+          undoable: false,
+        }),
+        expect.objectContaining({
+          entity_id: upload.id,
+          entity_type: 'attachment',
+          verb: 'created',
+          mcp_origin: 'Correu',
+        }),
+      ]),
+    );
+    expect(history.body).not.toContain('Reintent');
+    expect(history.body).not.toContain('Sense canvi');
+    expect(toolData(await callTool('get_task', { task_id: task.id }))).toMatchObject({
+      mcp_activity: { origin: 'Correu', creation: { origin: null } },
+    });
+  });
+
+  it('respecta l’àmbit autoritzat i omet la provinença en un enllaç públic', async () => {
+    const { task } = toolData<{ task: { id: string } }>(
+      await callTool('create_task', {
+        scope_id: scopeId,
+        title: 'Tasca compartida',
+        origin: 'Xat intern',
+      }),
+    );
+    const otherScope = uuidv7();
+    const otherUser = uuidv7();
+    await sql`
+      INSERT INTO users (id, email, name, kind, role, created_at, updated_at)
+      VALUES (${otherUser}, 'altra@example.com', 'Altra', 'human', 'member', ${NOW}, ${NOW})
+    `.execute(conn.db);
+    await sql`
+      INSERT INTO scopes (id, name, kind, color, owner_id, position, created_at, updated_at)
+      VALUES (${otherScope}, 'Altre àmbit', 'individual', '--plou-blue', ${otherUser}, 'a2', ${NOW}, ${NOW})
+    `.execute(conn.db);
+    const restricted = { authorization: await credential(['tasks:read'], otherScope, otherUser) };
+    for (const suffix of ['', '/activity']) {
+      const outside = await app.inject({
+        method: 'GET',
+        url: `/api/v1/tasks/${task.id}${suffix}`,
+        headers: restricted,
+      });
+      expect(outside.statusCode).toBe(403);
+      expect(outside.body).not.toContain('Xat intern');
+    }
+
+    const share = await app.inject({
+      method: 'POST',
+      url: '/api/v1/shares',
+      headers: await sessionHeaders(),
+      payload: { task_id: task.id, permission: 'view' },
+    });
+    expect(share.statusCode, share.body).toBe(201);
+    const guest = await app.inject({
+      method: 'POST',
+      url: `/s/${share.json<{ token: string }>().token}`,
+      payload: {},
+    });
+    expect(guest.statusCode).toBe(200);
+    expect(guest.json().task).toMatchObject({ id: task.id, title: 'Tasca compartida' });
+    expect(guest.json().task).not.toHaveProperty('mcp_activity');
+    expect(guest.body).not.toContain('Xat intern');
+  });
+
+  it('desa al seu àmbit l’origen d’una reserva feta amb next_task', async () => {
+    const session = await sessionHeaders();
+    const agent = await app.inject({
+      method: 'POST',
+      url: '/api/v1/ai/agents',
+      headers: session,
+      payload: { name: 'Assistent de prova' },
+    });
+    expect(agent.statusCode).toBe(201);
+    const agentId = agent.json<{ id: string }>().id;
+    const scopes = await app.inject({
+      method: 'PUT',
+      url: `/api/v1/ai/agents/${agentId}/scopes`,
+      headers: session,
+      payload: { scope_ids: [scopeId] },
+    });
+    expect(scopes.statusCode).toBe(200);
+    const access = await app.inject({
+      method: 'POST',
+      url: `/api/v1/ai/agents/${agentId}/credentials`,
+      headers: session,
+      payload: { name: 'Assistent al portàtil' },
+    });
+    expect(access.statusCode).toBe(201);
+    const agentAuth = `Bearer ${access.json<{ token: string }>().token}`;
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/v1/tasks',
+      headers: session,
+      payload: {
+        scope_id: scopeId,
+        title: 'Revisar la llista',
+        status: 'todo',
+        ai_mode: 'delegated',
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    const { id } = created.json<{ id: string }>();
+    const claim = await callTool('next_task', { scope_id: scopeId, origin: 'Notes' }, agentAuth);
+    expect(toolData(claim)).toMatchObject({ task: { id }, lease_expires_at: expect.any(String) });
+    const claimed = toolData<{ mcp_activity: unknown }>(
+      await callTool('get_task', { task_id: id }, agentAuth),
+    );
+    expect(claimed.mcp_activity).toEqual({ origin: 'Notes' });
+    const recorded = await sql<{ scope_id: string; mcp_origin: string }>`
+      SELECT scope_id, mcp_origin FROM activity_log
+      WHERE entity_type = 'task' AND entity_id = ${id} AND verb = 'claimed'
+    `.execute(conn.db);
+    expect(recorded.rows).toEqual([{ scope_id: scopeId, mcp_origin: 'Notes' }]);
+    const released = await callTool(
+      'release_task',
+      {
+        task_id: id,
+        reason: 'La reunió s’ajorna',
+        origin: 'Correu',
+      },
+      agentAuth,
+    );
+    expect(toolData(released)).toEqual({ released: id });
+    expect(toolData(await callTool('get_task', { task_id: id }, agentAuth))).toMatchObject({
+      mcp_activity: { origin: 'Correu' },
+      locked_until: null,
+    });
+    const oldClaim = uuidv7();
+    await sql`
+      INSERT INTO activity_log (id, entity_type, entity_id, actor_type, actor_agent_id,
+                                source, verb, created_at)
+      VALUES (${oldClaim}, 'task', ${id}, 'ai_agent', ${agentId}, 'mcp', 'claimed', ${NOW})
+    `.execute(conn.db);
+    const history = await app.inject({
+      method: 'GET',
+      url: `/api/v1/tasks/${id}/activity`,
+      headers: session,
+    });
+    expect(history.json().data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: oldClaim, verb: 'claimed', source: 'mcp', mcp_origin: null }),
+        expect.objectContaining({ verb: 'claimed', source: 'mcp', mcp_origin: 'Notes' }),
+        expect.objectContaining({ verb: 'released', source: 'mcp', mcp_origin: 'Correu' }),
+      ]),
+    );
+  });
+
+  it('rebutja una etiqueta buida o massa llarga abans d’escriure', async () => {
+    for (const origin of ['  ', 'x'.repeat(121)]) {
+      const id = uuidv7();
+      expect(
+        (await callTool('create_task', { id, scope_id: scopeId, title: 'Esborrany', origin }))
+          .isError,
+      ).toBe(true);
+      const audit = await sql`SELECT id FROM activity_log WHERE entity_id = ${id}`.execute(conn.db);
+      expect(audit.rows).toEqual([]);
+    }
   });
 });
 

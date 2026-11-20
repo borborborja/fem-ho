@@ -8,6 +8,7 @@ import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
 import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.JsonDecoder
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.intOrNull
@@ -122,7 +123,14 @@ data class Task(
     @SerialName("ai_last_read_at") val aiLastReadAt: String? = null,
     @SerialName("source_event") val sourceEvent: SourceEvent? = null,
     val version: Int = 1,
+    @SerialName("mcp_activity") val mcpActivity: McpActivity? = null,
 )
+
+@Serializable
+data class McpActivity(val origin: String? = null, val creation: McpCreation? = null)
+
+@Serializable
+data class McpCreation(val origin: String? = null)
 
 /** Veure `Task.progress`. `lists` compta blocs —les subtasques en són un— i no ítems. */
 @Serializable
@@ -458,6 +466,7 @@ data class ActivityEntry(
     val changes: Map<String, ActivityChange>? = null,
     @SerialName("created_at") val createdAt: String,
     val undoable: Boolean = false,
+    @SerialName("mcp_origin") val mcpOrigin: String? = null,
 )
 
 @Serializable
@@ -481,6 +490,7 @@ object ChangeValueCoerce : KSerializer<String?> {
     override fun deserialize(decoder: Decoder): String? {
         val element = (decoder as? JsonDecoder)?.decodeJsonElement()
         return when (element) {
+            JsonNull -> null
             is JsonPrimitive -> element.booleanOrNull?.toString() ?: element.intOrNull?.toString() ?: element.content
             null -> null
             else -> null

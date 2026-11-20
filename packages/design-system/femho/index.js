@@ -15,6 +15,7 @@ export { TaskCard } from './TaskCard.jsx';
 export { KanbanColumn, KanbanGroup, ScopeGroupHeader } from './KanbanColumn.jsx';
 export { EmptyState } from './EmptyState.jsx';
 export { ScopeChip } from './ScopeChip.jsx';
+export { SourceBadge } from './SourceBadge.jsx';
 export { QuickAddInput } from './QuickAddInput.jsx';
 export { MonthView, WeekView, DayView, monthCells, weekIndex } from './CalendarGrid.jsx';
 export { AiModeBadge, UnseenAiDot } from './AiModeBadge.jsx';

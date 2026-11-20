@@ -545,6 +545,8 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
         title: task.title,
         status: task.status,
         scope_id: task.scope_id,
+        sourceKind: task.source_kind,
+        mcpActivity: task.mcp_activity,
         time: task.due_time ?? undefined,
       }))}
       undated={(inbox.data?.undated ?? []).map((task) => ({
@@ -552,6 +554,8 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
         title: task.title,
         status: task.status,
         scope_id: task.scope_id,
+        sourceKind: task.source_kind,
+        mcpActivity: task.mcp_activity,
       }))}
       scopes={scopes
         .filter((scope) => activeScopeIds.includes(scope.id))

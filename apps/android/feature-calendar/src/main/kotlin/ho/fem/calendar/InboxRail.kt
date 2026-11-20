@@ -61,6 +61,7 @@ fun InboxRail(
     onEventToTask: (InboxEvent) -> Unit = {},
     onEventToggle: (InboxEvent) -> Unit = {},
     eventTime: (InboxEvent) -> String,
+    taskMetadata: @Composable (Task) -> Unit = {},
 ) {
     Column(
         modifier = modifier.fillMaxWidth().padding(12.dp).testTag("inbox-rail"),
@@ -97,6 +98,7 @@ fun InboxRail(
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f),
                 )
+                taskMetadata(task)
             }
         }
 

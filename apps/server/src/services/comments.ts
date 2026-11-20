@@ -173,6 +173,8 @@ export async function askUser(
   const task = await sql<{ scope_id: string }>`
     SELECT scope_id FROM tasks WHERE id = ${taskId}
   `.execute(ctx.tx);
+  const scopeId = task.rows[0]?.scope_id;
+  if (scopeId === undefined) throw notFound('task', taskId);
 
   await raiseAttention(ctx, taskId);
 
@@ -181,12 +183,12 @@ export async function askUser(
    * visqui ningú pot respondre-li ni endur-se la tasca: el pany voldria dir «hi ha algú a
    * dins» quan el que hi ha és algú esperant a fora.
    */
-  await releaseIfHeld(ctx, taskId, 'Espera resposta de la persona.');
+  await releaseIfHeld(ctx, taskId, scopeId, 'Espera resposta de la persona.');
 
   ctx.record({
     entityType: 'task',
     entityId: taskId,
-    scopeId: task.rows[0]?.scope_id ?? null,
+    scopeId,
     verb: 'asked',
   });
 

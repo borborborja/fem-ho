@@ -51,6 +51,14 @@ const MODIFY: ToolAnnotations = {
 
 const scopeId = z.string().describe('Scope identifier. A bare UUID, no prefix.');
 const taskId = z.string().describe('Task identifier. A bare UUID, no prefix.');
+const origin = z
+  .string()
+  .trim()
+  .min(1)
+  .max(120)
+  .refine((label) => !/[\p{Cc}\p{Zl}\p{Zp}]/u.test(label), 'Use a single-line label.')
+  .optional()
+  .describe('Where this action came from, e.g. WhatsApp or Email. Use a short label.');
 
 /**
  * El catàleg, **ordenat alfabèticament**.
@@ -65,7 +73,7 @@ export const TOOLS: ToolSpec[] = [
     title: 'Comment on a task',
     description:
       'Adds a comment to a task. **This is the main way for an agent to report** what it has done or what it is missing in order to continue.',
-    inputSchema: { task_id: taskId, body: z.string().describe('The comment text.') },
+    inputSchema: { task_id: taskId, body: z.string().describe('The comment text.'), origin },
     annotations: CREATE,
   },
   {
@@ -80,6 +88,7 @@ export const TOOLS: ToolSpec[] = [
       content_base64: z.string().optional().describe('Standard Base64, up to 1 MiB decoded.'),
       url: z.string().optional().describe('Public HTTPS download URL for the file.'),
       ai_context: z.boolean().optional(),
+      origin,
     },
     annotations: { ...MODIFY, openWorldHint: true },
   },
@@ -91,6 +100,7 @@ export const TOOLS: ToolSpec[] = [
     inputSchema: {
       task_id: taskId,
       question: z.string().describe('What you need in order to carry on. One concrete question.'),
+      origin,
     },
     annotations: CREATE,
   },
@@ -99,7 +109,7 @@ export const TOOLS: ToolSpec[] = [
     title: 'Complete a task',
     description:
       'Marks a task as done. Applies the upward cascade and generates the next instance if it repeats.',
-    inputSchema: { task_id: taskId },
+    inputSchema: { task_id: taskId, origin },
     annotations: MODIFY,
   },
   {
@@ -107,7 +117,7 @@ export const TOOLS: ToolSpec[] = [
     title: 'Create a task',
     description:
       'Creates a task in Inbox, To do, Doing or Done with its initial data. Use get_task_context to find identifiers. Pass a client-generated id for safe retries. Attach files separately with add_task_attachment.',
-    inputSchema: taskCreateShape,
+    inputSchema: { ...taskCreateShape, origin },
     annotations: CREATE,
   },
   {
@@ -180,6 +190,7 @@ export const TOOLS: ToolSpec[] = [
     inputSchema: {
       task_id: taskId,
       ...taskMoveMcpShape,
+      origin,
     },
     annotations: { ...MODIFY, idempotentHint: false },
   },
@@ -188,7 +199,7 @@ export const TOOLS: ToolSpec[] = [
     title: 'The next delegated task',
     description:
       'Returns the next available delegated task **and claims it** for 30 minutes. This is what stops two agents doing the same work. Call `release_task` if you cannot do it.',
-    inputSchema: { scope_id: z.string().optional() },
+    inputSchema: { scope_id: z.string().optional(), origin },
     // **No idempotent**: cada crida reserva una tasca diferent.
     annotations: CREATE,
   },
@@ -196,7 +207,7 @@ export const TOOLS: ToolSpec[] = [
     name: 'release_task',
     title: 'Release a claim',
     description: 'Releases the claim on a task, with a reason that stays in the history.',
-    inputSchema: { task_id: taskId, reason: z.string().describe('Why you cannot do it.') },
+    inputSchema: { task_id: taskId, reason: z.string().describe('Why you cannot do it.'), origin },
     annotations: MODIFY,
   },
   {
@@ -209,6 +220,7 @@ export const TOOLS: ToolSpec[] = [
       learned: z
         .string()
         .describe('What you now know that you did not know when you asked. In one paragraph.'),
+      origin,
     },
     annotations: CREATE,
   },
@@ -224,7 +236,7 @@ export const TOOLS: ToolSpec[] = [
     title: 'Check an item of a checklist',
     description:
       'Checks or unchecks an item. If it is the last one missing, the upward cascade can complete the subtask and the task.',
-    inputSchema: { item_id: z.string(), done: z.boolean() },
+    inputSchema: { item_id: z.string(), done: z.boolean(), origin },
     annotations: MODIFY,
   },
   {
@@ -234,6 +246,7 @@ export const TOOLS: ToolSpec[] = [
     inputSchema: {
       task_id: taskId,
       ...taskPatchShape,
+      origin,
     },
     annotations: MODIFY,
   },

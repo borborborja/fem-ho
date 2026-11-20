@@ -5,6 +5,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 
 /**
  * Serialització dels models nous de paritat amb la web.
@@ -24,6 +25,37 @@ import kotlin.test.assertNotNull
  */
 class SerializationTest {
     private val json = Json { ignoreUnknownKeys = true }
+
+    @Test
+    fun `la procedència MCP és opcional i distingeix una creació sense nom`() {
+        val legacy = """{"id":"t1","scope_id":"s1","title":"Tasca","position":"a1"}"""
+        assertNull(json.decodeFromString<Task>(legacy).mcpActivity)
+        val base = legacy.removeSuffix("}")
+
+        val named = json.decodeFromString<Task>(
+            """$base,"mcp_activity":{"origin":"Revisor","creation":{"origin":"Planificador"}}}""",
+        ).mcpActivity
+        assertEquals(McpActivity("Revisor", McpCreation("Planificador")), named)
+
+        val unknown = json.decodeFromString<Task>("""$base,"mcp_activity":{"origin":null,"creation":{"origin":null}}}""")
+        assertEquals(McpActivity(creation = McpCreation()), unknown.mcpActivity)
+    }
+
+    @Test
+    fun `l'historial llegeix la procedència de l'entrada i tolera un servidor anterior`() {
+        val base = """{"id":"a1","entity_type":"task","entity_id":"t1","verb":"updated","actor_type":"user","created_at":"2026-08-11T10:00:00.000Z"}""".removeSuffix("}")
+        val fromMcp = json.decodeFromString<ActivityEntry>(
+            """$base,"source":"mcp","mcp_origin":"Revisor","changes":{"title":{"from":"Abans","to":"Després"},"description":{"from":null,"to":"Nota"}}}""",
+        )
+        assertEquals("mcp", fromMcp.source)
+        assertEquals("Revisor", fromMcp.mcpOrigin)
+        assertEquals(ActivityChange("Abans", "Després"), fromMcp.changes?.get("title"))
+        assertEquals(ActivityChange(null, "Nota"), fromMcp.changes?.get("description"))
+
+        val fromWeb = json.decodeFromString<ActivityEntry>("""$base,"source":"web"}""")
+        assertEquals("web", fromWeb.source)
+        assertNull(fromWeb.mcpOrigin)
+    }
 
     /* ----------------------------------------- Label ----------------------------------------- */
     @Test

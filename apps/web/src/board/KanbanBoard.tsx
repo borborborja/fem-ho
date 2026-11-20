@@ -20,7 +20,7 @@ import {
 import { BoardCard } from './BoardCard.js';
 import { BoardDnd, DraggableCard, DroppableColumn, type DropPlacement } from './dnd.js';
 import { InboxRail } from './InboxRail.js';
-import type { InboxEvent, InboxMail } from '../app/types.js';
+import type { InboxEvent, InboxMail, Task } from '../app/types.js';
 
 export interface BoardTask {
   timeSummary?: import('@fem-ho/contracts').components['schemas']['TaskTimeSummary'] | undefined;
@@ -28,6 +28,7 @@ export interface BoardTask {
   title: string;
   /** De quina mena de font ve, o `undefined` si l'ha escrita una persona. */
   sourceKind?: SourceKind | null | undefined;
+  mcpActivity?: Task['mcp_activity'];
   status: TaskStatus;
   scope_id: string;
   project?: string | undefined;

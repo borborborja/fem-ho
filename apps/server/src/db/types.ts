@@ -21,8 +21,10 @@ export interface ActivityLog {
   entity_id: string;
   entity_type: string;
   id: string;
+  mcp_origin: string | null;
   scope_id: string | null;
   source: string;
+  task_id: string | null;
   verb: string;
 }
 

@@ -68,6 +68,8 @@ export interface AuditEntry {
   entityType: string;
   entityId: string;
   scopeId?: string | null;
+  /** Tasca del fill que cal poder trobar al seu historial. */
+  taskId?: string | undefined;
   verb: AuditVerb;
   /** `{camp: {from, to}}`. És el que fa possible desfer un canvi autònom de la IA. */
   changes?: Record<string, { from: unknown; to: unknown }>;
@@ -131,6 +133,8 @@ export interface AuditedTransactionOptions {
    * exclusiu de Postgres.
    */
   engine?: 'sqlite' | 'postgres';
+  /** Etiqueta declarada a la crida MCP, separada del canal autenticat. */
+  mcpOrigin?: string | undefined;
 }
 
 /**
@@ -175,7 +179,7 @@ export async function auditedTransaction<T>(
     }
 
     for (const entry of entries) {
-      await writeEntry(tx, principal, entry, now);
+      await writeEntry(tx, principal, entry, now, options.mcpOrigin);
     }
 
     // El `seq` s'assigna AQUÍ, al final i sota bloqueig, no a mesura que es treballa.
@@ -195,6 +199,7 @@ async function writeEntry(
   principal: Principal,
   entry: AuditEntry,
   now: string,
+  mcpOrigin: string | undefined,
 ): Promise<void> {
   // L'actor surt del principal, no d'un paràmetre: així no hi ha manera d'escriure una
   // entrada amb un actor que no sigui qui de veritat ha fet la petició.
@@ -219,12 +224,14 @@ async function writeEntry(
   await sql`
     INSERT INTO activity_log
       (id, entity_type, entity_id, scope_id, actor_type, actor_user_id, actor_agent_id,
-       actor_label, source, verb, changes, created_at, credential_id)
+       actor_label, source, verb, changes, created_at, credential_id, mcp_origin, task_id)
     VALUES
       (${uuidv7()}, ${entry.entityType}, ${entry.entityId}, ${entry.scopeId ?? null},
        ${actorType}, ${actorUserId}, ${principal.agentId ?? null},
        ${principal.label ?? null}, ${principal.source}, ${entry.verb},
-       ${entry.changes === undefined ? null : JSON.stringify(entry.changes)}, ${now}, ${principal.credentialId ?? null})
+       ${entry.changes === undefined ? null : JSON.stringify(entry.changes)}, ${now}, ${principal.credentialId ?? null},
+       ${principal.source === 'mcp' ? (mcpOrigin ?? null) : null},
+       ${principal.source === 'mcp' ? (entry.taskId ?? null) : null})
   `.execute(tx);
 
   /**

@@ -160,6 +160,7 @@ export type TaskAttachmentInput = {
 interface TaskAttachmentOptions {
   dataDir: string;
   maxUploadBytes: number;
+  mcpOrigin?: string | undefined;
   reauthorize?: () => Promise<Principal>;
 }
 
@@ -350,7 +351,7 @@ export async function deliverTaskAttachment(
         await storeAttachment(storageId, data, ctx.now, options.dataDir);
         return { attachment: row, created: true };
       },
-      { engine },
+      { engine, mcpOrigin: options.mcpOrigin },
     );
   } catch (error) {
     if (storedPath !== undefined) {
@@ -467,6 +468,7 @@ async function insertAttachment(
     entityType: 'attachment',
     entityId: id,
     scopeId,
+    taskId: input.taskId,
     verb: 'created',
     changes: { filename: { from: null, to: filename } },
   });

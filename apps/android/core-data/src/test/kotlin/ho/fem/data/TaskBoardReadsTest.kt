@@ -1,5 +1,7 @@
 package ho.fem.data
 
+import ho.fem.model.McpActivity
+import ho.fem.model.McpCreation
 import ho.fem.model.Task
 import ho.fem.model.TaskStatus
 import kotlinx.coroutines.runBlocking
@@ -8,6 +10,7 @@ import java.lang.reflect.Proxy
 import java.lang.reflect.Method
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class TaskBoardReadsTest {
@@ -34,6 +37,16 @@ class TaskBoardReadsTest {
             }
         } as FemhoDao
         return LocalReads(dao)
+    }
+
+    @Test
+    fun `la procedència MCP es manté a la tasca desada fora de línia`() {
+        val provenance = McpActivity(origin = "Revisor", creation = McpCreation("Planificador"))
+        val entity = Task("task-mcp", "personal", title = "Tasca MCP", position = "a1", mcpActivity = provenance)
+            .toEntity()
+
+        assertEquals(provenance, entity.copy(status = "doing").toDomain().mcpActivity)
+        assertNull(entity.copy(taskJson = null).toDomain().mcpActivity)
     }
 
     @Test

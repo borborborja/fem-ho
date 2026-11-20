@@ -96,6 +96,25 @@ Per REST, `POST /api/v1/tasks/{id}/attachments` accepta JSON amb `id`, `filename
 a la consulta. Les pujades REST i les descàrregues per URL tenen el límit configurat
 a la instància. Conserva l'identificador si has de reintentar un fitxer.
 
+## Indicar la font d'una acció MCP
+
+Les eines MCP que escriuen accepten `origin`, una etiqueta opcional de fins a
+120 caràcters. Afegeix `"origin": "WhatsApp"` als arguments de `create_task`
+quan la tasca vingui d'una conversa. Si una automatització després la modifica
+arran d'un correu, pot cridar `update_task` amb aquests arguments.
+
+```json
+{
+  "task_id": "01955f3c-3c04-7d4e-996b-644400000001",
+  "title": "Preparar el dossier per a divendres",
+  "origin": "Correu electrònic"
+}
+```
+
+La insígnia **MCP** a la tasca mostra la font de l'última acció i la de creació,
+si escau. L'historial conserva el canal i la font indicada de cada canvi. Si
+una eina omet `origin`, Fem-ho registra el canal MCP i deixa la font sense indicar.
+
 ## ChatGPT
 
 1. Copia la URL MCP que mostra Fem-ho, per exemple `https://tasques.example.net/mcp`.

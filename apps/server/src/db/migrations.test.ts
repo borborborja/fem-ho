@@ -164,6 +164,28 @@ describe.each(motors)('migracions · $engine', (motor) => {
     }
   });
 
+  it("conserva l'activitat MCP anterior a la migració 026", async () => {
+    const name = '026-mcp-activity-origin';
+    const pending = MIGRATIONS.slice(MIGRATIONS.findIndex((m) => m.name === name));
+    for (const migration of [...pending].reverse()) {
+      expect(await migrateDown(conn.db, motor.engine)).toBe(migration.name);
+    }
+
+    await sql`
+      INSERT INTO activity_log (id, entity_type, entity_id, actor_type, source, verb, created_at)
+      VALUES ('mcp-legacy', 'task', 'legacy-task', 'system', 'mcp', 'created', '2026-11-19T09:00:00Z')
+    `.execute(conn.db);
+
+    const result = await migrateToLatest(conn.db, { engine: motor.engine });
+    expect(result.applied).toEqual(pending.map((m) => m.name));
+    const entry = await sql`
+      SELECT entity_id, source, verb, mcp_origin, task_id FROM activity_log WHERE id = 'mcp-legacy'
+    `.execute(conn.db);
+    expect(entry.rows).toEqual([
+      { entity_id: 'legacy-task', source: 'mcp', verb: 'created', mcp_origin: null, task_id: null },
+    ]);
+  });
+
   it('scope_id de tasks és NOT NULL: una tasca sense àmbit no hi cap', async () => {
     // És la invariant central del producte (docs/01 §4). Es comprova a l'esquema i no
     // només a la capa de servei, perquè el CalDAV i el sync també hi escriuen.

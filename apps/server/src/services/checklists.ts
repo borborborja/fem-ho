@@ -273,7 +273,7 @@ export async function insertChecklist(
             ${generatePosition(last.rows[0]?.position ?? null, null)}, ${ctx.now}, ${ctx.now}, 1)
   `.execute(ctx.tx);
 
-  ctx.record({ entityType: 'checklist', entityId: id, scopeId, verb: 'created' });
+  ctx.record({ entityType: 'checklist', entityId: id, scopeId, taskId, verb: 'created' });
 
   const created = await sql<ChecklistRow>`
     SELECT id, task_id, subtask_id, name, pinned, pinned_by, show_completed_inline,
@@ -291,9 +291,9 @@ export async function createChecklistItem(
   input: { id?: string | undefined; text?: string | undefined; position?: string | undefined },
 ): Promise<ChecklistItemView> {
   if (!hasCapability(principal, 'checklists:write')) throw missingCapability('checklists:write');
-  const { scopeId } = await taskOfChecklist(ctx.tx, checklistId);
+  const { scopeId, taskId } = await taskOfChecklist(ctx.tx, checklistId);
   await assertScopeAccess(ctx.tx, principal, scopeId);
-  return insertChecklistItem(ctx, principal, checklistId, scopeId, input);
+  return insertChecklistItem(ctx, principal, checklistId, { scopeId, taskId }, input);
 }
 
 /** Crear un ítem ja fet conserva l'estat importat de la tasca i de la subtasca. */
@@ -301,7 +301,7 @@ export async function insertChecklistItem(
   ctx: AuditContext,
   principal: Principal,
   checklistId: string,
-  scopeId: string,
+  { scopeId, taskId }: { scopeId: string; taskId: string },
   input: {
     id?: string | undefined;
     text?: string | undefined;
@@ -328,7 +328,7 @@ export async function insertChecklistItem(
             ${ctx.now}, ${ctx.now}, 1)
   `.execute(ctx.tx);
 
-  ctx.record({ entityType: 'checklist_item', entityId: id, scopeId, verb: 'created' });
+  ctx.record({ entityType: 'checklist_item', entityId: id, scopeId, taskId, verb: 'created' });
 
   const created = await sql<ChecklistItemRow>`
     SELECT id, checklist_id, text, done, done_at, done_by, position
@@ -412,6 +412,14 @@ export async function updateChecklistItem(
   const wasDone = isTrue(item.done);
   const done = input.done ?? wasDone;
   const doneChanged = done !== wasDone;
+  if (
+    !doneChanged &&
+    (input.text === undefined || input.text === item.text) &&
+    (input.position === undefined || input.position === item.position)
+  ) {
+    ctx.noChange();
+    return { item: toItemView(item), cascade: NO_CASCADE };
+  }
 
   await sql`
     UPDATE checklist_items SET
@@ -429,6 +437,7 @@ export async function updateChecklistItem(
     entityType: 'checklist_item',
     entityId: itemId,
     scopeId,
+    taskId,
     verb: doneChanged ? (done ? 'completed' : 'reopened') : 'updated',
     changes: {
       ...(doneChanged ? { done: { from: wasDone, to: done } } : {}),
@@ -506,6 +515,7 @@ async function applyCascade(
         entityType: 'subtask',
         entityId: checklist.subtask_id,
         scopeId,
+        taskId,
         verb: 'cascade_complete',
       });
     }

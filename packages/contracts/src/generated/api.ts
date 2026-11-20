@@ -3777,7 +3777,10 @@ export interface components {
             credential_id?: string | null;
             /** @description "Borja", "IA · Claude", "Extern · Marta". */
             actor_label?: string | null;
+            /** @description Canal d’escriptura registrat pel servidor. */
             source: string;
+            /** @description Etiqueta de la font declarada pel client MCP per a aquest canvi. */
+            mcp_origin?: string | null;
             /**
              * @description `{camp: {from, to}}`. És el que fa possible el botó Desfés: sense el valor
              *     anterior no hi ha res a què tornar.
@@ -4143,6 +4146,15 @@ export interface components {
             ai_description?: string;
             position?: string;
         };
+        McpTaskActivity: {
+            /** @description Font declarada en l’última acció MCP de la tasca, si s’ha indicat. */
+            origin: string | null;
+            /** @description Present quan la tasca es va crear per MCP. */
+            creation?: {
+                /** @description Font declarada en crear la tasca, si s’ha indicat. */
+                origin: string | null;
+            };
+        };
         Task: {
             /** @description Agregat del tauler; mateixos permisos de lectura que el registre de dedicació. */
             time_summary?: components["schemas"]["TaskTimeSummary"];
@@ -4199,6 +4211,8 @@ export interface components {
              * @enum {string|null}
              */
             source_kind?: "caldav" | "ical" | "rss" | null;
+            /** @description Resum de les accions MCP. Absent quan la tasca no té activitat MCP o s’accedeix per un enllaç públic. */
+            readonly mcp_activity?: components["schemas"]["McpTaskActivity"];
             /**
              * @description Subtasques i ítems de llista **comptats junts**. La targeta els ensenya sota
              *     un sol commutador ("3/7 fets") perquè per a qui mira el tauler són el mateix:

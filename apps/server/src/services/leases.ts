@@ -12,8 +12,10 @@ import { sql } from 'kysely';
 import type { AuditContext } from '../audit/audited-transaction.js';
 import { dbBool } from '../db/bool.js';
 import type { MigrationDb } from '../db/migration-db.js';
-import { PolicyError } from '../policy/errors.js';
+import { notFound, PolicyError } from '../policy/errors.js';
 import type { Principal } from '../policy/principal.js';
+import { visibleScopesPredicate } from '../policy/scope-visibility.js';
+import { assertScopeAccess } from './scopes.js';
 
 /** Una reserva dura 30 minuts i es pot renovar (docs/09 §5). */
 export const LEASE_MINUTES = 30;
@@ -58,6 +60,13 @@ export async function claim(
   principal: Principal,
   taskId: string,
 ): Promise<Lease | undefined> {
+  const found = await sql<{ scope_id: string }>`
+    SELECT scope_id FROM tasks WHERE id = ${taskId} AND deleted_at IS NULL
+  `.execute(ctx.tx);
+  const scopeId = found.rows[0]?.scope_id;
+  if (scopeId === undefined) throw notFound('task', taskId);
+  await assertScopeAccess(ctx.tx, principal, scopeId);
+
   // Una reserva caducada ja no val: es treu abans de provar-ho, i s'anota que ha
   // caducat perquè a l'historial es vegi que la tasca va tornar a estar disponible.
   const caducada = await sql<{ user_id: string }>`
@@ -69,7 +78,7 @@ export async function claim(
     ctx.record({
       entityType: 'task',
       entityId: taskId,
-      scopeId: null,
+      scopeId,
       verb: 'released',
       changes: { reason: { from: null, to: 'La reserva ha caducat.' } },
     });
@@ -95,7 +104,7 @@ export async function claim(
   ctx.record({
     entityType: 'task',
     entityId: taskId,
-    scopeId: null,
+    scopeId,
     verb: 'claimed',
     changes: { expires_at: { from: null, to: expiryFrom(ctx.now) } },
   });
@@ -142,6 +151,9 @@ export async function nextTask(
         anar per poder-te deixar respondre.
       */
       AND t.needs_attention = ${dbBool(false)}
+      AND t.scope_id IN (
+        SELECT s.id FROM scopes s WHERE s.deleted_at IS NULL AND ${visibleScopesPredicate(principal.userId)}
+      )
       AND ${scopeFilter}
       ${scopeId === undefined ? sql`` : sql`AND t.scope_id = ${scopeId}`}
     ORDER BY t.position
@@ -178,19 +190,22 @@ export async function release(
     );
   }
 
-  const found = await sql<{ user_id: string }>`
-    SELECT user_id FROM task_leases WHERE task_id = ${taskId}
+  const found = await sql<{ scope_id: string }>`
+    SELECT t.scope_id FROM task_leases l JOIN tasks t ON t.id = l.task_id
+    WHERE l.task_id = ${taskId} AND t.deleted_at IS NULL
   `.execute(ctx.tx);
-  if (found.rows.length === 0) {
+  const scopeId = found.rows[0]?.scope_id;
+  if (scopeId === undefined) {
     throw new PolicyError('no-lease', 'No lease', 404, 'This task is not claimed.');
   }
+  await assertScopeAccess(ctx.tx, principal, scopeId);
 
   await sql`DELETE FROM task_leases WHERE task_id = ${taskId}`.execute(ctx.tx);
 
   ctx.record({
     entityType: 'task',
     entityId: taskId,
-    scopeId: null,
+    scopeId,
     verb: 'released',
     changes: { reason: { from: null, to: reason } },
   });
@@ -207,6 +222,7 @@ export async function release(
 export async function releaseIfHeld(
   ctx: AuditContext,
   taskId: string,
+  scopeId: string,
   reason: string,
 ): Promise<boolean> {
   const result = await sql`DELETE FROM task_leases WHERE task_id = ${taskId}`.execute(ctx.tx);
@@ -215,7 +231,7 @@ export async function releaseIfHeld(
   ctx.record({
     entityType: 'task',
     entityId: taskId,
-    scopeId: null,
+    scopeId,
     verb: 'released',
     changes: { reason: { from: null, to: reason } },
   });

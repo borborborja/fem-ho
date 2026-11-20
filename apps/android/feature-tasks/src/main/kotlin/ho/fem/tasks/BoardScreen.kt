@@ -165,6 +165,7 @@ fun BoardScreen(
     onStatusOpened: () -> Unit = {},
     taskMenuLabels: TaskMenuLabels? = null,
     onDelete: (Task) -> Unit = {},
+    mcpLabels: McpProvenanceLabels? = null,
 ) {
     val pager = rememberPagerState(pageCount = { ORDER.size })
     val scope = rememberCoroutineScope()
@@ -287,6 +288,7 @@ fun BoardScreen(
                         items(ofColumn, key = { it.id }) { task ->
                             val extra = extras(task)
                             val locked = task.isLockedNow()
+                            val mcp = task.mcpActivity
                             Box(Modifier.testTag("board-task-${task.id}")) {
                                 var actionsOpen by remember { mutableStateOf(false) }
                                 TaskCard(
@@ -319,6 +321,9 @@ fun BoardScreen(
                                     addForm = extra?.addForm,
                                     onLongPress = taskMenuLabels?.let { { actionsOpen = true } },
                                     longPressLabel = taskMenuLabels?.openActions,
+                                    extraMetadata = if (mcp != null && mcpLabels != null) {
+                                        { McpProvenanceBadge(mcp, mcpLabels) }
+                                    } else null,
                                 )
                                 if (taskMenuLabels != null) {
                                     TaskActionsMenu(

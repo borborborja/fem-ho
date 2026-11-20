@@ -40,6 +40,7 @@ import { leaseOf, releaseIfHeld } from './leases.js';
 import { setTaskLabelInScope } from './labels.js';
 import { assertScopeAccess, assertScopeRole, listScopes, type ScopeRow } from './scopes.js';
 import { getProfile } from './users.js';
+import { mcpActivityForTasks, type McpActivity } from './activity.js';
 
 export interface TaskRow {
   id: string;
@@ -102,6 +103,7 @@ export interface TaskRow {
 
 export interface Task extends TaskRow {
   time_summary?: TaskTimeSummary;
+  mcp_activity?: McpActivity;
   assignee_ids: string[];
   label_ids: string[];
   /**
@@ -138,7 +140,11 @@ const TASK_COLUMNS = sql`
   created_at, updated_at, version
 `;
 
-async function withAssignees(db: MigrationDb, rows: TaskRow[]): Promise<Task[]> {
+async function withAssignees(
+  db: MigrationDb,
+  rows: TaskRow[],
+  includeMcpActivity = true,
+): Promise<Task[]> {
   if (rows.length === 0) return [];
   const ids = rows.map((r) => r.id);
   const links = await sql<{ task_id: string; user_id: string }>`
@@ -225,20 +231,25 @@ async function withAssignees(db: MigrationDb, rows: TaskRow[]): Promise<Task[]> 
   const counts = new Map(
     progress.rows.map((row) => [row.task_id, { done: Number(row.done), total: Number(row.total) }]),
   );
+  const mcpActivity = includeMcpActivity ? await mcpActivityForTasks(db, ids) : undefined;
 
-  return rows.map((row) => ({
-    ...row,
-    // SQLite dona 0/1 i Postgres un booleà: qui ho llegeix ha de rebre sempre un booleà.
-    needs_attention: isTrue(row.needs_attention),
-    assignee_ids: (byTask.get(row.id) ?? []).sort(),
-    label_ids: (labelsByTask.get(row.id) ?? []).sort(),
-    locked_until: leaseByTask.get(row.id)?.expires_at ?? null,
-    locked_by_agent_id: leaseByTask.get(row.id)?.agent_id ?? null,
-    progress: {
-      ...(counts.get(row.id) ?? { done: 0, total: 0 }),
-      lists: listCounts.get(row.id) ?? 0,
-    },
-  }));
+  return rows.map((row) => {
+    const badge = mcpActivity?.get(row.id);
+    return {
+      ...row,
+      // SQLite dona 0/1 i Postgres un booleà: qui ho llegeix ha de rebre sempre un booleà.
+      needs_attention: isTrue(row.needs_attention),
+      assignee_ids: (byTask.get(row.id) ?? []).sort(),
+      label_ids: (labelsByTask.get(row.id) ?? []).sort(),
+      locked_until: leaseByTask.get(row.id)?.expires_at ?? null,
+      locked_by_agent_id: leaseByTask.get(row.id)?.agent_id ?? null,
+      ...(badge === undefined ? {} : { mcp_activity: badge }),
+      progress: {
+        ...(counts.get(row.id) ?? { done: 0, total: 0 }),
+        lists: listCounts.get(row.id) ?? 0,
+      },
+    };
+  });
 }
 
 /** Recalcula els agregats després d'afegir les relacions d'una tasca ja autoritzada. */
@@ -279,7 +290,7 @@ export async function getTask(db: MigrationDb, principal: Principal, id: string)
     row.ai_last_read_by = principal.agentId;
   }
 
-  const [task] = await withAssignees(db, [row]);
+  const [task] = await withAssignees(db, [row], principal.kind !== 'guest');
   if (task === undefined) throw notFound('task', id);
   // L'enllaç públic dóna accés a la tasca, no a les instruccions internes per a l'agent.
   return principal.kind === 'guest' ? { ...task, ai_instructions: null } : task;
@@ -1155,7 +1166,7 @@ export async function takeOverTask(
 
   await trackStatusTransition(ctx, principal.userId, current, status);
   await clearAttention(ctx, id);
-  await releaseIfHeld(ctx, id, 'Una persona ha assumit la tasca.');
+  await releaseIfHeld(ctx, id, current.scope_id, 'Una persona ha assumit la tasca.');
 
   /**
    * **`taken_over` i no `updated`.** L'historial és el que llegeix l'agent per saber què

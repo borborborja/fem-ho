@@ -70,9 +70,31 @@ export function ActivityTimeline({
             <div style={{ flex: 1, minWidth: 0 }}>
               <span style={{ fontWeight: 600 }}>{entry.actor_label}</span>{' '}
               <span style={{ color: 'var(--ink-soft)' }}>
-                {labels.verbs[entry.verb] ?? entry.verb}
+                {labels.verbs[`${entry.entity_type}.${entry.verb}`] ??
+                  labels.verbs[entry.verb] ??
+                  entry.verb}
               </span>
               <Changes changes={entry.changes} />
+              {entry.channel && (
+                <span
+                  data-testid="activity-channel"
+                  style={{
+                    display: 'block',
+                    marginTop: 2,
+                    color: 'var(--ink-soft)',
+                    fontSize: 12,
+                    overflowWrap: 'anywhere',
+                  }}
+                >
+                  {entry.channel.label}
+                  {entry.channel.origin !== null && (
+                    <>
+                      {' · '}
+                      <bdi>{entry.channel.origin}</bdi>
+                    </>
+                  )}
+                </span>
+              )}
             </div>
 
             <time

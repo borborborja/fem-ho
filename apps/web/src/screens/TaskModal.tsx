@@ -18,6 +18,7 @@ import {
   getLocale,
   relativeTime,
   shortTime,
+  SOURCES,
   t,
   type TaskStatus,
 } from '@fem-ho/contracts';
@@ -25,6 +26,7 @@ import { v7 as uuidv7 } from 'uuid';
 import { ActivityTimeline, ChecklistRow, EmptyState } from '@fem-ho/design-system/femho';
 import { api, failureText } from '../app/api.js';
 import { Attachments } from '../app/Attachments.js';
+import { McpSourceBadge } from '../board/McpSourceBadge.js';
 import { useSessionData } from '../app/session.js';
 import { useApi, useMutation } from '../app/useApi.js';
 import type {
@@ -45,8 +47,15 @@ import type {
  * que `t()` amb una clau que falta — visible i corregible, no un forat.
  */
 const VERBS = [
+  'attachment.created',
   'created',
   'updated',
+  'subtask.created',
+  'checklist.created',
+  'checklist_item.created',
+  'checklist_item.completed',
+  'checklist_item.reopened',
+  'checklist_item.updated',
   'moved',
   'completed',
   'reopened',
@@ -372,11 +381,14 @@ export function TaskModal({
           <p style={{ margin: 0, fontSize: 13, color: 'var(--ink-faint)' }}>{t('state.loading')}</p>
         ) : (
           <>
-            <div
-              data-testid="task-modal-title"
-              style={{ fontSize: 17, fontWeight: 800, color: 'var(--ink)' }}
-            >
-              {creating ? t('task.new') : t('task.edit')}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div
+                data-testid="task-modal-title"
+                style={{ fontSize: 17, fontWeight: 800, color: 'var(--ink)' }}
+              >
+                {creating ? t('task.new') : t('task.edit')}
+              </div>
+              <McpSourceBadge activity={data?.mcp_activity} />
             </div>
 
             <input
@@ -1228,14 +1240,21 @@ export function TaskModal({
                 <EmptyState>{t('task.empty.activity')}</EmptyState>
               ) : (
                 <ActivityTimeline
-                  entries={(activity.data?.data ?? []).map((entry) => ({
-                    ...entry,
-                    // El contracte els marca opcionals perquè poden ser nuls; el
-                    // component els vol sempre presents. Normalitzar-ho aquí és més
-                    // honest que fer-los obligatoris a l'API, on de veritat poden faltar.
-                    actor_label: entry.actor_label ?? null,
-                    changes: entry.changes ?? null,
-                  }))}
+                  entries={(activity.data?.data ?? []).map((entry) => {
+                    const source =
+                      entry.source === 'federation'
+                        ? 'federation'
+                        : SOURCES.find((value) => value === entry.source);
+                    return {
+                      ...entry,
+                      actor_label: entry.actor_label ?? null,
+                      changes: entry.changes ?? null,
+                      channel: {
+                        label: t(`activity.source.${source ?? 'unknown'}`),
+                        origin: source === 'mcp' ? (entry.mcp_origin ?? null) : null,
+                      },
+                    };
+                  })}
                   filter={activityFilter}
                   onFilterChange={setActivityFilter}
                   labels={{

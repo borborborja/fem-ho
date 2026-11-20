@@ -46,6 +46,7 @@ import * as taskTimeBadges from './migrations/022-task-time-badges.js';
 import * as mailOAuth from './migrations/023-mail-oauth.js';
 import * as externalAccess from './migrations/024-external-access.js';
 import * as federationOrigin from './migrations/025-federation-origin.js';
+import * as mcpActivityOrigin from './migrations/026-mcp-activity-origin.js';
 
 export interface Migration {
   name: string;
@@ -128,6 +129,7 @@ export const MIGRATIONS: Migration[] = [
   { name: '023-mail-oauth', up: mailOAuth.up, down: mailOAuth.down },
   { name: '024-external-access', up: externalAccess.up, down: externalAccess.down },
   { name: '025-federation-origin', up: federationOrigin.up, down: federationOrigin.down },
+  { name: '026-mcp-activity-origin', up: mcpActivityOrigin.up, down: mcpActivityOrigin.down },
 ];
 
 const MIGRATIONS_TABLE = 'schema_migrations';
