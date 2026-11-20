@@ -7,7 +7,7 @@ Data de l'última verificació completa: **2026-11-19**.
 
 ---
 
-## Tasques amb IA des del tauler i la fitxa
+## Tasques amb IA des del tauler i la fitxa · 0.22.0
 
 La migració 027 afegeix ajustos privats per usuari i àmbit. L'acció IA copia el
 context, lliura un esdeveniment a un xat de Work subscrit o inicia una rutina de
