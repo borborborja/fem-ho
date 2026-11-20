@@ -168,10 +168,15 @@ export function BoardCard({
         onTitleEdit={dragging ? undefined : inlineTitle.start}
         titleEditHint={t('task.titleEditHint')}
         sourceIcon={<SourceIcon kind={task.sourceKind} />}
-        sourceBadge={<McpSourceBadge activity={task.mcpActivity} />}
-        taskActions={
-          aiActionEnabled && !dragging ? (
-            <TaskAiAction taskId={task.id} scopeId={task.scope_id} />
+        sourceBadge={
+          task.mcpActivity === undefined ? undefined : (
+            <McpSourceBadge activity={task.mcpActivity} compact />
+          )
+        }
+        // Desactivar l'acció durant l'arrossegament conserva l'alçada de la barra.
+        railAction={
+          aiActionEnabled ? (
+            <TaskAiAction taskId={task.id} scopeId={task.scope_id} compact disabled={dragging} />
           ) : undefined
         }
         project={task.project}
@@ -242,7 +247,7 @@ export function BoardCard({
         // es trepitgin.
         onEdit={onOpen}
         editLabel={t('task.edit')}
-        onDelete={dragging ? undefined : () => setDeleting(true)}
+        onDelete={() => setDeleting(true)}
         deleteLabel={t('nav.delete')}
         addForm={{
           open: expanded && addOpen,

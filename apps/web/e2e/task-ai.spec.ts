@@ -48,12 +48,18 @@ async function fixture(page: Page, suffix: string) {
 test('activa un àmbit, copia el context i ofereix text seleccionable si falla el portapapers', async ({
   page,
 }, testInfo) => {
-  const { scopeId, taskId, otherTaskId } = await fixture(
+  const { headers, scopeId, taskId, otherTaskId } = await fixture(
     page,
     `copy-${testInfo.repeatEachIndex}-${testInfo.retry}`,
   );
   const card = page.getByTestId(`task-${taskId}`);
   const action = card.getByTestId('task-ai-action');
+  await expect(
+    await page.request.post(`/api/v1/tasks/${taskId}/subtasks`, {
+      headers,
+      data: { title: 'Verificar els totals' },
+    }),
+  ).toBeOK();
   await page.goto('/');
   await expect(card).toBeVisible();
   await expect(action).toHaveCount(0);
@@ -68,6 +74,20 @@ test('activa un àmbit, copia el context i ofereix text seleccionable si falla e
   await expect(page.getByText('Configuració desada')).toBeVisible();
   await page.getByTestId('settings-back').click();
   await expect(action).toBeVisible();
+  const rail = card.getByTestId('card-action-rail');
+  const advance = rail.getByTestId('card-advance');
+  await expect(advance).toBeVisible();
+  await expect(rail.getByTestId('task-ai-action')).toBeVisible();
+  await expect(card.getByLabel('Accions de la tasca')).toHaveCount(0);
+  const [railBounds, advanceBounds, actionBounds, titleBounds] = await Promise.all([
+    rail.boundingBox(),
+    advance.boundingBox(),
+    action.boundingBox(),
+    card.getByTestId('card-title').boundingBox(),
+  ]);
+  expect(actionBounds!.y).toBeGreaterThan(advanceBounds!.y);
+  expect(actionBounds!.y + actionBounds!.height).toBeCloseTo(railBounds!.y + railBounds!.height);
+  expect(railBounds!.x - (titleBounds!.x + titleBounds!.width)).toBeLessThanOrEqual(13);
   await expect(page.getByTestId(`task-${otherTaskId}`).getByTestId('task-ai-action')).toHaveCount(
     0,
   );
@@ -179,7 +199,11 @@ test('clic dret copia encara que falti la connexió i el clic principal envia no
   expect(await page.evaluate(() => navigator.clipboard.readText())).toContain(
     'Tasca per revisar amb IA',
   );
+  const copiedByKeyboard = page.waitForResponse(`**/api/v1/tasks/${taskId}/ai-context`);
+  await action.press('Shift+F10');
+  expect((await copiedByKeyboard).ok()).toBe(true);
   expect(outcomes).toHaveLength(0);
+  await expect(page.getByTestId('column-todo').getByTestId(`task-${taskId}`)).toBeVisible();
 
   await page.route('**/api/v1/ai/task-settings', async (route) => {
     const response = await route.fetch();

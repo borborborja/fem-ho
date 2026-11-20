@@ -84,11 +84,12 @@ function PinIcon({ size = 13, filled = false }) {
   );
 }
 
-/** El botó rodó de 20px de la cantonada, que apareix en passar-hi per sobre. */
-function CardAction({ label, onClick, revealed, testId, color, children }) {
+/** Acció de 20px que es revela amb el punter o el focus. */
+function CardAction({ label, onClick, revealed, disabled, testId, color, children }) {
   return (
     <button
       type="button"
+      disabled={disabled}
       onClick={(event) => {
         // La targeta sencera obre el modal: aquestes accions no l'han de disparar.
         event.stopPropagation();
@@ -149,7 +150,7 @@ export function TaskCard({
   project,
   sourceIcon,
   sourceBadge,
-  taskActions,
+  railAction,
   assigneeInitials,
   time,
   timeSpent,
@@ -210,9 +211,26 @@ export function TaskCard({
    */
   const mobile = useIsMobile();
   const [active, setActive] = useState(false);
-  const revealed = mobile || active;
+  const revealed = !dragging && (mobile || active);
   const actionCount =
     Number(onEdit !== undefined) + Number(addForm !== undefined) + Number(onDelete !== undefined);
+  const showTools = !titleEditor && (actionCount > 0 || sourceBadge != null);
+  const hasMetadata = Boolean(
+    project ||
+    assigneeInitials ||
+    time ||
+    timeSpent ||
+    lockLabel ||
+    attentionLabel ||
+    (aiMode !== 'manual' && aiModeLabel) ||
+    activityLabel ||
+    checklistProgress,
+  );
+  const toolsBesideMetadata = showTools && listsToggleLabel === undefined && hasMetadata;
+  const toolsBesideTitle = showTools && listsToggleLabel === undefined && !hasMetadata;
+  const advancing = onAdvance !== undefined;
+  const stateAction = onAdvance ?? onToggleDone;
+  const stateLabel = advancing ? advanceLabel : toggleLabel;
   const { titleProps, suppressClick: suppressTitleClick } = useTitleHold(onTitleEdit);
   const Body = titleEditor ? 'div' : 'button';
   const bodyRef = useRef(null);
@@ -222,6 +240,55 @@ export function TaskCard({
       bodyRef.current?.focus();
     wasEditing.current = !!titleEditor;
   }, [titleEditor]);
+
+  const tools = showTools ? (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        flexShrink: 0,
+        gap: 4,
+        ...(toolsBesideMetadata ? { position: 'absolute', insetInlineEnd: 0, bottom: 0 } : {}),
+        ...(toolsBesideTitle ? { marginInlineStart: 'auto' } : {}),
+      }}
+    >
+      {sourceBadge}
+      {onEdit === undefined ? null : (
+        <CardAction
+          label={editLabel}
+          onClick={onEdit}
+          revealed={revealed}
+          disabled={dragging}
+          testId="card-edit"
+        >
+          <PencilIcon />
+        </CardAction>
+      )}
+      {addForm === undefined ? null : (
+        <CardAction
+          label={addForm.toggleLabel}
+          onClick={addForm.onToggle}
+          revealed={revealed}
+          disabled={dragging}
+          testId="card-add-toggle"
+        >
+          <ListPlusIcon />
+        </CardAction>
+      )}
+      {onDelete === undefined ? null : (
+        <CardAction
+          label={deleteLabel}
+          onClick={onDelete}
+          revealed={revealed}
+          disabled={dragging}
+          testId="card-delete"
+          color="var(--danger-text)"
+        >
+          <TrashIcon />
+        </CardAction>
+      )}
+    </div>
+  ) : null;
 
   return (
     <div
@@ -287,57 +354,12 @@ export function TaskCard({
           gap: 9,
         }}
       >
-        {/*
-          Les accions de la targeta, a la cantonada. `paddingRight` a la fila del títol
-          perquè el text no hi passi per sota: les icones són absolutes i no aparten res.
-        */}
         <div
-          style={{
-            position: 'absolute',
-            top: 10,
-            right: 10,
-            display: titleEditor ? 'none' : 'flex',
-            alignItems: 'center',
-            gap: 4,
-            zIndex: 1,
-          }}
-        >
-          {onEdit === undefined ? null : (
-            <CardAction label={editLabel} onClick={onEdit} revealed={revealed} testId="card-edit">
-              <PencilIcon />
-            </CardAction>
-          )}
-          {addForm === undefined ? null : (
-            <CardAction
-              label={addForm.toggleLabel}
-              onClick={addForm.onToggle}
-              revealed={revealed}
-              testId="card-add-toggle"
-            >
-              <ListPlusIcon />
-            </CardAction>
-          )}
-          {onDelete === undefined ? null : (
-            <CardAction
-              label={deleteLabel}
-              onClick={onDelete}
-              revealed={revealed}
-              testId="card-delete"
-              color="var(--danger-text)"
-            >
-              <TrashIcon />
-            </CardAction>
-          )}
-        </div>
-
-        <div
-          style={{
-            display: 'flex',
-            gap: 9,
-            alignItems: 'flex-start',
-            // Espai per les icones de 20px, la separació i el marge fins al títol.
-            paddingRight: titleEditor || actionCount === 0 ? 0 : actionCount * 24 + 18,
-          }}
+          style={
+            toolsBesideTitle
+              ? { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '2px 4px' }
+              : { position: 'relative' }
+          }
         >
           <Body
             ref={bodyRef}
@@ -361,7 +383,11 @@ export function TaskCard({
               }
             }}
             style={{
-              flex: 1,
+              // Una targeta només amb títol pot compartir fila amb les accions.
+              // Si el text és llarg, les accions baixen i deixen l'amplada al títol.
+              width: toolsBesideTitle ? 'max-content' : '100%',
+              maxWidth: '100%',
+              flexGrow: toolsBesideTitle ? 1 : undefined,
               minWidth: 0,
               display: 'flex',
               flexDirection: 'column',
@@ -388,6 +414,7 @@ export function TaskCard({
                   display: 'flex',
                   alignItems: 'center',
                   gap: 6,
+                  overflowWrap: 'anywhere',
                   userSelect: onTitleEdit ? 'none' : undefined,
                   WebkitTouchCallout: onTitleEdit ? 'none' : undefined,
                 }}
@@ -404,10 +431,16 @@ export function TaskCard({
 
             <span
               style={{
-                display: 'flex',
+                display: hasMetadata ? 'flex' : 'none',
                 gap: 5,
                 flexWrap: 'wrap',
                 alignItems: 'center',
+                // El títol té tota l'amplada. Només les metadades cedeixen espai a
+                // les accions quan no hi ha una fila de llistes on posar-les.
+                minHeight: toolsBesideMetadata ? (sourceBadge == null ? 20 : 24) : undefined,
+                paddingInlineEnd: toolsBesideMetadata
+                  ? actionCount * 24 + (sourceBadge == null ? 0 : 28)
+                  : undefined,
               }}
             >
               {project ? (
@@ -564,10 +597,8 @@ export function TaskCard({
               ) : null}
             </span>
           </Body>
-          {sourceBadge}
+          {toolsBesideMetadata || toolsBesideTitle ? tools : null}
         </div>
-
-        {taskActions == null ? null : <div style={{ alignSelf: 'flex-start' }}>{taskActions}</div>}
 
         {/*
           Les subtasques i les llistes, desplegades a la mateixa targeta.
@@ -576,25 +607,35 @@ export function TaskCard({
           té nom, una llista sí— es veu dins, a l'epígraf de cada bloc.
         */}
         {listsToggleLabel === undefined ? null : (
-          <button
-            type="button"
-            onClick={onToggleLists}
-            aria-expanded={listsExpanded}
-            data-testid="card-lists-toggle"
+          <div
             style={{
-              alignSelf: 'flex-start',
-              fontSize: 11,
-              fontWeight: 700,
-              color: 'var(--ink-soft)',
-              padding: '2px 0',
-              border: 'none',
-              background: 'transparent',
-              cursor: 'pointer',
-              fontFamily: 'var(--font-sans)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 6,
             }}
           >
-            {listsToggleLabel}
-          </button>
+            <button
+              type="button"
+              onClick={onToggleLists}
+              aria-expanded={listsExpanded}
+              data-testid="card-lists-toggle"
+              style={{
+                fontSize: 11,
+                fontWeight: 700,
+                color: 'var(--ink-soft)',
+                padding: '2px 0',
+                border: 'none',
+                background: 'transparent',
+                cursor: 'pointer',
+                textAlign: 'start',
+                fontFamily: 'var(--font-sans)',
+              }}
+            >
+              {listsToggleLabel}
+            </button>
+            {tools}
+          </div>
         )}
 
         {/*
@@ -704,94 +745,57 @@ export function TaskCard({
       </div>
 
       {/*
-        La barra de la dreta, de 28px i tota l'alçada de la targeta.
-
-        **A les dues primeres columnes és una fletxa** que mou la targeta una columna
-        endavant; a les dues últimes és la casella d'estat. Són el mateix lloc perquè és
-        el mateix gest: fer avançar la targeta. Abans hi havia dos botons de destinació
-        sota el títol i el cercle d'estat a dalt a l'esquerra; el disseny validat ho ha
-        ajuntat tot aquí i la targeta ha quedat molt més neta.
-
-        Quina de les dues surt ho decideix qui munta el tauler, amb `onAdvance`: és qui
-        sap a quina columna és la targeta.
+        La fletxa o la casella d'estat i l'acció IA són botons germans. Activar un
+        d'ells no ha d'activar l'altre ni obrir la fitxa.
       */}
-      {onAdvance !== undefined ? (
-        <button
-          type="button"
-          onClick={onAdvance}
-          title={advanceLabel}
-          aria-label={advanceLabel}
-          data-testid="card-advance"
-          style={{
-            width: 28,
-            flexShrink: 0,
-            border: 'none',
-            background: 'var(--ghost-bg)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            padding: 0,
-          }}
+      {stateAction === undefined && railAction == null ? null : (
+        <div
+          className="femho-task-rail"
+          data-testid="card-action-rail"
+          data-extra-action={railAction == null ? undefined : 'true'}
         >
-          <svg
-            width="15"
-            height="15"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="var(--ink-soft)"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-          >
-            <path d="M9 6l6 6-6 6" />
-          </svg>
-        </button>
-      ) : onToggleDone === undefined ? null : (
-        <button
-          type="button"
-          onClick={onToggleDone}
-          aria-pressed={done}
-          aria-label={toggleLabel}
-          title={toggleLabel}
-          data-testid="card-toggle-done"
-          style={{
-            width: 28,
-            flexShrink: 0,
-            border: 'none',
-            background: done ? 'var(--gradient-brand-2stop)' : 'var(--ghost-bg)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            padding: 0,
-          }}
-        >
-          {done ? (
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <polyline
-                points="20 6 9 17 4 12"
-                stroke="var(--on-brand)"
-                strokeWidth="2.4"
+          {stateAction === undefined ? null : (
+            <button
+              type="button"
+              onClick={stateAction}
+              aria-pressed={advancing ? undefined : done}
+              aria-label={stateLabel}
+              title={stateLabel}
+              data-testid={advancing ? 'card-advance' : 'card-toggle-done'}
+              style={{
+                flex: 1,
+                minHeight: 28,
+                border: 'none',
+                background: done && !advancing ? 'var(--gradient-brand-2stop)' : 'transparent',
+                display: 'grid',
+                placeItems: 'center',
+                cursor: 'pointer',
+                padding: 0,
+              }}
+            >
+              <svg
+                width={advancing || done ? 15 : 16}
+                height={advancing || done ? 15 : 16}
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke={done && !advancing ? 'var(--on-brand)' : 'var(--ink-soft)'}
+                strokeWidth={done && !advancing ? 2.4 : 2}
                 strokeLinecap="round"
                 strokeLinejoin="round"
-              />
-            </svg>
-          ) : (
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="var(--ink-soft)"
-              strokeWidth="2"
-              aria-hidden="true"
-            >
-              <circle cx="12" cy="12" r="9" />
-            </svg>
+                aria-hidden="true"
+              >
+                {advancing ? (
+                  <path d="M9 6l6 6-6 6" />
+                ) : done ? (
+                  <polyline points="20 6 9 17 4 12" />
+                ) : (
+                  <circle cx="12" cy="12" r="9" />
+                )}
+              </svg>
+            </button>
           )}
-        </button>
+          {railAction}
+        </div>
       )}
     </div>
   );

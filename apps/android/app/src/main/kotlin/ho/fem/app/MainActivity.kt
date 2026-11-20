@@ -1349,7 +1349,7 @@ private fun mcpProvenanceLabels() = McpProvenanceLabels(
 
 private fun mcpMetadata(task: Task): (@Composable () -> Unit)? {
     val activity = task.mcpActivity ?: return null
-    return { McpProvenanceBadge(activity, mcpProvenanceLabels()) }
+    return { McpProvenanceBadge(activity, mcpProvenanceLabels(), compact = true) }
 }
 
 @Composable

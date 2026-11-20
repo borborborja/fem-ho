@@ -44,6 +44,8 @@ for (const gesture of ['pointer', 'keyboard'] as const) {
       await page.keyboard.press('Space');
       await expect(page.getByTestId('drag-overlay')).toBeVisible();
       await expect(column).toHaveAttribute('data-drop-target', 'true');
+      // dnd-kit instal·la el listener de les fletxes amb un temporitzador després d'agafar la targeta.
+      await page.evaluate(() => new Promise<void>((resolve) => setTimeout(resolve, 0)));
       await page.keyboard.press('ArrowUp');
       await expect(second).toHaveAttribute('data-insert-edge', 'top');
       await page.keyboard.press('Space');

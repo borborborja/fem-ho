@@ -1,7 +1,7 @@
 import React, { useCallback, useId, useLayoutEffect, useRef, useState } from 'react';
 
 /** La provinença és llegible també amb teclat i en una pantalla sense ratolí. */
-export function SourceBadge({ label, detailsLabel, rows }) {
+export function SourceBadge({ label, detailsLabel, rows, icon }) {
   const anchorRef = useRef(null);
   const panelRef = useRef(null);
   const panelId = useId();
@@ -82,6 +82,7 @@ export function SourceBadge({ label, detailsLabel, rows }) {
         ref={anchorRef}
         type="button"
         aria-label={detailsLabel}
+        title={icon == null ? undefined : detailsLabel}
         aria-expanded={open}
         aria-controls={open ? panelId : undefined}
         aria-describedby={open ? panelId : undefined}
@@ -104,21 +105,33 @@ export function SourceBadge({ label, detailsLabel, rows }) {
           else setPinned(true);
         }}
         style={{
-          alignSelf: 'flex-start',
+          ...(icon == null
+            ? {
+                alignSelf: 'flex-start',
+                border: '1px solid var(--border-subtle)',
+                padding: '4px 7px',
+                background: 'var(--tag-bg)',
+                color: 'var(--tag-text)',
+                fontFamily: 'inherit',
+                fontSize: 10.5,
+                fontWeight: 700,
+              }
+            : {
+                width: 24,
+                display: 'grid',
+                placeItems: 'center',
+                border: 'none',
+                padding: 0,
+                background: 'transparent',
+                color: 'var(--ink-soft)',
+              }),
           flexShrink: 0,
-          border: '1px solid var(--border-subtle)',
           borderRadius: 'var(--radius-pill)',
-          padding: '4px 7px',
           minHeight: 24,
-          background: 'var(--tag-bg)',
-          color: 'var(--tag-text)',
-          fontFamily: 'inherit',
-          fontSize: 10.5,
-          fontWeight: 700,
           cursor: 'pointer',
         }}
       >
-        {label}
+        {icon ?? label}
       </button>
       {open && (
         <div

@@ -10,6 +10,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -17,6 +18,8 @@ import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.longClick
@@ -60,6 +63,7 @@ import ho.fem.tasks.QuickAddField
 import ho.fem.tasks.TaskMenuLabels
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -272,7 +276,9 @@ class TaskUiTest {
             }
         }
         compose.onAllNodesWithTag("task-mcp-badge").assertCountEquals(1)
-        compose.onNodeWithTag("task-mcp-badge").performTouchInput { click() }
+        compose.onNodeWithText(mcpLabels.badge).assertDoesNotExist()
+        compose.onNodeWithTag("task-mcp-badge").assertContentDescriptionEquals(mcpLabels.details)
+            .performTouchInput { click() }
         compose.onNodeWithTag("task-mcp-details").assertIsDisplayed()
         compose.onNodeWithText(mcpLabels.creation).assertIsDisplayed()
         compose.onNodeWithText(mcpLabels.lastChange).assertIsDisplayed()
@@ -402,13 +408,14 @@ class TaskUiTest {
         val disabledTask = Task(id = "personal-task", scopeId = "personal", title = "Preparar motxilla", position = "a1")
         val copied = mutableListOf<String>()
         val primary = mutableListOf<String>()
+        val moved = mutableListOf<Pair<String, TaskStatus>>()
         compose.setContent {
             FemhoTheme {
                 BoardScreen(
                     tasks = listOf(enabledTask, disabledTask),
                     labels = boardLabels,
                     onOpen = {},
-                    onMove = { _, _ -> },
+                    onMove = { task, destination -> moved += task.id to destination },
                     onToggle = {},
                     taskMenuLabels = taskMenuLabels.copy(copyContext = "Copia el context"),
                     canCopyContext = { it.scopeId == enabledTask.scopeId },
@@ -432,11 +439,20 @@ class TaskUiTest {
         copy.assertIsDisplayed().performClick()
         compose.onNodeWithTag("board-task-actions").assertDoesNotExist()
         compose.onAllNodesWithTag("board-task-ai").assertCountEquals(1)
-        compose.onNodeWithTag("board-task-ai").performClick()
-        compose.onNodeWithTag("board-task-ai").performTouchInput { longClick() }
+        val card = hasAnyAncestor(hasTestTag("board-task-${enabledTask.id}"))
+        val rail = compose.onNode(hasTestTag("card-rail") and card, useUnmergedTree = true)
+        val advance = compose.onNode(hasTestTag("card-advance") and card, useUnmergedTree = true)
+        val action = compose.onNodeWithTag("board-task-ai")
+        assertEquals(rail.getUnclippedBoundsInRoot().bottom, action.getUnclippedBoundsInRoot().bottom)
+        assertTrue(action.getUnclippedBoundsInRoot().top >= advance.getUnclippedBoundsInRoot().bottom)
+        action.performTouchInput { click() }
+        action.performTouchInput { longClick() }
+        compose.runOnIdle { assertTrue(moved.isEmpty()) }
+        advance.performTouchInput { click() }
         compose.runOnIdle {
             assertEquals(listOf(enabledTask.id, enabledTask.id), copied)
             assertEquals(listOf(enabledTask.id), primary)
+            assertEquals(listOf(enabledTask.id to TaskStatus.TODO), moved)
         }
     }
 

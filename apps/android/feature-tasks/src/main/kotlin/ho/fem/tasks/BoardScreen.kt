@@ -116,7 +116,7 @@ data class CardAiAction(
  * que la criden.
  */
 data class CardExtras(
-    /** El llapis de la cantonada: obre el detall sense haver de clicar la targeta. */
+    /** El llapis de la targeta: obre el detall sense haver de clicar el títol. */
     val onEdit: () -> Unit,
     val editLabel: String,
     val lists: List<CardList>,
@@ -336,12 +336,10 @@ fun BoardScreen(
                                     addForm = extra?.addForm,
                                     onLongPress = taskMenuLabels?.let { { actionsOpen = true } },
                                     longPressLabel = taskMenuLabels?.openActions,
-                                    extraMetadata = if (ai != null || (mcp != null && mcpLabels != null)) {
-                                        {
-                                            if (mcp != null && mcpLabels != null) McpProvenanceBadge(mcp, mcpLabels)
-                                            if (ai != null) CardAiButton(ai)
-                                        }
+                                    extraMetadata = if (mcp != null && mcpLabels != null) {
+                                        { McpProvenanceBadge(mcp, mcpLabels, compact = true) }
                                     } else null,
+                                    railAction = ai?.let { action -> { CardAiButton(action) } },
                                 )
                                 if (taskMenuLabels != null) {
                                     TaskActionsMenu(
@@ -389,8 +387,8 @@ fun BoardScreen(
 private fun CardAiButton(action: CardAiAction) {
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(FemhoShape.pill))
-            .background(Femho.colors.ghostBg)
+            .fillMaxWidth()
+            .heightIn(min = FemhoSize.touch)
             .combinedClickable(
                 enabled = action.enabled,
                 role = Role.Button,
@@ -399,14 +397,12 @@ private fun CardAiButton(action: CardAiAction) {
                 onClick = action.onClick,
                 onLongClick = action.onCopy,
             )
-            .heightIn(min = FemhoSize.touch)
-            .padding(horizontal = 10.dp)
             .testTag("board-task-ai"),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             action.label,
-            color = if (action.enabled) Femho.colors.ink else Femho.colors.inkFaint,
+            color = if (action.enabled) Femho.colors.inkSoft else Femho.colors.inkFaint,
             fontSize = FemhoText.meta,
             fontWeight = FontWeight.SemiBold,
         )
