@@ -100,6 +100,10 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
                 // Un error de xarxa és `retry`, no `failure`: la feina segueix sent
                 // vàlida i el sistema la tornarà a provar amb espera creixent.
                 onSuccess = {
+                    // La reconnexió també ha de recuperar una neteja feta al web.
+                    // Una fallada d'aquesta lectura no invalida el tauler sincronitzat.
+                    runCatching { container.refreshUserSettings(account) }
+                        .onFailure { if (it is CancellationException) throw it }
                     // Els widgets es repinten **només si el refresc ha anat bé**: repintar
                     // després d'un error ensenyaria les mateixes dades i gastaria una
                     // transacció amb el llançador per no dir res de nou.

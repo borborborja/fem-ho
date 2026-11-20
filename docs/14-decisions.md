@@ -192,9 +192,9 @@ La columna es calcula amb `status = 'done'` i `completed_at` dins d'un rang, **e
 
 `user_settings.done_cleared_at` es guarda **per usuari**: netejar és un gest personal, no destrueix res i no afecta ningú més.
 
-**La presentació és més suau que un tall sec**: per defecte es veu el d'avui, i a sota "Ahir" i "Aquesta setmana" plegats amb el recompte. No s'amaga res, es plega. La cadència documentada del Personal Kanban és setmanal, no diària, i cap app de referència neteja el Fet silenciosament.
-
-Es mantenen les dues coses que demana el brief: el botó de netejar a demanda, i el mini-calendari a la capçalera per navegar a qualsevol dia passat. Més el botó de "veure tot el fet d'avui", que ignora el `done_cleared_at`.
+Per defecte es veu el d'avui. El mini-calendari de la capçalera permet consultar
+qualsevol dia passat. La neteja a demanda només afecta la vista d'avui i el botó
+«Tot avui» treu el `done_cleared_at`.
 
 ### P3 · Membres externs d'un àmbit col·lectiu
 

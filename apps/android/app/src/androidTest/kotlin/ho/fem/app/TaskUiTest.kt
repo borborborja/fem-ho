@@ -44,6 +44,7 @@ import ho.fem.designsystem.SubtaskRowActions
 import ho.fem.designsystem.SubtaskRowLabels
 import ho.fem.designsystem.TaskCard
 import ho.fem.model.AiMode
+import ho.fem.model.DoneDayFilter
 import ho.fem.model.McpActivity
 import ho.fem.model.McpCreation
 import ho.fem.model.QuickAddContext
@@ -61,6 +62,8 @@ import ho.fem.tasks.CardExtras
 import ho.fem.tasks.McpProvenanceLabels
 import ho.fem.tasks.QuickAddField
 import ho.fem.tasks.TaskMenuLabels
+import java.time.LocalDate
+import java.time.ZoneId
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -94,6 +97,9 @@ class TaskUiTest {
         attention = "Atenció",
         claim = "Reclama",
     )
+    private val today = LocalDate.parse("2026-03-29")
+    private val profileZone = ZoneId.of("Europe/Madrid")
+    private val boardDay = DoneDayFilter(profileZone, today, today, null)
     private val taskMenuLabels = TaskMenuLabels(
         openActions = "Accions de la tasca",
         edit = "Edita",
@@ -233,6 +239,7 @@ class TaskUiTest {
             FemhoTheme {
                 BoardScreen(
                     tasks = tasks,
+                    doneDay = boardDay,
                     labels = boardLabels,
                     onOpen = {},
                     onMove = { _, _ -> },
@@ -267,6 +274,7 @@ class TaskUiTest {
             FemhoTheme {
                 BoardScreen(
                     tasks = listOf(touched.copy(mcpActivity = provenance.value), ordinary),
+                    doneDay = boardDay,
                     labels = boardLabels,
                     mcpLabels = mcpLabels,
                     onOpen = { openedTask = true },
@@ -296,13 +304,17 @@ class TaskUiTest {
     fun boardShowsFixedPreviewAndKeepsTabsReadableAtLargerFont() {
         val width = mutableStateOf(320.dp)
         val tasks = TaskStatus.entries.mapIndexed { index, status ->
-            Task(id = "task-$index", scopeId = "work", title = "Tasca $index", position = "$index", status = status)
+            Task(
+                id = "task-$index", scopeId = "work", title = "Tasca $index", position = "$index", status = status,
+                completedAt = if (status == TaskStatus.DONE) "2026-03-29T10:00:00Z" else null,
+            )
         }
         compose.setContent {
             FemhoTheme {
                 CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, fontScale = 1.4f)) {
                     BoardScreen(
                         tasks = tasks,
+                        doneDay = boardDay,
                         labels = boardLabels,
                         onOpen = {},
                         onMove = { _, _ -> },
@@ -344,6 +356,55 @@ class TaskUiTest {
     }
 
     @Test
+    fun doneTabCountsTheSameTasksItShowsInTheProfileDay() {
+        fun completed(id: String, at: String?) = Task(
+            id = id, scopeId = "work", title = id, position = id, status = TaskStatus.DONE, completedAt = at,
+        )
+        val first = completed("first", "2026-03-29T00:00:00+01:00")
+        val after = completed("after", "2026-03-29T00:00:01Z")
+        val previous = completed("previous", "2026-03-28T22:59:59Z")
+        val tasks = listOf(
+            first, after, previous,
+            completed("future", "2026-03-29T22:00:00Z"),
+            completed("missing", null),
+            after.copy(id = "ai", aiMode = AiMode.ASSISTED),
+            first.copy(id = "todo", status = TaskStatus.TODO, completedAt = null),
+        )
+        val day = mutableStateOf(today)
+        val clearedAt = mutableStateOf<String?>("2026-03-29T01:00:00+01:00")
+        compose.setContent {
+            FemhoTheme {
+                BoardScreen(
+                    tasks = tasks,
+                    doneDay = DoneDayFilter(profileZone, today, day.value, clearedAt.value),
+                    labels = boardLabels,
+                    onOpen = {},
+                    onMove = { _, _ -> },
+                    onToggle = {},
+                )
+            }
+        }
+        val tab = compose.onNodeWithTag("board-column-done")
+        tab.performClick().assertTextContains("1")
+        compose.onNodeWithTag("board-task-after").assertIsDisplayed()
+        compose.onNodeWithTag("board-task-first").assertDoesNotExist()
+
+        compose.runOnIdle { day.value = today.minusDays(1) }
+        tab.assertTextContains("1")
+        compose.onNodeWithTag("board-task-previous").assertIsDisplayed()
+        compose.onNodeWithTag("board-task-after").assertDoesNotExist()
+
+        compose.runOnIdle {
+            day.value = today
+            clearedAt.value = null
+        }
+        tab.assertTextContains("2")
+        compose.onNodeWithTag("board-task-first").assertIsDisplayed()
+        compose.onNodeWithTag("board-task-after").assertIsDisplayed()
+        compose.onNodeWithTag("board-task-previous").assertDoesNotExist()
+    }
+
+    @Test
     fun taskActionsKeepCardTapAndChildControlsAndConfirmDeletion() {
         val task = Task(id = "task", scopeId = "work", title = "Revisar pressupost", position = "a0")
         val calls = mutableListOf<String>()
@@ -351,6 +412,7 @@ class TaskUiTest {
             FemhoTheme {
                 BoardScreen(
                     tasks = listOf(task),
+                    doneDay = boardDay,
                     labels = boardLabels,
                     onOpen = { calls += "open:${it.id}" },
                     onMove = { moved, status -> calls += "move:${moved.id}:$status" },
@@ -413,6 +475,7 @@ class TaskUiTest {
             FemhoTheme {
                 BoardScreen(
                     tasks = listOf(enabledTask, disabledTask),
+                    doneDay = boardDay,
                     labels = boardLabels,
                     onOpen = {},
                     onMove = { task, destination -> moved += task.id to destination },
@@ -467,6 +530,7 @@ class TaskUiTest {
             FemhoTheme {
                 BoardScreen(
                     tasks = tasks.value,
+                    doneDay = boardDay,
                     labels = boardLabels,
                     onOpen = {},
                     onMove = { _, destination -> moved += destination },

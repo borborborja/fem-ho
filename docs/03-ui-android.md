@@ -66,6 +66,17 @@ Les quatre pestanyes del tauler obren la columna corresponent i mostren el títo
 
 **L'Inbox continua sent visualment diferent** (targeta sòlida contra contenidor buit), igual que a la web.
 
+### La columna «Fet»
+
+La llista i el recompte mostren les tasques acabades el dia seleccionat, segons
+el fus horari del perfil. El calendari permet consultar dies anteriors i
+«Tornar a avui» recupera la vista d'avui.
+
+«Netejar» amaga les que ja s'havien acabat avui. Les que es completen després
+continuen entrant a la columna. «Tot avui» recupera la llista sencera. La
+preferència és compartida amb la web i cal connexió per canviar-la. La consulta
+del tauler i de l'històric fa servir les dades locals quan no hi ha connexió.
+
 ### Moure targetes
 
 El drag & drop lliure en un pager horitzontal és hostil en tàctil: el gest de moure competeix amb el de canviar de columna. A Android:

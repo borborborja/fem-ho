@@ -15,6 +15,7 @@ import { useTimeCompletion, type MoveExtra } from '../board/useTimeCompletion.js
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   comparePositions,
+  createDoneDayFilter,
   eventDateOf,
   generatePosition,
   localDateOf,
@@ -48,28 +49,6 @@ export interface BoardScreenProps {
   /** El kanban de la IA. Les columnes són les mateixes; el que canvia és què hi surt. */
   aiBoard?: boolean;
   flip?: { transform: string; transition: string } | undefined;
-}
-
-/**
- * «Netejar» només amaga el que ja havies acabat avui. No és una acció sobre les tasques:
- * les que s'acabin després del clic han de continuar entrant a la columna.
- */
-function isDoneHiddenByClear(
-  task: Task,
-  doneDay: string,
-  today: string,
-  timezone: string,
-  clearedAt: string | null | undefined,
-): boolean {
-  if (task.status !== 'done' || task.completed_at == null || clearedAt == null) return false;
-  const cleared = Date.parse(clearedAt);
-  const completed = Date.parse(task.completed_at);
-  if (Number.isNaN(cleared) || Number.isNaN(completed)) return false;
-  return (
-    doneDay === today &&
-    localDateOf(timezone, new Date(cleared)) === doneDay &&
-    completed <= cleared
-  );
 }
 
 /** La targeta tal com la vol el component, des de la tasca tal com la dona l'API. */
@@ -256,15 +235,19 @@ export function BoardScreen({
    */
   const [day, setDay] = useState(today);
 
-  /**
-   * Quin dia ensenya la columna Fet.
-   *
-   * **La columna ensenyava tot l'històric**, pla i sense agrupar: `groupDone` existia amb
-   * les seves proves i no el cridava ningú, `done_cleared_at` s'escrivia i no el llegia
-   * ningú, i l'estat buit no s'arribava a veure mai perquè amb una sola tasca feta el mes
-   * passat la columna ja no era buida.
-   */
-  const [doneDay, setDoneDay] = useState(today);
+  // Només es fixa un dia quan es consulta l'històric. «Avui» segueix el dia del perfil.
+  const [doneHistoryDay, setDoneHistoryDay] = useState<string | null>(null);
+  const doneDay = doneHistoryDay === null || doneHistoryDay > today ? today : doneHistoryDay;
+  const doneDayFilter = useMemo(
+    () =>
+      createDoneDayFilter({
+        timezone: profile.timezone,
+        today,
+        day: doneDay,
+        clearedAt: settings.done_cleared_at,
+      }),
+    [profile.timezone, today, doneDay, settings.done_cleared_at],
+  );
 
   /**
    * I la bústia surt de `/inbox`, no de `/board`.
@@ -430,21 +413,7 @@ export function BoardScreen({
           if (!triatsDelSeu) return true;
           return task.project_id != null && projectIds.includes(task.project_id);
         })
-        /**
-         * La columna Fet és **del dia que es mira**, i per defecte avui.
-         *
-         * `completed_at` es compara en data local i no restant mil·lisegons: els dies de
-         * canvi d'hora en tenen 23 o 25, i una resta d'instants els compta malament dos
-         * dies l'any sense donar cap error.
-         */
-        .filter((task) => {
-          if (task.status !== 'done') return true;
-          if (task.completed_at == null) return false;
-          return (
-            localDateOf(profile.timezone, new Date(task.completed_at)) === doneDay &&
-            !isDoneHiddenByClear(task, doneDay, today, profile.timezone, settings.done_cleared_at)
-          );
-        })
+        .filter((task) => doneDayFilter.isVisible(task.status, task.completed_at))
         .map((task) => {
           const assignees = task.assignee_ids ?? [];
           const card = toBoardTask(
@@ -468,13 +437,10 @@ export function BoardScreen({
     initialsOf,
     aiBoard,
     profile.id,
-    profile.timezone,
     scopes,
     projectIds,
     projects,
-    doneDay,
-    today,
-    settings.done_cleared_at,
+    doneDayFilter,
   ]);
 
   /**
@@ -934,12 +900,13 @@ export function BoardScreen({
         }}
         doneHeaderActions={
           <DoneHeader
-            clearedAt={settings.done_cleared_at ?? null}
+            today={today}
+            hasActiveClear={doneDayFilter.hasActiveClear}
             onClear={() => void updateSettings({ done_cleared_at: new Date().toISOString() })}
             onShowAll={() => void updateSettings({ done_cleared_at: null })}
             day={doneDay}
-            onPickDay={setDoneDay}
-            onBackToToday={() => setDoneDay(today)}
+            onPickDay={(day) => setDoneHistoryDay(day === today ? null : day)}
+            onBackToToday={() => setDoneHistoryDay(null)}
           />
         }
       />

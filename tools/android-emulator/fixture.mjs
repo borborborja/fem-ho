@@ -5,6 +5,7 @@ const password = 'femho-emulator-fixture';
 const email = `android-${suffix}@example.test`;
 const otherEmail = `android-other-${suffix}@example.test`;
 const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Madrid' }).format(new Date());
+const yesterday = new Date(Date.parse(today) - 86_400_000).toISOString().slice(0, 10);
 
 async function api(path, { method, body, token } = {}) {
   const response = await fetch(`${origin}${path}`, {
@@ -74,6 +75,25 @@ const task = await api('/api/v1/tasks', {
     checklists: [{ name: 'Release', items: [{ text: 'Check the workspace' }] }],
   },
 });
+async function completedTasks(day, count, title) {
+  let firstId;
+  for (let index = 1; index <= count; index += 1) {
+    const completed = await api('/api/v1/tasks', {
+      method: 'POST',
+      token: first.token,
+      body: {
+        scope_id: first.scope,
+        title: `${title} ${index}`,
+        status: 'done',
+        completed_at: day,
+      },
+    });
+    firstId ??= completed.id;
+  }
+  return firstId;
+}
+const doneTodayId = await completedTasks(today, 12, 'Completed today');
+const doneYesterdayId = await completedTasks(yesterday, 50, 'Completed yesterday');
 const team = await api('/api/v1/scopes', {
   method: 'POST',
   token: first.token,
@@ -160,6 +180,9 @@ process.stdout.write(
     teamProjectId: teamProject.id,
     taskId: task.id,
     today,
+    yesterday,
+    doneTodayId,
+    doneYesterdayId,
     oauthGrantId: oauthGrant.id,
   }),
 );

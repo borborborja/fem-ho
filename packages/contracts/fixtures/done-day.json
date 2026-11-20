@@ -1,0 +1,114 @@
+[
+  {
+    "name": "Avui al fus del perfil en creuar mitjanit abans que UTC",
+    "timezone": "Europe/Madrid",
+    "now": "2026-11-19T23:15:00Z",
+    "selectedDay": null,
+    "clearedAt": null,
+    "tasks": [
+      { "id": "before-midnight", "status": "done", "completedAt": "2026-11-19T22:59:59.999Z" },
+      { "id": "at-midnight", "status": "done", "completedAt": "2026-11-19T23:00:00Z" },
+      { "id": "after-midnight", "status": "done", "completedAt": "2026-11-20T00:05:00+01:00" },
+      { "id": "missing", "status": "done", "completedAt": null },
+      { "id": "malformed", "status": "done", "completedAt": "invalid" },
+      { "id": "date-only", "status": "done", "completedAt": "2026-11-20" },
+      { "id": "inbox", "status": "inbox", "completedAt": null },
+      { "id": "todo", "status": "todo", "completedAt": null },
+      { "id": "doing", "status": "doing", "completedAt": null }
+    ],
+    "visibleIds": ["at-midnight", "after-midnight", "inbox", "todo", "doing"],
+    "hasActiveClear": false
+  },
+  {
+    "name": "Netejar inclou el mateix instant i deixa passar les tasques posteriors",
+    "timezone": "Europe/Madrid",
+    "now": "2026-11-19T23:15:00Z",
+    "selectedDay": null,
+    "clearedAt": "2026-11-19T23:10:00Z",
+    "tasks": [
+      { "id": "before", "status": "done", "completedAt": "2026-11-19T23:09:59.999Z" },
+      { "id": "same", "status": "done", "completedAt": "2026-11-19T23:10:00Z" },
+      { "id": "after", "status": "done", "completedAt": "2026-11-19T23:10:00.001Z" }
+    ],
+    "visibleIds": ["after"],
+    "hasActiveClear": true
+  },
+  {
+    "name": "L’històric no aplica la neteja del dia consultat",
+    "timezone": "Europe/Madrid",
+    "now": "2026-11-20T12:00:00Z",
+    "selectedDay": "2026-11-19",
+    "clearedAt": "2026-11-19T12:00:00Z",
+    "tasks": [
+      { "id": "history", "status": "done", "completedAt": "2026-11-19T08:00:00Z" },
+      { "id": "today", "status": "done", "completedAt": "2026-11-19T23:10:00Z" }
+    ],
+    "visibleIds": ["history"],
+    "hasActiveClear": false
+  },
+  {
+    "name": "La neteja d’ahir caduca en canviar el dia al fus del perfil",
+    "timezone": "Europe/Madrid",
+    "now": "2026-11-19T23:15:00Z",
+    "selectedDay": null,
+    "clearedAt": "2026-11-19T22:45:00Z",
+    "tasks": [
+      { "id": "yesterday", "status": "done", "completedAt": "2026-11-19T22:44:00Z" },
+      { "id": "today", "status": "done", "completedAt": "2026-11-19T23:10:00Z" }
+    ],
+    "visibleIds": ["today"],
+    "hasActiveClear": false
+  },
+  {
+    "name": "Una data sense hora no activa el llindar",
+    "timezone": "UTC",
+    "now": "2026-11-20T12:00:00Z",
+    "selectedDay": null,
+    "clearedAt": "2026-11-20",
+    "tasks": [{ "id": "midnight", "status": "done", "completedAt": "2026-11-20T00:00:00Z" }],
+    "visibleIds": ["midnight"],
+    "hasActiveClear": false
+  },
+  {
+    "name": "Una data civil impossible no es converteix en una data de març",
+    "timezone": "UTC",
+    "now": "2026-03-03T12:00:00Z",
+    "selectedDay": null,
+    "clearedAt": "2026-02-31T10:00:00Z",
+    "tasks": [
+      { "id": "valid", "status": "done", "completedAt": "2026-03-03T08:00:00Z" },
+      { "id": "malformed", "status": "done", "completedAt": "2026-02-31T11:00:00Z" }
+    ],
+    "visibleIds": ["valid"],
+    "hasActiveClear": false
+  },
+  {
+    "name": "El dia del canvi d’hora de primavera acaba després de 23 hores",
+    "timezone": "Europe/Madrid",
+    "now": "2026-03-29T21:59:59Z",
+    "selectedDay": null,
+    "clearedAt": null,
+    "tasks": [
+      { "id": "start", "status": "done", "completedAt": "2026-03-28T23:00:00Z" },
+      { "id": "end", "status": "done", "completedAt": "2026-03-29T21:59:59Z" },
+      { "id": "next", "status": "done", "completedAt": "2026-03-29T22:00:00Z" }
+    ],
+    "visibleIds": ["start", "end"],
+    "hasActiveClear": false
+  },
+  {
+    "name": "A la tardor es distingeixen les dues ocurrències de la mateixa hora local",
+    "timezone": "Europe/Madrid",
+    "now": "2026-10-25T22:30:00Z",
+    "selectedDay": null,
+    "clearedAt": "2026-10-25T01:00:00Z",
+    "tasks": [
+      { "id": "first", "status": "done", "completedAt": "2026-10-25T00:30:00Z" },
+      { "id": "second", "status": "done", "completedAt": "2026-10-25T01:30:00Z" },
+      { "id": "last-hour", "status": "done", "completedAt": "2026-10-25T22:15:00Z" },
+      { "id": "next", "status": "done", "completedAt": "2026-10-25T23:00:00Z" }
+    ],
+    "visibleIds": ["second", "last-hour"],
+    "hasActiveClear": true
+  }
+]

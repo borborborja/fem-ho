@@ -16,47 +16,27 @@ import { MonthView } from '@fem-ho/design-system/femho';
 import { CalendarIcon } from './CalendarIcon.js';
 
 export interface DoneHeaderProps {
-  clearedAt: string | null;
+  today: string;
+  day: string;
+  hasActiveClear: boolean;
   onClear: () => void;
   onShowAll: () => void;
-  /**
-   * Anar a un altre dia a veure què vas fer.
-   *
-   * **Existia i no es passava mai**: el mini-calendari s'obria, triaves un dia i no
-   * passava res. La columna ensenyava tot l'històric de tasques fetes, planes, i per això
-   * no s'arribava a veure mai ni l'estat buit ni l'efecte de "Netejar".
-   */
-  onPickDay?: (date: string) => void;
-  /** El dia que s'està mirant. Amb `null`, avui. */
-  day?: string | null | undefined;
-  /** Tornar a avui. Només surt quan s'està mirant un altre dia. */
-  onBackToToday?: (() => void) | undefined;
-}
-
-function localDate(at: Date): string {
-  return `${String(at.getFullYear())}-${String(at.getMonth() + 1).padStart(2, '0')}-${String(
-    at.getDate(),
-  ).padStart(2, '0')}`;
-}
-
-function isToday(iso: string | null): boolean {
-  return iso !== null && localDate(new Date(iso)) === localDate(new Date());
+  onPickDay: (date: string) => void;
+  onBackToToday: () => void;
 }
 
 export function DoneHeader({
-  clearedAt,
+  today,
+  day,
+  hasActiveClear,
   onClear,
   onShowAll,
   onPickDay,
-  day,
   onBackToToday,
 }: DoneHeaderProps) {
-  const avui = localDate(new Date());
-  const mirantUnAltreDia = day != null && day !== avui;
   // El mini-calendari segueix la mateixa regla que el gran: idioma i preferència.
   const weekStart = resolveWeekStart(useSessionData().settings.week_start, getLocale());
-  const [calendarOpen, setCalendarOpen] = useState(false);
-  const [month, setMonth] = useState(() => new Date());
+  const [month, setMonth] = useState<Date | null>(null);
 
   const button = (label: React.ReactNode, onClick: () => void, testId: string) => (
     <button
@@ -81,23 +61,25 @@ export function DoneHeader({
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 2, position: 'relative' }}>
-      {button(<CalendarIcon />, () => setCalendarOpen(!calendarOpen), 'done-calendar')}
+      {button(
+        <CalendarIcon />,
+        () => setMonth(month === null ? new Date(`${day}T12:00:00`) : null),
+        'done-calendar',
+      )}
       {/*
         Mirant un altre dia, «Netejar» i «Tot avui» no hi són: totes dues parlen d'avui, i
         un botó que no fa res on l'has clicat és pitjor que un que no hi és.
       */}
-      {mirantUnAltreDia ? (
-        button(t('board.done.backToToday'), () => onBackToToday?.(), 'done-back-today')
+      {day !== today ? (
+        button(t('board.done.backToToday'), onBackToToday, 'done-back-today')
       ) : (
         <>
           {button(t('board.done.clear'), onClear, 'done-clear')}
-          {isToday(clearedAt)
-            ? button(t('board.done.showAllToday'), onShowAll, 'done-show-all')
-            : null}
+          {hasActiveClear ? button(t('board.done.showAllToday'), onShowAll, 'done-show-all') : null}
         </>
       )}
 
-      {calendarOpen ? (
+      {month !== null ? (
         <div
           style={{
             position: 'absolute',
@@ -122,15 +104,15 @@ export function DoneHeader({
               prevLabel: t('calendar.prevMonth'),
               nextLabel: t('calendar.nextMonth'),
             }}
-            today={avui}
-            selectedDate={day ?? avui}
+            today={today}
+            selectedDate={day}
             // Què vas fer demà no vol dir res.
-            maxDate={avui}
+            maxDate={today}
             onPrev={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}
             onNext={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}
             onSelect={(date) => {
-              setCalendarOpen(false);
-              onPickDay?.(date);
+              setMonth(null);
+              onPickDay(date);
             }}
           />
         </div>

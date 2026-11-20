@@ -359,7 +359,7 @@ data class AuthTokens(
 )
 
 /**
- * Les settings de l'usuari, el que el wizard de la primera entrada necessita.
+ * Les preferències que Android llegeix de l'embolcall `{profile, settings}`.
  *
  * `scope_mode` és `null` fins que la persona tria — i és exactament quan el wizard es
  * mostra (docs/12 §3, scope-mode.ts). El servidor el retorna dins de l'embolcall
@@ -368,6 +368,7 @@ data class AuthTokens(
 @Serializable
 data class UserSettingsView(
     @SerialName("scope_mode") val scopeMode: String? = null,
+    @SerialName("done_cleared_at") val doneClearedAt: String? = null,
 )
 
 /** La resposta de `GET /auth/settings`: el perfil i les settings juntes. */

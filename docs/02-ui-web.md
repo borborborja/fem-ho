@@ -189,9 +189,10 @@ Capçalera pròpia (P2):
 
 - Botó de **calendari** que obre un mini-calendari per navegar a qualsevol dia passat.
 - Botó de **netejar** que posa `user_settings.done_cleared_at` a ara. No esborra res.
-- Quan hi ha `done_cleared_at` d'avui, apareix **"Veure tot el fet d'avui"**, que l'ignora.
+- Quan hi ha `done_cleared_at` d'avui, apareix **"Tot avui"**, que treu el llindar.
 
-Per defecte es veu el d'avui desplegat i, a sota, "Ahir · 4" i "Aquesta setmana · 11" plegats. **No s'amaga res: es plega.**
+Per defecte es veuen les tasques acabades avui, segons el fus del perfil. El
+selector permet consultar un dia anterior i **"Tornar a avui"** recupera la vista d'avui.
 
 ---
 

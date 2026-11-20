@@ -153,6 +153,10 @@ class AppViewModel(private val container: Container) : ViewModel() {
     private val defaultTimezone = ZoneId.systemDefault().id
     private val _profileTimezone = MutableStateFlow(defaultTimezone)
     val profileTimezone = _profileTimezone.asStateFlow()
+    private val _doneClearedAt = MutableStateFlow<String?>(null)
+    val doneClearedAt = _doneClearedAt.asStateFlow()
+    private val _doneSettingsSaving = MutableStateFlow(false)
+    val doneSettingsSaving = _doneSettingsSaving.asStateFlow()
 
     private val _activeScopes = MutableStateFlow<List<String>>(emptyList())
     val activeScopes = _activeScopes.asStateFlow()
@@ -487,6 +491,7 @@ class AppViewModel(private val container: Container) : ViewModel() {
     private var openTaskJob: Job? = null
     private var openNotificationJob: Job? = null
     private var scopeModeJob: Job? = null
+    private var profileLoadJob: Job? = null
     private var sessionScope = CoroutineScope(viewModelScope.coroutineContext + Job().also { it.cancel() })
 
     private fun startSession(account: ActiveAccount) {
@@ -530,6 +535,9 @@ class AppViewModel(private val container: Container) : ViewModel() {
         _actionError.value = null
         _profile.value = null
         _profileTimezone.value = defaultTimezone
+        profileLoadJob = null
+        _doneClearedAt.value = null
+        _doneSettingsSaving.value = false
         _activeScopes.value = emptyList()
         _instanceVersion.value = ""
         _needsScopeModeWizard.value = false
@@ -1452,16 +1460,29 @@ class AppViewModel(private val container: Container) : ViewModel() {
         }
     }
 
-    /**
-     * Carrega el perfil de l'usuari.
-     *
-     * Es crida en iniciar sessió per tenir el nom, correu i timezone a mà.
-     */
+    /** El perfil i les preferències de «Fet» es refresquen amb la mateixa lectura. */
     fun loadProfile() {
         val sessionAccount = activeAccount ?: return
-        sessionScope.launch {
-            runCatching { container.api(sessionAccount).settings().profile }
+        if (profileLoadJob?.isActive == true) return
+        profileLoadJob = sessionScope.launch {
+            runCatching { container.refreshUserSettings(sessionAccount).profile }
                 .onSuccess { if (it != null) showAccountProfile(sessionAccount, it) }
+                .onFailure { if (it is CancellationException) throw it }
+        }
+    }
+
+    fun setDoneClearedAt(value: String?) {
+        val sessionAccount = activeAccount ?: return
+        if (_doneSettingsSaving.value) return
+        _doneSettingsSaving.value = true
+        sessionScope.launch {
+            try {
+                container.setDoneClearedAt(sessionAccount, value)
+            } catch (error: Exception) {
+                actionFailed(error)
+            } finally {
+                if (activeAccount == sessionAccount) _doneSettingsSaving.value = false
+            }
         }
     }
 
@@ -2464,6 +2485,9 @@ class AppViewModel(private val container: Container) : ViewModel() {
 
     private fun observe(account: ActiveAccount) {
         val repository = container.repository(account)
+        sessionScope.launch {
+            container.settings.doneClearedAt(account).collect { _doneClearedAt.value = it }
+        }
         sessionScope.launch {
             repository.tasks.collect {
                 _tasks.value = it

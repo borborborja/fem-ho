@@ -59,6 +59,7 @@ import ho.fem.designsystem.FemhoText
 import ho.fem.designsystem.KanbanColumn
 import ho.fem.designsystem.TaskCard
 import ho.fem.model.AiMode
+import ho.fem.model.DoneDayFilter
 import ho.fem.model.Task
 import ho.fem.model.TaskStatus
 import java.time.Instant
@@ -155,6 +156,8 @@ fun BoardScreen(
     onMove: (Task, TaskStatus) -> Unit,
     onToggle: (Task) -> Unit,
     modifier: Modifier = Modifier,
+    doneDay: DoneDayFilter,
+    doneHeader: @Composable () -> Unit = {},
     /**
      * El peu de cada columna. El disseny validat hi posa l'afegida ràpida de la columna,
      * i abans n'hi havia una de sola sota el tauler que ho enviava tot a la bústia.
@@ -183,9 +186,10 @@ fun BoardScreen(
 ) {
     val pager = rememberPagerState(pageCount = { ORDER.size })
     val scope = rememberCoroutineScope()
-    val columns = remember(tasks, aiBoard) {
+    val columns = remember(tasks, aiBoard, doneDay) {
         tasks.filter { task ->
-            task.status == TaskStatus.INBOX || (task.aiMode != AiMode.MANUAL) == aiBoard
+            val belongsToBoard = task.status == TaskStatus.INBOX || (task.aiMode != AiMode.MANUAL) == aiBoard
+            belongsToBoard && (task.status != TaskStatus.DONE || doneDay.includes(task.completedAt))
         }.groupBy { it.status }
     }
     var dialogTaskId by rememberSaveable(aiBoard) { mutableStateOf<String?>(null) }
@@ -289,6 +293,7 @@ fun BoardScreen(
                 inbox = status == TaskStatus.INBOX,
                 modifier = Modifier.fillMaxSize().testTag("board-page-${status.name.lowercase()}"),
             ) {
+                if (status == TaskStatus.DONE) doneHeader()
                 LazyColumn(
                     // El camp de captura és un germà de la llista i queda accessible
                     // quan una columna és llarga o s'obre el teclat.

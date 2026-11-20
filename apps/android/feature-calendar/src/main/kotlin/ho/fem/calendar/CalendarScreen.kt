@@ -89,6 +89,7 @@ fun MonthView(
     modifier: Modifier = Modifier,
     /** 0 diumenge, 1 dilluns. El resol `Dates.resolveWeekStart`. */
     weekStart: Int = 1,
+    maxDate: LocalDate? = null,
 ) {
     Column(
         modifier = modifier.fillMaxWidth().padding(12.dp).testTag("calendar-month"),
@@ -121,6 +122,7 @@ fun MonthView(
                         date = date,
                         selected = date == selected,
                         today = date == today,
+                        enabled = date != null && (maxDate == null || date <= maxDate),
                         dots = date?.let { dots[it] }.orEmpty(),
                         onSelect = onSelect,
                         modifier = Modifier.weight(1f),
@@ -136,6 +138,7 @@ private fun DayCell(
     date: LocalDate?,
     selected: Boolean,
     today: Boolean,
+    enabled: Boolean,
     dots: List<Color>,
     onSelect: (LocalDate) -> Unit,
     modifier: Modifier = Modifier,
@@ -154,14 +157,21 @@ private fun DayCell(
                     else -> Modifier
                 },
             )
-            .then(if (date == null) Modifier else Modifier.testTag("calendar-date-$date").clickable { onSelect(date) }),
+            .then(
+                if (date == null) Modifier
+                else Modifier.testTag("calendar-date-$date").clickable(enabled = enabled) { onSelect(date) },
+            ),
         contentAlignment = Alignment.Center,
     ) {
         if (date != null) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
                     text = date.dayOfMonth.toString(),
-                    color = if (selected) Femho.onBrand else Femho.colors.ink,
+                    color = when {
+                        selected -> Femho.onBrand
+                        enabled -> Femho.colors.ink
+                        else -> Femho.colors.inkFaint
+                    },
                     fontSize = FemhoText.body,
                     fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.Normal,
                 )

@@ -44,6 +44,7 @@ import ho.fem.model.Task
 import ho.fem.model.TaskPage
 import ho.fem.model.TaskType
 import ho.fem.model.UserProfile
+import ho.fem.model.UserSettingsView
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
@@ -330,6 +331,9 @@ class FemhoApi(
 
     /** Les settings de l'usuari: `scope_mode` decideix si cal el wizard (docs/12 §3). */
     suspend fun settings(): AuthSettingsEnvelope = get("/api/v1/auth/settings")
+
+    suspend fun setDoneClearedAt(value: String?): UserSettingsView =
+        patch("/api/v1/auth/settings", mapOf("done_cleared_at" to value))
 
     suspend fun logout() {
         runCatching { raw("POST", "/api/v1/auth/logout", null, authenticated = true) }
