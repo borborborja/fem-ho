@@ -18,12 +18,14 @@ en sincronitzar si el dispositiu no té cap distribuïdor UnifiedPush.
 La migració 028 conserva les subscripcions existents. Les proves amb SQLite i
 PostgreSQL cobreixen les escriptures MCP i REST, la privadesa de cada
 dispositiu, la pèrdua d'accés, la baixa i la recuperació d'un enviament
-interromput. Amb el web construït s'ha provat el worker de producció i
-l'obertura de la fitxa amb una passarel·la simulada. La prova amb una
-passarel·la web real queda pendent perquè el Chromium aïllat, amb el
-permís concedit, no ha pogut obtenir una subscripció. La prova instrumentada
-d'Android 16 ha exercitat els canals del sistema, la recepció per
-sincronització i la deduplicació contra un servidor de proves.
+interromput. Amb el web construït i Google Chrome s'ha verificat una
+subscripció Web Push real, el lliurament amb la web en segon pla i
+l'obertura de la fitxa des de l'avís. La prova, contra un servidor aïllat,
+també ha confirmat que una tasca creada a Inbox amb l'avís desactivat no
+genera cap notificació.
+
+La prova instrumentada d'Android 16 ha exercitat els canals del sistema,
+la recepció per sincronització i la deduplicació contra un servidor de proves.
 Amb l'APK de publicació en Android 16 també s'ha rebut un avís xifrat de
 UnifiedPush a través de ntfy, amb Fem-ho en segon pla. L'app ha mostrat un
 sol avís i n'ha confirmat la recepció al servidor.
