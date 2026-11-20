@@ -495,7 +495,14 @@ interface FemhoDao {
     suspend fun replaceIssue(oldId: String, newId: String, baseVersion: Int, payload: String, baseFields: String?)
 
     @Transaction
-    suspend fun resolveIssue(remove: List<String>, previousId: String?, replacement: OutboxEntity?, taskId: String?, task: TaskEntity?) {
+    suspend fun resolveIssue(
+        remove: List<String>,
+        previousId: String?,
+        replacement: OutboxEntity?,
+        taskId: String?,
+        task: TaskEntity?,
+        lists: TaskListsEntity? = null,
+    ) {
         remove.forEach { dequeue(it) }
         if (previousId != null && replacement != null) {
             replaceIssue(previousId, replacement.opId, replacement.baseVersion, replacement.payload, replacement.baseFields)
@@ -506,12 +513,21 @@ interface FemhoDao {
             purgeOrphanTaskLists()
             purgeOrphanComments()
         }
+        if (lists != null) putTaskLists(lists)
     }
 
     @Transaction
-    suspend fun acknowledgeChild(opId: String, lists: TaskListsEntity?, comment: CommentEntity?) {
+    suspend fun acknowledgeChild(
+        opId: String,
+        lists: TaskListsEntity?,
+        comment: CommentEntity?,
+        rebased: List<OutboxEntity> = emptyList(),
+        task: TaskEntity? = null,
+    ) {
         if (lists != null) putTaskLists(lists)
         if (comment != null) putComments(listOf(comment))
+        rebased.forEach { updateOperation(it) }
+        if (task != null) putTasks(listOf(task))
         dequeue(opId)
     }
 

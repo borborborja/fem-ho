@@ -109,8 +109,50 @@ export function topologicalOrder(rows: OutboxRow[]): OutboxRow[] {
     }
   };
 
-  for (const row of [...rows].sort((a, b) => a.created_at.localeCompare(b.created_at))) emit(row);
+  for (const row of [...rows].sort(compareOperations)) emit(row);
   return ordered;
+}
+
+export function compareOperations(a: OutboxRow, b: OutboxRow): number {
+  // Dues pestanyes poden encuar al mateix mil·lisegon. L'UUIDv7 desempata com a IndexedDB.
+  return a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id);
+}
+
+export function nextBoardOperations(rows: OutboxRow[]): OutboxRow[] {
+  const pendingParents = new Set(
+    rows
+      .filter((row) => row.entity_type === 'task' && row.op === 'create')
+      .map((row) => row.entity_id),
+  );
+  const seen = new Set<string>();
+  return topologicalOrder(rows)
+    .filter((row) => {
+      if (seen.has(row.entity_id)) return false;
+      seen.add(row.entity_id);
+      // Esperem el rebut de la tasca mare. Si la creació ha fallat, les seves subtasques
+      // encara es poden enviar quan es resolgui l'error de la mare.
+      if (row.parent_task_id !== undefined && pendingParents.has(row.parent_task_id)) return false;
+      return row.status === 'pending' || row.status === 'sending';
+    })
+    .slice(0, 100);
+}
+
+export async function discardBoardOperation(db: FemHoDatabase, row: OutboxRow): Promise<void> {
+  await db.transaction('rw', db.outbox, async () => {
+    const current = await db.outbox.get(row.id);
+    if (current?.status !== 'failed' && current?.status !== 'conflict') return;
+    if (row.op === 'create') {
+      // Els gestos següents no tenen entitat al servidor si es descarta la creació.
+      await db.outbox
+        .where('[entity_type+entity_id]')
+        .equals([row.entity_type, row.entity_id])
+        .delete();
+      if (row.entity_type === 'task')
+        await db.outbox.where('parent_task_id').equals(row.entity_id).delete();
+    } else {
+      await db.outbox.delete(row.id);
+    }
+  });
 }
 
 /** Encua una operació, fusionant-la amb les pendents si toca. */
@@ -198,7 +240,9 @@ export async function applyResults(
 
       if (result.status === 'ok') {
         await db.outbox.delete(row.id);
-        if (result.entity !== undefined) {
+        if (row.op === 'delete') {
+          await db.entities.delete(row.entity_id);
+        } else if (result.entity !== undefined) {
           await db.entities.put({
             ...(result.entity as { id: string }),
             entity_type: row.entity_type,

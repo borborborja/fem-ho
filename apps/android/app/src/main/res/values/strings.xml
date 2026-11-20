@@ -41,7 +41,10 @@
     <string name="activity_verb_refreshed">ha refrescat l\'origen</string>
     <string name="activity_verb_released">ha alliberat la tasca</string>
     <string name="activity_verb_reopened">ha reobert</string>
+    <string name="activity_verb_subtask_completed">ha completat una subtasca</string>
     <string name="activity_verb_subtask_created">ha creat una subtasca</string>
+    <string name="activity_verb_subtask_reopened">ha reobert una subtasca</string>
+    <string name="activity_verb_subtask_updated">ha editat una subtasca</string>
     <string name="activity_verb_token_created">ha creat un token</string>
     <string name="activity_verb_token_revoked">ha revocat un token</string>
     <string name="activity_verb_updated">ha canviat</string>
@@ -924,6 +927,10 @@
     <string name="stats_tasks">Tasques fetes</string>
     <string name="stats_title">Estadístiques</string>
     <string name="stats_total">Dedicació total</string>
+    <string name="subtask_actions">Accions de la subtasca</string>
+    <string name="subtask_delete">Esborra la subtasca</string>
+    <string name="subtask_deleteconfirm">Vols esborrar la subtasca «{title}»?</string>
+    <string name="subtask_edit">Edita la subtasca</string>
     <string name="sync_appliedbyserver">Aplicades pel servidor</string>
     <string name="sync_applymychange">Torna a aplicar el meu canvi</string>
     <string name="sync_complete">Fes-la</string>

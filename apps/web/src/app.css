@@ -453,6 +453,112 @@ button {
   font-size: 11px;
   color: var(--danger-text);
 }
+.subtask-title {
+  flex: 1;
+  min-width: 0;
+  padding-block: 2px;
+  font-size: 13.5px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+.subtask-row [aria-checked='true'] + .subtask-title {
+  color: var(--ink-faint);
+  text-decoration: line-through;
+}
+.subtask-hover-actions {
+  display: flex;
+  flex-shrink: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+.subtask-row:hover .subtask-hover-actions,
+.subtask-row:focus-within .subtask-hover-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+.subtask-hover-actions button,
+.subtask-menu summary,
+.subtask-menu button,
+.subtask-editor-actions button {
+  border: 0;
+  border-radius: 4px;
+  padding: 4px;
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+.subtask-hover-actions button:last-child,
+.subtask-menu button:last-child {
+  color: var(--danger-text);
+}
+.subtask-hover-actions svg,
+.subtask-menu svg {
+  display: block;
+  width: 14px;
+  height: 14px;
+}
+.subtask-hover-actions svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.subtask-menu {
+  display: none;
+}
+.subtask-menu summary {
+  list-style: none;
+  display: grid;
+  justify-content: end;
+  align-items: center;
+  min-width: 32px;
+  min-height: 28px;
+}
+.subtask-menu svg {
+  fill: currentColor;
+}
+.subtask-menu button {
+  display: block;
+  min-height: 32px;
+  text-align: start;
+}
+@media (hover: none), (pointer: coarse) {
+  .subtask-hover-actions {
+    display: none;
+  }
+  .subtask-menu {
+    display: block;
+  }
+}
+.subtask-editor {
+  flex: 1;
+  min-width: 0;
+}
+.subtask-editor textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 4px 6px;
+  font-size: 13.5px;
+  resize: vertical;
+}
+.subtask-editor [role='alert'] {
+  font-size: 11px;
+  color: var(--danger-text);
+}
+.subtask-editor-actions {
+  display: flex;
+  justify-content: end;
+  gap: 6px;
+}
+.subtask-editor-actions button:last-child {
+  color: var(--ink);
+  font-weight: 600;
+}
 .chrono-track {
   position: relative;
   flex-shrink: 0;

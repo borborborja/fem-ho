@@ -41,7 +41,10 @@
     <string name="activity_verb_refreshed">ha refrescado el origen</string>
     <string name="activity_verb_released">ha liberado la tarea</string>
     <string name="activity_verb_reopened">ha reabierto</string>
+    <string name="activity_verb_subtask_completed">ha completado una subtarea</string>
     <string name="activity_verb_subtask_created">ha creado una subtarea</string>
+    <string name="activity_verb_subtask_reopened">ha reabierto una subtarea</string>
+    <string name="activity_verb_subtask_updated">ha editado una subtarea</string>
     <string name="activity_verb_token_created">ha creado un token</string>
     <string name="activity_verb_token_revoked">ha revocado un token</string>
     <string name="activity_verb_updated">ha cambiado</string>
@@ -924,6 +927,10 @@
     <string name="stats_tasks">Tareas hechas</string>
     <string name="stats_title">Estadísticas</string>
     <string name="stats_total">Dedicación total</string>
+    <string name="subtask_actions">Acciones de la subtarea</string>
+    <string name="subtask_delete">Borrar subtarea</string>
+    <string name="subtask_deleteconfirm">¿Quieres borrar la subtarea «{title}»?</string>
+    <string name="subtask_edit">Editar subtarea</string>
     <string name="sync_appliedbyserver">Aplicadas por el servidor</string>
     <string name="sync_applymychange">Volver a aplicar mi cambio</string>
     <string name="sync_complete">Márcala</string>

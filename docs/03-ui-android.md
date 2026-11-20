@@ -81,6 +81,13 @@ Camp al peu de la columna. L'autocompletat de `@` i `#` surt en un full ancorat 
 
 El xip reversible es manté.
 
+### Subtasques
+
+A la targeta i a la fitxa, una pulsació llarga sobre el títol d'una subtasca
+obre l'editor. El menú de la fila permet editar-la o esborrar-la amb confirmació.
+En plegar **Llistes**, el camp d'afegida queda amagat i conserva l'esborrany.
+Les accions de subtasques passen per la cua local i es sincronitzen en reconnectar.
+
 ---
 
 ## 5 · Calendari

@@ -13,13 +13,33 @@ export function DeleteTaskDialog({
   onClose: () => void;
   onChanged: () => void;
 }) {
+  return (
+    <ConfirmDeleteDialog
+      prompt={t('task.deleteConfirm', { title: task.title })}
+      onClose={onClose}
+      onDelete={async () => {
+        await api.delete(`/api/v1/tasks/${task.id}`);
+        onChanged();
+      }}
+    />
+  );
+}
+
+export function ConfirmDeleteDialog({
+  prompt,
+  onClose,
+  onDelete,
+}: {
+  prompt: string;
+  onClose: () => void;
+  onDelete: () => Promise<void>;
+}) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
   const titleId = useId();
   const descriptionId = useId();
   const remove = useMutation(async () => {
-    await api.delete(`/api/v1/tasks/${task.id}`);
-    onChanged();
+    await onDelete();
     onClose();
   });
 
@@ -47,7 +67,7 @@ export function DeleteTaskDialog({
       onClick={(event) => event.stopPropagation()}
     >
       <h2 id={titleId}>{t('nav.delete')}</h2>
-      <p id={descriptionId}>{t('task.deleteConfirm', { title: task.title })}</p>
+      <p id={descriptionId}>{prompt}</p>
       {remove.error !== undefined && <p role="alert">{failureText(remove.error)}</p>}
       <div className="femho-delete-dialog-actions">
         <button

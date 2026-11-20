@@ -41,7 +41,10 @@
     <string name="activity_verb_refreshed">refreshed the source</string>
     <string name="activity_verb_released">released the task</string>
     <string name="activity_verb_reopened">reopened</string>
+    <string name="activity_verb_subtask_completed">completed a subtask</string>
     <string name="activity_verb_subtask_created">created a subtask</string>
+    <string name="activity_verb_subtask_reopened">reopened a subtask</string>
+    <string name="activity_verb_subtask_updated">edited a subtask</string>
     <string name="activity_verb_token_created">created a token</string>
     <string name="activity_verb_token_revoked">revoked a token</string>
     <string name="activity_verb_updated">changed</string>
@@ -924,6 +927,10 @@
     <string name="stats_tasks">Tasks done</string>
     <string name="stats_title">Stats</string>
     <string name="stats_total">Total time</string>
+    <string name="subtask_actions">Subtask actions</string>
+    <string name="subtask_delete">Delete subtask</string>
+    <string name="subtask_deleteconfirm">Delete the subtask “{title}”?</string>
+    <string name="subtask_edit">Edit subtask</string>
     <string name="sync_appliedbyserver">Applied by the server</string>
     <string name="sync_applymychange">Apply my change again</string>
     <string name="sync_complete">Mark as done</string>

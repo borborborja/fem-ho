@@ -1,4 +1,5 @@
 export { TaskCard } from './TaskCard.js';
+export { useTitleHold } from './useTitleHold.js';
 export type { TaskCardProps, CardList, CardListItem, CardAddForm } from './TaskCard.js';
 export { KanbanColumn, KanbanGroup, ScopeGroupHeader } from './KanbanColumn.js';
 export type { KanbanColumnProps, KanbanGroupProps, ScopeGroupHeaderProps } from './KanbanColumn.js';

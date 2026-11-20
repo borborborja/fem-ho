@@ -51,6 +51,10 @@ export interface OutboxRow {
   possibly_sent_direct?: boolean | undefined;
   /** El títol conegut quan es va encuar una operació que no porta el títol al cos. */
   task_title?: string | undefined;
+  /** La tasca mare. Es desa a part perquè un PATCH de subtasca no pot canviar-la. */
+  parent_task_id?: string | undefined;
+  /** Títol vist abans d'editar, per distingir els canvis propis dels d'un altre client. */
+  observed_title?: string | undefined;
 }
 
 /** Claus de la taula `meta`. */
@@ -77,6 +81,9 @@ export class FemHoDatabase extends Dexie {
       // troba les operacions fusionables sense llegir la taula sencera.
       outbox: 'id, status, created_at, [entity_type+entity_id]',
       meta: 'key',
+    });
+    this.version(2).stores({
+      outbox: 'id, status, created_at, [entity_type+entity_id], parent_task_id',
     });
   }
 }

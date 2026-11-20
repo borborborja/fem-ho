@@ -23,6 +23,7 @@ import { connect, type Connection } from '../db/connection.js';
 import { migrateToLatest } from '../db/migrator.js';
 import { connectTestSchema, postgresUrl, type TestSchema } from '../db/test-postgres.js';
 import { TOOLS, assertCatalogue } from '../mcp/tools.js';
+import type { SubtaskView } from '../services/subtasks.js';
 
 const tmp = mkdtempSync(join(tmpdir(), 'femho-mcp-'));
 const NOW = '2026-08-06T09:00:00.000Z';
@@ -142,10 +143,10 @@ afterAll(async () => {
 });
 
 describe('el catàleg', () => {
-  it('el catàleg inclou les vint-i-tres eines documentades', () => {
+  it('el catàleg inclou les vint-i-sis eines documentades', () => {
     // "Una definició de tool ocupa entre 100 i 500 tokens" (docs/08 §3). La disciplina
     // de nombre és el que evita que la finestra de context se'n vagi en metadades.
-    expect(TOOLS).toHaveLength(23);
+    expect(TOOLS).toHaveLength(26);
     expect(() => assertCatalogue()).not.toThrow();
   });
 
@@ -196,17 +197,31 @@ describe('el catàleg', () => {
     const byName = new Map(TOOLS.map((tool) => [tool.name, tool.annotations]));
 
     // Les de lectura: el client les pot aprovar sol.
-    for (const name of ['whoami', 'get_task', 'get_task_context', 'list_tasks', 'search_tasks']) {
+    for (const name of [
+      'whoami',
+      'get_task',
+      'get_task_context',
+      'list_subtasks',
+      'list_tasks',
+      'search_tasks',
+    ]) {
       expect(byName.get(name)?.readOnlyHint).toBe(true);
     }
 
     // `next_task` **no** és idempotent: cada crida reserva una tasca diferent.
     expect(byName.get('next_task')?.idempotentHint).toBe(false);
+    expect(byName.get('create_subtask')?.idempotentHint).toBe(false);
     expect(byName.get('create_task')?.idempotentHint).toBe(false);
     expect(byName.get('move_task')?.idempotentHint).toBe(false);
 
     // Les que modifiquen sí que ho són.
-    for (const name of ['update_task', 'complete_task', 'release_task', 'add_task_attachment']) {
+    for (const name of [
+      'update_subtask',
+      'update_task',
+      'complete_task',
+      'release_task',
+      'add_task_attachment',
+    ]) {
       expect(byName.get(name)?.idempotentHint).toBe(true);
     }
 
@@ -253,7 +268,7 @@ describe('tools/list', () => {
     expect(response.status).toBe(200);
 
     const tools = (result(response.body).tools ?? []) as { name: string }[];
-    expect(tools).toHaveLength(16);
+    expect(tools).toHaveLength(19);
     expect(tools.map((tool) => tool.name)).toEqual(
       TOOLS.filter(
         (tool) =>
@@ -267,6 +282,19 @@ describe('tools/list', () => {
             'report_task_execution_result',
           ].includes(tool.name),
       ).map((tool) => tool.name),
+    );
+  });
+
+  it.each([
+    [['tasks:read'], ['list_subtasks']],
+    [['tasks:create'], []],
+    [['tasks:update'], ['create_subtask', 'update_subtask']],
+  ])('filtra les eines de subtasques amb %j', async (capabilities, expected) => {
+    const auth = await credential(capabilities);
+    const response = await rpc('tools/list', {}, auth);
+    const tools = result(response.body).tools as { name: string }[];
+    expect(tools.map(({ name }) => name).filter((name) => name.includes('subtask'))).toEqual(
+      expected,
     );
   });
 
@@ -311,6 +339,156 @@ describe('la provinença d’MCP', () => {
     expect(login.statusCode).toBe(200);
     return { authorization: `Bearer ${login.json<{ access_token: string }>().access_token}` };
   };
+
+  it('crea, edita, completa i reobre subtasques d’una tasca existent', async () => {
+    const headers = await sessionHeaders();
+    const taskId = uuidv7();
+    const subtaskId = uuidv7();
+    const parent = await app.inject({
+      method: 'POST',
+      url: '/api/v1/tasks',
+      headers,
+      payload: { id: taskId, scope_id: scopeId, title: 'Tasca mare', status: 'todo' },
+    });
+    expect(parent.statusCode).toBe(201);
+    const original = await app.inject({
+      method: 'POST',
+      url: `/api/v1/tasks/${taskId}/subtasks`,
+      headers,
+      payload: { id: 'subtasca-antiga', title: 'Subtasca inicial' },
+    });
+    expect(original.statusCode).toBe(201);
+    const reader = await credential(['tasks:read']);
+    const writer = await credential(['tasks:read', 'tasks:update']);
+    const originalChanged = toolData<SubtaskView>(
+      await callTool('update_subtask', { subtask_id: 'subtasca-antiga', done: true }, writer),
+    );
+    expect(originalChanged).toMatchObject({ id: 'subtasca-antiga', done: true });
+
+    const input = {
+      id: subtaskId,
+      task_id: taskId,
+      title: ' Segon pas ',
+      origin: 'Correu',
+    };
+    const created = await Promise.all([
+      callTool('create_subtask', input, writer),
+      callTool('create_subtask', input, writer),
+    ]);
+    const stored = toolData<SubtaskView>(created[0]!);
+    expect(stored).toMatchObject({ id: subtaskId, title: 'Segon pas', done: false, version: 1 });
+    expect(toolData(created[1]!)).toEqual(stored);
+    expect((await callTool('update_subtask', { subtask_id: subtaskId }, writer)).isError).toBe(
+      true,
+    );
+    expect(
+      (await callTool('update_subtask', { subtask_id: subtaskId, title: '   ' }, writer)).isError,
+    ).toBe(true);
+
+    const changed = await Promise.all([
+      callTool(
+        'update_subtask',
+        { subtask_id: subtaskId, title: 'Pas editat', origin: 'Notes' },
+        writer,
+      ),
+      callTool('update_subtask', { subtask_id: subtaskId, done: true, origin: 'Claude' }, writer),
+    ]);
+    for (const response of changed) expect(toolData(response)).toMatchObject({ id: subtaskId });
+    expect(toolData(await callTool('list_subtasks', { task_id: taskId }, reader))).toEqual([
+      originalChanged,
+      { ...stored, title: 'Pas editat', done: true, version: 3 },
+    ]);
+    expect(toolData(await callTool('get_task', { task_id: taskId }, reader))).toMatchObject({
+      status: 'todo',
+    });
+
+    const editOnly = await credential(['tasks:update']);
+    const reopen = { subtask_id: subtaskId, done: false, origin: 'ChatGPT' };
+    const reopened = toolData(await callTool('update_subtask', reopen, editOnly));
+    expect(reopened).toEqual({ id: subtaskId, task_id: taskId, version: 4 });
+    expect(toolData(await callTool('update_subtask', reopen, editOnly))).toEqual(reopened);
+
+    const history = await app.inject({
+      method: 'GET',
+      url: `/api/v1/tasks/${taskId}/activity`,
+      headers,
+    });
+    expect(history.statusCode).toBe(200);
+    const entries = history
+      .json<{ data: { entity_id: string }[] }>()
+      .data.filter((entry) => entry.entity_id === subtaskId);
+    expect(entries).toHaveLength(4);
+    expect(entries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          entity_type: 'subtask',
+          verb: 'created',
+          source: 'mcp',
+          mcp_origin: 'Correu',
+        }),
+        expect.objectContaining({
+          verb: 'updated',
+          source: 'mcp',
+          mcp_origin: 'Notes',
+          changes: { title: { from: 'Segon pas', to: 'Pas editat' } },
+        }),
+        expect.objectContaining({
+          verb: 'completed',
+          source: 'mcp',
+          mcp_origin: 'Claude',
+          changes: { done: { from: false, to: true } },
+        }),
+        expect.objectContaining({
+          verb: 'reopened',
+          source: 'mcp',
+          mcp_origin: 'ChatGPT',
+          changes: { done: { from: true, to: false } },
+        }),
+      ]),
+    );
+  });
+
+  it('respecta els àmbits de la credencial i el rol de lectura dins de l’àmbit', async () => {
+    const shared = uuidv7();
+    const viewer = uuidv7();
+    await sql`INSERT INTO scopes (id, name, kind, color, owner_id, position, created_at, updated_at)
+      VALUES (${shared}, 'Compartit', 'collective', '--plou-blue', ${userId}, 'a2', ${NOW}, ${NOW})`.execute(
+      conn.db,
+    );
+    await sql`INSERT INTO users (id, email, name, password_hash, kind, role, created_at, updated_at)
+      VALUES (${viewer}, 'viewer@example.com', 'Lector', 'fixture', 'human', 'member', ${NOW}, ${NOW})`.execute(
+      conn.db,
+    );
+    await sql`INSERT INTO scope_members (id, scope_id, user_id, role, created_at)
+      VALUES (${uuidv7()}, ${shared}, ${viewer}, 'viewer', ${NOW})`.execute(conn.db);
+    const taskId = uuidv7();
+    const subtaskId = uuidv7();
+    const writer = await credential(['tasks:read', 'tasks:create', 'tasks:update'], shared);
+    const viewerToken = await credential(['tasks:read', 'tasks:update'], shared, viewer);
+    toolData(
+      await callTool('create_task', { id: taskId, scope_id: shared, title: 'Amb lector' }, writer),
+    );
+    toolData(
+      await callTool(
+        'create_subtask',
+        { id: subtaskId, task_id: taskId, title: 'Pas compartit' },
+        writer,
+      ),
+    );
+
+    expect(toolData(await callTool('list_subtasks', { task_id: taskId }, viewerToken))).toEqual([
+      expect.objectContaining({ id: subtaskId }),
+    ]);
+    expect((await callTool('list_subtasks', { task_id: taskId })).isError).toBe(true);
+    for (const auth of [undefined, viewerToken]) {
+      expect(
+        (await callTool('create_subtask', { task_id: taskId, title: 'Denegat' }, auth)).isError,
+      ).toBe(true);
+      expect(
+        (await callTool('update_subtask', { subtask_id: subtaskId, done: true }, auth)).isError,
+      ).toBe(true);
+    }
+  });
 
   it('conserva a la targeta i a l’historial l’origen de cada crida', async () => {
     const id = uuidv7();
@@ -541,6 +719,10 @@ describe('la provinença d’MCP', () => {
     });
     expect(created.statusCode).toBe(201);
     const { id } = created.json<{ id: string }>();
+    const args = { task_id: id, title: 'Subtasca delegada' };
+    const unclaimed = await callTool('create_subtask', args, agentAuth);
+    expect(unclaimed.isError).toBe(true);
+    expect(unclaimed.content[0]?.text).toContain('before writing');
     const claim = await callTool('next_task', { scope_id: scopeId, origin: 'Notes' }, agentAuth);
     expect(toolData(claim)).toMatchObject({ task: { id }, lease_expires_at: expect.any(String) });
     const claimed = toolData<{ mcp_activity: unknown }>(
@@ -552,6 +734,10 @@ describe('la provinença d’MCP', () => {
       WHERE entity_type = 'task' AND entity_id = ${id} AND verb = 'claimed'
     `.execute(conn.db);
     expect(recorded.rows).toEqual([{ scope_id: scopeId, mcp_origin: 'Notes' }]);
+    const subtask = toolData<SubtaskView>(await callTool('create_subtask', args, agentAuth));
+    expect(
+      toolData(await callTool('update_subtask', { subtask_id: subtask.id, done: true }, agentAuth)),
+    ).toMatchObject({ done: true });
     const released = await callTool(
       'release_task',
       {

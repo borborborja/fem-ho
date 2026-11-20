@@ -15,7 +15,8 @@ import { dbBool, isTrue } from '../db/bool.js';
 import type { MigrationDb } from '../db/migration-db.js';
 import { PolicyError, missingCapability, notFound } from '../policy/errors.js';
 import { hasCapability, type Principal } from '../policy/principal.js';
-import { assertScopeAccess } from './scopes.js';
+import { assertScopeAccess, assertScopeRole } from './scopes.js';
+import { assertWritable, type TaskRow } from './tasks.js';
 
 export interface SubtaskView {
   id: string;
@@ -35,6 +36,8 @@ interface SubtaskRow {
   version: number;
 }
 
+type ParentTask = Pick<TaskRow, 'id' | 'scope_id' | 'ai_mode'>;
+
 function toView(row: SubtaskRow): SubtaskView {
   return {
     id: row.id,
@@ -46,27 +49,35 @@ function toView(row: SubtaskRow): SubtaskView {
   };
 }
 
-/** L'àmbit de la tasca amfitriona. Tota comprovació de permís hi passa. */
-async function scopeOfTask(db: MigrationDb, taskId: string): Promise<string> {
-  const found = await sql<{ scope_id: string }>`
-    SELECT scope_id FROM tasks WHERE id = ${taskId} AND deleted_at IS NULL
+/** La subtasca hereta els permisos i la reserva de la tasca que la conté. */
+async function parentTask(db: MigrationDb, taskId: string): Promise<ParentTask> {
+  const found = await sql<ParentTask>`
+    SELECT id, scope_id, ai_mode FROM tasks WHERE id = ${taskId} AND deleted_at IS NULL
   `.execute(db);
   const row = found.rows[0];
   if (row === undefined) throw notFound('task', taskId);
-  return row.scope_id;
+  return row;
 }
 
-async function taskOfSubtask(
-  db: MigrationDb,
-  subtaskId: string,
-): Promise<{ row: SubtaskRow; scopeId: string }> {
+async function assertParentWritable(
+  ctx: AuditContext,
+  principal: Principal,
+  taskId: string,
+): Promise<string> {
+  const task = await parentTask(ctx.tx, taskId);
+  await assertScopeRole(ctx.tx, principal, task.scope_id, 'content', { type: 'task', id: taskId });
+  await assertWritable(ctx, principal, task, 'edit');
+  return task.scope_id;
+}
+
+async function findSubtask(db: MigrationDb, subtaskId: string): Promise<SubtaskRow> {
   const found = await sql<SubtaskRow>`
     SELECT id, task_id, title, done, position, version
     FROM subtasks WHERE id = ${subtaskId} AND deleted_at IS NULL
   `.execute(db);
   const row = found.rows[0];
   if (row === undefined) throw notFound('subtask', subtaskId);
-  return { row, scopeId: await scopeOfTask(db, row.task_id) };
+  return row;
 }
 
 export async function listSubtasks(
@@ -75,7 +86,7 @@ export async function listSubtasks(
   taskId: string,
 ): Promise<SubtaskView[]> {
   if (!hasCapability(principal, 'tasks:read')) throw missingCapability('tasks:read');
-  await assertScopeAccess(db, principal, await scopeOfTask(db, taskId));
+  await assertScopeAccess(db, principal, (await parentTask(db, taskId)).scope_id);
 
   const rows = await sql<SubtaskRow>`
     SELECT id, task_id, title, done, position, version
@@ -91,9 +102,8 @@ export async function createSubtask(
   taskId: string,
   input: { id?: string | undefined; title?: string | undefined; position?: string | undefined },
 ): Promise<SubtaskView> {
-  if (!hasCapability(principal, 'tasks:write')) throw missingCapability('tasks:write');
-  const scopeId = await scopeOfTask(ctx.tx, taskId);
-  await assertScopeAccess(ctx.tx, principal, scopeId);
+  if (!hasCapability(principal, 'tasks:update')) throw missingCapability('tasks:update');
+  const scopeId = await assertParentWritable(ctx, principal, taskId);
   return insertSubtask(ctx, taskId, scopeId, input);
 }
 
@@ -114,34 +124,31 @@ export async function insertSubtask(
   }
 
   const id = input.id ?? uuidv7();
-  const existing = await sql<SubtaskRow & { deleted_at: string | null }>`
-    SELECT id, task_id, title, done, position, version, deleted_at FROM subtasks WHERE id = ${id}
-  `.execute(ctx.tx);
-  if (existing.rows[0] !== undefined) {
-    if (existing.rows[0].task_id !== taskId || existing.rows[0].deleted_at !== null)
-      throw notFound('subtask', id);
-    ctx.noChange();
-    return toView(existing.rows[0]);
-  }
-
   const last = await sql<{ position: string }>`
     SELECT position FROM subtasks WHERE task_id = ${taskId} AND deleted_at IS NULL
     ORDER BY position DESC, id DESC LIMIT 1
   `.execute(ctx.tx);
 
-  await sql`
+  const created = await sql<SubtaskRow>`
     INSERT INTO subtasks (id, task_id, title, done, position, created_at, updated_at, version)
     VALUES (${id}, ${taskId}, ${input.title.trim()}, ${dbBool(input.done === true)},
             ${input.position ?? generatePosition(last.rows[0]?.position ?? null, null)},
             ${ctx.now}, ${ctx.now}, 1)
+    ON CONFLICT (id) DO NOTHING
+    RETURNING id, task_id, title, done, position, version
   `.execute(ctx.tx);
 
-  ctx.record({ entityType: 'subtask', entityId: id, scopeId, taskId, verb: 'created' });
+  const row = created.rows[0];
+  if (row !== undefined) {
+    ctx.record({ entityType: 'subtask', entityId: id, scopeId, taskId, verb: 'created' });
+    return toView(row);
+  }
 
-  const created = await sql<SubtaskRow>`
-    SELECT id, task_id, title, done, position, version FROM subtasks WHERE id = ${id} AND deleted_at IS NULL
-  `.execute(ctx.tx);
-  return toView(created.rows[0]!);
+  // Dos reintents amb el mateix UUID poden arribar abans que cap dels dos hagi confirmat.
+  const existing = await findSubtask(ctx.tx, id);
+  if (existing.task_id !== taskId) throw notFound('subtask', id);
+  ctx.noChange();
+  return toView(existing);
 }
 
 export async function updateSubtask(
@@ -150,9 +157,9 @@ export async function updateSubtask(
   subtaskId: string,
   input: { title?: string | undefined; done?: boolean | undefined; position?: string | undefined },
 ): Promise<SubtaskView> {
-  if (!hasCapability(principal, 'tasks:write')) throw missingCapability('tasks:write');
-  const { row, scopeId } = await taskOfSubtask(ctx.tx, subtaskId);
-  await assertScopeAccess(ctx.tx, principal, scopeId);
+  if (!hasCapability(principal, 'tasks:update')) throw missingCapability('tasks:update');
+  let row = await findSubtask(ctx.tx, subtaskId);
+  const scopeId = await assertParentWritable(ctx, principal, row.task_id);
 
   if (input.title !== undefined && input.title.trim() === '') {
     throw new PolicyError(
@@ -163,37 +170,42 @@ export async function updateSubtask(
     );
   }
 
-  const done = input.done ?? isTrue(row.done);
-  const title = input.title?.trim() ?? row.title;
-  const position = input.position ?? row.position;
+  for (;;) {
+    const wasDone = isTrue(row.done);
+    const done = input.done ?? wasDone;
+    const title = input.title?.trim() ?? row.title;
+    const position = input.position ?? row.position;
+    const changes = {
+      ...(title !== row.title ? { title: { from: row.title, to: title } } : {}),
+      ...(done !== wasDone ? { done: { from: wasDone, to: done } } : {}),
+      ...(position !== row.position ? { position: { from: row.position, to: position } } : {}),
+    };
+    if (Object.keys(changes).length === 0) {
+      ctx.noChange();
+      return toView(row);
+    }
 
-  if (done === isTrue(row.done) && title === row.title && position === row.position) {
-    ctx.noChange();
-    return toView(row);
+    // Una edició i un canvi d'estat simultanis han de conservar els dos camps i el seu rastre.
+    const updated = await sql<SubtaskRow>`
+      UPDATE subtasks SET title = ${title}, done = ${dbBool(done)}, position = ${position},
+                          updated_at = ${ctx.now}, version = version + 1
+      WHERE id = ${subtaskId} AND version = ${row.version} AND deleted_at IS NULL
+      RETURNING id, task_id, title, done, position, version
+    `.execute(ctx.tx);
+    const after = updated.rows[0];
+    if (after !== undefined) {
+      ctx.record({
+        entityType: 'subtask',
+        entityId: subtaskId,
+        scopeId,
+        taskId: row.task_id,
+        verb: done === wasDone ? 'updated' : done ? 'completed' : 'reopened',
+        changes,
+      });
+      return toView(after);
+    }
+    row = await findSubtask(ctx.tx, subtaskId);
   }
-
-  await sql`
-    UPDATE subtasks SET title = ${title}, done = ${dbBool(done)}, position = ${position},
-                        updated_at = ${ctx.now}, version = version + 1
-    WHERE id = ${subtaskId}
-  `.execute(ctx.tx);
-
-  ctx.record({
-    entityType: 'subtask',
-    entityId: subtaskId,
-    scopeId,
-    // Marcar-la i reobrir-la són gestos diferents a l'historial, com a les tasques.
-    verb: done === isTrue(row.done) ? 'updated' : done ? 'completed' : 'reopened',
-    changes: {
-      title: { from: row.title, to: title },
-      done: { from: isTrue(row.done), to: done },
-    },
-  });
-
-  const after = await sql<SubtaskRow>`
-    SELECT id, task_id, title, done, position, version FROM subtasks WHERE id = ${subtaskId}
-  `.execute(ctx.tx);
-  return toView(after.rows[0]!);
 }
 
 /**
@@ -209,8 +221,15 @@ export async function deleteSubtask(
   subtaskId: string,
 ): Promise<void> {
   if (!hasCapability(principal, 'tasks:write')) throw missingCapability('tasks:write');
-  const { scopeId } = await taskOfSubtask(ctx.tx, subtaskId);
-  await assertScopeAccess(ctx.tx, principal, scopeId);
+  const { task_id: taskId } = await findSubtask(ctx.tx, subtaskId);
+  const scopeId = await assertParentWritable(ctx, principal, taskId);
+
+  const deleted = await sql<{ id: string }>`
+    UPDATE subtasks SET deleted_at = ${ctx.now}, updated_at = ${ctx.now}, version = version + 1
+    WHERE id = ${subtaskId} AND deleted_at IS NULL
+    RETURNING id
+  `.execute(ctx.tx);
+  if (deleted.rows[0] === undefined) throw notFound('subtask', subtaskId);
 
   const detached = await sql<{ id: string }>`
     UPDATE checklists SET subtask_id = NULL, updated_at = ${ctx.now}, version = version + 1
@@ -223,15 +242,11 @@ export async function deleteSubtask(
       entityType: 'checklist',
       entityId: checklist.id,
       scopeId,
+      taskId,
       verb: 'updated',
       changes: { subtask_id: { from: subtaskId, to: null } },
     });
   }
 
-  await sql`
-    UPDATE subtasks SET deleted_at = ${ctx.now}, updated_at = ${ctx.now}, version = version + 1
-    WHERE id = ${subtaskId}
-  `.execute(ctx.tx);
-
-  ctx.record({ entityType: 'subtask', entityId: subtaskId, scopeId, verb: 'deleted' });
+  ctx.record({ entityType: 'subtask', entityId: subtaskId, scopeId, taskId, verb: 'deleted' });
 }

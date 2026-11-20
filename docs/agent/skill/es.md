@@ -48,6 +48,11 @@ next_task  →  move_task(doing)  →  trabajar  →  add_comment  →  complete
 Si un cambio viene de una fuente externa identificable, indícala con el argumento opcional
 `origin`. Por ejemplo, `"WhatsApp"` o `"Correo electrónico"`. Se guarda con el cambio en el historial.
 
+Con la tarea reservada, usa `list_subtasks(task_id)` para leer sus subtareas y
+`create_subtask(task_id, title)` para añadir una. Usa `update_subtask(subtask_id, title?, done?)`
+para editar el título o cambiar su estado. `done: true` completa la subtarea y
+`done: false` la reabre. La tarea principal conserva su columna.
+
 ## La reserva es un cerrojo
 
 Mientras la tengas reservada, **la tarea está bloqueada para la persona**: no la puede mover

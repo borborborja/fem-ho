@@ -12,6 +12,7 @@
  */
 
 export { TaskCard } from './TaskCard.jsx';
+export { useTitleHold } from './useTitleHold.jsx';
 export { KanbanColumn, KanbanGroup, ScopeGroupHeader } from './KanbanColumn.jsx';
 export { EmptyState } from './EmptyState.jsx';
 export { ScopeChip } from './ScopeChip.jsx';

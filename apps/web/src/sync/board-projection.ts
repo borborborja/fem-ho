@@ -10,6 +10,7 @@ export function projectBoardTasks(base: Task[], pending: OutboxRow[]): Task[] {
   const tasks = new Map(base.map((task) => [task.id, task]));
   const blocked = new Set<string>();
   for (const row of pending) {
+    if (row.entity_type !== 'task') continue;
     if (row.status === 'failed' || row.status === 'conflict') blocked.add(row.entity_id);
     if (blocked.has(row.entity_id)) continue;
     if (row.op === 'create' && !tasks.has(row.entity_id)) {

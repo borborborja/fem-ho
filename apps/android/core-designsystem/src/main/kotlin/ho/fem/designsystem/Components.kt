@@ -112,6 +112,7 @@ data class CardListItem(
     val done: Boolean,
     val toggleLabel: String,
     val onToggle: () -> Unit,
+    val subtaskActions: SubtaskRowActions? = null,
 )
 
 /**
@@ -299,12 +300,14 @@ fun TaskCard(
                         verticalArrangement = Arrangement.spacedBy(5.dp),
                     ) {
                         list.items.forEach { item ->
-                            ChecklistRow(
-                                text = item.text,
-                                done = item.done,
-                                toggleLabel = item.toggleLabel,
-                                onToggle = item.onToggle,
-                            )
+                            androidx.compose.runtime.key(item.id) {
+                                val actions = item.subtaskActions
+                                if (actions == null) {
+                                    ChecklistRow(item.text, item.done, item.toggleLabel, item.onToggle)
+                                } else {
+                                    SubtaskRow(item.text, item.done, item.toggleLabel, item.onToggle, actions)
+                                }
+                            }
                         }
                     }
                     return@forEach
@@ -358,7 +361,7 @@ fun TaskCard(
          * Afegir, amb **un sol camp**: `#Llista element` va a la llista i sense sigil
          * és una subtasca. El botó de la cantonada l'obre; el teclat el tanca amb Enter.
          */
-        if (addForm != null && addForm.open) {
+        if (listsExpanded && addForm != null && addForm.open) {
             androidx.compose.material3.OutlinedTextField(
                 value = addForm.text,
                 onValueChange = addForm.onText,
@@ -498,6 +501,8 @@ fun ChecklistRow(
     onToggle: () -> Unit,
     modifier: Modifier = Modifier,
     strikeWhenDone: Boolean = true,
+    titleModifier: Modifier = Modifier,
+    trailing: (@Composable () -> Unit)? = null,
 ) {
     Row(
         modifier = modifier.fillMaxWidth().padding(vertical = 7.dp),
@@ -514,7 +519,9 @@ fun ChecklistRow(
             } else {
                 null
             },
+            modifier = Modifier.weight(1f).then(titleModifier),
         )
+        trailing?.invoke()
     }
 }
 

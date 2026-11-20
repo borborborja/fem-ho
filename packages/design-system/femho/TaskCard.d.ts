@@ -9,7 +9,7 @@ export interface CardListItem {
   onToggle: () => void;
 }
 
-export interface CardList {
+interface CardListBase {
   id: string;
   /** `null` per al bloc de subtasques: no en té, i per això va sense caixa ni epígraf. */
   name: string | null;
@@ -18,8 +18,10 @@ export interface CardList {
   /** Del catàleg. Si no hi és, la llista no es pot pinejar. */
   pinLabel?: string | undefined;
   onPinToggle?: (() => void) | undefined;
-  items: CardListItem[];
 }
+
+export type CardList = CardListBase &
+  ({ items: CardListItem[]; rows?: never } | { name: null; rows: React.ReactNode; items?: never });
 
 export interface CardAddForm {
   open: boolean;

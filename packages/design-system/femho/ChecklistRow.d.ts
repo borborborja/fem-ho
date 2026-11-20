@@ -1,4 +1,4 @@
-import type { CSSProperties, HTMLAttributes } from 'react';
+import type { CSSProperties, HTMLAttributes, ReactNode } from 'react';
 
 export interface ChecklistRowProps extends Omit<HTMLAttributes<HTMLDivElement>, 'onToggle'> {
   text: string;
@@ -10,7 +10,9 @@ export interface ChecklistRowProps extends Omit<HTMLAttributes<HTMLDivElement>, 
   strikeWhenDone?: boolean | undefined;
   /** Etiqueta accessible de la casella. Ve del catàleg (regla 3). */
   toggleLabel?: string | undefined;
-  style?: CSSProperties;
+  titleContent?: ReactNode;
+  actions?: ReactNode;
+  style?: CSSProperties | undefined;
 }
 
 export declare function ChecklistRow(props: ChecklistRowProps): JSX.Element;

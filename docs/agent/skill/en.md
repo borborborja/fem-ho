@@ -49,6 +49,11 @@ next_task  →  move_task(doing)  →  work  →  add_comment  →  complete_tas
 When acting on information from an identifiable external source, pass its label in the optional
 `origin` argument. For example, use `"WhatsApp"` or `"Email"`. The task history records it with the change.
 
+With the task claimed, use `list_subtasks(task_id)` to read its subtasks and
+`create_subtask(task_id, title)` to add one. Use `update_subtask(subtask_id, title?, done?)`
+to edit the title or change its state. `done: true` completes the subtask and
+`done: false` reopens it. The parent task stays in its column.
+
 ## The claim is a lock
 
 While you hold it, **the task is locked for the person**: they cannot move it or take it

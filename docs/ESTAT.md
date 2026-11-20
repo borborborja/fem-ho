@@ -7,6 +7,30 @@ Data de l'última verificació completa: **2026-11-19**.
 
 ---
 
+## Edició de subtasques i catàleg MCP · 0.23.0
+
+El web i Android permeten editar el títol amb una pulsació llarga a la targeta i
+a la fitxa. Les accions d'edició i esborrat són a la fila. Plegar les llistes
+amaga el camp d'afegida i conserva l'esborrany. Els canvis de subtasques es
+desen a la cua local.
+
+MCP ofereix `list_subtasks`, `create_subtask` i `update_subtask`. S'ha
+comprovat amb SQLite i PostgreSQL que una credencial OAuth existent rep les
+eines noves en refrescar el catàleg segons els seus permisos. Les proves de
+Chromium cobreixen el ratolí, el teclat, el toc i la sincronització després
+de reobrir el tauler sense connexió.
+
+Amb l'APK de publicació en Android 14 s'han comprovat la pulsació llarga al
+tauler i a la fitxa, la recuperació de l'esborrany en desplegar i l'edició i
+l'esborrat fora de línia després de tancar i reobrir l'app. Els canvis s'han
+sincronitzat en reconnectar al servidor de proves.
+
+Queda pendent verificar el refresc amb connectors reals de Claude i ChatGPT
+contra una instància HTTPS amb aquests canvis i comptes compatibles.
+[Guia de refresc](mcp-access.md#refrescar-les-eines-duna-connexió-existent).
+
+---
+
 ## Tasques amb IA des del tauler i la fitxa · 0.22.0
 
 La migració 027 afegeix ajustos privats per usuari i àmbit. L'acció IA copia el

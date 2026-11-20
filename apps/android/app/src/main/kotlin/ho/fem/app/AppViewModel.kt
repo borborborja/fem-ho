@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import ho.fem.data.ActiveAccount
 import ho.fem.data.Container
 import ho.fem.data.Repository
+import ho.fem.data.TaskLists
 import ho.fem.data.normalizeServerUrl
 import ho.fem.model.Agent
 import ho.fem.model.AgentDetail
@@ -26,7 +27,6 @@ import ho.fem.model.QuickAddResult
 import ho.fem.model.Scope
 import ho.fem.model.ScopeSettings
 import ho.fem.model.serverIsNewer
-import ho.fem.model.Subtask
 import ho.fem.model.Task
 import ho.fem.model.TaskStatus
 import ho.fem.model.TaskType
@@ -454,8 +454,8 @@ class AppViewModel(private val container: Container) : ViewModel() {
         }
     }
 
-    private val _openChecklists = MutableStateFlow<List<Checklist>>(emptyList())
-    val openChecklists: StateFlow<List<Checklist>> = _openChecklists.asStateFlow()
+    private val _openTaskLists = MutableStateFlow(TaskLists())
+    val openTaskLists: StateFlow<TaskLists> = _openTaskLists.asStateFlow()
 
     /**
      * Les llistes pinejades, per al menú de la xinxeta (`docs/03` §3).
@@ -556,7 +556,7 @@ class AppViewModel(private val container: Container) : ViewModel() {
         _adminUsers.value = emptyList()
         _adminInviteUrl.value = null
         _adminError.value = null
-        _openChecklists.value = emptyList()
+        _openTaskLists.value = TaskLists()
         _activeProjects.value = emptyList()
         _pinned.value = emptyList()
         _quickAddDraft.value = null
@@ -1000,7 +1000,7 @@ class AppViewModel(private val container: Container) : ViewModel() {
             }
             launch {
                 repository.taskLists(task.id).collect { lists ->
-                    if (isOpen(sessionAccount, task.id)) _openChecklists.value = lists.checklists
+                    if (isOpen(sessionAccount, task.id)) _openTaskLists.value = lists
                 }
             }
             launch {
@@ -1040,7 +1040,7 @@ class AppViewModel(private val container: Container) : ViewModel() {
     private fun clearTaskDetail() {
         _taskSaveError.value = false
         _taskSaving.value = false
-        _openChecklists.value = emptyList()
+        _openTaskLists.value = TaskLists()
         _openComments.value = emptyList()
         _openActivity.value = emptyList()
         _openShares.value = emptyList()
@@ -2174,21 +2174,14 @@ class AppViewModel(private val container: Container) : ViewModel() {
 
     // ------------------------------------------------- les llistes de la targeta
 
-    /** El que s'ha demanat d'una targeta desplegada. Buit mentre no arriba. */
-    data class CardLists(
-        val subtasks: List<Subtask> = emptyList(),
-        val checklists: List<Checklist> = emptyList(),
-    )
-
-
     private val _expandedCards = MutableStateFlow<Set<String>>(emptySet())
     val expandedCards: StateFlow<Set<String>> = _expandedCards.asStateFlow()
 
     private val _openCards = MutableStateFlow<Set<String>>(emptySet())
     val openCards: StateFlow<Set<String>> = _openCards.asStateFlow()
 
-    private val _cardLists = MutableStateFlow<Map<String, CardLists>>(emptyMap())
-    val cardLists: StateFlow<Map<String, CardLists>> = _cardLists.asStateFlow()
+    private val _cardLists = MutableStateFlow<Map<String, TaskLists>>(emptyMap())
+    val cardLists: StateFlow<Map<String, TaskLists>> = _cardLists.asStateFlow()
     private val cardJobs = mutableMapOf<String, Job>()
     private val savingCards = mutableSetOf<String>()
 
@@ -2211,7 +2204,7 @@ class AppViewModel(private val container: Container) : ViewModel() {
     }
 
     fun toggleCardForm(task: Task) {
-        val open = task.id !in _openCards.value
+        val open = task.id !in _expandedCards.value || task.id !in _openCards.value
         _openCards.value = if (open) _openCards.value + task.id else _openCards.value - task.id
         // Obrir el formulari desplega la targeta: afegir-hi una cosa i no veure-la
         // aparèixer sembla que no hagi passat res.
@@ -2225,10 +2218,25 @@ class AppViewModel(private val container: Container) : ViewModel() {
         _cardDrafts.value = _cardDrafts.value + (taskId to text)
     }
 
-    fun toggleCardSubtask(taskId: String, subtaskId: String, done: Boolean) {
+    fun toggleSubtask(taskId: String, subtaskId: String, done: Boolean) {
         val sessionAccount = activeAccount ?: return
         sessionScope.launch {
             localChange(sessionAccount) { setSubtask(taskId, subtaskId, done) }
+        }
+    }
+
+    fun renameSubtask(taskId: String, subtaskId: String, title: String, onPersisted: (Boolean) -> Unit) {
+        val sessionAccount = activeAccount ?: return onPersisted(false)
+        sessionScope.launch {
+            val saved = localChange(sessionAccount, showError = false) { renameSubtask(taskId, subtaskId, title) }
+            if (activeAccount == sessionAccount) onPersisted(saved)
+        }
+    }
+
+    fun deleteSubtask(taskId: String, subtaskId: String) {
+        val sessionAccount = activeAccount ?: return
+        sessionScope.launch {
+            localChange(sessionAccount) { deleteSubtask(taskId, subtaskId) }
         }
     }
 
@@ -2295,8 +2303,7 @@ class AppViewModel(private val container: Container) : ViewModel() {
             launch { runCatching { repository.refreshTaskLists(taskId) } }
             repository.taskLists(taskId).collect { lists ->
                 if (activeAccount == sessionAccount) {
-                    _cardLists.value = _cardLists.value +
-                        (taskId to CardLists(lists.subtasks, lists.checklists))
+                    _cardLists.value = _cardLists.value + (taskId to lists)
                 }
             }
         }
