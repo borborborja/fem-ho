@@ -7,6 +7,24 @@ Data de l'última verificació completa: **2026-11-19**.
 
 ---
 
+## Pomodoro · 0.26.0
+
+Ajustos → General activa el Pomodoro, desactivat per defecte. El web i Android
+comparteixen les opcions, la cua personal i el temporitzador. Es poden canviar
+fora de línia i els canvis se sincronitzen en recuperar la connexió. Iniciar un bloc amb
+una tasca de «Per fer» la mou a «Fent». Els modes Divertit i Seriós comparteixen
+els controls.
+
+Les proves de servidor cobreixen la privadesa, els reintents i els inicis
+concurrents a SQLite i PostgreSQL. Chromium comprova el flux offline i el
+panell a 320 px. Han passat 18 proves instrumentades a Android 14, amb la
+migració de Room, la cua offline i la represa del temporitzador.
+
+En publicar, actualitza el servidor abans de l'APK. La migració 029 afegeix
+l'estat del Pomodoro per compte.
+
+---
+
 ## Columna «Fet» a Android · 0.25.1
 
 La pestanya «Fet» compta i mostra les tasques acabades el dia seleccionat,
