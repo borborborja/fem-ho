@@ -24,6 +24,11 @@ function tokenColor(tokenName: string): string {
 }
 
 const APP_BG = tokenColor('app-bg');
+const { version } = JSON.parse(
+  readFileSync(new URL('./package.json', import.meta.url), 'utf8'),
+) as {
+  version: string;
+};
 
 /**
  * En desenvolupament la web i el servidor són processos diferents; en producció el
@@ -48,6 +53,7 @@ const PROXY = {
   '/api': API,
   '/info': API,
   '/healthz': API,
+  '/readyz': API,
   /*
     El logo de la instància el serveix el servidor. **Sense això, en desenvolupament la
     imatge es demanava a Vite**, que responia `index.html` per la seva regla de retorn a
@@ -68,9 +74,32 @@ const PROXY = {
 export default defineConfig({
   plugins: [
     react(),
+    {
+      name: 'fem-ho-service-worker-registration',
+      apply: 'build',
+      transformIndexHtml: () => [
+        {
+          tag: 'script',
+          // La consulta evita la còpia vella de /sw.js. El camí es manté perquè
+          // un worker registrat fa servir el seu URL per consultar si hi ha canvis.
+          children: `
+            if ('serviceWorker' in navigator) {
+              window.addEventListener('load', () => {
+                navigator.serviceWorker.register(${JSON.stringify(`/sw.js?v=${version}`)}, {
+                  scope: '/',
+                  updateViaCache: 'none',
+                }).catch(console.error);
+              });
+            }
+          `,
+        },
+      ],
+    },
     VitePWA({
       // `autoUpdate`: una app de tasques no ha de demanar permís per actualitzar-se.
       registerType: 'autoUpdate',
+      // El registre a l'HTML evita dependre de l'antic /registerSW.js.
+      injectRegister: false,
       manifest: {
         name: 'Fem-ho',
         short_name: 'Fem-ho',
@@ -87,6 +116,9 @@ export default defineConfig({
         ],
       },
       workbox: {
+        // El worker nou ha de prendre el control tot i que l'antic tingui pestanyes obertes.
+        skipWaiting: true,
+        clientsClaim: true,
         globPatterns: ['**/*.{js,css,html,woff2,svg,png}'],
         // L'API NO es guarda a la memòria cau del servei de treball: l'estat offline el
         // porta Dexie (docs/06 §1), i dues memòries cau del mateix contingut acaben
@@ -97,6 +129,7 @@ export default defineConfig({
           /^\/oauth\//,
           /^\/\.well-known\//,
           /^\/connect\/mcp/,
+          /^\/(?:info|healthz|readyz)(?:[/?]|$)/,
         ],
         runtimeCaching: [],
       },

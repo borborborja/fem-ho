@@ -7,6 +7,15 @@ Data de l'última verificació completa: **2026-11-19**.
 
 ---
 
+## Actualització de la PWA · 0.23.1
+
+L'HTML i el service worker es revaliden a la xarxa. Els fitxers amb hash
+conserven la memòria cau d'un any. El registre del service worker usa una URL
+amb la versió per recuperar els navegadors que encara reben el fitxer antic
+d'un proxy. L'actualització preserva la sessió i la cua de canvis pendents.
+
+---
+
 ## Edició de subtasques i catàleg MCP · 0.23.0
 
 El web i Android permeten editar el títol amb una pulsació llarga a la targeta i
