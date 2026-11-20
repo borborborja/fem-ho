@@ -7,6 +7,20 @@ Data de l'última verificació completa: **2026-11-19**.
 
 ---
 
+## Targetes de tasca compactes · 0.24.0
+
+Al web i a Android, l'acció IA apareix al peu de la barra dreta de les
+targetes. L'origen MCP es consulta amb una icona a les metadades i els
+títols aprofiten tota l'amplada del cos de la targeta. La còpia de context
+continua disponible amb el clic dret al web i la pulsació llarga en
+pantalles tàctils.
+
+Han passat les 280 proves de Chromium i les deu proves instrumentades
+de tasques a Android 14. S'ha instal·lat l'APK amb R8 a l'emulador i
+s'ha comprovat el tauler contra un servidor de proves.
+
+---
+
 ## Actualització de la PWA · 0.23.1
 
 L'HTML i el service worker es revaliden a la xarxa. Els fitxers amb hash
