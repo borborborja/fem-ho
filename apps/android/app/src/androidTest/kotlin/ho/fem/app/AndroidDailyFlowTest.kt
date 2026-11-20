@@ -48,14 +48,16 @@ class AndroidDailyFlowTest {
         val server = args.getString("serverUrl")
         assumeTrue("Pass the isolated server fixture to run this test", server != null)
         val base = requireNotNull(server)
+        val control = argument("controlUrl")
         val email = argument("email")
         val password = argument("password")
         val task = argument("taskId")
         val scope = argument("scopeId")
         val date = argument("today")
         val token = request(
-            base, "/api/v1/auth/login", "POST",
+            control, "/api/v1/auth/login", "POST",
             JSONObject().put("email", email).put("password", password),
+            readTimeoutMillis = 15_000,
         ).getString("access_token")
 
         tag("server-input").performTextReplacement(base)
@@ -84,11 +86,6 @@ class AndroidDailyFlowTest {
         tag("calendar-today").performClick()
         tag("view-board").performClick()
 
-        // La segona sessió canvia el mateix camp abans que el dispositiu enviï la seva còpia.
-        request(
-            base, "/api/v1/tasks/$task", "PATCH",
-            JSONObject().put("title", "Remote title"), token,
-        )
         try {
             setOffline(true)
             tag("board-task-$task").performClick()
@@ -109,11 +106,19 @@ class AndroidDailyFlowTest {
             }
             tag("board-list-inbox").performScrollToIndex(1)
             waitForText("Independent offline task")
+
+            // El canal de prova per adb segueix disponible en mode avió. La segona sessió
+            // canvia el camp amb la versió antiga ja desada a la cua del dispositiu.
+            request(
+                control, "/api/v1/tasks/$task", "PATCH",
+                JSONObject().put("title", "Remote title"), token,
+            )
         } finally {
             setOffline(false)
         }
 
-        tag("sync-issues").performClick()
+        // WorkManager pot reintentar amb 30 s d'espera mentre es recupera la connexió.
+        tag("sync-issues", timeoutMillis = 65_000).performClick()
         tag("sync-keep-server").performClick()
         tag("board-list-inbox").performScrollToIndex(0)
         waitForText("Remote title")
@@ -265,10 +270,14 @@ class AndroidDailyFlowTest {
         }
     }
 
-    private fun tag(name: String, enabled: Boolean = false): SemanticsNodeInteraction {
+    private fun tag(
+        name: String,
+        enabled: Boolean = false,
+        timeoutMillis: Long = 25_000,
+    ): SemanticsNodeInteraction {
         val tagged = hasTestTag(name)
         val matcher = if (enabled) tagged and isEnabled() else tagged
-        compose.waitUntil(25_000) {
+        compose.waitUntil(timeoutMillis) {
             compose.onAllNodes(matcher, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
         }
         return compose.onNode(matcher, useUnmergedTree = true)
@@ -315,12 +324,13 @@ class AndroidDailyFlowTest {
         method: String = "GET",
         body: JSONObject? = null,
         token: String? = null,
+        readTimeoutMillis: Int = 3_000,
     ): JSONObject {
         val connection = URL(base + path).openConnection() as HttpURLConnection
         try {
             connection.requestMethod = method
             connection.connectTimeout = 3_000
-            connection.readTimeout = 3_000
+        connection.readTimeout = readTimeoutMillis
             if (token != null) connection.setRequestProperty("Authorization", "Bearer $token")
             if (body != null) {
                 connection.doOutput = true
