@@ -101,7 +101,8 @@ test('el distintiu MCP i l’historial conserven l’origen de cada canvi', asyn
   const badge = card.getByRole('button', { name: 'Origen MCP' });
   const dialog = page.getByTestId('task-modal');
   const panel = page.locator('[popover]:popover-open');
-  await expect(badge).toHaveText('MCP');
+  await expect(badge.locator('svg')).toBeVisible();
+  await expect(badge).toHaveText('');
   await badge.hover();
   await expect(panel.getByText(original, { exact: true })).toBeVisible();
   await expect(panel.getByText(latest, { exact: true })).toBeVisible();

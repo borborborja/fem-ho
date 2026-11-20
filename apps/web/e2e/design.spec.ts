@@ -51,7 +51,7 @@ function card(page: Page, title: string) {
 }
 
 /**
- * Les accions de la cantonada **surten en passar-hi per sobre** (disseny validat).
+ * Les accions de la targeta **surten en passar-hi per sobre**.
  *
  * Mentre no s'hi passa no reben el ratolí, a posta: un botó invisible que igualment es
  * pot clicar és una trampa. Per això les proves fan el mateix gest que una persona —
@@ -115,7 +115,18 @@ test('des de la targeta es pot afegir una subtasca sense obrir-la', async ({ pag
   await (await cardAction(page, title, 'card-add-toggle')).click();
   const field = card(page, title).locator('[data-testid="card-add-item"]');
   await field.fill('Passaport');
+  const synced = page.waitForResponse((response) => {
+    const request = response.request();
+    return (
+      request.method() === 'POST' &&
+      new URL(response.url()).pathname === '/api/v1/sync/batch' &&
+      (
+        request.postDataJSON() as { operations: { entity: string; data: { title?: string } }[] }
+      ).operations.some(({ entity, data }) => entity === 'subtask' && data.title === 'Passaport')
+    );
+  });
   await field.press('Enter');
+  expect(await (await synced).json()).toMatchObject({ results: [{ status: 'ok' }] });
 
   // Ara sí: un bloc, el de les subtasques.
   await expect(card(page, title).locator('[data-testid="card-lists-toggle"]')).toContainText(
@@ -147,6 +158,7 @@ test('i una llista amb nom, que compta com un bloc a part', async ({ page }) => 
   // I escriure el mateix nom una segona vegada **no crea una llista bessona**.
   await field.fill('#Farmaciola Tiretes');
   await field.press('Enter');
+  await expect(card(page, title)).toContainText('Tiretes');
   await expect(card(page, title).locator('[data-testid="card-lists-toggle"]')).toContainText('(2)');
 });
 

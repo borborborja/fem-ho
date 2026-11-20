@@ -162,7 +162,7 @@ fun TaskCard(
      */
     onAdvance: (() -> Unit)? = null,
     advanceLabel: String = "",
-    /** El llapis de la cantonada. Al mòbil surt sempre: no hi ha ratolí per revelar-lo. */
+    /** El llapis del peu. Al mòbil surt sempre: no hi ha ratolí per revelar-lo. */
     onEdit: (() -> Unit)? = null,
     editLabel: String = "",
     lists: List<CardList> = emptyList(),
@@ -178,6 +178,8 @@ fun TaskCard(
     onLongPress: (() -> Unit)? = null,
     longPressLabel: String? = null,
     extraMetadata: (@Composable () -> Unit)? = null,
+    /** Una acció independent al peu de la barra d'estat. */
+    railAction: (@Composable () -> Unit)? = null,
 ) {
     val openAction = if (onLongPress == null) {
         Modifier.clickable(onClick = onOpen)
@@ -205,46 +207,9 @@ fun TaskCard(
             .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(FemhoSize.cardGap),
     ) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(FemhoSize.cardGap),
-            verticalAlignment = Alignment.Top,
-        ) {
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    text = title,
-                    color = if (done) Femho.colors.inkFaint else Femho.colors.ink,
-                    fontSize = FemhoText.cardTitle,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis,
-                )
-
-                val metadata = listOfNotNull(
-                    lockLabel?.let { "🔒 $it" },
-                    attentionLabel?.let { "◉ $it" },
-                    project,
-                    time,
-                    aiModeLabel,
-                    checklistProgress,
-                )
-                if (metadata.isNotEmpty() || extraMetadata != null) {
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        metadata.forEach { Pill(it) }
-                        extraMetadata?.invoke()
-                    }
-                }
-            }
-
-            /**
-             * Les accions de la targeta.
-             *
-             * A la web surten en passar-hi el ratolí per sobre; **aquí surten sempre**,
-             * perquè en un telèfon no hi ha res a passar-hi. És el que fa el disseny
-             * mòbil, i és el mateix motiu pel qual les icones hi són a 19dp i no a 20.
-             */
+        // Les accions comparteixen peu amb les metadades o amb Llistes i deixen
+        // que el títol aprofiti totes les línies disponibles.
+        val actions: (@Composable () -> Unit)? = if (onClaim != null || onEdit != null || addForm != null) ({
             Row(
                 horizontalArrangement = Arrangement.spacedBy(3.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -271,19 +236,68 @@ fun TaskCard(
                     ) { ListPlusGlyph() }
                 }
             }
+        }) else null
+
+        val metadata = listOfNotNull(
+            lockLabel?.let { "🔒 $it" },
+            attentionLabel?.let { "◉ $it" },
+            project,
+            time,
+            aiModeLabel,
+            checklistProgress,
+        )
+        val hasMetadata = metadata.isNotEmpty() || extraMetadata != null
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                text = title,
+                color = if (done) Femho.colors.inkFaint else Femho.colors.ink,
+                fontSize = FemhoText.cardTitle,
+                fontWeight = FontWeight.SemiBold,
+                lineHeight = FemhoText.cardTitle * 1.3f,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            if (hasMetadata || (listsToggleLabel == null && actions != null)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (hasMetadata) {
+                        FlowRow(
+                            modifier = Modifier.weight(1f),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            metadata.forEach { Pill(it) }
+                            extraMetadata?.invoke()
+                        }
+                    }
+                    if (listsToggleLabel == null) actions?.invoke()
+                }
+            }
         }
 
         if (listsToggleLabel != null) {
-            Text(
-                text = listsToggleLabel,
-                color = Femho.colors.inkSoft,
-                fontSize = FemhoText.meta,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier
-                    .clickable(onClick = onToggleLists)
-                    .padding(vertical = 2.dp)
-                    .testTag("card-lists-toggle"),
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = listsToggleLabel,
+                    color = Femho.colors.inkSoft,
+                    fontSize = FemhoText.meta,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .clickable(onClick = onToggleLists)
+                        .padding(vertical = 2.dp)
+                        .testTag("card-lists-toggle"),
+                )
+                actions?.invoke()
+            }
         }
 
         /**
@@ -380,32 +394,42 @@ fun TaskCard(
     }
 
     /**
-     * La barra de la dreta, de 26dp i tota l'alçada de la targeta.
+     * La barra de la dreta ocupa tota l'alçada de la targeta.
      *
      * **A la bústia i a "Per fer" és una fletxa**; a "Fent" i a "Fet", la casella
-     * d'estat. Són el mateix lloc perquè és el mateix gest: fer avançar la targeta.
+     * d'estat. Quan hi ha una segona acció, cadascuna té la seva àrea tàctil.
      */
-    Box(
+    Column(
         modifier = Modifier
-            .width(26.dp)
+            .width(if (railAction == null) 26.dp else FemhoSize.touch)
             .fillMaxHeight()
-            .background(
-                if (onAdvance == null && done) Femho.brandGradient2
-                else androidx.compose.ui.graphics.SolidColor(Femho.colors.ghostBg),
-            )
-            .clickable(
-                role = Role.Button,
-                onClick = { if (onAdvance != null) onAdvance() else onToggle() },
-            )
-            .semantics { contentDescription = if (onAdvance != null) advanceLabel else toggleLabel }
-            .testTag(if (onAdvance != null) "card-advance" else "card-toggle-done"),
-        contentAlignment = Alignment.Center,
+            .background(Femho.colors.ghostBg)
+            .testTag("card-rail"),
     ) {
-        when {
-            onAdvance != null -> ChevronGlyph()
-            done -> Text("✓", color = Femho.onBrand, fontSize = FemhoText.body, fontWeight = FontWeight.Bold)
-            else -> CircleGlyph()
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .then(if (railAction == null) Modifier else Modifier.heightIn(min = FemhoSize.touch))
+                .then(
+                    if (onAdvance == null && done) Modifier.background(Femho.brandGradient2)
+                    else Modifier,
+                )
+                .clickable(
+                    role = Role.Button,
+                    onClick = { if (onAdvance != null) onAdvance() else onToggle() },
+                )
+                .semantics { contentDescription = if (onAdvance != null) advanceLabel else toggleLabel }
+                .testTag(if (onAdvance != null) "card-advance" else "card-toggle-done"),
+            contentAlignment = Alignment.Center,
+        ) {
+            when {
+                onAdvance != null -> ChevronGlyph()
+                done -> Text("✓", color = Femho.onBrand, fontSize = FemhoText.body, fontWeight = FontWeight.Bold)
+                else -> CircleGlyph()
+            }
         }
+        railAction?.invoke()
     }
     }
 }

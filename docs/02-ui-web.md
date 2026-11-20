@@ -122,7 +122,14 @@ L'Inbox també té controls propis a la capçalera que les altres no tenen: nave
 
 **Cos**: títol a 13,5px pes 600, interlineat 1.3. Sota, una fila de metadades que embolica: pastilla de projecte (10,5px, `var(--tag-bg)`), inicial de la persona assignada (cercle de 18px), hora si en té, i **el distintiu de mode IA** si no és `manual` (veure [`09-mode-ia.md`](09-mode-ia.md)).
 
-**Accions de la cantonada**: a dalt a la dreta del cos, botons de 20px que **apareixen en passar-hi per sobre** —i amb el focus del teclat, que si no serien inabastables sense ratolí. El llapis obre l'edició completa; el de llista amb un més obre el camp d'afegir.
+**Accions de la targeta**. Els botons d'editar, afegir i esborrar apareixen
+amb el ratolí o el focus del teclat. Comparteixen la fila de les llistes o la
+de metadades i deixen tota l'amplada del cos per al títol. La icona discreta
+d'origen MCP obre el detall de la procedència.
+
+Amb Tasques amb IA activat per a l'àmbit, **IA** apareix al peu de la barra
+dreta. El clic dret, la pulsació llarga tàctil i **Maj+F10** amb el botó
+enfocat copien el context. La fitxa manté l'acció de còpia al seu menú.
 
 **Afegir des de la targeta**: un sol camp. `#Llista element` posa l'ítem a aquella llista; sense sigil, és una subtasca. Mateix sigil que l'afegida ràpida.
 

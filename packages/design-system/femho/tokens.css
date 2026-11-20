@@ -113,3 +113,22 @@
   --gradient-brand-2stop: linear-gradient(135deg, #8fc0ff, #4b81e4);
   --gradient-toggle: linear-gradient(135deg, #8fc0ff, #4b81e4);
 }
+
+.femho-task-rail {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  flex-shrink: 0;
+  width: 28px;
+  background: var(--ghost-bg);
+}
+
+.femho-task-rail > button:focus-visible {
+  outline-offset: -2px;
+}
+
+@media (pointer: coarse) {
+  .femho-task-rail[data-extra-action] {
+    width: 44px;
+  }
+}

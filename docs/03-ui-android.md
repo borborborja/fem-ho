@@ -75,6 +75,10 @@ El drag & drop lliure en un pager horitzontal és hostil en tàctil: el gest de 
 - **Arrossegar per reordenar dins d'una columna**, un cop iniciat amb pulsació llarga, amb resposta hàptica.
 - **Lliscar** una targeta cap a la dreta la completa; cap a l'esquerra obre accions.
 
+La barra dreta té **IA** al peu quan l'àmbit ho té activat. Mantenir premut
+aquest botó copia el context. La icona d'origen MCP obre la procedència i les
+accions de la targeta comparteixen fila amb les metadades o amb **Llistes**.
+
 ### Afegida ràpida
 
 Camp al peu de la columna. L'autocompletat de `@` i `#` surt en un full ancorat sobre el teclat, no en un desplegable flotant: en mòbil un popup sota el cursor queda tapat pel teclat.

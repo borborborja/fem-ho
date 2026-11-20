@@ -14,10 +14,14 @@ export function TaskAiAction({
   taskId,
   scopeId,
   onDispatched,
+  compact = false,
+  disabled = false,
 }: {
   taskId: string;
   scopeId: string;
   onDispatched?: (() => void) | undefined;
+  compact?: boolean;
+  disabled?: boolean;
 }) {
   const settings = useTaskAiSettings();
   const { notify } = useToasts();
@@ -106,6 +110,55 @@ export function TaskAiAction({
     press.current = { timer, x: event.clientX, y: event.clientY };
   };
 
+  const actionLabel = t(setting.method === 'copy' ? 'ai.tasks.copy' : 'ai.tasks.send');
+  const action = (
+    <button
+      ref={button}
+      type="button"
+      disabled={disabled}
+      className={compact ? 'task-ai-rail-action' : 'plou-btn plou-btn-ghost'}
+      data-testid="task-ai-action"
+      title={actionLabel}
+      aria-label={compact ? actionLabel : undefined}
+      aria-keyshortcuts={compact ? 'Shift+F10 ContextMenu' : undefined}
+      onKeyDown={(event) => {
+        if (compact && (event.key === 'ContextMenu' || (event.key === 'F10' && event.shiftKey))) {
+          event.preventDefault();
+          event.stopPropagation();
+          clearPress();
+          void copy();
+        }
+        if (event.key === ' ' || event.key === 'Enter') event.stopPropagation();
+      }}
+      onClick={(event) => {
+        event.stopPropagation();
+        if (event.detail === 0 || !held.current) void start();
+      }}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        clearPress();
+        if (!held.current) void copy();
+        held.current = true;
+      }}
+      onPointerDown={startPress}
+      onPointerUp={clearPress}
+      onPointerCancel={clearPress}
+      onPointerLeave={clearPress}
+      onPointerMove={(event) => {
+        if (
+          press.current !== null &&
+          Math.hypot(event.clientX - press.current.x, event.clientY - press.current.y) > 8
+        )
+          clearPress();
+      }}
+      style={compact ? undefined : { padding: '3px 8px', minHeight: 30 }}
+    >
+      {t('ai.tasks.button')}
+    </button>
+  );
+  if (compact) return action;
+
   return (
     <div
       onKeyDown={(event) => {
@@ -113,38 +166,7 @@ export function TaskAiAction({
       }}
       style={{ display: 'inline-flex', gap: 4, alignItems: 'flex-start', flexWrap: 'wrap' }}
     >
-      <button
-        ref={button}
-        type="button"
-        className="plou-btn plou-btn-ghost"
-        data-testid="task-ai-action"
-        title={t(setting.method === 'copy' ? 'ai.tasks.copy' : 'ai.tasks.send')}
-        onClick={(event) => {
-          event.stopPropagation();
-          if (event.detail === 0 || !held.current) void start();
-        }}
-        onContextMenu={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          clearPress();
-          if (!held.current) void copy();
-          held.current = true;
-        }}
-        onPointerDown={startPress}
-        onPointerUp={clearPress}
-        onPointerCancel={clearPress}
-        onPointerLeave={clearPress}
-        onPointerMove={(event) => {
-          if (
-            press.current !== null &&
-            Math.hypot(event.clientX - press.current.x, event.clientY - press.current.y) > 8
-          )
-            clearPress();
-        }}
-        style={{ padding: '3px 8px', minHeight: 30 }}
-      >
-        {t('ai.tasks.button')}
-      </button>
+      {action}
       <details ref={menu} onPointerDown={(event) => event.stopPropagation()}>
         <summary
           aria-label={t('task.actions')}
