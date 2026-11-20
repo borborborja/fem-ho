@@ -48,8 +48,11 @@ import ho.fem.designsystem.Femho
 import ho.fem.designsystem.FemhoShape
 import ho.fem.designsystem.FemhoSize
 import ho.fem.designsystem.FemhoText
+import ho.fem.designsystem.SubtaskRow
+import ho.fem.designsystem.SubtaskRowActions
 import ho.fem.model.AiMode
 import ho.fem.model.Checklist
+import ho.fem.model.Subtask
 import ho.fem.model.Task
 import ho.fem.model.TaskStatus
 
@@ -115,6 +118,8 @@ data class TaskDetailLabels(
     val attachmentTooBig: String,
     val status: Map<TaskStatus, String>,
     val aiMode: Map<AiMode, String>,
+    val subtasks: String,
+    val subtaskToggle: String,
     val checklists: String,
     val toggle: String,
     val save: String,
@@ -135,6 +140,7 @@ private val TaskEditsSaver = mapSaver<Map<String, String?>>(
 @Composable
 fun TaskDetail(
     task: Task,
+    subtasks: List<Subtask>,
     checklists: List<Checklist>,
     projects: List<ho.fem.model.Project>,
     people: List<ho.fem.model.Person>,
@@ -148,6 +154,8 @@ fun TaskDetail(
     saveError: String? = null,
     saving: Boolean = false,
     onStatus: (TaskStatus) -> Unit,
+    subtaskActions: (Subtask) -> SubtaskRowActions,
+    onToggleSubtask: (subtaskId: String, done: Boolean) -> Unit,
     onToggleItem: (itemId: String, done: Boolean) -> Unit,
     onAddAssignee: (String) -> Unit,
     onRemoveAssignee: (String) -> Unit,
@@ -629,6 +637,21 @@ fun TaskDetail(
                         .padding(horizontal = 12.dp, vertical = 12.dp)
                         .testTag("ai-${mode.wire}"),
                 )
+            }
+        }
+
+        if (subtasks.isNotEmpty()) {
+            Text(labels.subtasks, color = Femho.colors.ink, fontWeight = FontWeight.ExtraBold)
+            subtasks.forEach { subtask ->
+                key(subtask.id) {
+                    SubtaskRow(
+                        title = subtask.title,
+                        done = subtask.done,
+                        toggleLabel = labels.subtaskToggle.replace("{text}", subtask.title),
+                        onToggle = { onToggleSubtask(subtask.id, !subtask.done) },
+                        actions = subtaskActions(subtask),
+                    )
+                }
             }
         }
 

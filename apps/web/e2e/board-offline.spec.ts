@@ -117,3 +117,59 @@ test('la cua d’un compte queda inaccessible quan se n’obre un altre a la mat
   };
   expect(stored.data.some((task) => task.title === title)).toBe(false);
 });
+
+test('les subtasques d’una tasca pendent es conserven i se sincronitzen en ordre', async ({
+  page,
+  context,
+}) => {
+  await enterBoard(page, 'subtasques');
+  await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
+  const headers = { authorization: `Bearer ${await token(page)}` };
+
+  await context.setOffline(true);
+  const title = 'Preparar el material sense xarxa';
+  await addTodo(page, title);
+  const card = page
+    .getByTestId('column-todo')
+    .locator('[data-testid^="task-"]')
+    .filter({ has: page.getByTestId('card-title').filter({ hasText: title }) })
+    .first();
+  await card.hover();
+  await card.getByTestId('card-add-toggle').click();
+  const field = card.getByTestId('card-add-item');
+  await field.fill('Fitxa vella');
+  await field.press('Enter');
+  await expect(field).toHaveValue('');
+  await field.fill('Per esborrar');
+  await field.press('Enter');
+  const first = card.getByTestId('subtask-row').filter({ hasText: 'Fitxa vella' });
+  await first.getByTestId('subtask-title').press('F2');
+  const editor = card.getByTestId('subtask-title-input');
+  await editor.fill('Fitxa nova');
+  await editor.press('Enter');
+  await card.getByRole('checkbox', { name: /Fitxa nova/u }).click();
+  const second = card.getByTestId('subtask-row').filter({ hasText: 'Per esborrar' });
+  await second.hover();
+  await second.getByRole('button', { name: 'Esborra la subtasca' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Esborra' }).click();
+  await expect(card).toContainText('1/1');
+  const id = (await card.getAttribute('data-testid'))!.slice('task-'.length);
+
+  await page.reload();
+  await card.getByTestId('card-lists-toggle').click();
+  await expect(card.getByRole('checkbox', { name: /Fitxa nova/u })).toHaveAttribute(
+    'aria-checked',
+    'true',
+  );
+  await expect(card.getByText('Per esborrar')).toHaveCount(0);
+
+  await context.setOffline(false);
+  await expect
+    .poll(async () => {
+      const response = await page.request.get(`/api/v1/tasks/${id}/subtasks`, { headers });
+      return response.ok() ? response.json() : [];
+    })
+    .toEqual([expect.objectContaining({ title: 'Fitxa nova', done: true })]);
+  await expect(card).toContainText('1/1');
+  await expect(card.getByText('Per esborrar')).toHaveCount(0);
+});

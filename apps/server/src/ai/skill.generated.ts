@@ -57,6 +57,11 @@ next_task  →  move_task(doing)  →  treballar  →  add_comment  →  complet
 Quan un canvi vingui d'una font externa identificable, indica-la amb l'argument opcional
 \`origin\`, per exemple \`"WhatsApp"\` o \`"Correu electrònic"\`. Es desa amb el canvi a l'historial.
 
+Amb la tasca reservada, llegeix-ne les subtasques amb \`list_subtasks(task_id)\` i
+afegeix-ne amb \`create_subtask(task_id, title)\`. Usa \`update_subtask(subtask_id, title?, done?)\`
+per editar el títol o canviar l'estat. \`done: true\` completa la subtasca i
+\`done: false\` la reobre. La tasca mare conserva la columna.
+
 ## La reserva és un pany
 
 Mentre la tinguis reservada, **la tasca està bloquejada per a la persona**: no la pot moure
@@ -158,6 +163,11 @@ next_task  →  move_task(doing)  →  work  →  add_comment  →  complete_tas
 When acting on information from an identifiable external source, pass its label in the optional
 \`origin\` argument. For example, use \`"WhatsApp"\` or \`"Email"\`. The task history records it with the change.
 
+With the task claimed, use \`list_subtasks(task_id)\` to read its subtasks and
+\`create_subtask(task_id, title)\` to add one. Use \`update_subtask(subtask_id, title?, done?)\`
+to edit the title or change its state. \`done: true\` completes the subtask and
+\`done: false\` reopens it. The parent task stays in its column.
+
 ## The claim is a lock
 
 While you hold it, **the task is locked for the person**: they cannot move it or take it
@@ -257,6 +267,11 @@ next_task  →  move_task(doing)  →  trabajar  →  add_comment  →  complete
 
 Si un cambio viene de una fuente externa identificable, indícala con el argumento opcional
 \`origin\`. Por ejemplo, \`"WhatsApp"\` o \`"Correo electrónico"\`. Se guarda con el cambio en el historial.
+
+Con la tarea reservada, usa \`list_subtasks(task_id)\` para leer sus subtareas y
+\`create_subtask(task_id, title)\` para añadir una. Usa \`update_subtask(subtask_id, title?, done?)\`
+para editar el título o cambiar su estado. \`done: true\` completa la subtarea y
+\`done: false\` la reabre. La tarea principal conserva su columna.
 
 ## La reserva es un cerrojo
 

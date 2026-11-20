@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ChecklistRow } from './ChecklistRow.jsx';
 import { useIsMobile } from './MentionPopover.jsx';
+import { useTitleHold } from './useTitleHold.jsx';
 
 /** El llapis d'editar. Del disseny validat: 12px, traç 1.8. */
 function PencilIcon() {
@@ -212,8 +213,7 @@ export function TaskCard({
   const revealed = mobile || active;
   const actionCount =
     Number(onEdit !== undefined) + Number(addForm !== undefined) + Number(onDelete !== undefined);
-  const titlePress = useRef(null);
-  const suppressTitleClick = useRef(false);
+  const { titleProps, suppressClick: suppressTitleClick } = useTitleHold(onTitleEdit);
   const Body = titleEditor ? 'div' : 'button';
   const bodyRef = useRef(null);
   const wasEditing = useRef(false);
@@ -379,48 +379,7 @@ export function TaskCard({
               <span
                 data-testid="card-title"
                 title={titleEditHint}
-                onPointerDown={(event) => {
-                  suppressTitleClick.current = false;
-                  titlePress.current =
-                    onTitleEdit && event.button === 0 && event.isPrimary
-                      ? {
-                          id: event.pointerId,
-                          x: event.clientX,
-                          y: event.clientY,
-                          at: performance.now(),
-                        }
-                      : null;
-                }}
-                onPointerMove={(event) => {
-                  const press = titlePress.current;
-                  if (press && Math.hypot(event.clientX - press.x, event.clientY - press.y) > 6)
-                    titlePress.current = null;
-                }}
-                onPointerLeave={() => {
-                  titlePress.current = null;
-                }}
-                onPointerCancel={() => {
-                  titlePress.current = null;
-                }}
-                onContextMenu={(event) => {
-                  if (onTitleEdit) event.preventDefault();
-                }}
-                onPointerUp={(event) => {
-                  const press = titlePress.current;
-                  titlePress.current = null;
-                  // Esperem a deixar anar: el sensor del tauler acaba el seu gest abans
-                  // que aparegui el camp, i mai arrossega una targeta mentre s'hi escriu.
-                  if (
-                    press &&
-                    press.id === event.pointerId &&
-                    performance.now() - press.at >= 550 &&
-                    Math.hypot(event.clientX - press.x, event.clientY - press.y) <= 6
-                  ) {
-                    event.preventDefault();
-                    suppressTitleClick.current = true;
-                    onTitleEdit?.();
-                  }
-                }}
+                {...titleProps}
                 style={{
                   fontSize: 13.5,
                   fontWeight: 600,
@@ -646,7 +605,7 @@ export function TaskCard({
           té nom és el que pertoca a la tasca i prou, i posar-hi "SUBTASQUES" a sobre era
           etiquetar l'obvi dins d'una targeta que ja va justa d'espai.
         */}
-        {(listsExpanded && lists !== undefined && lists.length > 0) || addForm?.open === true ? (
+        {listsExpanded && (lists?.length > 0 || addForm?.open === true) ? (
           <div
             className="femho-list-in"
             style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingTop: 2 }}
@@ -659,16 +618,17 @@ export function TaskCard({
                       data-testid="card-list"
                       style={{ display: 'flex', flexDirection: 'column', gap: 5 }}
                     >
-                      {list.items.map((item) => (
-                        <ChecklistRow
-                          key={item.id}
-                          text={item.text}
-                          done={item.done}
-                          toggleLabel={item.toggleLabel}
-                          onToggle={item.onToggle}
-                          style={{ padding: 0 }}
-                        />
-                      ))}
+                      {list.rows ??
+                        list.items.map((item) => (
+                          <ChecklistRow
+                            key={item.id}
+                            text={item.text}
+                            done={item.done}
+                            toggleLabel={item.toggleLabel}
+                            onToggle={item.onToggle}
+                            style={{ padding: 0 }}
+                          />
+                        ))}
                     </div>
                   ) : (
                     <div

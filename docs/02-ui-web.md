@@ -128,6 +128,12 @@ L'Inbox també té controls propis a la capçalera que les altres no tenen: nave
 
 **Indicador de llista**: si la tasca té llistes senzilles, una pastilla amb `3/7`. A sota, el commutador `▸ Llistes (2)` —que compta **blocs**, no ítems— desplega les subtasques (nues) i les llistes (en caixa, amb el seu nom i una xinxeta).
 
+En plegar **Llistes**, el camp d'afegida queda amagat i conserva l'esborrany.
+A la targeta i a la fitxa, mantenir premut el títol d'una subtasca i deixar-lo
+anar obre l'editor. Amb teclat es pot prémer **F2** sobre el títol. Les accions
+d'editar i esborrar surten amb el punter o el focus a la fila, i en un menú amb
+pantalla tàctil. L'esborrat demana confirmació i conserva les llistes ancorades.
+
 **Clic** obre el modal d'edició completa. **Clic al cercle** només commuta l'estat i no obre res.
 
 ### Agrupació per àmbit

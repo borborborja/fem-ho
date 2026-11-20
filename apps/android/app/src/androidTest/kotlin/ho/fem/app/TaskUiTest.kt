@@ -27,13 +27,19 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import ho.fem.designsystem.CardAddForm
+import ho.fem.designsystem.CardList
+import ho.fem.designsystem.CardListItem
 import ho.fem.designsystem.FemhoTheme
+import ho.fem.designsystem.SubtaskRowActions
+import ho.fem.designsystem.SubtaskRowLabels
+import ho.fem.designsystem.TaskCard
 import ho.fem.model.AiMode
 import ho.fem.model.McpActivity
 import ho.fem.model.McpCreation
@@ -92,6 +98,64 @@ class TaskUiTest {
         deleteConfirm = "Vols esborrar «{title}»?",
         cancel = "Cancel·la",
     )
+
+    @Test
+    fun subtaskTitleLongPressEditsOnlyTheSubtaskAndMenuConfirmsDelete() {
+        val title = mutableStateOf("Neteja")
+        var toggles = 0
+        var opens = 0
+        var deletes = 0
+        val labels = SubtaskRowLabels("Accions subtasca", "Edita subtasca", "Esborra subtasca",
+            "Vols esborrar «{title}»?", "Títol", "Desa", "Cancel·la", "Error")
+        compose.setContent {
+            FemhoTheme {
+                TaskCard(
+                    title = "Tasca mare",
+                    onOpen = { opens++ },
+                    listsExpanded = true,
+                    lists = listOf(CardList("subtasks", null, items = listOf(
+                        CardListItem("item", title.value, false, "Completa", { toggles++ },
+                            SubtaskRowActions(labels, { newTitle, finished -> title.value = newTitle; finished(true) }, { deletes++ })),
+                    ))),
+                )
+            }
+        }
+        compose.onNodeWithTag("subtask-title", useUnmergedTree = true).performTouchInput { longClick() }
+        compose.onNodeWithTag("subtask-editor").assertTextContains("Neteja").performTextReplacement("Prepara")
+        compose.onNodeWithText("Desa").performClick()
+        compose.onNodeWithTag("subtask-title", useUnmergedTree = true).assertTextContains("Prepara")
+        compose.onNodeWithTag("subtask-actions").performClick()
+        compose.onNodeWithText("Esborra subtasca").performClick()
+        compose.onNodeWithText("Vols esborrar «Prepara»?").assertIsDisplayed()
+        compose.onNodeWithText("Cancel·la").performClick()
+        compose.runOnIdle {
+            assertEquals(0, toggles)
+            assertEquals(0, opens)
+            assertEquals(0, deletes)
+        }
+    }
+
+    @Test
+    fun collapsingListsHidesTheOpenFormAndRestoresItsDraft() {
+        val expanded = mutableStateOf(true)
+        val draft = mutableStateOf("")
+        compose.setContent {
+            FemhoTheme {
+                TaskCard(
+                    title = "Tasca mare",
+                    listsToggleLabel = "Llistes (1)",
+                    listsExpanded = expanded.value,
+                    onToggleLists = { expanded.value = !expanded.value },
+                    addForm = CardAddForm(true, {}, "Afegeix", "Nova subtasca", draft.value, { draft.value = it }, {}),
+                )
+            }
+        }
+        compose.onNodeWithTag("card-add-item").performTextInput("Esborrany")
+        compose.onNodeWithTag("card-lists-toggle").performClick()
+        compose.onNodeWithTag("card-add-item").assertDoesNotExist()
+        compose.onNodeWithTag("card-lists-toggle").performClick()
+        compose.onNodeWithTag("card-add-item").assertTextContains("Esborrany")
+    }
 
     @Test
     fun captureKeepsAllParsedValuesAndClearsOnlyAfterPersisting() {

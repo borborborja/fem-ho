@@ -26,6 +26,7 @@ import ho.fem.model.ShareSummary
 import ho.fem.model.Task
 import ho.fem.model.DashboardView
 import ho.fem.model.TaskPage
+import ho.fem.model.TaskProgress
 import ho.fem.model.TaskStatus
 import ho.fem.model.TaskType
 import ho.fem.model.UserProfile
@@ -36,6 +37,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import java.time.Instant
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -93,7 +95,18 @@ class Repository(
     private val moveLock: Mutex = Mutex(),
 ) {
 
-    val tasks: Flow<List<Task>> = dao.tasks().map { rows -> rows.map { it.toDomain() } }
+    val tasks: Flow<List<Task>> = combine(dao.tasks(), dao.outboxFlow()) { _, _ ->
+        moveLock.withLock {
+            val edits = dao.outbox().filter { it.entity == "subtask" }.groupBy { it.rootTaskId() }
+            dao.taskRows().filterNot { it.deleted }.sortedWith(compareBy({ it.position }, { it.id })).map { row ->
+                val task = row.toDomain()
+                val pending = edits[task.id] ?: return@map task
+                val canonical = dao.taskListsOnce(task.id).toTaskLists()
+                val projected = canonical.withQueue(task.id, pending)
+                task.withSubtaskProgress(canonical, projected)
+            }
+        }
+    }.distinctUntilChanged()
     val scopes: Flow<List<Scope>> = dao.scopes().map { rows -> rows.map { it.toDomain() } }
     val projects: Flow<List<Project>> = dao.projects().map { rows -> rows.map { it.toDomain() } }
     val people: Flow<List<Person>> = dao.people().map { rows -> rows.map { Person(it.id, it.name) } }
@@ -264,7 +277,32 @@ class Repository(
         } else {
             val canonical = dao.taskListsOnce(taskId).toTaskLists()
             val updated = canonical.applyOperation(operation, entity)
-            dao.acknowledgeChild(operation.opId, updated.toEntity(taskId), null)
+            val task = if (operation.entity == "subtask") {
+                dao.taskRow(taskId)?.let { row ->
+                    row.toDomain().withSubtaskProgress(canonical, updated).toEntity(deleted = row.deleted)
+                }
+            } else null
+            val rebased = if (operation.entity == "subtask" && operation.op != "delete") {
+                rebaseSubtaskEdits(operation, updated)
+            } else emptyList()
+            dao.acknowledgeChild(operation.opId, updated.toEntity(taskId), null, rebased, task)
+        }
+    }
+
+    private suspend fun rebaseSubtaskEdits(operation: OutboxEntity, updated: TaskLists): List<OutboxEntity> {
+        val confirmed = updated.subtasks.find { it.id == operation.entityId } ?: return emptyList()
+        var title = confirmed.title
+        return dao.outbox().filter {
+            it.opId != operation.opId && it.entity == "subtask" && it.entityId == confirmed.id && it.state == "pending"
+        }.mapNotNull { next ->
+            val newTitle = objectFrom(next.payload).string("title")
+            // Un rebut pot portar un títol editat en un altre dispositiu. En aquest cas
+            // conservem la versió antiga perquè el servidor pugui detectar el conflicte.
+            if (newTitle != null && next.baseFields?.let(::objectFrom)?.string("title") != title) {
+                return@mapNotNull null
+            }
+            if (newTitle != null) title = newTitle
+            next.copy(baseVersion = confirmed.version)
         }
     }
 
@@ -426,9 +464,11 @@ class Repository(
     // ------------------------------------------------------- llistes locals
 
     fun taskLists(taskId: String): Flow<TaskLists> =
-        combine(dao.taskLists(taskId), dao.outboxFlow()) { lists, queue ->
-            lists.toTaskLists().withQueue(taskId, queue)
-        }
+        combine(dao.taskLists(taskId), dao.outboxFlow()) { _, _ ->
+            // El rebut toca les dues taules. Llegir-les juntes evita que una subtasca
+            // esborrada reaparegui mentre encara no ha arribat la nova llista al Flow.
+            moveLock.withLock { localLists(taskId) }
+        }.distinctUntilChanged()
 
     suspend fun refreshTaskLists(taskId: String) = flushLock.withLock {
         val subtasks = api.subtasks(taskId)
@@ -472,9 +512,27 @@ class Repository(
     }
 
     suspend fun setSubtask(taskId: String, id: String, done: Boolean) = moveLock.withLock {
+        checkNotNull(dao.taskRow(taskId)?.takeUnless { it.deleted })
         val item = checkNotNull(localLists(taskId).subtasks.find { it.id == id })
         if (item.done != done) dao.enqueue(operation("subtask", "update", id, item.version,
             buildJsonObject { put("done", done) }, taskId = taskId, parentId = taskId))
+    }
+
+    suspend fun renameSubtask(taskId: String, id: String, title: String) = moveLock.withLock {
+        require(title.isNotBlank())
+        checkNotNull(dao.taskRow(taskId)?.takeUnless { it.deleted })
+        val item = checkNotNull(localLists(taskId).subtasks.find { it.id == id })
+        val trimmed = title.trim()
+        if (item.title != trimmed) dao.enqueue(operation("subtask", "update", id, item.version,
+            buildJsonObject { put("title", trimmed) }, taskId = taskId, parentId = taskId,
+            base = buildJsonObject { put("title", item.title) }))
+    }
+
+    suspend fun deleteSubtask(taskId: String, id: String) = moveLock.withLock {
+        checkNotNull(dao.taskRow(taskId)?.takeUnless { it.deleted })
+        val item = localLists(taskId).subtasks.find { it.id == id } ?: return@withLock
+        dao.enqueue(operation("subtask", "delete", id, item.version, buildJsonObject {},
+            taskId = taskId, parentId = taskId))
     }
 
     suspend fun setChecklistItem(taskId: String, id: String, done: Boolean) = moveLock.withLock {
@@ -510,7 +568,10 @@ class Repository(
 
         moveLock.withLock {
             val queue = dao.outbox()
-            val replacement = if (keepLocal) issue.retryOn(canonical) else null
+            val serverSubtask = issue.serverEntity?.let(::objectFrom)?.takeIf {
+                issue.entity == "subtask" && it.string("id") == issue.entityId && it.string("task_id") == taskId
+            }
+            val replacement = if (keepLocal) issue.retryOn(canonical, serverSubtask) else null
             val discarded = if (keepLocal) emptyList() else dependenciesToDiscard(issue, queue)
             val projected = canonical?.let { server ->
                 queue.filter { it.entity == "task" && it.entityId == server.id && it.opId !in discarded }
@@ -520,13 +581,23 @@ class Repository(
                             .toEntity(deleted = remaining.any { it.op == "delete" })
                     }
             }
+            val syncedSubtask = if (serverSubtask != null && taskId != null) {
+                val known = dao.taskListsOnce(taskId).toTaskLists()
+                val op = if (serverSubtask["deleted_at"].let { it == null || it == JsonNull }) "update" else "delete"
+                val updated = known.applyOperation(issue.copy(op = op), serverSubtask)
+                val parent = dao.taskRow(taskId)?.let { row ->
+                    row.toDomain().withSubtaskProgress(known, updated).toEntity(deleted = row.deleted)
+                }
+                updated.toEntity(taskId) to parent
+            } else null
             val replaceTask = issue.entity == "task" && (canonical != null || !keepLocal)
             dao.resolveIssue(
                 discarded,
                 issue.opId.takeIf { replacement != null },
                 replacement,
                 if (replaceTask) taskId else null,
-                projected,
+                projected ?: syncedSubtask?.second,
+                syncedSubtask?.first,
             )
         }
     }
@@ -970,16 +1041,20 @@ private fun OutboxEntity.requestBody(): String = buildJsonObject {
     })))
 }.toString()
 
-private fun OutboxEntity.retryOn(task: Task?): OutboxEntity {
+private fun OutboxEntity.retryOn(task: Task?, subtask: JsonObject?): OutboxEntity {
     val changes = objectFrom(payload).toMutableMap()
     if (entity == "task" && op == "move" && task != null) {
         changes["from_status"] = JsonPrimitive(task.status.name.lowercase())
         changes["occurred_at"] = JsonPrimitive(Instant.now().toString())
     }
     val updated = JsonObject(changes)
+    val childTitle = subtask?.string("title")?.takeIf { "title" in updated }
     return copy(
-        opId = UUID.randomUUID().toString(), baseVersion = task?.version ?: baseVersion,
-        payload = updated.toString(), baseFields = task?.baseText(updated)?.toString() ?: baseFields,
+        opId = UUID.randomUUID().toString(),
+        baseVersion = task?.version ?: subtask?.primitive("version")?.intOrNull ?: baseVersion,
+        payload = updated.toString(),
+        baseFields = task?.baseText(updated)?.toString()
+            ?: childTitle?.let { buildJsonObject { put("title", it) }.toString() } ?: baseFields,
         state = "pending", attempts = 0, detail = null, serverEntity = null,
     )
 }
@@ -1016,18 +1091,42 @@ private fun TaskLists.withQueue(taskId: String, queue: List<OutboxEntity>): Task
     queue.filter { it.rootTaskId() == taskId && it.entity in setOf("subtask", "checklist", "checklist_item") }
         .fold(this) { value, next -> value.applyOperation(next) }
 
+private fun Task.withSubtaskProgress(before: TaskLists, after: TaskLists): Task {
+    val previous = progress ?: TaskProgress()
+    val done = after.subtasks.count { it.done } - before.subtasks.count { it.done }
+    val total = after.subtasks.size - before.subtasks.size
+    val lists = when {
+        before.subtasks.isNotEmpty() && after.subtasks.isEmpty() -> -1
+        // El recompte del tauler pot incloure subtasques que encara no hem baixat.
+        before.subtasks.isEmpty() && after.subtasks.isNotEmpty() && previous.lists <= before.checklists.size -> 1
+        else -> 0
+    }
+    return if (done == 0 && total == 0 && lists == 0) this else copy(progress = TaskProgress(
+        done = (previous.done + done).coerceAtLeast(0),
+        total = (previous.total + total).coerceAtLeast(0),
+        lists = (previous.lists + lists).coerceAtLeast(0),
+    ))
+}
+
 private fun TaskLists.applyOperation(operation: OutboxEntity, entity: JsonObject? = null): TaskLists {
     val data = entity ?: objectFrom(operation.payload)
     val id = operation.entityId
     val done = data.bool("done")
     return when (operation.entity) {
         "subtask" -> {
+            if (operation.op == "delete") return copy(
+                subtasks = subtasks.filterNot { it.id == id },
+                checklists = checklists.map { if (it.subtaskId == id) it.copy(subtaskId = null) else it },
+            )
             val updated = if (operation.op == "create") {
                 val item = Subtask(id, requireNotNull(operation.rootTaskId()), data.string("title").orEmpty(), done ?: false,
                     data.string("position").orEmpty(), data.primitive("version")?.intOrNull ?: 1)
                 subtasks.filterNot { it.id == id } + item
             } else {
-                subtasks.map { if (it.id != id) it else it.copy(done = done ?: it.done,
+                subtasks.map { if (it.id != id) it else it.copy(
+                    title = data.string("title") ?: it.title,
+                    done = done ?: it.done,
+                    position = data.string("position") ?: it.position,
                     version = data.primitive("version")?.intOrNull ?: it.version) }
             }
             copy(subtasks = updated.sortedWith(compareBy({ it.position }, { it.id })))

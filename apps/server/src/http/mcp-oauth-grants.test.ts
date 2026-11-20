@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { sql } from 'kysely';
 import { v7 as uuidv7 } from 'uuid';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { buildApp } from '../app.js';
 import { hashPassword } from '../auth/password.js';
 import { loadConfig } from '../config.js';
@@ -177,6 +178,35 @@ async function taskTool(access: string, name: string, args: Record<string, strin
   };
 }
 
+it('ofereix les eines noves en tornar a escanejar amb la mateixa connexió OAuth', async () => {
+  const grant = await authorize('Catàleg MCP anterior', ['tasks:read', 'tasks:update']);
+  const auth = await grant.exchange();
+  expect(auth.statusCode, auth.body).toBe(200);
+  const { access_token: access } = auth.json<{ access_token: string }>();
+  const additions = ['create_subtask', 'list_subtasks', 'update_subtask'];
+  const register = McpServer.prototype.registerTool;
+  // Primer reproduïm el catàleg que guardaria un client abans del desplegament.
+  const oldCatalogue = vi.spyOn(McpServer.prototype, 'registerTool').mockImplementation(function (
+    this: McpServer,
+    ...args
+  ) {
+    const tool = Reflect.apply(register, this, args) as ReturnType<McpServer['registerTool']>;
+    if (additions.includes(args[0])) tool.remove();
+    return tool;
+  });
+  const scan = async () => {
+    const response = await mcp(access, 'tools/list');
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.headers['cache-control']).toMatch(/no-cache|no-store/u);
+    return (mcpValue(response.body).result?.tools as { name: string }[]).map(({ name }) => name);
+  };
+  const previous = await scan().finally(() => oldCatalogue.mockRestore());
+  expect(previous).toContain('update_task');
+  expect(previous.filter((name) => additions.includes(name))).toEqual([]);
+  expect(await scan()).toEqual([...previous, ...additions].sort());
+  expect((await summary(grant.id)).capabilities).toEqual(['tasks:read', 'tasks:update']);
+});
+
 it('redueix els permisos i àmbits OAuth en ús, deixa rastre i pot revocar-los sense aturar un token manual', async () => {
   const grant = await authorize('Reducció OAuth');
   const auth = await grant.exchange();
@@ -287,7 +317,10 @@ it('renova la subscripció i execució OAuth i torna el context, l’adjunt i un
     capabilities: {},
     clientInfo: { name: 'test', version: '1.0.0' },
   });
-  expect(mcpValue(initialized.body).result?.capabilities).toMatchObject({ events: {} });
+  expect(mcpValue(initialized.body).result?.capabilities).toMatchObject({
+    events: {},
+    tools: { listChanged: false },
+  });
   expect(mcpValue((await mcp(access_token, 'events/list')).body).result?.events).toMatchObject([
     { name: 'task.execution_requested', inputSchema: { required: ['scope_id'] } },
   ]);

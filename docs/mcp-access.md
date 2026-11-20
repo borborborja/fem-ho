@@ -45,6 +45,20 @@ Fem-ho ofereix lectura i escriptura per defecte. Si el client en demana només u
 el consentiment mostra les operacions de tasques que hi corresponen. El client rep
 una credencial pròpia per a MCP.
 
+### Refrescar les eines d'una connexió existent
+
+Després d'actualitzar Fem-ho, el client rep el catàleg vigent quan torna a
+consultar `tools/list`. Conserves la connexió i els permisos. Si el client manté
+una còpia del catàleg, refresca el connector des del client.
+
+- A **Claude Code**, torna a connectar el servidor des de `/mcp`. A **Claude**,
+  obre un xat nou i, si encara mostra el catàleg anterior, torna a connectar Fem-ho
+  des d'Ajustos → Connectors. [Claude Code](https://code.claude.com/docs/en/mcp#dynamic-tool-updates) · [Connectors de Claude](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp)
+- A **ChatGPT Business o Enterprise/Edu**, un administrador pot refrescar les
+  eines de l'app existent des dels ajustos de l'espai de treball. A Enterprise/Edu,
+  cal habilitar també les accions noves a **Action control**. Després obre l'app en
+  un xat nou. [Connectors MCP de ChatGPT](https://help.openai.com/en/articles/12584461-connecting-custom-mcp-servers-in-chatgpt)
+
 ## Enviar una tasca des d'un LLM
 
 1. Tria **Crear** i els àmbits on vols rebre tasques. Afegeix **Consultar** per trobar
@@ -95,6 +109,23 @@ Per REST, `POST /api/v1/tasks/{id}/attachments` accepta JSON amb `id`, `filename
 `url`, o els bytes del fitxer com a `application/octet-stream` amb `id` i `filename`
 a la consulta. Les pujades REST i les descàrregues per URL tenen el límit configurat
 a la instància. Conserva l'identificador si has de reintentar un fitxer.
+
+## Gestionar les subtasques d'una tasca existent
+
+1. Amb **Consultar**, crida `list_subtasks` amb `{"task_id":"ID_TASCA"}` per
+   veure les subtasques i els seus identificadors.
+2. Amb **Editar**, crida `create_subtask` amb
+   `{"task_id":"ID_TASCA","title":"Revisar el resum"}`. Si hi afegeixes un
+   `id` UUIDv7, reutilitza'l quan reintentis la mateixa creació.
+3. Crida `update_subtask` amb
+   `{"subtask_id":"ID_SUBTASCA","title":"Revisar el resum final","done":true}`
+   per editar i completar la subtasca en una sola crida. Pots enviar només el
+   títol o només `done`. Usa `done: false` per reobrir-la. La tasca mare conserva
+   la columna.
+
+Si uses una credencial d'agent, reserva la tasca mare abans d'afegir-hi subtasques
+o modificar-les. Pots indicar `origin` a les dues escriptures. Els canvis i la
+font apareixen a l'historial de la tasca mare.
 
 ## Indicar la font d'una acció MCP
 

@@ -18,6 +18,8 @@ export function ChecklistRow({
   onTextChange,
   strikeWhenDone = true,
   toggleLabel,
+  titleContent,
+  actions,
   style,
   ...rest
 }) {
@@ -66,37 +68,39 @@ export function ChecklistRow({
         ) : null}
       </button>
 
-      {onTextChange === undefined ? (
-        <span
-          style={{
-            fontSize: 13.5,
-            lineHeight: 1.35,
-            color: done ? 'var(--ink-faint)' : 'var(--ink)',
-            // El ratllat només quan els completats es veuen EN LÍNIA: a la secció
-            // "Completats" ja se sap que ho estan i ratllar-los és soroll.
-            textDecoration: done && strikeWhenDone ? 'line-through' : 'none',
-          }}
-        >
-          {text}
-        </span>
-      ) : (
-        <input
-          value={text}
-          onChange={(event) => onTextChange(event.target.value)}
-          style={{
-            flex: 1,
-            border: 'none',
-            outline: 'none',
-            background: 'transparent',
-            font: 'inherit',
-            fontSize: 13.5,
-            lineHeight: 1.35,
-            padding: 0,
-            color: done ? 'var(--ink-faint)' : 'var(--ink)',
-            textDecoration: done && strikeWhenDone ? 'line-through' : 'none',
-          }}
-        />
-      )}
+      {titleContent ??
+        (onTextChange === undefined ? (
+          <span
+            style={{
+              fontSize: 13.5,
+              lineHeight: 1.35,
+              color: done ? 'var(--ink-faint)' : 'var(--ink)',
+              // El ratllat només quan els completats es veuen EN LÍNIA: a la secció
+              // "Completats" ja se sap que ho estan i ratllar-los és soroll.
+              textDecoration: done && strikeWhenDone ? 'line-through' : 'none',
+            }}
+          >
+            {text}
+          </span>
+        ) : (
+          <input
+            value={text}
+            onChange={(event) => onTextChange(event.target.value)}
+            style={{
+              flex: 1,
+              border: 'none',
+              outline: 'none',
+              background: 'transparent',
+              font: 'inherit',
+              fontSize: 13.5,
+              lineHeight: 1.35,
+              padding: 0,
+              color: done ? 'var(--ink-faint)' : 'var(--ink)',
+              textDecoration: done && strikeWhenDone ? 'line-through' : 'none',
+            }}
+          />
+        ))}
+      {actions}
     </div>
   );
 }

@@ -29,6 +29,12 @@ import { updateChecklistItem } from '../services/checklists.js';
 import { listProjects, listScopes } from '../services/scopes.js';
 import { deliverTaskAttachment } from '../services/attachments.js';
 import {
+  createSubtask,
+  listSubtasks,
+  updateSubtask,
+  type SubtaskView,
+} from '../services/subtasks.js';
+import {
   getExecutionAttachment,
   getExecutionContext,
   reportExecutionResult,
@@ -65,6 +71,13 @@ function ok(value: unknown): ToolResult {
   return { content: [{ type: 'text', text: JSON.stringify(value, null, 2) }] };
 }
 
+/** Un permís d'edició sol pot confirmar el canvi, però no consultar el títol existent. */
+function subtaskReceipt(principal: Principal, subtask: SubtaskView): ToolResult {
+  if (hasCapability(principal, 'tasks:read')) return ok(subtask);
+  const { id, task_id, version } = subtask;
+  return ok({ id, task_id, version });
+}
+
 /**
  * Un error que el model ha de poder llegir i corregir.
  *
@@ -92,13 +105,16 @@ export function buildMcpServer(deps: McpDeps): McpServer {
     list_scopes: ['scopes:read'],
     list_projects: ['projects:read'],
     list_events: ['events:read'],
+    list_subtasks: ['tasks:read'],
     list_tasks: ['tasks:read'],
     get_task: ['tasks:read'],
     get_task_execution_attachment: ['ai_executions:read'],
     get_task_execution_context: ['ai_executions:read'],
     search_tasks: ['tasks:read'],
     get_briefing: ['scopes:read', 'projects:read', 'tasks:read'],
+    create_subtask: ['tasks:update'],
     create_task: ['tasks:create'],
+    update_subtask: ['tasks:update'],
     update_task: ['tasks:update'],
     move_task: ['tasks:move'],
     complete_task: ['tasks:move'],
@@ -134,6 +150,9 @@ export function buildMcpServer(deps: McpDeps): McpServer {
     }
     registerOne(server, spec, handler, executionTool);
   }
+  // El transport no conserva cap sessió on enviar una notificació. El catàleg és al dia
+  // a cada tools/list amb els permisos actuals, també per a credencials antigues.
+  server.server.registerCapabilities({ tools: { listChanged: false } });
   registerTaskAiEvents(server, deps);
 
   return server;
@@ -271,6 +290,8 @@ function buildHandlers(deps: McpDeps): Record<string, ToolHandler> {
         ),
       ),
 
+    list_subtasks: async ({ task_id }) => ok(await listSubtasks(db, principal, String(task_id))),
+
     list_tasks: async (args) =>
       ok(
         await listTasks(db, principal, {
@@ -336,11 +357,34 @@ function buildHandlers(deps: McpDeps): Record<string, ToolHandler> {
       );
     },
 
+    create_subtask: async ({ task_id, title, id }, origin) => {
+      const subtask = await write(origin, (ctx) =>
+        createSubtask(ctx, principal, String(task_id), {
+          title: String(title),
+          id: typeof id === 'string' ? id : undefined,
+        }),
+      );
+      return subtaskReceipt(principal, subtask);
+    },
+
     create_task: async (args, origin) => {
       const { task, created } = await write(origin, (ctx) =>
         createDeliveredTask(ctx, principal, args, engine),
       );
       return ok({ task: taskMutationReceipt(principal, task), created });
+    },
+
+    update_subtask: async ({ subtask_id, title, done }, origin) => {
+      if (typeof title !== 'string' && typeof done !== 'boolean') {
+        return fail('Provide at least one of title or done.');
+      }
+      const subtask = await write(origin, (ctx) =>
+        updateSubtask(ctx, principal, String(subtask_id), {
+          title: typeof title === 'string' ? title : undefined,
+          done: typeof done === 'boolean' ? done : undefined,
+        }),
+      );
+      return subtaskReceipt(principal, subtask);
     },
 
     update_task: async ({ task_id, ...input }, origin) => {

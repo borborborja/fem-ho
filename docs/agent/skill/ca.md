@@ -46,6 +46,11 @@ next_task  →  move_task(doing)  →  treballar  →  add_comment  →  complet
 Quan un canvi vingui d'una font externa identificable, indica-la amb l'argument opcional
 `origin`, per exemple `"WhatsApp"` o `"Correu electrònic"`. Es desa amb el canvi a l'historial.
 
+Amb la tasca reservada, llegeix-ne les subtasques amb `list_subtasks(task_id)` i
+afegeix-ne amb `create_subtask(task_id, title)`. Usa `update_subtask(subtask_id, title?, done?)`
+per editar el títol o canviar l'estat. `done: true` completa la subtasca i
+`done: false` la reobre. La tasca mare conserva la columna.
+
 ## La reserva és un pany
 
 Mentre la tinguis reservada, **la tasca està bloquejada per a la persona**: no la pot moure

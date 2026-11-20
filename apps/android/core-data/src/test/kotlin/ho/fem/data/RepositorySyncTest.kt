@@ -1,7 +1,9 @@
 package ho.fem.data
 
 import ho.fem.model.AiMode
+import ho.fem.model.Checklist
 import ho.fem.model.RecurrenceMode
+import ho.fem.model.Subtask
 import ho.fem.model.Task
 import ho.fem.model.TaskProgress
 import ho.fem.model.TaskStatus
@@ -58,6 +60,7 @@ class RepositorySyncTest {
                 "lastPosition" -> null
                 "task" -> flowOf(tasks[args!![0]])
                 "taskRow" -> tasks[args!![0]]
+                "taskRows" -> tasks.values.toList()
                 "taskLists" -> flowOf(lists[args!![0]])
                 "taskListsOnce" -> lists[args!![0]]
                 "enqueue" -> { queue += args!![0] as OutboxEntity; Unit }
@@ -75,6 +78,25 @@ class RepositorySyncTest {
                     }
                     val task = args[2] as TaskEntity
                     tasks[task.id] = task
+                    Unit
+                }
+                "acknowledgeChild" -> {
+                    (args!![1] as TaskListsEntity?)?.let { lists[it.taskId] = it }
+                    (args[3] as List<*>).filterIsInstance<OutboxEntity>().forEach { updated ->
+                        queue[queue.indexOfFirst { it.opId == updated.opId }] = updated
+                    }
+                    (args[4] as TaskEntity?)?.let { tasks[it.id] = it }
+                    queue.removeAll { it.opId == args[0] }
+                    Unit
+                }
+                "resolveIssue" -> {
+                    val discarded = args!![0] as List<*>
+                    queue.removeAll { it.opId in discarded }
+                    (args[2] as OutboxEntity?)?.let { replacement ->
+                        queue[queue.indexOfFirst { it.opId == args[1] }] = replacement
+                    }
+                    (args[4] as TaskEntity?)?.let { tasks[it.id] = it }
+                    (args[5] as TaskListsEntity?)?.let { lists[it.taskId] = it }
                     Unit
                 }
                 "outboxFlow" -> flowOf(queue.toList())
@@ -219,5 +241,77 @@ class RepositorySyncTest {
         repo.flush()
         assertEquals(1, requests.size)
         assertEquals(listOf("rejected", "pending"), queue.map { it.state })
+    }
+
+    @Test
+    fun `crear editar completar i esborrar subtasques sobreviu a un reinici de la cua`() = runBlocking {
+        val task = Task("task", "scope", title = "Work", position = "a1", progress = TaskProgress(0, 1, 2))
+        val old = Subtask("previous", task.id, "Previous", false, "a1")
+        val pinned = Checklist("list", task.id, old.id, name = "Keep", pinned = true, position = "a1")
+        val tasks = mutableMapOf(task.id to task.toEntity())
+        val lists = mutableMapOf(task.id to TaskListsEntity(task.id, Json.encodeToString(listOf(old)), Json.encodeToString(listOf(pinned))))
+        val queue = mutableListOf<OutboxEntity>()
+        val offline = repository(queue, { error("No network") }, mutableListOf(), tasks = tasks, lists = lists)
+        offline.addSubtask(task.id, "New")
+        val created = offline.taskLists(task.id).first().subtasks.last()
+        offline.renameSubtask(task.id, created.id, "  Renamed  ")
+        offline.setSubtask(task.id, created.id, true)
+        offline.deleteSubtask(task.id, old.id)
+
+        val expected = created.copy(title = "Renamed", done = true)
+        val bodies = mutableListOf<String>()
+        val resumed = repository(queue, { index ->
+            val entity = when (index) {
+                0 -> created
+                1 -> expected.copy(done = false, version = 2)
+                2 -> expected.copy(version = 3)
+                else -> null
+            }
+            val result = entity?.let { ""","entity":${Json.encodeToString(it)}""" }.orEmpty()
+            """{"results":[{"op_id":"${queue.first().opId}","status":"ok"$result}]}"""
+        }, mutableListOf(), bodies, tasks, lists)
+        val pending = resumed.taskLists(task.id).first()
+        assertEquals(listOf(expected), pending.subtasks)
+        assertEquals(listOf(pinned.copy(subtaskId = null)), pending.checklists)
+        assertEquals(TaskProgress(1, 1, 2), resumed.tasks.first().single().progress)
+
+        resumed.flush()
+        assertEquals(emptyList(), queue)
+        assertEquals(listOf("0", "1", "2", "1"), bodies.map { body ->
+            Json.parseToJsonElement(body).jsonObject.getValue("operations").jsonArray.single()
+                .jsonObject.getValue("base_version").jsonPrimitive.content
+        })
+        assertEquals(pending.copy(subtasks = listOf(expected.copy(version = 3))), resumed.taskLists(task.id).first())
+        assertEquals(TaskProgress(1, 1, 2), resumed.tasks.first().single().progress)
+    }
+
+    @Test
+    fun `un conflicte de títol de subtasca permet triar el remot o reenviar sobre la seva versió`() = runBlocking {
+        for (keepLocal in listOf(false, true)) {
+            val task = Task("task", "scope", title = "Work", position = "a1", progress = TaskProgress(0, 1, 1))
+            val original = Subtask("item", task.id, "Before", false, "a1", version = 2)
+            val remote = original.copy(title = "Remote", version = 3)
+            val committed = remote.copy(title = "Local", version = 4)
+            val tasks = mutableMapOf(task.id to task.toEntity())
+            val lists = mutableMapOf(task.id to TaskListsEntity(task.id, Json.encodeToString(listOf(original)), "[]"))
+            val queue = mutableListOf<OutboxEntity>()
+            val bodies = mutableListOf<String>()
+            val repo = repository(queue, { index ->
+                val entry = if (index == 0) """"status":"conflict","server_entity":${Json.encodeToString(remote)}"""
+                    else """"status":"ok","entity":${Json.encodeToString(committed)}"""
+                """{"results":[{"op_id":"${queue.first().opId}",$entry}]}"""
+            }, mutableListOf(), bodies, tasks, lists)
+            repo.renameSubtask(task.id, original.id, "Local")
+            repo.flush()
+            assertEquals("conflict", queue.single().state)
+            repo.resolveSyncIssue(queue.single().opId, keepLocal)
+            repo.flush()
+            assertEquals(emptyList(), queue)
+            assertEquals(if (keepLocal) committed else remote, repo.taskLists(task.id).first().subtasks.single())
+            if (keepLocal) {
+                val retry = Json.parseToJsonElement(bodies.last()).jsonObject.getValue("operations").jsonArray.single().jsonObject
+                assertEquals("3", retry.getValue("base_version").jsonPrimitive.content)
+            }
+        }
     }
 }

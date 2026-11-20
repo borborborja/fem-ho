@@ -65,6 +65,7 @@ Cada credencial veu les eines que corresponen als seus permisos.
 | `get_task_context` | Identificadors d'àmbits i, dins d'un àmbit, projectes, tipologies, etiquetes i responsables. |
 | `get_task_execution_context` | Context de la tasca de l'execució lliurada al connector OAuth. |
 | `get_task_execution_attachment` | Un adjunt marcat com a context de la tasca de l'execució, fins a 1 MiB. |
+| `list_subtasks` | Subtasques ordenades d'una tasca accessible, amb identificador, títol, estat, posició i versió. Requereix `tasks:read`. |
 | `search_tasks` | Cerca de text. |
 | `list_events` | Esdeveniments en una finestra. **Requereix `from` i `to`.** |
 
@@ -78,6 +79,8 @@ en mostra exemples de creació i edició.
 | --- | --- |
 | `create_task` | Crea en qualsevol columna amb les dades inicials. Respecta `can_create_tasks` de l'agent. |
 | `update_task` | Modifica camps. |
+| `create_subtask` | Afegeix una subtasca a una tasca existent. L'UUID opcional permet reintentar sense duplicar-la. |
+| `update_subtask` | Edita el títol o canvia l'estat de la subtasca amb `done: true` o `done: false`. |
 | `move_task` | Canvia `status` i `position`. |
 | `complete_task` | Completa, amb cascada i recurrència. |
 | `add_comment` | Comenta. **És la via principal perquè un agent reporti.** |
@@ -86,6 +89,12 @@ en mostra exemples de creació i edició.
 | `ask_user` | Pregunta **i s'atura**: el comentari surt igual, la tasca passa a demanar atenció i **la reserva es deixa anar** —qui espera no treballa—. La marca la baixa una resposta d'una persona, o completar la tasca. Mai un «vist». |
 | `resume_task` | L'agent ha sabut per un altre canal el que li faltava: ho deixa escrit, la marca cau i **torna a reservar** la tasca. El text és obligatori: primer es documenta, després es desbloqueja. |
 | `update_checklist_item` | Marca un ítem. |
+
+Crear i editar subtasques requereix `tasks:update`, permís de contingut a
+l'àmbit i la política d'edició de la tasca mare. Un agent ha de tenir-ne la
+reserva. Amb permís de lectura, les dues eines retornen la subtasca. Amb permís
+d'edició sol, el rebut porta `id`, `task_id` i `version`. Les accions queden
+vinculades a l'historial de la tasca mare.
 
 ### Flux de treball d'agent
 
@@ -103,7 +112,7 @@ Cada tool declara les seves pistes de comportament, i cal encertar-les perquè s
 | Tool | Només lectura | Destructiva | Idempotent |
 | --- | --- | --- | --- |
 | `whoami`, `get_*`, `list_*`, `search_*` | sí | no | sí |
-| `create_task`, `add_comment`, `ask_user`, `resume_task` | no | no | no |
+| `create_task`, `create_subtask`, `add_comment`, `ask_user`, `resume_task` | no | no | no |
 | `update_*`, `complete_task`, `add_task_attachment` | no | no | sí |
 | `move_task` | no | no | no |
 | `release_task` | no | no | sí |

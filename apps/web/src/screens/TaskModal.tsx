@@ -24,23 +24,19 @@ import {
   type TaskStatus,
 } from '@fem-ho/contracts';
 import { v7 as uuidv7 } from 'uuid';
-import { ActivityTimeline, ChecklistRow, EmptyState } from '@fem-ho/design-system/femho';
+import { ActivityTimeline, EmptyState } from '@fem-ho/design-system/femho';
 import { api, failureText } from '../app/api.js';
 import { Attachments } from '../app/Attachments.js';
 import { taskAiMethodLabel, taskAiStatusLabel, type TaskAiExecution } from '../app/task-ai.js';
 import { McpSourceBadge } from '../board/McpSourceBadge.js';
+import { SubtaskRow } from '../board/SubtaskRow.js';
 import { TaskAiAction } from '../board/TaskAiAction.js';
 import { useSessionData } from '../app/session.js';
+import { useToasts } from '../app/toasts.js';
 import { useApi, useMutation } from '../app/useApi.js';
-import type {
-  ActivityEntry,
-  Checklist,
-  Comment,
-  Label,
-  Subtask,
-  Task,
-  TaskType,
-} from '../app/types.js';
+import { useBoardQuery } from '../sync/board-sync.js';
+import { useSubtaskSync } from '../sync/subtask-sync.js';
+import type { ActivityEntry, Comment, Label, Task, TaskType } from '../app/types.js';
 
 /**
  * Els verbs que l'historial sap traduir.
@@ -53,7 +49,10 @@ const VERBS = [
   'attachment.created',
   'created',
   'updated',
+  'subtask.completed',
   'subtask.created',
+  'subtask.reopened',
+  'subtask.updated',
   'checklist.created',
   'checklist_item.created',
   'checklist_item.completed',
@@ -189,15 +188,14 @@ export function TaskModal({
   onOpenList,
 }: TaskModalProps) {
   const { scopes, projects, people } = useSessionData();
+  const { notify } = useToasts();
   const creating = create !== undefined;
   const completion = useTimeCompletion();
 
   // Una tasca que encara no existeix no té res a demanar: cap crida fins que es desa.
-  const task = useApi<Task>(creating ? null : `/api/v1/tasks/${taskId ?? ''}`);
-  const subtasks = useApi<Subtask[]>(creating ? null : `/api/v1/tasks/${taskId ?? ''}/subtasks`);
-  const checklists = useApi<Checklist[]>(
-    creating ? null : `/api/v1/tasks/${taskId ?? ''}/checklists`,
-  );
+  const task = useBoardQuery<Task>(creating ? null : `/api/v1/tasks/${taskId ?? ''}`);
+  const subtaskSync = useSubtaskSync(creating ? undefined : taskId, !creating);
+  const { subtasks, checklists } = subtaskSync;
   const comments = useApi<Comment[]>(creating ? null : `/api/v1/tasks/${taskId ?? ''}/comments`);
   const activity = useApi<{ data: ActivityEntry[] }>(
     creating ? null : `/api/v1/tasks/${taskId ?? ''}/activity`,
@@ -959,19 +957,11 @@ export function TaskModal({
                 <EmptyState>{t('task.empty.subtasks')}</EmptyState>
               ) : (
                 (subtasks.data ?? []).map((subtask) => (
-                  <ChecklistRow
+                  <SubtaskRow
                     key={subtask.id}
-                    text={subtask.title}
-                    done={subtask.done}
-                    toggleLabel={t('checklist.toggleItem', { text: subtask.title })}
-                    onToggle={() => {
-                      void api
-                        .patch(`/api/v1/subtasks/${subtask.id}`, { done: !subtask.done })
-                        .then(() => {
-                          subtasks.reload();
-                          onChanged();
-                        });
-                    }}
+                    subtask={subtask}
+                    onUpdate={subtaskSync.updateSubtask}
+                    onDelete={() => subtaskSync.deleteSubtask(subtask)}
                   />
                 ))
               )}
@@ -982,17 +972,17 @@ export function TaskModal({
                 placeholder={t('task.newSubtask')}
                 onChange={(event) => setNewSubtask(event.target.value)}
                 onKeyDown={(event) => {
-                  if (event.key !== 'Enter' || newSubtask.trim() === '') return;
+                  if (
+                    event.key !== 'Enter' ||
+                    event.nativeEvent.isComposing ||
+                    newSubtask.trim() === ''
+                  )
+                    return;
                   event.preventDefault();
-                  void api
-                    .post(`/api/v1/tasks/${taskId}/subtasks`, {
-                      id: uuidv7(),
-                      title: newSubtask.trim(),
-                    })
-                    .then(() => {
-                      setNewSubtask('');
-                      subtasks.reload();
-                    });
+                  void subtaskSync
+                    .createSubtask(newSubtask.trim())
+                    .then(() => setNewSubtask((current) => (current === newSubtask ? '' : current)))
+                    .catch((error: unknown) => notify(failureText(error), { tone: 'error' }));
                 }}
               />
             </section>

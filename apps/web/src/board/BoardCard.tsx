@@ -19,11 +19,13 @@ import { McpSourceBadge } from './McpSourceBadge.js';
 import { TaskTimeBadge } from './TaskTimeBadge.js';
 import { TaskAiAction } from './TaskAiAction.js';
 import { SourceIcon } from './SourceIcon.js';
+import { SubtaskRow } from './SubtaskRow.js';
 import { useInlineTaskTitle } from './useInlineTaskTitle.js';
-import { api } from '../app/api.js';
+import { api, failureText } from '../app/api.js';
 import { useTaskAiSettings } from '../app/task-ai.js';
-import { useApi } from '../app/useApi.js';
-import type { Checklist, Subtask } from '../app/types.js';
+import { useToasts } from '../app/toasts.js';
+import type { Checklist } from '../app/types.js';
+import { useSubtaskSync } from '../sync/subtask-sync.js';
 import type { BoardTask } from './KanbanBoard.js';
 
 export interface BoardCardProps {
@@ -44,7 +46,7 @@ export interface BoardCardProps {
 
 export function BoardCard({
   task,
-  progress,
+  progress: fallbackProgress,
   onOpen,
   onToggleDone,
   onAdvance,
@@ -55,21 +57,14 @@ export function BoardCard({
   const [addOpen, setAddOpen] = useState(false);
   const [draft, setDraft] = useState('');
   const [deleting, setDeleting] = useState(false);
+  const { notify } = useToasts();
   const aiActionEnabled = useTaskAiSettings()?.data?.data.some(
     (setting) => setting.scope_id === task.scope_id && setting.enabled,
   );
   const inlineTitle = useInlineTaskTitle(task.id, task.title, onChanged);
 
-  /**
-   * `null` mentre no calgui: `useApi` no demana res amb un camí nul.
-   *
-   * També es demanen amb el formulari obert encara que estigui plegada: afegir a una
-   * llista que ja existeix necessita saber quines hi ha, i sense això escriure dues
-   * vegades el mateix nom donaria dues llistes iguals.
-   */
-  const needsItems = expanded || addOpen;
-  const subtasks = useApi<Subtask[]>(needsItems ? `/api/v1/tasks/${task.id}/subtasks` : null);
-  const checklists = useApi<Checklist[]>(needsItems ? `/api/v1/tasks/${task.id}/checklists` : null);
+  const subtaskSync = useSubtaskSync(task.id, expanded, fallbackProgress);
+  const { subtasks, checklists, progress } = subtaskSync;
 
   const reload = (): void => {
     subtasks.reload();
@@ -88,17 +83,15 @@ export function BoardCard({
           {
             id: `subtasks-${task.id}`,
             name: null,
-            items: (subtasks.data ?? []).map((subtask) => ({
-              id: subtask.id,
-              text: subtask.title,
-              done: subtask.done,
-              toggleLabel: t('checklist.toggleItem', { text: subtask.title }),
-              onToggle: () => {
-                void api
-                  .patch(`/api/v1/subtasks/${subtask.id}`, { done: !subtask.done })
-                  .then(reload);
-              },
-            })),
+            rows: (subtasks.data ?? []).map((subtask) => (
+              <SubtaskRow
+                key={subtask.id}
+                subtask={subtask}
+                onUpdate={subtaskSync.updateSubtask}
+                onDelete={() => subtaskSync.deleteSubtask(subtask)}
+                compact
+              />
+            )),
           },
         ]),
     ...(checklists.data ?? []).map((checklist) => ({
@@ -145,7 +138,7 @@ export function BoardCard({
     if (text === '') return;
 
     if (name === '') {
-      await api.post(`/api/v1/tasks/${task.id}/subtasks`, { id: uuidv7(), title: text });
+      await subtaskSync.createSubtask(text);
     } else {
       const existing = (checklists.data ?? []).find(
         (candidate) => candidate.name.toLowerCase() === name.toLowerCase(),
@@ -157,11 +150,11 @@ export function BoardCard({
           name,
         }));
       await api.post(`/api/v1/checklists/${target.id}/items`, { id: uuidv7(), text });
+      reload();
     }
 
     // El camp es buida sencer: el sigil es torna a escriure, com a l'afegida ràpida.
-    setDraft('');
-    reload();
+    setDraft((current) => (current === draft ? '' : current));
   };
 
   return (
@@ -252,21 +245,21 @@ export function BoardCard({
         onDelete={dragging ? undefined : () => setDeleting(true)}
         deleteLabel={t('nav.delete')}
         addForm={{
-          open: addOpen,
+          open: expanded && addOpen,
           onToggle: () => {
-            // Obrir el formulari desplega la targeta: afegir-hi alguna cosa i no veure-la
-            // aparèixer sembla que no hagi passat res.
-            if (!addOpen) setExpanded(true);
-            setAddOpen(!addOpen);
+            setAddOpen(!expanded || !addOpen);
+            setExpanded(true);
           },
           toggleLabel: t('card.add'),
           placeholder: t('card.addPlaceholder'),
           text: draft,
           onText: (event) => setDraft(event.target.value),
           onKeyDown: (event) => {
-            if (event.key !== 'Enter') return;
+            if (event.key !== 'Enter' || event.nativeEvent.isComposing) return;
             event.preventDefault();
-            void submitAdd();
+            void submitAdd().catch((error: unknown) =>
+              notify(failureText(error), { tone: 'error' }),
+            );
           },
         }}
       />

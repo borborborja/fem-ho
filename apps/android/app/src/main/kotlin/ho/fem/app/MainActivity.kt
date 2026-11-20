@@ -88,6 +88,8 @@ import ho.fem.tasks.BoardLabels
 import ho.fem.designsystem.CardAddForm
 import ho.fem.designsystem.CardList
 import ho.fem.designsystem.CardListItem
+import ho.fem.designsystem.SubtaskRowActions
+import ho.fem.designsystem.SubtaskRowLabels
 import ho.fem.tasks.BoardScreen
 import ho.fem.tasks.CardExtras
 import ho.fem.tasks.McpProvenanceBadge
@@ -994,6 +996,7 @@ private fun BoardHost(
     val pinLabel = stringResource(R.string.checklist_pin)
     val unpinLabel = stringResource(R.string.checklist_unpinaction)
     val toggleItemTemplate = stringResource(R.string.checklist_toggleitem)
+    val subtaskActionsLabels = subtaskRowLabels()
     // "+ Afegir a {columna}…" per a cada columna: el text porta el nom de la columna i
     // `stringResource` no es pot cridar des del `footer`, que no és `@Composable` allà.
     val columnAddLabels = mapOf(
@@ -1213,7 +1216,7 @@ private fun BoardHost(
                         if (subtasks.isNotEmpty()) {
                             add(
                                 CardList(
-                                    id = "subtasks-${'$'}{task.id}",
+                                    id = "subtasks-${task.id}",
                                     name = null,
                                     items = subtasks.map { sub ->
                                         CardListItem(
@@ -1222,8 +1225,9 @@ private fun BoardHost(
                                             done = sub.done,
                                             toggleLabel = toggleItemTemplate.replace("{text}", sub.title),
                                             onToggle = {
-                                                model.toggleCardSubtask(task.id, sub.id, !sub.done)
+                                                model.toggleSubtask(task.id, sub.id, !sub.done)
                                             },
+                                            subtaskActions = subtaskActionsLabels.actions(model, task.id, sub.id),
                                         )
                                     },
                                 ),
@@ -1349,9 +1353,27 @@ private fun mcpMetadata(task: Task): (@Composable () -> Unit)? {
 }
 
 @Composable
+private fun subtaskRowLabels() = SubtaskRowLabels(
+    actions = stringResource(R.string.subtask_actions),
+    edit = stringResource(R.string.subtask_edit),
+    delete = stringResource(R.string.subtask_delete),
+    deleteConfirm = stringResource(R.string.subtask_deleteconfirm),
+    title = stringResource(R.string.task_title),
+    save = stringResource(R.string.nav_save),
+    cancel = stringResource(R.string.nav_cancel),
+    error = stringResource(R.string.error_generic),
+)
+
+private fun SubtaskRowLabels.actions(model: AppViewModel, taskId: String, subtaskId: String) = SubtaskRowActions(
+    labels = this,
+    onEdit = { title, finished -> model.renameSubtask(taskId, subtaskId, title, finished) },
+    onDelete = { model.deleteSubtask(taskId, subtaskId) },
+)
+
+@Composable
 private fun TaskDetailSheet(model: AppViewModel) {
     val openTask by model.openTask.collectAsStateWithLifecycle()
-    val openChecklists by model.openChecklists.collectAsStateWithLifecycle()
+    val taskLists by model.openTaskLists.collectAsStateWithLifecycle()
     val openComments by model.openComments.collectAsStateWithLifecycle()
     val openActivity by model.openActivity.collectAsStateWithLifecycle()
     val timezone by model.profileTimezone.collectAsStateWithLifecycle()
@@ -1369,6 +1391,7 @@ private fun TaskDetailSheet(model: AppViewModel) {
     val manualLabel = stringResource(R.string.ai_mode_manual)
     val assistedLabel = stringResource(R.string.ai_mode_assisted)
     val delegatedLabel = stringResource(R.string.ai_mode_delegated)
+    val subtaskActionsLabels = subtaskRowLabels()
 
     openTask?.let { task ->
         val context = androidx.compose.ui.platform.LocalContext.current
@@ -1409,7 +1432,8 @@ private fun TaskDetailSheet(model: AppViewModel) {
         }
         TaskDetail(
             task = task,
-            checklists = openChecklists,
+            subtasks = taskLists.subtasks,
+            checklists = taskLists.checklists,
             projects = projects,
             people = people,
             taskTypes = taskTypes,
@@ -1510,6 +1534,9 @@ private fun TaskDetailSheet(model: AppViewModel) {
                     "released" to stringResource(R.string.activity_verb_released),
                     "reopened" to stringResource(R.string.activity_verb_reopened),
                     "subtask.created" to stringResource(R.string.activity_verb_subtask_created),
+                    "subtask.updated" to stringResource(R.string.activity_verb_subtask_updated),
+                    "subtask.completed" to stringResource(R.string.activity_verb_subtask_completed),
+                    "subtask.reopened" to stringResource(R.string.activity_verb_subtask_reopened),
                     "token_created" to stringResource(R.string.activity_verb_token_created),
                     "token_revoked" to stringResource(R.string.activity_verb_token_revoked),
                     "updated" to stringResource(R.string.activity_verb_updated),
@@ -1525,6 +1552,8 @@ private fun TaskDetailSheet(model: AppViewModel) {
                     AiMode.ASSISTED to assistedLabel,
                     AiMode.DELEGATED to delegatedLabel,
                 ),
+                subtasks = stringResource(R.string.task_subtasks),
+                subtaskToggle = stringResource(R.string.checklist_toggleitem),
                 checklists = stringResource(R.string.task_checklists),
                 toggle = stringResource(R.string.sync_complete),
                 save = stringResource(R.string.nav_save),
@@ -1539,6 +1568,8 @@ private fun TaskDetailSheet(model: AppViewModel) {
             saveError = if (taskSaveError) stringResource(R.string.error_generic) else null,
             saving = taskSaving,
             onStatus = { model.move(task, it) },
+            subtaskActions = { subtaskActionsLabels.actions(model, task.id, it.id) },
+            onToggleSubtask = { id, done -> model.toggleSubtask(task.id, id, done) },
             onToggleItem = model::toggleItem,
             onAddAssignee = { model.addAssignee(task, it) },
             onRemoveAssignee = { model.removeAssignee(task, it) },

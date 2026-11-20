@@ -13,7 +13,7 @@ import { t } from '@fem-ho/contracts';
 import { v7 as uuidv7 } from 'uuid';
 import { SyncPill } from '@fem-ho/design-system/femho';
 import { api, currentTokens, request } from '../app/api.js';
-import type { Task } from '../app/types.js';
+import type { Subtask, Task } from '../app/types.js';
 import { useApi, type QueryResult } from '../app/useApi.js';
 import {
   accountDatabase,
@@ -24,12 +24,24 @@ import {
   saveBoardQuery,
 } from './cache.js';
 import type { FemHoDatabase, OutboxRow } from './db.js';
-import { markSending, topologicalOrder, type OperationResult } from './outbox.js';
+import {
+  discardBoardOperation,
+  markSending,
+  nextBoardOperations,
+  type OperationResult,
+} from './outbox.js';
+import { taskListPath } from './subtask-projection.js';
 
 type BoardMutation = Pick<
   OutboxRow,
-  'entity_id' | 'op' | 'payload' | 'base_version' | 'task_title'
->;
+  | 'entity_id'
+  | 'op'
+  | 'payload'
+  | 'base_version'
+  | 'task_title'
+  | 'parent_task_id'
+  | 'observed_title'
+> & { entity_type?: OutboxRow['entity_type'] };
 
 interface BoardSync {
   db: FemHoDatabase;
@@ -40,16 +52,22 @@ interface BoardSync {
 
 const BoardSyncContext = createContext<BoardSync | null>(null);
 
+export function useOptionalBoardSync(): BoardSync | null {
+  return useContext(BoardSyncContext);
+}
+
 export function useBoardSync(): BoardSync {
-  const sync = useContext(BoardSyncContext);
+  const sync = useOptionalBoardSync();
   if (sync === null) throw new Error('BoardSyncProvider is required');
   return sync;
 }
 
-export function useBoardQuery<T>(path: string): QueryResult<T> {
-  const { db, revision } = useBoardSync();
+export function useBoardQuery<T>(path: string | null): QueryResult<T> {
+  const sync = useOptionalBoardSync();
+  const db = sync?.db;
   const load = useCallback(
     async (url: string, signal: AbortSignal): Promise<T> => {
+      if (db === undefined) return api.get<T>(url, signal);
       try {
         const startRevision = await boardSnapshotRevision(db, url);
         const result = await api.get<T>(url, signal);
@@ -63,23 +81,11 @@ export function useBoardQuery<T>(path: string): QueryResult<T> {
     },
     [db],
   );
-  return useApi<T>(path, [revision], load);
+  return useApi<T>(path, [sync?.revision], load);
 }
 
 function queueRows(db: FemHoDatabase): Promise<OutboxRow[]> {
   return db.outbox.orderBy('created_at').toArray();
-}
-
-/** Una operació rebutjada només atura les següents de la mateixa tasca. */
-function nextMoves(rows: OutboxRow[]): OutboxRow[] {
-  const seen = new Set<string>();
-  return topologicalOrder(rows)
-    .filter((row) => {
-      if (seen.has(row.entity_id)) return false;
-      seen.add(row.entity_id);
-      return row.status === 'pending' || row.status === 'sending';
-    })
-    .slice(0, 100);
 }
 
 function withQueueLock<T>(db: FemHoDatabase, run: () => Promise<T>): Promise<T> {
@@ -148,14 +154,14 @@ export function BoardSyncProvider({ userId, children }: { userId: string; childr
     try {
       await withQueueLock(db, async () => {
         while (navigator.onLine && current()) {
-          const rows = nextMoves(await queueRows(db));
+          const rows = nextBoardOperations(await queueRows(db));
           if (rows.length === 0) break;
           await markSending(db, rows);
           if (!current()) break;
           const results = await pushBoardBatch(rows, current);
           retry.current = { after: 0, delay: 1_000 };
           await applyBoardResults(db, rows, results);
-          if (results.some((result) => result.status === 'ok')) {
+          if (results.some((result) => result.status === 'ok' || result.status === 'conflict')) {
             setRevision((value) => value + 1);
             if ((await db.outbox.count()) === 0) setConfirmedAt(Date.now());
           }
@@ -213,17 +219,35 @@ export function BoardSyncProvider({ userId, children }: { userId: string; childr
       ...mutation,
       id: uuidv7(),
       created_at: new Date().toISOString(),
-      entity_type: 'task',
+      entity_type: mutation.entity_type ?? 'task',
       status: 'pending',
       attempts: 0,
     };
+    if (row.entity_type === 'subtask' && row.parent_task_id !== undefined) {
+      const path = taskListPath(row.parent_task_id, 'subtasks');
+      // La projecció local no ha d'esperar una petició en curs. IndexedDB només
+      // serialitza aquest desament amb la transacció curta que aplica els rebuts.
+      await db.transaction('rw', db.outbox, db.meta, async () => {
+        if (!current()) throw new Error('The account changed.');
+        if (row.op === 'update') {
+          const latest = await readSnapshot<Subtask[]>(db, path);
+          const canonical = latest?.find((subtask) => subtask.id === row.entity_id);
+          // El rebut es pot haver desat mentre es feia el gest.
+          if (canonical !== undefined && canonical.title === row.observed_title)
+            row.base_version = Math.max(row.base_version ?? 0, canonical.version);
+        }
+        await db.outbox.add(row);
+      });
+      void flush();
+      return;
+    }
     await withQueueLock(db, async () => {
       if (!current()) throw new Error('The account changed.');
       let direct = send !== undefined && navigator.onLine;
       try {
         const preceding = await db.outbox
           .where('[entity_type+entity_id]')
-          .equals(['task', row.entity_id])
+          .equals([row.entity_type, row.entity_id])
           .count();
         direct = direct && preceding === 0;
         await db.outbox.add({
@@ -305,7 +329,7 @@ export function BoardSyncProvider({ userId, children }: { userId: string; childr
                     type="button"
                     className="plou-btn"
                     onClick={() => {
-                      void db.outbox.delete(row.id).then(flush);
+                      void withQueueLock(db, () => discardBoardOperation(db, row)).then(flush);
                     }}
                   >
                     {t(row.status === 'conflict' ? 'sync.keepTheirs' : 'nav.delete')}
