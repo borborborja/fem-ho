@@ -148,6 +148,7 @@ export function TaskCard({
   project,
   sourceIcon,
   sourceBadge,
+  taskActions,
   assigneeInitials,
   time,
   timeSpent,
@@ -606,6 +607,8 @@ export function TaskCard({
           </Body>
           {sourceBadge}
         </div>
+
+        {taskActions == null ? null : <div style={{ alignSelf: 'flex-start' }}>{taskActions}</div>}
 
         {/*
           Les subtasques i les llistes, desplegades a la mateixa targeta.

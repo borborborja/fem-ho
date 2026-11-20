@@ -36,6 +36,7 @@ import { registerReportRoutes } from './http/reports.js';
 import { registerSessionRoutes } from './http/sessions.js';
 import { registerTokenRoutes } from './http/tokens.js';
 import { registerTaskContextRoutes } from './http/task-context.js';
+import { registerTaskAiRoutes } from './http/task-ai.js';
 import { registerChecklistRoutes, registerEventRoutes, registerTaskRoutes } from './http/tasks.js';
 
 export interface BuildOptions {
@@ -134,12 +135,13 @@ export function buildApp(config: Config, options: BuildOptions = {}): FastifyIns
   registerScopeRoutes(app, instanceSecret);
   registerTaskRoutes(app);
   registerTaskContextRoutes(app);
+  registerTaskAiRoutes(app, instanceSecret);
   registerAttachmentRoutes(app);
   registerFederationRoutes(app, instanceSecret);
   registerEventRoutes(app, instanceSecret);
   registerChecklistRoutes(app);
   registerSyncRoutes(app);
-  registerMcpRoutes(app);
+  registerMcpRoutes(app, instanceSecret);
   registerSessionRoutes(app);
   registerReportRoutes(app);
   registerTokenRoutes(app);

@@ -43,6 +43,9 @@ describe('mitigació 3 · rangs bloquejats', () => {
     ['100.64.0.1', 'CGNAT'],
     ['224.0.0.1', 'multicast'],
     ['198.18.0.1', 'proves de rendiment'],
+    ['192.88.99.1', 'transició 6to4'],
+    ['198.51.100.1', 'TEST-NET-2'],
+    ['203.0.113.1', 'TEST-NET-3'],
   ])('bloqueja %s (%s)', (address) => {
     expect(isBlockedAddress(address)).toBe(true);
   });
@@ -64,6 +67,9 @@ describe('mitigació 3 · rangs bloquejats', () => {
     ['ff02::1', 'multicast'],
     ['::ffff:127.0.0.1', 'loopback mapat a IPv6'],
     ['::ffff:192.168.1.1', 'privada mapada a IPv6'],
+    ['2001::1', 'Teredo'],
+    ['2001:1ff::1', 'dins del bloc de l’IETF'],
+    ['2001:db8::1', 'documentació'],
   ])('bloqueja %s (%s)', (address) => {
     // L'adreça mapada és la que se'n va: passa totes les comprovacions d'IPv6 i cap de
     // les d'IPv4 si no es desembolica.

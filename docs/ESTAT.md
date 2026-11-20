@@ -7,6 +7,25 @@ Data de l'última verificació completa: **2026-11-19**.
 
 ---
 
+## Tasques amb IA des del tauler i la fitxa
+
+La migració 027 afegeix ajustos privats per usuari i àmbit. L'acció IA copia el
+context, lliura un esdeveniment a un xat de Work subscrit o inicia una rutina de
+Claude Code. L'historial registra cada enviament. El resultat es pot retornar
+com a comentari amb la connexió OAuth que va rebre l'execució.
+
+S'ha exercitat la migració i el flux d'enviament amb SQLite i PostgreSQL i amb
+receptors simulats. Han passat les 276 proves de Chromium. En Android 14 s'ha
+instal·lat l'APK amb R8 i s'hi han comprovat la còpia de context, el clic a la
+targeta i els dos estats de lliurament amb respostes simulades.
+
+Queda pendent provar una subscripció real de ChatGPT Work i una rutina real de
+Claude Code. Calen una instància accessible per HTTPS i connexions autoritzades
+en aquests comptes.
+[Guia de configuració](mcp-access.md#enviar-una-tasca-a-una-ia-des-de-fem-ho).
+
+---
+
 ## Origen i historial de tasques MCP · 0.21.0
 
 Les eines MCP que modifiquen tasques accepten l'etiqueta opcional `origin`. El

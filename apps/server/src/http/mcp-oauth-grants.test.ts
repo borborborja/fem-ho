@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, createHmac, randomBytes } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -8,9 +8,12 @@ import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { buildApp } from '../app.js';
 import { hashPassword } from '../auth/password.js';
 import { loadConfig } from '../config.js';
+import * as download from '../dav/fetch-safe.js';
+import { dbBool } from '../db/bool.js';
 import { connect } from '../db/connection.js';
 import { migrateToLatest } from '../db/migrator.js';
 import { connectTestSchema, postgresUrl } from '../db/test-postgres.js';
+import { processTaskAiExecutions } from '../jobs/task-ai.js';
 import type { ApiTokenSummary } from '../services/tokens.js';
 
 const directory = mkdtempSync(join(tmpdir(), 'femho-oauth-grants-'));
@@ -20,9 +23,10 @@ const connection = pgConnection ?? connect(`sqlite://${join(directory, 'test.db'
 const issuer = 'http://localhost:8080';
 const resource = `${issuer}/mcp`;
 const redirectUri = 'http://127.0.0.1:8123/callback';
+const instanceSecret = 'secret-de-prova-de-la-instancia-mcp-oauth';
 const app = buildApp(
-  { ...loadConfig('test'), baseUrl: issuer, logLevel: 'silent' },
-  { connection },
+  { ...loadConfig('test'), baseUrl: issuer, dataDir: directory, logLevel: 'silent' },
+  { connection, secret: instanceSecret },
 );
 const owner = uuidv7();
 const other = uuidv7();
@@ -34,7 +38,7 @@ let session: string;
 let otherSession: string;
 
 function api(
-  method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   path: string,
   payload?: object,
   credential = session,
@@ -90,7 +94,7 @@ async function summary(id: string) {
   return response.json<{ data: ApiTokenSummary[] }>().data.find((grant) => grant.id === id)!;
 }
 
-async function authorize(name: string) {
+async function authorize(name: string, capabilities = ['tasks:read', 'tasks:create']) {
   const registered = await app.inject({
     method: 'POST',
     url: '/oauth/register',
@@ -116,7 +120,7 @@ async function authorize(name: string) {
     approve: true,
     permission: 'custom',
     scope_ids: [personal, work],
-    capabilities: ['tasks:read', 'tasks:create'],
+    capabilities,
   });
   expect(consent.statusCode, consent.body).toBe(200);
   const code = new URL(consent.json<{ redirect_url: string }>().redirect_url).searchParams.get(
@@ -156,6 +160,23 @@ const mcp = (access: string, method: string, params?: object) =>
     payload: { jsonrpc: '2.0', id: 1, method, params },
   });
 
+function mcpValue(body: string) {
+  const data = body.split('\n').find((line) => line.startsWith('data: '));
+  return JSON.parse(data?.slice(6) ?? body) as {
+    result?: Record<string, unknown>;
+    error?: { code: number };
+  };
+}
+
+async function taskTool(access: string, name: string, args: Record<string, string>) {
+  const response = await mcp(access, 'tools/call', { name, arguments: args });
+  expect(response.statusCode, response.body).toBe(200);
+  return mcpValue(response.body).result as {
+    content: { type: 'text'; text: string }[];
+    isError?: boolean;
+  };
+}
+
 it('redueix els permisos i àmbits OAuth en ús, deixa rastre i pot revocar-los sense aturar un token manual', async () => {
   const grant = await authorize('Reducció OAuth');
   const auth = await grant.exchange();
@@ -166,6 +187,8 @@ it('redueix els permisos i àmbits OAuth en ús, deixa rastre i pot revocar-los 
   const toolsBefore = await mcp(access, 'tools/list');
   expect(toolsBefore.statusCode, toolsBefore.body).toBe(200);
   expect(toolsBefore.body).toContain('"name":"create_task"');
+  expect(toolsBefore.body).not.toContain('get_task_execution_context');
+  expect(mcpValue((await mcp(access, 'events/list')).body).error?.code).toBe(-32601);
   const manual = await api('POST', '/tokens', {
     name: 'Token independent',
     capabilities: ['tasks:read'],
@@ -244,6 +267,182 @@ it('redueix els permisos i àmbits OAuth en ús, deixa rastre i pot revocar-los 
   expect((await mcp(renewedTokens.access_token, 'tools/list')).statusCode).toBe(401);
   expect((await grant.renew(renewedTokens.refresh_token)).statusCode).toBe(401);
   expect((await mcp(pat, 'tools/list')).statusCode).toBe(200);
+});
+
+it('renova la subscripció i execució OAuth i torna el context, l’adjunt i un sol resultat per MCP', async () => {
+  const grant = await authorize('Execucions amb IA', ['ai_executions:read', 'ai_executions:write']);
+  const auth = await grant.exchange();
+  expect(auth.statusCode, auth.body).toBe(200);
+  const { access_token, refresh_token } = auth.json<{
+    access_token: string;
+    refresh_token: string;
+  }>();
+  const tools = await mcp(access_token, 'tools/list');
+  expect(tools.body).toContain('get_task_execution_context');
+  expect(tools.body).toContain('get_task_execution_attachment');
+  expect(tools.body).toContain('report_task_execution_result');
+  expect(tools.body).not.toContain('"name":"get_task"');
+  const initialized = await mcp(access_token, 'initialize', {
+    protocolVersion: '2025-03-26',
+    capabilities: {},
+    clientInfo: { name: 'test', version: '1.0.0' },
+  });
+  expect(mcpValue(initialized.body).result?.capabilities).toMatchObject({ events: {} });
+  expect(mcpValue((await mcp(access_token, 'events/list')).body).result?.events).toMatchObject([
+    { name: 'task.execution_requested', inputSchema: { required: ['scope_id'] } },
+  ]);
+
+  const url = 'https://example.net/mcp-events/first-chat';
+  const signingKey = randomBytes(32);
+  const secret = `whsec_${signingKey.toString('base64')}`;
+  const executionId = uuidv7();
+  const mockCallback = vi
+    .spyOn(download, 'safeFetch')
+    .mockImplementation(async (destination, input) => {
+      expect(destination).toBe(url);
+      expect(input?.maxRedirects).toBe(0);
+      const raw = input!.body!.toString();
+      const headers = input!.headers!;
+      const signed = createHmac('sha256', signingKey)
+        .update(`${headers['webhook-id']}.${headers['webhook-timestamp']}.${raw}`)
+        .digest('base64');
+      expect(headers['webhook-signature']).toBe(`v1,${signed}`);
+      if (headers['webhook-id'] === executionId) {
+        expect(JSON.parse(raw)).toMatchObject({ data: { execution_id: executionId } });
+        expect(raw).not.toContain('Notes de la feina');
+        return { status: 202, headers: new Headers(), url, body: '', bytes: Buffer.alloc(0) };
+      }
+      const request = JSON.parse(raw) as { type: string; challenge: string };
+      expect(request.type).toBe('verification');
+      const body = JSON.stringify({ challenge: request.challenge });
+      return { status: 200, headers: new Headers(), url, body, bytes: Buffer.from(body) };
+    });
+  try {
+    const name = 'task.execution_requested';
+    const params = {
+      name,
+      arguments: { scope_id: personal },
+      delivery: { mode: 'webhook', url, secret },
+    };
+    const rejected = await mcp(access_token, 'events/subscribe', {
+      ...params,
+      arguments: { scope_id: family },
+    });
+    expect(mcpValue(rejected.body).error?.code).toBe(-32024);
+    expect(mockCallback).not.toHaveBeenCalled();
+    const subscribed = await mcp(access_token, 'events/subscribe', params);
+    const result = mcpValue(subscribed.body).result;
+    expect(result).toMatchObject({
+      id: expect.any(String),
+      refreshBefore: expect.any(String),
+      cursor: null,
+    });
+    expect(mockCallback).toHaveBeenCalledTimes(1);
+    expect(subscribed.body).not.toContain(secret);
+
+    const renewed = await grant.renew(refresh_token);
+    expect(renewed.statusCode, renewed.body).toBe(200);
+    const nextToken = renewed.json<{ access_token: string }>().access_token;
+    const refreshed = await mcp(nextToken, 'events/subscribe', params);
+    expect(mcpValue(refreshed.body).result?.id).toBe(result?.id);
+    expect(mockCallback).toHaveBeenCalledTimes(1);
+
+    const settings = await api('PUT', `/ai/task-settings/${personal}`, {
+      enabled: true,
+      method: 'mcp_events',
+      subscription_id: result?.id,
+    });
+    expect(settings.statusCode, settings.body).toBe(200);
+    const task = await api('POST', '/tasks', {
+      scope_id: personal,
+      title: 'Notes de la feina',
+      description: 'Text exclusiu de la tasca',
+    });
+    expect(task.statusCode, task.body).toBe(201);
+    const { id: taskId } = task.json<{ id: string }>();
+    const upload = async (aiContext: boolean) => {
+      const id = uuidv7();
+      const response = await app.inject({
+        method: 'POST',
+        url: `/api/v1/tasks/${taskId}/attachments?id=${id}&filename=${aiContext ? 'notes' : 'privat'}.txt&ai_context=${aiContext}`,
+        headers: { authorization: `Bearer ${session}`, 'content-type': 'application/octet-stream' },
+        payload: Buffer.from(aiContext ? 'Adjunt autoritzat' : 'Adjunt privat'),
+      });
+      expect(response.statusCode, response.body).toBe(201);
+      return id;
+    };
+    const contextAttachment = await upload(true);
+    const privateAttachment = await upload(false);
+    const queued = await api('POST', `/tasks/${taskId}/ai-executions`, { id: executionId });
+    expect(queued.statusCode, queued.body).toBe(202);
+    const reference = { execution_id: executionId };
+    expect((await taskTool(nextToken, 'get_task_execution_context', reference)).isError).toBe(true);
+    await processTaskAiExecutions(connection, instanceSecret);
+    expect(mockCallback).toHaveBeenCalledTimes(2);
+
+    const context = await taskTool(nextToken, 'get_task_execution_context', reference);
+    expect(context.isError, context.content[0]?.text).toBeUndefined();
+    const { text, attachments } = JSON.parse(context.content[0]!.text) as {
+      text: string;
+      attachments: { id: string }[];
+    };
+    expect(text).toContain('Text exclusiu de la tasca');
+    expect(text).not.toContain('privat.txt');
+    expect(attachments).toMatchObject([{ id: contextAttachment }]);
+    const file = await taskTool(nextToken, 'get_task_execution_attachment', {
+      ...reference,
+      attachment_id: contextAttachment,
+    });
+    expect(file.content).toEqual([{ type: 'text', text: 'Adjunt autoritzat' }]);
+    const privateFile = await taskTool(nextToken, 'get_task_execution_attachment', {
+      ...reference,
+      attachment_id: privateAttachment,
+    });
+    expect(privateFile.isError).toBe(true);
+
+    const otherGrant = await authorize('Un altre xat', ['ai_executions:read']);
+    const otherToken = (await otherGrant.exchange()).json<{ access_token: string }>().access_token;
+    expect((await taskTool(otherToken, 'get_task_execution_context', reference)).isError).toBe(
+      true,
+    );
+    expect((await mcp(otherToken, 'tools/list')).body).not.toContain(
+      'report_task_execution_result',
+    );
+
+    await sql`UPDATE tasks SET needs_attention = ${dbBool(true)} WHERE id = ${taskId}`.execute(
+      connection.db,
+    );
+    const report = await taskTool(nextToken, 'report_task_execution_result', {
+      ...reference,
+      body: 'Resultat de l’execució',
+    });
+    expect(report.isError, report.content[0]?.text).toBeUndefined();
+    expect(
+      await taskTool(nextToken, 'report_task_execution_result', {
+        ...reference,
+        body: 'Reintent del mateix resultat',
+      }),
+    ).toEqual(report);
+    const comments = await api('GET', `/tasks/${taskId}/comments`);
+    expect(comments.json()).toMatchObject([{ body: 'Resultat de l’execució' }]);
+    expect((await api('GET', `/tasks/${taskId}`)).json()).toMatchObject({
+      status: 'inbox',
+      ai_mode: 'manual',
+      needs_attention: true,
+    });
+    const history = await api('GET', `/tasks/${taskId}/activity`);
+    expect(history.body).toContain('ai_execution_result');
+    expect(history.body).not.toContain('Resultat de l’execució');
+
+    const stop = { name, arguments: params.arguments, delivery: { mode: 'webhook', url } };
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const unsubscribed = await mcp(nextToken, 'events/unsubscribe', stop);
+      expect(mcpValue(unsubscribed.body).result).toEqual({});
+    }
+    expect((await taskTool(nextToken, 'get_task_execution_context', reference)).isError).toBe(true);
+  } finally {
+    mockCallback.mockRestore();
+  }
 });
 
 it('mostra l’estat real del codi i de la sessió d’una autorització OAuth', async () => {

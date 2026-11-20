@@ -589,6 +589,56 @@ export interface SyncOpIds {
   result: string;
 }
 
+export interface TaskAiExecutions {
+  attempts: Generated<number>;
+  available_at: string;
+  claim_until: string | null;
+  connection_id: string;
+  created_at: string;
+  id: string;
+  method: string;
+  oauth_session_id: string;
+  result_comment_id: string | null;
+  retry_at: string | null;
+  scope_id: string;
+  session_url: string | null;
+  settings_revision: string;
+  status: string;
+  task_id: string;
+  user_id: string;
+}
+
+export interface TaskAiRequests {
+  execution_id: string;
+  id: string;
+}
+
+export interface TaskAiSettings {
+  connection_id: string | null;
+  enabled: number;
+  method: string;
+  revision: string;
+  routine_id: string | null;
+  routine_token_enc: string | null;
+  scope_id: string;
+  subscription_id: string | null;
+  user_id: string;
+}
+
+export interface TaskAiSubscriptions {
+  callback_enc: string;
+  connection_id: string;
+  created_at: string;
+  expires_at: string;
+  id: string;
+  oauth_session_id: string;
+  previous_secret_enc: string | null;
+  rotated_at: string | null;
+  scope_id: string;
+  secret_enc: string;
+  user_id: string;
+}
+
 export interface TaskAssignees {
   assigned_at: string;
   task_id: string;
@@ -790,6 +840,10 @@ export interface DB {
   shares: Shares;
   subtasks: Subtasks;
   sync_op_ids: SyncOpIds;
+  task_ai_executions: TaskAiExecutions;
+  task_ai_requests: TaskAiRequests;
+  task_ai_settings: TaskAiSettings;
+  task_ai_subscriptions: TaskAiSubscriptions;
   task_assignees: TaskAssignees;
   task_labels: TaskLabels;
   task_leases: TaskLeases;

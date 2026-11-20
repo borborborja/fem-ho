@@ -11,6 +11,7 @@ import { buildApp } from './app.js';
 import { ensureInstanceSecret } from './config/secret.js';
 import { buildDavServer } from './dav/index.js';
 import { startScheduler } from './jobs/scheduler.js';
+import { startTaskAiWorker } from './jobs/task-ai.js';
 import { loadConfig } from './config.js';
 import { connect } from './db/connection.js';
 import { parseDatabaseUrl } from './db/dialect.js';
@@ -116,12 +117,17 @@ async function main(): Promise<void> {
       else app.log.warn({ err: error }, message);
     },
   });
+  const stopTaskAi = startTaskAiWorker(connection, secret, () => {
+    app.log.warn("No s'ha pogut processar la cua de tasques amb IA");
+  });
 
   for (const signal of ['SIGTERM', 'SIGINT'] as const) {
     process.once(signal, () => {
       app.log.info({ signal }, 'Tancant');
       scheduler.stop();
+      const aiStopped = stopTaskAi();
       void new Promise<void>((resolve) => dav.close(() => resolve()))
+        .then(() => aiStopped)
         .then(() => app.close())
         .then(() => connection.close())
         .then(() => process.exit(0));

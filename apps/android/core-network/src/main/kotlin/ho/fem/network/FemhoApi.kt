@@ -1008,6 +1008,45 @@ class FemhoApi(
 
     suspend fun aiStatus(): Map<String, Any> = legacyObject("GET", "/api/v1/ai/status")
 
+    suspend fun aiTaskSettings(): List<ho.fem.model.AiTaskSettings> =
+        get<ho.fem.model.AiTaskSettingsEnvelope>("/api/v1/ai/task-settings").data
+
+    suspend fun aiTaskConnections(scopeId: String): ho.fem.model.AiTaskConnections =
+        get("/api/v1/ai/task-settings/$scopeId/connections")
+
+    suspend fun saveAiTaskSettings(
+        settings: ho.fem.model.AiTaskSettings,
+        previous: ho.fem.model.AiTaskSettings,
+        routineToken: String?,
+        removeRoutineToken: Boolean,
+    ) {
+        val body = buildMap<String, Any?> {
+            put("enabled", settings.enabled)
+            put("method", settings.method.wire)
+            when (settings.method) {
+                ho.fem.model.AiTaskMethod.COPY -> Unit
+                ho.fem.model.AiTaskMethod.MCP_EVENTS -> {
+                    if (settings.subscriptionId != previous.subscriptionId) put("subscription_id", settings.subscriptionId)
+                }
+                ho.fem.model.AiTaskMethod.CLAUDE_ROUTINE -> {
+                    if (settings.routineId != previous.routineId) put("routine_id", settings.routineId)
+                    if (settings.connectionId != previous.connectionId) put("connection_id", settings.connectionId)
+                    if (removeRoutineToken || routineToken != null) put("routine_token", routineToken)
+                }
+            }
+        }
+        raw("PUT", "/api/v1/ai/task-settings/${settings.scopeId}", encode(body), authenticated = true)
+    }
+
+    suspend fun aiTaskContext(taskId: String): String =
+        get<ho.fem.model.AiTaskContext>("/api/v1/tasks/$taskId/ai-context").text
+
+    suspend fun aiExecutions(taskId: String): List<ho.fem.model.AiExecution> =
+        get<ho.fem.model.AiExecutionsEnvelope>("/api/v1/tasks/$taskId/ai-executions").data
+
+    suspend fun sendTaskToAi(taskId: String, executionId: String): ho.fem.model.AiExecution =
+        post("/api/v1/tasks/$taskId/ai-executions", mapOf("id" to executionId))
+
     suspend fun takeOverTask(taskId: String, status: String): Task =
         post("/api/v1/tasks/$taskId/take-over", mapOf("status" to status))
 

@@ -12,7 +12,7 @@ import { useTimeCompletion } from '../board/useTimeCompletion.js';
  * comentari—, que es desen soles perquè no formen part del formulari.
  */
 
-import { useEffectEvent, useLayoutEffect, useState } from 'react';
+import { useEffect, useEffectEvent, useLayoutEffect, useState } from 'react';
 import {
   dateTime,
   getLocale,
@@ -20,13 +20,16 @@ import {
   shortTime,
   SOURCES,
   t,
+  type operations,
   type TaskStatus,
 } from '@fem-ho/contracts';
 import { v7 as uuidv7 } from 'uuid';
 import { ActivityTimeline, ChecklistRow, EmptyState } from '@fem-ho/design-system/femho';
 import { api, failureText } from '../app/api.js';
 import { Attachments } from '../app/Attachments.js';
+import { taskAiMethodLabel, taskAiStatusLabel, type TaskAiExecution } from '../app/task-ai.js';
 import { McpSourceBadge } from '../board/McpSourceBadge.js';
+import { TaskAiAction } from '../board/TaskAiAction.js';
 import { useSessionData } from '../app/session.js';
 import { useApi, useMutation } from '../app/useApi.js';
 import type {
@@ -70,7 +73,43 @@ const VERBS = [
   'released',
   'token_created',
   'token_revoked',
+  'ai_execution_requested',
+  'ai_execution_updated',
+  'ai_execution_result',
 ] as const;
+
+function executionActivity(entry: ActivityEntry, owned: TaskAiExecution[]) {
+  if (!entry.verb.startsWith('ai_execution_')) return {};
+  const id = entry.changes?.execution_id?.to;
+  const method = entry.changes?.method?.to;
+  const status = entry.changes?.status?.to;
+  if (typeof id !== 'string' || (method !== 'mcp_events' && method !== 'claude_routine')) return {};
+  const execution = owned.find((item) => item.id === id);
+  const sessionUrl = status === 'delivered' ? execution?.session_url : null;
+  const retryAt = status === 'failed' ? execution?.retry_at : null;
+  return {
+    changes: null,
+    message:
+      entry.verb === 'ai_execution_result' || typeof status !== 'string'
+        ? undefined
+        : taskAiStatusLabel(status, method),
+    details: (
+      <div style={{ fontSize: 12, color: 'var(--ink-soft)', overflowWrap: 'anywhere' }}>
+        {taskAiMethodLabel(method)}
+        {' · '}
+        <code title={id}>{id.slice(-8)}</code>
+        {sessionUrl ? (
+          <a href={sessionUrl} target="_blank" rel="noreferrer" style={{ marginInlineStart: 8 }}>
+            {t('ai.tasks.openSession')}
+          </a>
+        ) : null}
+        {retryAt ? (
+          <div>{t('ai.tasks.retryAt', { when: dateTime(getLocale(), new Date(retryAt)) })}</div>
+        ) : null}
+      </div>
+    ),
+  };
+}
 
 export interface TaskModalProps {
   /** Editar una tasca que ja hi és. Excloent amb `create`. */
@@ -163,6 +202,43 @@ export function TaskModal({
   const activity = useApi<{ data: ActivityEntry[] }>(
     creating ? null : `/api/v1/tasks/${taskId ?? ''}/activity`,
   );
+  const executions = useApi<
+    operations['listTaskAiExecutions']['responses'][200]['content']['application/json']
+  >(taskId === undefined ? null : `/api/v1/tasks/${taskId}/ai-executions`);
+  const refreshExecutions = useEffectEvent(() => {
+    executions.reload();
+    activity.reload();
+    comments.reload();
+  });
+  const latestExecution = executions.data?.data[0];
+  const latestId = latestExecution?.id;
+  const latestRequestedAt = activity.data?.data.find(
+    (entry) =>
+      entry.verb === 'ai_execution_requested' && entry.changes?.execution_id?.to === latestId,
+  )?.created_at;
+  const waitingForAi =
+    latestExecution?.status === 'queued' ||
+    latestExecution?.status === 'sending' ||
+    ((latestExecution?.status === 'delivered' || latestExecution?.status === 'uncertain') &&
+      latestExecution.result_comment_id === null);
+  useEffect(() => {
+    if (!waitingForAi) return undefined;
+    // Un connector que només llegeix pot lliurar l'avís i no tornar cap comentari.
+    const followWindow = 10 * 60 * 1000;
+    const requestedAt = Date.parse(latestRequestedAt ?? '');
+    const remaining = Number.isFinite(requestedAt)
+      ? Math.min(followWindow, requestedAt + followWindow - Date.now())
+      : followWindow;
+    if (remaining <= 0) return undefined;
+    const interval = window.setInterval(() => {
+      if (!document.hidden && navigator.onLine) refreshExecutions();
+    }, 5000);
+    const stop = window.setTimeout(() => window.clearInterval(interval), remaining);
+    return () => {
+      window.clearTimeout(stop);
+      window.clearInterval(interval);
+    };
+  }, [waitingForAi, latestId, latestRequestedAt]);
 
   const [edits, setEdits] = useState<Partial<Draft>>({});
   const [newTaskId] = useState(() => uuidv7());
@@ -389,6 +465,16 @@ export function TaskModal({
                 {creating ? t('task.new') : t('task.edit')}
               </div>
               <McpSourceBadge activity={data?.mcp_activity} />
+              {data === undefined ? null : (
+                <TaskAiAction
+                  taskId={data.id}
+                  scopeId={data.scope_id}
+                  onDispatched={() => {
+                    executions.reload();
+                    activity.reload();
+                  }}
+                />
+              )}
             </div>
 
             <input
@@ -1253,6 +1339,7 @@ export function TaskModal({
                         label: t(`activity.source.${source ?? 'unknown'}`),
                         origin: source === 'mcp' ? (entry.mcp_origin ?? null) : null,
                       },
+                      ...executionActivity(entry, executions.data?.data ?? []),
                     };
                   })}
                   filter={activityFilter}

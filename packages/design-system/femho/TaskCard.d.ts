@@ -45,6 +45,8 @@ export interface TaskCardProps extends React.HTMLAttributes<HTMLDivElement> {
   sourceIcon?: React.ReactNode;
   /** Distintiu interactiu al costat del cos que obre la tasca. */
   sourceBadge?: React.ReactNode;
+  /** Accions interactives que queden fora del botó que obre la fitxa. */
+  taskActions?: React.ReactNode;
   /** Inicial de la persona assignada, en un cercle de 18px. */
   assigneeInitials?: string | undefined;
   /** Hora, si la tasca en té. Normalment no en té (docs/01 §4). */

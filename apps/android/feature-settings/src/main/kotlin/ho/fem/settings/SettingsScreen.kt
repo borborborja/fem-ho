@@ -256,6 +256,7 @@ data class SettingsTabs(
     val shares: String,
     val profile: String,
     val admin: String,
+    val aiTasks: String = "",
 )
 
 data class SettingsEmptyStates(
@@ -365,6 +366,7 @@ fun SettingsScreen(
     onDeleteAdminUser: (String) -> Unit = {},
     onWipeInstance: (String, () -> Unit) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
+    aiTasksContent: @Composable () -> Unit = {},
 ) {
     var selectedTab by remember { mutableStateOf("general") }
 
@@ -399,10 +401,11 @@ fun SettingsScreen(
             "mail" to labels.tabs.mail,
             "mcp" to labels.tabs.mcp,
             "ai" to labels.tabs.ai,
+            "ai-tasks" to labels.tabs.aiTasks,
             "shares" to labels.tabs.shares,
             "profile" to labels.tabs.profile,
             "admin" to labels.tabs.admin,
-        )
+        ).filter { (_, label) -> label.isNotEmpty() }
 
         Row(
             modifier = Modifier
@@ -506,6 +509,7 @@ fun SettingsScreen(
                     onDeleteMailRule = onDeleteMailRule,
                 )
                 "mcp" -> mcpContent()
+                "ai-tasks" -> aiTasksContent()
                 "ai" -> AiTab(
                     labels = labels,
                     scopes = scopes,

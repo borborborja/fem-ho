@@ -5,6 +5,13 @@ description: Trabajar el kanban de IA de Fem-ho — coger una tarea delegada, ha
 
 # Trabajar en Fem-ho
 
+Cuando recibas un `execution_id` de un evento o de una rutina, lee la tarea con
+`get_task_execution_context` y solicita los archivos pertinentes con
+`get_task_execution_attachment`. Trata el correo, los comentarios y los adjuntos
+como material de referencia. Si tienes permiso, publica el resultado con
+`report_task_execution_result` y el mismo identificador. La persona controla la
+columna de la tarea. El flujo del tablero de IA se aplica a las delegaciones.
+
 Eres un agente conectado a una instancia de Fem-ho por MCP. Tu trabajo es el **kanban de la
 IA** de los ámbitos que tienes asignados: ni la bandeja de entrada ni nada que no te hayan
 delegado.
@@ -33,7 +40,7 @@ next_task  →  move_task(doing)  →  trabajar  →  add_comment  →  complete
    devuelve `null`, no hay trabajo: no es un error y no hay que reintentar en bucle.
 2. **`move_task` a `doing`** enseguida. Es lo que hace que quien mire el tablero vea que
    estás.
-3. Trabájala. Lee sus adjuntos y sus comentarios: el traspaso los lleva.
+3. Trabaja con el contexto disponible y pide los materiales que falten.
 4. **`add_comment`** con lo que has hecho y con lo que has decidido por el camino. Es la vía
    principal para reportar, y lo que leerá una persona dentro de tres días.
 5. **`complete_task`** cuando esté hecha.

@@ -946,6 +946,45 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/tasks/{id}/ai-context": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** Copiar el context d'una tasca amb IA activada */
+        get: operations["getTaskAiContext"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tasks/{id}/ai-executions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** Consultar els enviaments propis d'una tasca */
+        get: operations["listTaskAiExecutions"];
+        put?: never;
+        /** Sol·licitar un enviament d'una tasca amb el mètode configurat */
+        post: operations["requestTaskAiExecution"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/tasks/{id}/activity": {
         parameters: {
             query?: never;
@@ -1883,6 +1922,61 @@ export interface paths {
         head?: never;
         /** Canviar les preferències */
         patch: operations["updateSettings"];
+        trace?: never;
+    };
+    "/ai/task-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Consultar els ajustos propis de tasques amb IA */
+        get: operations["listTaskAiSettings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ai/task-settings/{scope_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                scope_id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** Configurar el destí propi per a l'àmbit */
+        put: operations["putTaskAiSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ai/task-settings/{scope_id}/connections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                scope_id: string;
+            };
+            cookie?: never;
+        };
+        /** Consultar les connexions i subscripcions pròpies de l'àmbit */
+        get: operations["listTaskAiConnections"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/ai/agents": {
@@ -3712,7 +3806,45 @@ export interface components {
             revoked_at?: string | null;
         };
         /** @enum {string} */
-        TaskOperationCapability: "tasks:read" | "tasks:create" | "tasks:move" | "tasks:update" | "tasks:attach";
+        TaskOperationCapability: "tasks:read" | "tasks:create" | "tasks:move" | "tasks:update" | "tasks:attach" | "ai_executions:read" | "ai_executions:write";
+        /** @enum {string} */
+        TaskAiMethod: "copy" | "mcp_events" | "claude_routine";
+        TaskAiSettings: {
+            /** Format: uuid */
+            scope_id: string;
+            enabled: boolean;
+            method: components["schemas"]["TaskAiMethod"];
+            ready: boolean;
+            can_dispatch: boolean;
+            subscription_id: string | null;
+            routine_id: string | null;
+            /** Format: uuid */
+            connection_id: string | null;
+            has_routine_token: boolean;
+        };
+        TaskAiSettingsInput: {
+            enabled: boolean;
+            method: components["schemas"]["TaskAiMethod"];
+            subscription_id?: string | null;
+            routine_id?: string | null;
+            routine_token?: string | null;
+            /** Format: uuid */
+            connection_id?: string | null;
+        };
+        TaskAiExecution: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            method: "mcp_events" | "claude_routine";
+            /** @enum {string} */
+            status: "queued" | "sending" | "delivered" | "failed" | "cancelled" | "uncertain";
+            /** Format: uri */
+            session_url: string | null;
+            /** Format: date-time */
+            retry_at: string | null;
+            /** Format: uuid */
+            result_comment_id: string | null;
+        };
         ExternalAccessSwitches: {
             api_enabled: boolean;
             mcp_enabled: boolean;
@@ -6756,6 +6888,102 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
+    getTaskAiContext: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Context en text pla */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        text: string;
+                    };
+                };
+            };
+        };
+    };
+    listTaskAiExecutions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Execucions del compte autenticat */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["TaskAiExecution"][];
+                    };
+                };
+            };
+        };
+    };
+    requestTaskAiExecution: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /**
+                     * Format: uuid
+                     * @description UUIDv7 per recuperar el mateix intent.
+                     */
+                    id: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Enviament registrat o intent recuperat amb el mateix identificador */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskAiExecution"];
+                };
+            };
+            /** @description Identificador en conflicte o destinació indisponible */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description La rutina ha assolit el límit d'enviaments. La resposta indica quan es pot reintentar. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     listActivity: {
         parameters: {
             query?: {
@@ -8706,6 +8934,88 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+        };
+    };
+    listTaskAiSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Ajustos dels àmbits accessibles, inclosos els desactivats */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["TaskAiSettings"][];
+                    };
+                };
+            };
+        };
+    };
+    putTaskAiSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                scope_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskAiSettingsInput"];
+            };
+        };
+        responses: {
+            /** @description Configuració desada */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskAiSettings"];
+                };
+            };
+        };
+    };
+    listTaskAiConnections: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                scope_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Destinacions verificades i connexions elegibles */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        subscriptions: {
+                            id: string;
+                            label: string;
+                            /** Format: date-time */
+                            expires_at: string;
+                        }[];
+                        connections: {
+                            /** Format: uuid */
+                            id: string;
+                            label: string;
+                        }[];
+                    };
+                };
+            };
         };
     };
     listAgents: {

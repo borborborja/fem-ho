@@ -142,10 +142,10 @@ afterAll(async () => {
 });
 
 describe('el catàleg', () => {
-  it('el catàleg inclou les vint eines documentades', () => {
+  it('el catàleg inclou les vint-i-tres eines documentades', () => {
     // "Una definició de tool ocupa entre 100 i 500 tokens" (docs/08 §3). La disciplina
     // de nombre és el que evita que la finestra de context se'n vagi en metadades.
-    expect(TOOLS).toHaveLength(20);
+    expect(TOOLS).toHaveLength(23);
     expect(() => assertCatalogue()).not.toThrow();
   });
 
@@ -183,6 +183,7 @@ describe('el catàleg', () => {
       'resume',
       'next',
       'release',
+      'report',
     ];
     for (const tool of TOOLS) {
       expect(verbs.some((verb) => tool.name === verb || tool.name.startsWith(`${verb}_`))).toBe(
@@ -255,9 +256,25 @@ describe('tools/list', () => {
     expect(tools).toHaveLength(16);
     expect(tools.map((tool) => tool.name)).toEqual(
       TOOLS.filter(
-        (tool) => !['next_task', 'release_task', 'ask_user', 'resume_task'].includes(tool.name),
+        (tool) =>
+          ![
+            'next_task',
+            'release_task',
+            'ask_user',
+            'resume_task',
+            'get_task_execution_context',
+            'get_task_execution_attachment',
+            'report_task_execution_result',
+          ].includes(tool.name),
       ).map((tool) => tool.name),
     );
+  });
+
+  it('reserva les execucions per a les connexions OAuth, encara que un PAT tingui les capacitats', async () => {
+    const auth = await credential(['ai_executions:read', 'ai_executions:write']);
+    const tools = result((await rpc('tools/list', {}, auth)).body);
+    expect(tools.tools).toEqual([expect.objectContaining({ name: 'whoami' })]);
+    expect(result((await rpc('events/list', {}, auth)).body).code).toBe(-32601);
   });
 
   it('cada tool porta les seves anotacions', async () => {

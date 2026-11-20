@@ -16,6 +16,7 @@
  */
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { auditedTransaction } from '../audit/audited-transaction.js';
 import type { Connection } from '../db/connection.js';
 import { PolicyError } from '../policy/errors.js';
@@ -27,6 +28,11 @@ import { listEventOccurrences } from '../services/events.js';
 import { updateChecklistItem } from '../services/checklists.js';
 import { listProjects, listScopes } from '../services/scopes.js';
 import { deliverTaskAttachment } from '../services/attachments.js';
+import {
+  getExecutionAttachment,
+  getExecutionContext,
+  reportExecutionResult,
+} from '../services/task-ai.js';
 import { getTaskContext, hasTaskContext } from '../services/task-context.js';
 import {
   createDeliveredTask,
@@ -36,6 +42,7 @@ import {
 } from '../services/task-delivery.js';
 import { completeTask, getTask, listTasks } from '../services/tasks.js';
 import { assertCatalogue, TOOLS, type ToolSpec } from './tools.js';
+import { isExecutionConnection, registerTaskAiEvents } from './task-ai-events.js';
 import type { Capability } from '../policy/capabilities.js';
 
 export interface McpDeps {
@@ -45,9 +52,10 @@ export interface McpDeps {
   dataDir: string;
   maxUploadBytes: number;
   reauthorize: () => Promise<Principal>;
+  instanceSecret: () => string;
 }
 
-type ToolResult = { content: { type: 'text'; text: string }[]; isError?: boolean };
+type ToolResult = CallToolResult;
 type ToolHandler = (
   args: Record<string, unknown>,
   origin: string | undefined,
@@ -86,6 +94,8 @@ export function buildMcpServer(deps: McpDeps): McpServer {
     list_events: ['events:read'],
     list_tasks: ['tasks:read'],
     get_task: ['tasks:read'],
+    get_task_execution_attachment: ['ai_executions:read'],
+    get_task_execution_context: ['ai_executions:read'],
     search_tasks: ['tasks:read'],
     get_briefing: ['scopes:read', 'projects:read', 'tasks:read'],
     create_task: ['tasks:create'],
@@ -93,6 +103,7 @@ export function buildMcpServer(deps: McpDeps): McpServer {
     move_task: ['tasks:move'],
     complete_task: ['tasks:move'],
     add_comment: ['comments:write'],
+    report_task_execution_result: ['ai_executions:read', 'ai_executions:write'],
     ask_user: ['comments:write', 'tasks:write'],
     resume_task: ['comments:write', 'tasks:write'],
     update_checklist_item: ['checklists:write'],
@@ -102,6 +113,7 @@ export function buildMcpServer(deps: McpDeps): McpServer {
 
   for (const spec of TOOLS) {
     const requiredCapabilities = required[spec.name];
+    const executionTool = requiredCapabilities?.includes('ai_executions:read') === true;
     const allowed =
       spec.name === 'add_task_attachment'
         ? hasCapability(deps.principal, 'tasks:attach') ||
@@ -110,6 +122,7 @@ export function buildMcpServer(deps: McpDeps): McpServer {
           ? hasTaskContext(deps.principal)
           : requiredCapabilities?.every((c) => hasCapability(deps.principal, c)) === true;
     if (!allowed) continue;
+    if (executionTool && !isExecutionConnection(deps.principal)) continue;
     if (
       ['next_task', 'release_task', 'ask_user', 'resume_task'].includes(spec.name) &&
       deps.principal.kind !== 'agent'
@@ -119,13 +132,55 @@ export function buildMcpServer(deps: McpDeps): McpServer {
     if (handler === undefined) {
       throw new Error(`La tool "${spec.name}" és al catàleg però no té implementació.`);
     }
-    registerOne(server, spec, handler);
+    registerOne(server, spec, handler, executionTool);
   }
+  registerTaskAiEvents(server, deps);
 
   return server;
 }
 
-function registerOne(server: McpServer, spec: ToolSpec, handler: ToolHandler): void {
+const IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
+
+function attachmentContent(
+  attachment: Awaited<ReturnType<typeof getExecutionAttachment>>,
+  executionId: string,
+  attachmentId: string,
+): ToolResult {
+  if (attachment.mime_type.toLowerCase().split(';')[0] === 'text/plain') {
+    try {
+      return {
+        content: [
+          { type: 'text', text: new TextDecoder('utf-8', { fatal: true }).decode(attachment.data) },
+        ],
+      };
+    } catch {
+      // Si no és UTF-8, un recurs conserva els bytes sense alterar el text.
+    }
+  }
+  const data = attachment.data.toString('base64');
+  if (IMAGE_MIME_TYPES.has(attachment.mime_type)) {
+    return { content: [{ type: 'image', mimeType: attachment.mime_type, data }] };
+  }
+  return {
+    content: [
+      {
+        type: 'resource',
+        resource: {
+          uri: `femho://executions/${executionId}/attachments/${attachmentId}`,
+          mimeType: attachment.mime_type,
+          blob: data,
+        },
+      },
+    ],
+  };
+}
+
+function registerOne(
+  server: McpServer,
+  spec: ToolSpec,
+  handler: ToolHandler,
+  executionTool: boolean,
+): void {
   server.registerTool(
     spec.name,
     {
@@ -145,6 +200,8 @@ function registerOne(server: McpServer, spec: ToolSpec, handler: ToolHandler): v
          * començat: dir-li a l'agent exactament què li falta.
          */
         if (error instanceof PolicyError) return fail(error.detail ?? error.title);
+        // L'error de disc en llegir un adjunt podria revelar el camí local al connector.
+        if (executionTool) return fail('The execution could not be read or updated.');
         return fail(`No s'ha pogut fer: ${String(error)}`);
       }
     }) as never,
@@ -226,6 +283,22 @@ function buildHandlers(deps: McpDeps): Record<string, ToolHandler> {
       ),
     get_task: async (args) => ok(await getTask(db, principal, String(args.task_id))),
 
+    get_task_execution_context: async ({ execution_id }) =>
+      ok(await getExecutionContext(db, principal, String(execution_id))),
+
+    get_task_execution_attachment: async ({ execution_id, attachment_id }) => {
+      const executionId = String(execution_id);
+      const attachmentId = String(attachment_id);
+      const attachment = await getExecutionAttachment(
+        db,
+        principal,
+        executionId,
+        attachmentId,
+        deps.dataDir,
+      );
+      return attachmentContent(attachment, executionId, attachmentId);
+    },
+
     get_task_context: async (args) =>
       ok(
         await getTaskContext(
@@ -293,6 +366,13 @@ function buildHandlers(deps: McpDeps): Record<string, ToolHandler> {
       ok(
         await write(origin, async (ctx) =>
           addComment(ctx, principal, String(args.task_id), String(args.body)),
+        ),
+      ),
+
+    report_task_execution_result: async ({ execution_id, body }, origin) =>
+      ok(
+        await write(origin, (ctx) =>
+          reportExecutionResult(ctx, principal, String(execution_id), String(body)),
         ),
       ),
 

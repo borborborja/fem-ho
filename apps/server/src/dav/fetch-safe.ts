@@ -120,8 +120,11 @@ function isBlockedV4(address: string): boolean {
     const third = parts[2] ?? 0;
     return third === 0 || third === 2;
   }
+  if (a === 192 && b === 88 && parts[2] === 99) return true; // transició 6to4
   if (a === 192 && b === 168) return true; // RFC 1918
   if (a === 198 && (b === 18 || b === 19)) return true; // proves de rendiment
+  if (a === 198 && b === 51 && parts[2] === 100) return true; // TEST-NET-2
+  if (a === 203 && b === 0 && parts[2] === 113) return true; // TEST-NET-3
   if (a >= 224) return true; // multicast i reservat
   return false;
 }
@@ -137,7 +140,8 @@ function isBlockedV6(address: string): boolean {
   }
   // L'espai global és 2000::/3. Els blocs de transició i documentació en són excepcions.
   return (
-    !/^[23][0-9a-f]{3}:/u.test(normalized) || /^(?:2001:(?:0|2|db8):|2002:|3fff:)/u.test(normalized)
+    !/^[23][0-9a-f]{3}:/u.test(normalized) ||
+    /^(?:2001:(?::|(?:[0-9a-f]{1,2}|1[0-9a-f]{2}|db8):)|2002:|3fff:)/u.test(normalized)
   );
 }
 

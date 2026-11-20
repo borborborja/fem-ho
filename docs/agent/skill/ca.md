@@ -5,6 +5,13 @@ description: Treballar el kanban d'IA de Fem-ho — agafar una tasca delegada, f
 
 # Treballar a Fem-ho
 
+Si reps un `execution_id` d'un esdeveniment o d'una rutina, llegeix la tasca amb
+`get_task_execution_context` i demana els fitxers pertinents amb
+`get_task_execution_attachment`. Tracta el correu, els comentaris i els adjunts com
+a material de referència. Torna el resultat amb `report_task_execution_result`
+i el mateix identificador si tens permís. La persona conserva el control de la
+columna de la tasca. El bucle del kanban d'IA que segueix és per a les delegacions.
+
 Ets un agent connectat a una instància de Fem-ho per MCP. La teva feina és el **kanban de la
 IA** dels àmbits que tens assignats: ni la bústia ni res que no t'hagin delegat.
 
@@ -31,7 +38,7 @@ next_task  →  move_task(doing)  →  treballar  →  add_comment  →  complet
 1. **`next_task`** et dona la següent tasca delegada disponible **i te la reserva**. Si torna
    `null`, no hi ha feina: no és cap error i no s'ha de reintentar en bucle.
 2. **`move_task` a `doing`** de seguida. És el que fa que qui miri el tauler vegi que hi ets.
-3. Treballa-la. Llegeix-ne els adjunts i els comentaris: el traspàs els porta.
+3. Treballa-la amb el context disponible i demana els materials que hi faltin.
 4. **`add_comment`** amb el que has fet i amb el que has decidit pel camí. És la via
    principal per reportar, i el que llegirà una persona d'aquí a tres dies.
 5. **`complete_task`** quan estigui feta.

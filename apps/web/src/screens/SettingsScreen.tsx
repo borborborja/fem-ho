@@ -50,6 +50,7 @@ import type {
 import { ErrorBanner } from './BoardScreen.js';
 import { GoogleMailPanel } from './GoogleMailPanel.js';
 import { ExternalAccessPanel, AgentTokenEditor } from './ExternalAccessPanel.js';
+import { TaskAiSettingsPanel } from './TaskAiSettingsPanel.js';
 
 /**
  * **El correu va en pestanya pròpia i no dins de «Calendaris».**
@@ -65,6 +66,7 @@ const TABS = [
   'mail',
   'mcp',
   'ai',
+  'aiTasks',
   'shares',
   'profile',
   'admin',
@@ -213,6 +215,7 @@ export function SettingsScreen() {
           {tab === 'mail' ? <MailTab /> : null}
           {tab === 'mcp' ? <ExternalAccessPanel onGoToAgent={() => setTab('ai')} /> : null}
           {tab === 'ai' ? <AiTab /> : null}
+          {tab === 'aiTasks' ? <TaskAiSettingsPanel onConnect={() => setTab('mcp')} /> : null}
           {tab === 'shares' ? <SharesTab /> : null}
           {tab === 'profile' ? <ProfileTab /> : null}
           {tab === 'admin' ? <AdminTab /> : null}
