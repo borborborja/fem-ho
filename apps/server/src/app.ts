@@ -64,7 +64,9 @@ export function buildApp(config: Config, options: BuildOptions = {}): FastifyIns
           const url = String(request.url ?? '');
           return {
             method: request.method,
-            url: /oauth|\/connect\/mcp|\/mcp\/authorization/.test(url) ? url.split('?')[0]! : url,
+            url: /oauth|\/connect\/mcp|\/mcp\/authorization|\/push\/subscriptions/.test(url)
+              ? url.split('?')[0]!
+              : url,
           };
         },
       },

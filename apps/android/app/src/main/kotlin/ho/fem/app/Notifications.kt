@@ -21,8 +21,8 @@ import java.util.concurrent.TimeUnit
  *
  * **UnifiedPush si hi ha distribuïdor, i consulta periòdica si no n'hi ha.** El document
  * ho diu així i la raó és pràctica: sense Google Play Services, la majoria de telèfons no
- * tenen cap distribuïdor instal·lat, i una app que només sap parlar per push no avisaria
- * mai. La consulta és pitjor —gasta bateria i té latència— però funciona a tot arreu.
+ * tenen cap distribuïdor instal·lat. La consulta recull els avisos d'activitat pendents
+ * mentre posa al dia el tauler.
  *
  * Web Push i UnifiedPush **comparteixen les RFC i el xifratge**, o sigui que el servidor
  * no distingeix: una taula de subscripcions i una crida d'enviament per als dos clients.
@@ -92,7 +92,10 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         val account = container.account() ?: return Result.success()
         val expected = inputData.getString(Notifications.SYNC_ACCOUNT)
         if (expected != null && expected != account.identity.key) return Result.success()
-        return runCatching { container.repository(account).refresh(emptyList(), null) }
+        return runCatching {
+            container.repository(account).refresh(emptyList(), null)
+            ActivityNotifications.sync(container, account)
+        }
             .fold(
                 // Un error de xarxa és `retry`, no `failure`: la feina segueix sent
                 // vàlida i el sistema la tornarà a provar amb espera creixent.

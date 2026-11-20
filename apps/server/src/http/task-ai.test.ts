@@ -7,7 +7,7 @@ import { hashToken } from '../auth/tokens.js';
 import { loadConfig } from '../config.js';
 import * as outbound from '../dav/fetch-safe.js';
 import { connect } from '../db/connection.js';
-import { migrateDown, migrateToLatest } from '../db/migrator.js';
+import { MIGRATIONS, migrateDown, migrateToLatest } from '../db/migrator.js';
 import { connectTestSchema, postgresUrl } from '../db/test-postgres.js';
 import { fireClaudeRoutine, processTaskAiExecutions } from '../jobs/task-ai.js';
 
@@ -62,7 +62,10 @@ beforeAll(async () => {
 
   // Les dades prèvies queden a lloc i cap àmbit rep un destí implícit.
   await migrateToLatest(db.db, { engine: db.engine });
-  expect(await migrateDown(db.db, db.engine)).toBe('027-task-ai');
+  for (const migration of [...MIGRATIONS].reverse()) {
+    expect(await migrateDown(db.db, db.engine)).toBe(migration.name);
+    if (migration.name === '027-task-ai') break;
+  }
   const password = await hashPassword('contrasenya-de-prova');
   await sql`INSERT INTO users (id, email, name, password_hash, kind, role, created_at, updated_at)
     VALUES (${adminId}, 'admin@example.com', 'Admin', ${password}, 'human', 'admin', ${now()}, ${now()}),

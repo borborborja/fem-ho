@@ -47,7 +47,7 @@ Un detall relacionat: **resubscriure's amb una clau diferent sense fer `unsubscr
 
 L'API del navegador per programar notificacions locals **mai es va arribar a implementar i està abandonada**. No existeix cap manera de programar una notificació al client web.
 
-Per tant **tota notificació web surt d'una feina programada al servidor** que consulta els recordatoris pendents. No és una tria d'arquitectura: és l'única possibilitat.
+Per tant **tota notificació web surt d'una feina del servidor**. El planificador consulta els recordatoris i els avisos d'activitat pendents de manera independent.
 
 La feina s'executa cada 30 segons, agafa els recordatoris amb `fired_at IS NULL` i el moment ja passat, els envia i marca `fired_at`. Ha de ser idempotent: si el procés cau entremig, no es pot enviar dues vegades.
 
@@ -80,7 +80,7 @@ L'API de comptador d'insígnia serveix per posar el nombre de l'Inbox a la icona
 
 Les dades sobre això són brutals: la gran majoria de peticions de permís de notificació es rebutgen, i alguns navegadors ja rebutguen directament la promesa si no ve d'un gest de l'usuari.
 
-**Fem-ho demana el permís en un sol moment: quan l'usuari desa el seu primer recordatori.** Mai en obrir l'app, mai a l'onboarding, mai amb un banner.
+Fem-ho demana permís en un gest explícit, quan la persona activa els avisos a Ajustos → Notificacions o desa el primer recordatori. Si es denega, els ajustos expliquen com recuperar-lo al sistema o al navegador.
 
 Si es denega, es diu clarament que els recordatoris arribaran per correu i com es pot canviar d'opinió des dels ajustos del navegador.
 
@@ -163,3 +163,46 @@ Cal fixar-lo explícitament:
 4. **Idempotència**: matar el procés a mig enviar el lot i comprovar que en reprendre no es duplica cap avís.
 5. **Detecció d'iOS**: en una pestanya de Safari, comprovar que es mostren les instruccions d'instal·lació i no un error.
 6. **Sense SMTP**: comprovar que la interfície ho diu i que no es perd cap recordatori en silenci.
+
+---
+
+## 12 · Avisos d'activitat de connexions externes
+
+A **Ajustos → Notificacions** es pot activar el navegador o l'app d'Android i
+triar, per àmbit, quins avisos rep aquest dispositiu. Cada dispositiu i cada
+compte fa la seva tria. Als àmbits compartits, cada membre pot activar els avisos
+de les tasques que pot llegir. Els quatre interruptors comencen desactivats.
+
+| Avís | Canvis que el generen |
+| --- | --- |
+| Tasques noves | Una connexió externa crea una tasca fora d'Inbox. |
+| Canvis d'estat | Una tasca canvia de columna amb destí fora d'Inbox, o es completa o reobre una subtasca fora d'Inbox. |
+| Activitat de la fitxa | Canvis als camps, les subtasques, les llistes, els comentaris o els adjunts d'una tasca fora d'Inbox. Inclou preguntes i resultats de les execucions d'IA. |
+| Entrades a Inbox | Una connexió externa crea una tasca a Inbox o hi mou una tasca existent. |
+
+Les fonts d'aquests avisos són MCP i les escriptures autenticades a l'API REST
+amb una credencial externa, incloses les claus personals. Es classifica el canvi
+confirmat a l'auditoria. Una reordenació, una escriptura sense canvis o la
+generació automàtica de la següent recurrència no dispara un avís. Entrar a
+Inbox només compta com a entrada. Les edicions dins d'Inbox queden fora. Si en
+una escriptura coincideixen estat i activitat, cada dispositiu rep el tipus
+activat amb prioritat per a l'estat. Una cascada queda agrupada en un sol avís.
+
+- **Web.** Activa el permís al navegador. Si es bloqueja, torna'l a donar als
+  permisos del lloc. A iPhone i iPad, obre Fem-ho des de la icona instal·lada a
+  la pantalla d'inici. Un clic sobre la notificació obre la fitxa.
+- **Android.** Els quatre tipus tenen un canal propi als ajustos del sistema.
+  Si tens un distribuïdor UnifiedPush compatible, Fem-ho hi registra la
+  subscripció. Sense distribuïdor, l'app consulta els avisos quan sincronitza.
+  Android pot ajornar la sincronització en segon pla. Tocar l'avís obre la fitxa.
+- **Prova de configuració.** Activa `Tasques noves` i `Entrades a Inbox` només
+  als dispositius que vulguis provar. Crea una tasca a Per fer i una a Inbox
+  amb el connector MCP. Comprova que cada tasca arriba pel seu tipus i obre la
+  seva fitxa. Desactiva un tipus i repeteix la prova.
+
+El servidor conserva els avisos pendents fins a 24 hores i comprova l'accés,
+l'àmbit, la sessió i la configuració abans de lliurar-los. Tant el push com la
+consulta d'Android usen el mateix identificador. L'avís mostra el títol de la
+tasca. El contingut dels comentaris, descripcions i adjunts es consulta a la
+fitxa. En tancar sessió, el client deixa de mostrar avisos del compte anterior.
+Els recordatoris tenen la seva pròpia subscripció i el seu canal.

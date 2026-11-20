@@ -116,6 +116,7 @@ export default defineConfig({
         ],
       },
       workbox: {
+        importScripts: ['/push-worker.js'],
         // El worker nou ha de prendre el control tot i que l'antic tingui pestanyes obertes.
         skipWaiting: true,
         clientsClaim: true,

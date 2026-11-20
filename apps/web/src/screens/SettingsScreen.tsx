@@ -51,6 +51,7 @@ import { ErrorBanner } from './BoardScreen.js';
 import { GoogleMailPanel } from './GoogleMailPanel.js';
 import { ExternalAccessPanel, AgentTokenEditor } from './ExternalAccessPanel.js';
 import { TaskAiSettingsPanel } from './TaskAiSettingsPanel.js';
+import { NotificationSettingsPanel } from './NotificationSettingsPanel.js';
 
 /**
  * **El correu va en pestanya pròpia i no dins de «Calendaris».**
@@ -61,6 +62,7 @@ import { TaskAiSettingsPanel } from './TaskAiSettingsPanel.js';
  */
 const TABS = [
   'general',
+  'notifications',
   'scopes',
   'calendars',
   'mail',
@@ -203,13 +205,14 @@ export function SettingsScreen() {
                 ...(mobile ? { flexShrink: 0, whiteSpace: 'nowrap' as const } : {}),
               }}
             >
-              {t(`settings.tab.${key}`)}
+              {key === 'notifications' ? t('notify.activity.heading') : t(`settings.tab.${key}`)}
             </button>
           ))}
         </nav>
 
         <section>
           {tab === 'general' ? <GeneralTab /> : null}
+          {tab === 'notifications' ? <NotificationSettingsPanel /> : null}
           {tab === 'scopes' ? <ScopesTab /> : null}
           {tab === 'calendars' ? <CalendarsTab /> : null}
           {tab === 'mail' ? <MailTab /> : null}

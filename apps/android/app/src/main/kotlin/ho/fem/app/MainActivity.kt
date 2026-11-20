@@ -167,6 +167,17 @@ class MainActivity : ComponentActivity() {
         pending.value = intent
     }
 
+    override fun onStart() {
+        super.onStart()
+        val container = (application as FemhoApplication).container
+        lifecycleScope.launch {
+            val account = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { container.account() }
+            if (account != null && ActivityNotifications.needsSync(applicationContext, account)) {
+                Notifications.requestSync(applicationContext, account)
+            }
+        }
+    }
+
     /**
      * En sortir de l'app, els widgets es posen al dia.
      *
@@ -234,12 +245,17 @@ private fun Root(model: AppViewModel, pending: MutableState<Intent?>) {
      * va demanar fa mitja hora. La tasca es demana per identificador i no per objecte
      * perquè qui l'envia és un altre procés que no en té cap.
      */
-    LaunchedEffect(pending.value) {
+    LaunchedEffect(pending.value, session) {
         val intent = pending.value ?: return@LaunchedEffect
+        val notificationAccount = intent.getStringExtra(Route.EXTRA_NOTIFICATION_ACCOUNT)
+        if (notificationAccount != null && session is AppViewModel.Session.Checking) return@LaunchedEffect
         val destination = Route.screenOf(intent)
         route = if (destination == Screen.BOARD) destination.name else "${Screen.BOARD.name}/${destination.name}"
         requestedStatus = Route.statusOf(intent)
-        Route.taskOf(intent)?.let { model.openById(it) }
+        Route.taskOf(intent)?.let { id ->
+            if (notificationAccount == null) model.openById(id)
+            else if (session is AppViewModel.Session.Ready) model.openNotificationTask(id, notificationAccount)
+        }
         if (Route.quickAddOf(intent)) {
             requestedStatus = TaskStatus.INBOX
             model.requestQuickAdd(Route.draftOf(intent) ?: "")
@@ -2195,6 +2211,7 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
                 mcp = stringResource(R.string.settings_tab_mcp),
                 ai = stringResource(R.string.settings_tab_ai),
                 aiTasks = stringResource(R.string.settings_tab_aitasks),
+                notifications = stringResource(R.string.notify_activity_heading),
                 shares = stringResource(R.string.settings_tab_shares),
                 profile = stringResource(R.string.settings_tab_profile),
                 admin = stringResource(R.string.settings_tab_admin),
@@ -2418,6 +2435,7 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
         serverUrl = serverUrl,
         mcpContent = { McpSettingsHost(model, scopes, "$serverUrl/mcp") },
         aiTasksContent = { AiTaskSettingsHost(model, scopes) },
+        notificationsContent = { NotificationSettingsHost(model) },
         agents = agentsDetail,
         agentScopeAvailability = agentScopeAvailability,
         agentCredentials = agentCredentials,

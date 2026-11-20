@@ -865,6 +865,7 @@ async function completeSubtasks(ctx: AuditContext, taskId: string, scopeId: stri
       entityType: 'subtask',
       entityId: subtask.id,
       scopeId,
+      taskId,
       verb: 'cascade_complete',
       changes: { done: { from: false, to: true } },
     });

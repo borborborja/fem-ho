@@ -21,6 +21,7 @@ object Route {
     const val EXTRA_SCREEN = "ho.fem.screen"
     const val EXTRA_STATUS = "ho.fem.status"
     const val EXTRA_TASK = "ho.fem.task_id"
+    const val EXTRA_NOTIFICATION_ACCOUNT = "ho.fem.notification_account"
 
     /** Obre l'afegida ràpida amb el camp enfocat i, si escau, un text ja escrit. */
     const val EXTRA_QUICK_ADD = "ho.fem.quick_add"

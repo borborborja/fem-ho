@@ -7,6 +7,8 @@ import ho.fem.data.Container
 import ho.fem.data.Repository
 import ho.fem.data.TaskLists
 import ho.fem.data.normalizeServerUrl
+import ho.fem.model.ActivityNotificationDevice
+import ho.fem.model.ActivityNotificationKind
 import ho.fem.model.Agent
 import ho.fem.model.AgentDetail
 import ho.fem.model.AgentScopeAvailability
@@ -95,6 +97,9 @@ class AppViewModel(private val container: Container) : ViewModel() {
 
     private val _session = MutableStateFlow<Session>(Session.Checking)
     val session: StateFlow<Session> = _session.asStateFlow()
+
+    private val _notificationSettings = MutableStateFlow(NotificationSettings())
+    internal val notificationSettings = _notificationSettings.asStateFlow()
 
     /** Host i DER (base64) del certificat pendent de confirmar per empremta. */
     private var _pendingCertHost: String? = null
@@ -480,6 +485,7 @@ class AppViewModel(private val container: Container) : ViewModel() {
     private var activeAccount: ActiveAccount? = null
     private var authentication: Job? = null
     private var openTaskJob: Job? = null
+    private var openNotificationJob: Job? = null
     private var scopeModeJob: Job? = null
     private var sessionScope = CoroutineScope(viewModelScope.coroutineContext + Job().also { it.cancel() })
 
@@ -505,6 +511,7 @@ class AppViewModel(private val container: Container) : ViewModel() {
 
     private fun clearSessionData() {
         openTaskJob = null
+        openNotificationJob = null
         cardJobs.clear()
         savingCards.clear()
         _tasks.value = emptyList()
@@ -515,6 +522,7 @@ class AppViewModel(private val container: Container) : ViewModel() {
         _taskTypes.value = emptyList()
         _scopeSettings.value = emptyMap()
         _aiTaskSettings.value = null
+        _notificationSettings.value = NotificationSettings()
         aiExecutionRequests.clear()
         _aiExecutingTasks.value = emptySet()
         _pending.value = 0
@@ -827,6 +835,80 @@ class AppViewModel(private val container: Container) : ViewModel() {
         }
     }
 
+    internal data class NotificationSettings(
+        val device: ActivityNotificationDevice? = null,
+        val busy: Boolean = false,
+        val error: Int? = null,
+    )
+
+    internal fun loadNotificationSettings() {
+        val account = activeAccount ?: return
+        val current = _notificationSettings.value
+        if (current.busy) return
+        _notificationSettings.value = current.copy(busy = true, error = null)
+        sessionScope.launch {
+            try {
+                _notificationSettings.value = NotificationSettings(device = ActivityNotifications.settings(container, account))
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                _notificationSettings.value = current.copy(error = R.string.notify_activity_needsconnection)
+            }
+        }
+    }
+
+    internal fun enableNotifications(enabled: Boolean) {
+        updateNotificationSettings { account, device ->
+            try {
+                ActivityNotifications.setEnabled(container, account, enabled)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                if (enabled) throw error
+                Notifications.requestSync(container.appContext, account)
+                _notificationSettings.value = NotificationSettings(
+                    device = device.copy(enabled = false, subscribed = false),
+                    error = R.string.notify_activity_needsconnection,
+                )
+                null
+            }
+        }
+    }
+
+    internal fun setScopeNotification(scopeId: String, kind: ActivityNotificationKind, enabled: Boolean) {
+        updateNotificationSettings { account, device ->
+            val id = ActivityNotifications.deviceId(container.appContext, account)
+            val updated = container.api(account).setActivityNotificationScope(id, scopeId, kind, enabled)
+            device.copy(scopes = device.scopes.map { if (it.scopeId == scopeId) updated else it })
+        }
+    }
+
+    internal fun chooseNotificationDistributor(distributor: String) {
+        updateNotificationSettings { account, _ ->
+            ActivityNotifications.selectDistributor(container.appContext, account, distributor)
+            ActivityNotifications.settings(container, account)
+        }
+    }
+
+    private fun updateNotificationSettings(
+        action: suspend (ActiveAccount, ActivityNotificationDevice) -> ActivityNotificationDevice?,
+    ) {
+        val account = activeAccount ?: return
+        val current = _notificationSettings.value
+        val device = current.device ?: return
+        if (current.busy) return
+        _notificationSettings.value = current.copy(busy = true, error = null)
+        sessionScope.launch {
+            try {
+                action(account, device)?.let { _notificationSettings.value = NotificationSettings(device = it) }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                _notificationSettings.value = current.copy(error = R.string.notify_activity_savefailed)
+            }
+        }
+    }
+
     fun logout() = endSession(expired = false)
 
     private fun endSession(expired: Boolean) {
@@ -842,7 +924,11 @@ class AppViewModel(private val container: Container) : ViewModel() {
                 container.appContext.getSystemService(android.app.NotificationManager::class.java).cancelAll()
                 ho.fem.app.widget.FemhoWidgets.updateAll(container.appContext)
             }
-            if (account != null) container.logout(account, signedOut) else signedOut()
+            if (account == null) signedOut()
+            else {
+                withContext(Dispatchers.IO) { ActivityNotifications.deactivate(container.appContext, account) }
+                container.logout(account, signedOut)
+            }
         }
     }
 
@@ -883,6 +969,7 @@ class AppViewModel(private val container: Container) : ViewModel() {
         loadProfile()
         sessionScope.launch {
             runCatching { container.repository(sessionAccount).refresh(emptyList(), null) }
+            runCatching { ActivityNotifications.sync(container, sessionAccount) }
         }
         sessionScope.launch { runCatching { container.api(sessionAccount).pinnedChecklists() }.onSuccess { _pinned.value = it } }
     }
@@ -983,6 +1070,8 @@ class AppViewModel(private val container: Container) : ViewModel() {
 
     fun open(task: Task) {
         val sessionAccount = activeAccount ?: return
+        openNotificationJob?.cancel()
+        openNotificationJob = null
         openTaskJob?.cancel()
         clearTaskDetail()
         _openTask.value = task
@@ -1151,6 +1240,24 @@ class AppViewModel(private val container: Container) : ViewModel() {
     fun openById(id: String) {
         pendingOpen = id
         resolvePendingOpen()
+    }
+
+    /** Una notificació pot obrir una tasca fora del filtre actiu i ha de revalidar-ne l'accés. */
+    fun openNotificationTask(id: String, accountKey: String) {
+        val account = activeAccount?.takeIf { it.identity.key == accountKey } ?: return
+        openNotificationJob?.cancel()
+        openNotificationJob = sessionScope.launch {
+            try {
+                val task = container.api(account).getTask(id)
+                ensureActive()
+                openNotificationJob = null
+                open(task)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                _actionError.value = R.string.notify_activity_taskunavailable
+            }
+        }
     }
 
     private var pendingOpen: String? = null

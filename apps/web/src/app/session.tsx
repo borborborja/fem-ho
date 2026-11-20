@@ -33,6 +33,11 @@ import {
 import { isLocale, negotiate, setLocale, type Locale } from '@fem-ho/contracts';
 import { applyAccent, applyDefaults, applyTheme } from './theme.js';
 import {
+  clearBrowserPushForUser,
+  disableBrowserPushForUser,
+  watchBrowserPush,
+} from './notification-device.js';
+import {
   accountDatabase,
   isConnectionFailure,
   readSnapshot,
@@ -179,7 +184,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       // Un 401 vol dir sessió morta; qualsevol altra cosa és una fallada temporal i no
       // ha de fer fora ningú, però sense dades no hi ha res a pintar.
       if (epoch !== currentSessionEpoch()) return;
-      if (error instanceof ApiError && error.status === 401) setTokens(null);
+      if (error instanceof ApiError && error.status === 401) {
+        clearBrowserPushForUser(userId);
+        setTokens(null);
+      }
       applyDefaults();
       setState({ status: 'anonymous' });
     }
@@ -187,7 +195,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     applyDefaults();
-    onSessionExpired(() => {
+    onSessionExpired((userId) => {
+      clearBrowserPushForUser(userId);
       applyDefaults();
       setState({ status: 'anonymous' });
     });
@@ -201,6 +210,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       const active = currentTokens();
       if (saved?.user_id !== undefined && active?.user_id === saved.user_id) return;
       if (saved?.access_token === active?.access_token) return;
+      clearBrowserPushForUser(active?.user_id);
       setTokens(saved);
       if (saved === null) applyDefaults();
       setState({ status: saved === null ? 'anonymous' : 'loading' });
@@ -213,6 +223,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       window.removeEventListener('storage', changeAccount);
     };
   }, [load]);
+
+  const userId = state.status === 'ready' ? state.data.profile.id : undefined;
+  useEffect(() => (userId === undefined ? undefined : watchBrowserPush(userId)), [userId]);
 
   useEffect(() => {
     if (state.status !== 'ready' || currentTokens()?.user_id !== state.data.profile.id) return;
@@ -245,11 +258,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       logout: async () => {
         // El servidor ha de saber-ho per revocar la sessió; que la crida falli no ha
         // d'impedir sortir, perquè llavors no es podria sortir sense connexió.
+        const push = disableBrowserPushForUser(currentTokens()?.user_id);
         const revoke = api.post('/api/v1/auth/logout').catch(() => undefined);
         setTokens(null);
         applyDefaults();
         setState({ status: 'anonymous' });
-        await revoke;
+        await Promise.all([revoke, push]);
       },
       reload: load,
       refreshEntities: async () => {

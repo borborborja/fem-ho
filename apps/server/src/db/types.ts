@@ -441,6 +441,15 @@ export interface McpOauthUsedRefresh {
   session_id: string;
 }
 
+export interface NotificationDevices {
+  enabled: number;
+  id: string;
+  platform: string;
+  session_id: string;
+  subscription_id: string | null;
+  user_id: string;
+}
+
 export interface Projects {
   ai_description: string | null;
   ai_instructions: string | null;
@@ -456,6 +465,7 @@ export interface Projects {
 }
 
 export interface PushSubscriptions {
+  activity_only: Generated<number>;
   auth: string;
   created_at: string;
   endpoint: string;
@@ -587,6 +597,27 @@ export interface SyncOpIds {
   op_id: string;
   principal_key: string;
   result: string;
+}
+
+export interface TaskActivityNotifications {
+  attempts: Generated<number>;
+  available_at: string;
+  claim_token: string | null;
+  claim_until: string | null;
+  created_at: string;
+  device_id: string;
+  expires_at: string;
+  id: string;
+  kind: string;
+  push_finished: Generated<number>;
+  scope_id: string;
+  task_id: string;
+}
+
+export interface TaskActivityPreferences {
+  device_id: string;
+  kind: string;
+  scope_id: string;
 }
 
 export interface TaskAiExecutions {
@@ -827,6 +858,7 @@ export interface DB {
   mcp_oauth_requests: McpOauthRequests;
   mcp_oauth_sessions: McpOauthSessions;
   mcp_oauth_used_refresh: McpOauthUsedRefresh;
+  notification_devices: NotificationDevices;
   projects: Projects;
   push_subscriptions: PushSubscriptions;
   reminders: Reminders;
@@ -840,6 +872,8 @@ export interface DB {
   shares: Shares;
   subtasks: Subtasks;
   sync_op_ids: SyncOpIds;
+  task_activity_notifications: TaskActivityNotifications;
+  task_activity_preferences: TaskActivityPreferences;
   task_ai_executions: TaskAiExecutions;
   task_ai_requests: TaskAiRequests;
   task_ai_settings: TaskAiSettings;

@@ -27,6 +27,7 @@ import { openImapClient } from '../net/imap-mail-client.js';
 import { mailCredentials } from '../services/mail-credentials.js';
 import { pruneMailOAuth } from '../services/mail-oauth.js';
 import { pollMail, pruneMail } from './mail-poll.js';
+import { deliverTaskActivity } from './task-activity-notifications.js';
 import type { Principal } from '../policy/principal.js';
 import {
   ensureVapidKeys,
@@ -105,6 +106,18 @@ export async function tick(options: SchedulerOptions): Promise<TickResult> {
   }
 
   try {
+    await deliverTaskActivity(
+      options.connection,
+      options.now ?? (() => new Date().toISOString()),
+      vapidSubject(options.baseUrl),
+      options.send,
+    );
+  } catch {
+    result.errors += 1;
+    log("El lliurament d'avisos d'activitat ha fallat");
+  }
+
+  try {
     result.refreshed = await runRefreshes(options, principal, now);
     result.federated = await runFederationPulls(options, now);
 
@@ -179,12 +192,7 @@ async function runReminders(
   const keys = await ensureVapidKeys(db, now);
   const send = options.send ?? realSender;
 
-  // `mailto:` és el que l'RFC de VAPID demana com a subjecte, i alguns serveis de push
-  // rebutgen la petició si no hi és.
-  const subject =
-    options.baseUrl === undefined
-      ? 'mailto:femho@localhost'
-      : `mailto:femho@${new URL(options.baseUrl).hostname}`;
+  const subject = vapidSubject(options.baseUrl);
 
   return auditedTransaction(
     db,
@@ -217,6 +225,13 @@ async function runReminders(
       }),
     { engine: options.connection.engine, now },
   );
+}
+
+/** Algunes passarel·les rebutgen les peticions que no declaren un subjecte VAPID. */
+function vapidSubject(baseUrl: string | undefined): string {
+  return baseUrl === undefined
+    ? 'mailto:femho@localhost'
+    : `mailto:femho@${new URL(baseUrl).hostname}`;
 }
 
 /** L'idioma d'una persona. `ca` si la fila no hi és o porta res que no coneguem. */

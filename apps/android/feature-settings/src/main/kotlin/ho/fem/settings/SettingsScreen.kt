@@ -257,6 +257,7 @@ data class SettingsTabs(
     val profile: String,
     val admin: String,
     val aiTasks: String = "",
+    val notifications: String = "",
 )
 
 data class SettingsEmptyStates(
@@ -367,6 +368,7 @@ fun SettingsScreen(
     onWipeInstance: (String, () -> Unit) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
     aiTasksContent: @Composable () -> Unit = {},
+    notificationsContent: @Composable () -> Unit = {},
 ) {
     var selectedTab by remember { mutableStateOf("general") }
 
@@ -396,6 +398,7 @@ fun SettingsScreen(
 
         val tabs = listOf(
             "general" to labels.tabs.general,
+            "notifications" to labels.tabs.notifications,
             "scopes" to labels.tabs.scopes,
             "calendars" to labels.tabs.calendars,
             "mail" to labels.tabs.mail,
@@ -510,6 +513,7 @@ fun SettingsScreen(
                 )
                 "mcp" -> mcpContent()
                 "ai-tasks" -> aiTasksContent()
+                "notifications" -> notificationsContent()
                 "ai" -> AiTab(
                     labels = labels,
                     scopes = scopes,
