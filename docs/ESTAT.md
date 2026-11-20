@@ -7,7 +7,7 @@ Data de l'última verificació completa: **2026-11-19**.
 
 ---
 
-## Avisos d'activitat de connexions externes
+## Avisos d'activitat de connexions externes · 0.25.0
 
 El web i Android permeten triar els avisos per dispositiu i àmbit. Els canvis
 de connexions MCP i REST que generen avisos són les creacions, els canvis
