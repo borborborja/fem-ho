@@ -37,7 +37,7 @@ El camp de servidor:
 
 **TLS.** Molta gent l'autoallotja amb una CA pròpia o un certificat autofirmat. S'accepta afegir un certificat de confiança **explícitament**, amb una pantalla que ensenyi l'empremta i obligui a confirmar-la. Mai un `TrustManager` permissiu compilat a l'app.
 
-**Emmagatzematge.** URL, token d'accés i token de refresc van a l'emmagatzematge encriptat, amb la clau al Keystore. Verifica l'estat actual de les API de seguretat d'AndroidX en fer l'scaffold: la recomanada ha anat canviant.
+**Emmagatzematge.** La sessió xifrada amb el Keystore vincula el servidor, el compte i els tokens. En arrencar, el tauler del compte desat es pot obrir sense xarxa. Si queden tokens d'una versió que encara no vinculava el compte, l'app mostra el servidor desat i permet recuperar la sessió. Cal confirmar aquest servidor i tenir connexió per verificar-hi el compte abans d'obrir-ne el tauler.
 
 ---
 
@@ -71,7 +71,7 @@ Les quatre pestanyes del tauler obren la columna corresponent i mostren el títo
 El drag & drop lliure en un pager horitzontal és hostil en tàctil: el gest de moure competeix amb el de canviar de columna. A Android:
 
 - **Botons ràpids** a la targeta ("→ Per fer", "→ Fent"), com ja fa el prototip.
-- **Pulsació llarga** obre un full amb "Mou a…" i les quatre columnes.
+- **Pulsació llarga** obre les accions de la tasca. Permet editar-la, triar una altra columna amb «Mou a…» o esborrar-la després de confirmar-ho.
 - **Arrossegar per reordenar dins d'una columna**, un cop iniciat amb pulsació llarga, amb resposta hàptica.
 - **Lliscar** una targeta cap a la dreta la completa; cap a l'esquerra obre accions.
 

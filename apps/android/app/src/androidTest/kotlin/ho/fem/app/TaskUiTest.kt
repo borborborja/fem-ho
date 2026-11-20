@@ -11,11 +11,14 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -27,6 +30,7 @@ import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import ho.fem.designsystem.CardAddForm
 import ho.fem.designsystem.FemhoTheme
 import ho.fem.model.AiMode
 import ho.fem.model.QuickAddContext
@@ -39,7 +43,9 @@ import ho.fem.model.Task
 import ho.fem.model.TaskStatus
 import ho.fem.tasks.BoardLabels
 import ho.fem.tasks.BoardScreen
+import ho.fem.tasks.CardExtras
 import ho.fem.tasks.QuickAddField
+import ho.fem.tasks.TaskMenuLabels
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Rule
@@ -71,6 +77,14 @@ class TaskUiTest {
         lock = "Agent",
         attention = "Atenció",
         claim = "Reclama",
+    )
+    private val taskMenuLabels = TaskMenuLabels(
+        openActions = "Accions de la tasca",
+        edit = "Edita",
+        move = "Mou a…",
+        delete = "Esborra",
+        deleteConfirm = "Vols esborrar «{title}»?",
+        cancel = "Cancel·la",
     )
 
     @Test
@@ -211,5 +225,115 @@ class TaskUiTest {
             swipeLeft(startX = this.width * 0.80f, endX = this.width * 0.15f, durationMillis = 350)
         }
         compose.onNodeWithTag("board-column-todo").assertIsSelected()
+    }
+
+    @Test
+    fun taskActionsKeepCardTapAndChildControlsAndConfirmDeletion() {
+        val task = Task(id = "task", scopeId = "work", title = "Revisar pressupost", position = "a0")
+        val calls = mutableListOf<String>()
+        compose.setContent {
+            FemhoTheme {
+                BoardScreen(
+                    tasks = listOf(task),
+                    labels = boardLabels,
+                    onOpen = { calls += "open:${it.id}" },
+                    onMove = { moved, status -> calls += "move:${moved.id}:$status" },
+                    onToggle = {},
+                    extras = {
+                        CardExtras(
+                            onEdit = { calls += "edit-icon" },
+                            editLabel = "Edita la tasca",
+                            lists = emptyList(),
+                            expanded = false,
+                            toggleLabel = null,
+                            onToggleLists = {},
+                            addForm = CardAddForm(false, {}, "Afegeix", "", "", {}, {}),
+                        )
+                    },
+                    taskMenuLabels = taskMenuLabels,
+                    onDelete = { calls += "delete:${it.id}" },
+                )
+            }
+        }
+
+        val title = compose.onNodeWithText(task.title, useUnmergedTree = true)
+        val card = compose.onNodeWithText(task.title)
+        val menu = compose.onNodeWithTag("board-task-actions")
+        title.performTouchInput { click() }
+        compose.onNodeWithTag("card-edit").performTouchInput { click() }
+        compose.onNodeWithTag("card-advance").performTouchInput { click() }
+        menu.assertDoesNotExist()
+        compose.runOnIdle { assertEquals(listOf("open:task", "edit-icon", "move:task:TODO"), calls) }
+
+        title.performTouchInput { longClick() }
+        menu.assertIsDisplayed()
+        compose.onNodeWithTag("board-task-edit").performClick()
+        menu.assertDoesNotExist()
+        compose.runOnIdle { assertEquals(listOf("open:task", "edit-icon", "move:task:TODO", "open:task"), calls) }
+
+        assertEquals(taskMenuLabels.openActions, card.fetchSemanticsNode().config[SemanticsActions.OnLongClick].label)
+        card.performSemanticsAction(SemanticsActions.OnLongClick)
+        compose.onNodeWithTag("board-task-delete").performClick()
+        compose.onNodeWithText("Vols esborrar «Revisar pressupost»?").assertIsDisplayed()
+        compose.onNodeWithTag("board-task-delete-cancel").performClick()
+        compose.runOnIdle { assertFalse(calls.any { it.startsWith("delete:") }) }
+
+        // La tecla Tab surt del mode tàctil abans de demanar el focus de la targeta.
+        title.performTouchInput { longClick() }
+        menu.assertIsDisplayed()
+        compose.onNodeWithTag("board-task-delete").performClick()
+        compose.onNodeWithTag("board-task-delete-confirm").performClick()
+        compose.runOnIdle { assertEquals(listOf("delete:task"), calls.filter { it.startsWith("delete:") }) }
+    }
+
+    @Test
+    fun taskMoveMenuUsesCanonicalStatusesAndChecksTheLatestLock() {
+        val taskTitle = "Preparar reunió"
+        val task = Task(id = "task", scopeId = "work", title = taskTitle, position = "a0")
+        val tasks = mutableStateOf(listOf(task))
+        val moved = mutableListOf<TaskStatus>()
+        val locked = mutableListOf<String>()
+        compose.setContent {
+            FemhoTheme {
+                BoardScreen(
+                    tasks = tasks.value,
+                    labels = boardLabels,
+                    onOpen = {},
+                    onMove = { _, destination -> moved += destination },
+                    onToggle = {},
+                    onLocked = { locked += it.id },
+                    taskMenuLabels = taskMenuLabels,
+                )
+            }
+        }
+
+        val card = compose.onNodeWithText(task.title)
+        val move = compose.onNodeWithTag("board-task-move")
+        val dialog = compose.onNodeWithTag("board-task-move-dialog")
+        card.performSemanticsAction(SemanticsActions.OnLongClick)
+        move.performClick()
+        compose.onNodeWithTag("board-task-move-inbox").assertIsSelected().assertIsNotEnabled()
+        compose.onNodeWithTag("board-task-move-todo").assertIsDisplayed()
+        compose.onNodeWithTag("board-task-move-doing").assertIsDisplayed()
+        compose.onNodeWithTag("board-task-move-done").assertIsDisplayed()
+        compose.onNodeWithTag("board-task-move-cancel").performClick()
+        dialog.assertDoesNotExist()
+        compose.runOnIdle { assertEquals(emptyList<TaskStatus>(), moved) }
+
+        card.performSemanticsAction(SemanticsActions.OnLongClick)
+        move.performClick()
+        compose.onNodeWithTag("board-task-move-doing").performClick()
+        dialog.assertDoesNotExist()
+        compose.runOnIdle { assertEquals(listOf(TaskStatus.DOING), moved) }
+
+        card.performSemanticsAction(SemanticsActions.OnLongClick)
+        move.performClick()
+        compose.runOnIdle { tasks.value = listOf(task.copy(lockedUntil = "9999-12-31T23:59:59Z")) }
+        compose.onNodeWithTag("board-task-move-done").performClick()
+        dialog.assertDoesNotExist()
+        compose.runOnIdle {
+            assertEquals(listOf(TaskStatus.DOING), moved)
+            assertEquals(listOf(task.id), locked)
+        }
     }
 }

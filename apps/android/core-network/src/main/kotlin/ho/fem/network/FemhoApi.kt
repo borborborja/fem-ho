@@ -45,6 +45,9 @@ import ho.fem.model.TaskPage
 import ho.fem.model.TaskType
 import ho.fem.model.UserProfile
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -54,6 +57,7 @@ import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
@@ -85,8 +89,10 @@ class FemhoApi(
     private val client: OkHttpClient = defaultClient(),
 ) {
     /** Client que a més confia en el certificat que l'usuari ha confirmat per empremta. */
-    constructor(baseUrl: String, tokens: TokenStore, trustedCertDer: ByteArray?) :
-        this(baseUrl, tokens, defaultClient(trustedCertDer))
+    constructor(baseUrl: String, tokens: TokenStore, trustedCertDer: ByteArray?, followRedirects: Boolean = true) :
+        this(baseUrl, tokens, defaultClient(trustedCertDer).let { client ->
+            if (followRedirects) client else client.newBuilder().followRedirects(false).build()
+        })
 
     private val json = Json {
         ignoreUnknownKeys = true
@@ -95,6 +101,7 @@ class FemhoApi(
     }
     companion object {
         private val JSON_TYPE = "application/json; charset=utf-8".toMediaType()
+        private const val REFRESH_PATH = "/api/v1/auth/refresh"
 
         fun defaultClient(): OkHttpClient = OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)
@@ -135,7 +142,12 @@ class FemhoApi(
     }
 
     /** Un error de l'API amb el `detail` que el servidor dona en català (RFC 9457). */
-    class ApiException(val status: Int, val detail: String) : IOException(detail)
+    class ApiException(
+        val status: Int,
+        val detail: String,
+        val problemType: String? = null,
+        val problemInstance: String? = null,
+    ) : IOException(detail)
 
     private fun url(path: String): String = baseUrl.trimEnd('/') + path
 
@@ -147,9 +159,11 @@ class FemhoApi(
      * útil que qualsevol text que pugui posar l'app. Si el cos no és el que s'espera, es
      * torna buit i qui crida ensenya el seu missatge genèric.
      */
-    private fun detailOf(text: String): String = runCatching {
-        json.parseToJsonElement(text).jsonObject["detail"]?.jsonPrimitive?.content.orEmpty()
-    }.getOrDefault("")
+    private fun failure(status: Int, text: String): ApiException {
+        val problem = runCatching { json.parseToJsonElement(text).jsonObject }.getOrNull()
+        fun field(name: String) = (problem?.get(name) as? JsonPrimitive)?.contentOrNull
+        return ApiException(status, field("detail").orEmpty(), field("type"), field("instance"))
+    }
 
     private suspend fun raw(
         method: String,
@@ -175,13 +189,15 @@ class FemhoApi(
         var response = send(sentAccess)
         if (response.code == 401 && authenticated) {
             response.close()
-            if (!refresh(sentAccess)) throw ApiException(401, "")
+            val refreshed = refresh(sentAccess)
+            currentCoroutineContext().ensureActive()
+            if (!refreshed) throw ApiException(401, "")
             response = send(tokens.access() ?: throw ApiException(401, ""))
         }
 
         response.use {
             val text = it.body?.string().orEmpty()
-            if (!it.isSuccessful) throw ApiException(it.code, detailOf(text))
+            if (!it.isSuccessful) throw failure(it.code, text)
             text
         }
     }
@@ -196,21 +212,32 @@ class FemhoApi(
         val refreshToken = tokens.refresh() ?: return@withLock false
         if (sentAccess != tokens.access()) return@withLock true
 
-        return@withLock try {
-            val text = raw(
-                "POST",
-                "/api/v1/auth/refresh",
-                encode(mapOf("refresh_token" to refreshToken)),
-                authenticated = false,
-            )
-            // Una resposta tardana no pot restaurar una sessió que ja s'ha tancat.
-            if (tokens.refresh() != refreshToken) return@withLock false
-            tokens.save(json.decodeFromString<AuthTokens>(text))
-            true
-        } catch (error: ApiException) {
-            if (error.status != 401) throw error
-            if (tokens.refresh() == refreshToken) tokens.clear()
-            false
+        currentCoroutineContext().ensureActive()
+        // Un cop enviat, el servidor pot consumir el testimoni anterior encara que
+        // la pantalla o el worker es cancel·li. Cal desar la rotació abans d'alliberar el pany.
+        withContext(NonCancellable + Dispatchers.IO) {
+            try {
+                val text = raw(
+                    "POST",
+                    REFRESH_PATH,
+                    encode(mapOf("refresh_token" to refreshToken)),
+                    authenticated = false,
+                )
+                // Una resposta tardana no pot restaurar una sessió que ja s'ha tancat.
+                if (tokens.refresh() != refreshToken) return@withContext false
+                tokens.save(json.decodeFromString<AuthTokens>(text))
+                true
+            } catch (error: ApiException) {
+                // Un 401 d'un intermediari o d'una instància temporalment sense base
+                // de dades no permet concloure que la sessió s'hagi revocat.
+                if (error.status != 401 ||
+                    error.problemType != "https://femho.app/errors/unauthenticated" ||
+                    error.problemInstance != REFRESH_PATH ||
+                    error.detail != "Invalid refresh token."
+                ) throw error
+                if (tokens.refresh() == refreshToken) tokens.clear()
+                false
+            }
         }
     }
 
@@ -499,7 +526,7 @@ class FemhoApi(
             .build()
         val response = client.newCall(request).execute()
         val text = response.body?.string().orEmpty()
-        if (!response.isSuccessful) throw ApiException(response.code, detailOf(text))
+        if (!response.isSuccessful) throw failure(response.code, text)
         return json.decodeFromString(text)
     }
 
@@ -514,7 +541,7 @@ class FemhoApi(
             .build()
         val response = client.newCall(request).execute()
         val text = response.body?.string().orEmpty()
-        if (!response.isSuccessful) throw ApiException(response.code, detailOf(text))
+        if (!response.isSuccessful) throw failure(response.code, text)
         return json.decodeFromString(text)
     }
 
@@ -530,7 +557,7 @@ class FemhoApi(
             .build()
         val response = client.newCall(request).execute()
         val bytes = response.body?.bytes() ?: throw ApiException(response.code, "No content")
-        if (!response.isSuccessful) throw ApiException(response.code, detailOf(response.body?.string().orEmpty()))
+        if (!response.isSuccessful) throw failure(response.code, response.body?.string().orEmpty())
         return bytes
     }
 

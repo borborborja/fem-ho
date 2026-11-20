@@ -25,8 +25,8 @@ android {
         applicationId = "ho.fem"
         minSdk = 26
         targetSdk = 36
-        versionCode = 25
-        versionName = "0.20.2"
+        versionCode = 26
+        versionName = "0.20.3"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

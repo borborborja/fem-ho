@@ -55,9 +55,36 @@ class Container(context: Context) {
                 .build())
         }
 
-    fun account(baseUrl: String? = null): ActiveAccount? = runCatching {
-        sessions.active()?.takeIf { baseUrl == null || it.identity.serverUrl == normalizeServerUrl(baseUrl) }
-    }.getOrNull()
+    fun account(): ActiveAccount? = runCatching(sessions::active).getOrNull()
+
+    /** En obrir l'app, una fallada del Keystore és diferent de no tenir cap sessió. */
+    suspend fun restoreAccount(): ActiveAccount? = withContext(Dispatchers.IO) { sessions.active() }
+
+    suspend fun hasLegacySession(): Boolean = withContext(Dispatchers.IO) { sessions.legacyTokenStore() != null }
+
+    suspend fun recoverLegacySession(serverUrl: String): ActiveAccount? = sessionChangeLock.withLock {
+        withContext(Dispatchers.IO) {
+            sessions.active()?.let { return@withContext it }
+            val legacy = sessions.legacyTokenStore() ?: return@withContext null
+            val base = normalizeServerUrl(serverUrl)
+            check(settings.serverUrl.first()?.let(::normalizeServerUrl) == base)
+            java.net.URI(base).host?.let { settings.trustedCert(it) }
+
+            // El client antic només desava els testimonis i el seu servidor. Confirma
+            // la identitat al mateix servidor abans d'obrir una base de dades per compte.
+            val user = try {
+                client(base, legacy, followRedirects = false).profile()
+            } catch (error: FemhoApi.ApiException) {
+                if (error.status == 401 && legacy.refresh() == null) return@withContext null
+                throw error
+            }
+            sessions.bindLegacy(AccountIdentity(base, user.id))
+        }
+    }
+
+    suspend fun discardLegacySession() = sessionChangeLock.withLock {
+        withContext(Dispatchers.IO) { sessions.legacyTokenStore()?.clear() }
+    }
 
     fun api(baseUrl: String): FemhoApi = client(baseUrl, InMemoryTokenStore())
 
@@ -92,13 +119,13 @@ class Container(context: Context) {
 
     fun local(account: ActiveAccount): LocalReads = LocalReads(workspace(account).database.dao())
 
-    private fun client(baseUrl: String, tokens: TokenStore): FemhoApi {
+    private fun client(baseUrl: String, tokens: TokenStore, followRedirects: Boolean = true): FemhoApi {
         val der = runCatching {
             val host = java.net.URI(baseUrl).host ?: return@runCatching null
             val b64 = settings.trustedCertCache[host] ?: return@runCatching null
             android.util.Base64.decode(b64, android.util.Base64.NO_WRAP)
         }.getOrNull()
-        return FemhoApi(baseUrl, tokens, der)
+        return FemhoApi(baseUrl, tokens, der, followRedirects)
     }
 
     companion object {

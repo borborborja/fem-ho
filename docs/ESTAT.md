@@ -7,6 +7,17 @@ Data de l'última verificació completa: **2026-11-19**.
 
 ---
 
+## Accions de tasca i recuperació de sessió · 0.20.3
+
+Una pulsació llarga sobre una targeta d'Android obre les accions d'editar,
+moure-la a una altra columna i esborrar-la amb confirmació. El tauler es pot
+obrir fora de línia amb el compte desat. Per recuperar una sessió antiga, cal
+confirmar l'adreça del servidor i tenir connexió per verificar-hi el compte.
+
+S'ha verificat la recuperació des de 0.19.0 i l'esborrat amb un servidor de proves
+en Android 14. Han passat les tretze proves instrumentades en Android 16 i
+s'ha comprovat el tauler fora de línia amb l'APK R8.
+
 ## Interfície compacta d'Android · 0.20.2
 
 La capçalera passa de Tasques a Calendari. Els informes de dedicació es consulten

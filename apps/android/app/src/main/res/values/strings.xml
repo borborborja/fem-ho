@@ -338,12 +338,16 @@
     <string name="login_forgot">Has oblidat la contrasenya?</string>
     <string name="login_insecure">Aquesta adreça no va xifrada. Qualsevol de la xarxa pot llegir el que hi passi.</string>
     <string name="login_password">Contrasenya</string>
+    <string name="login_recoversession">Recupera la sessió</string>
+    <string name="login_recoversessionprompt">Hem trobat una sessió desada. Recupera-la si reconeixes aquest servidor.</string>
     <string name="login_register">Fer-se un compte</string>
     <string name="login_server">Servidor</string>
     <string name="login_serverhint">L\'adreça del teu servidor de Fem-ho</string>
     <string name="login_servernewer">El servidor és més nou que aquesta app. Actualitza-la.</string>
     <string name="login_serverunreachable">No hi ha cap Fem-ho en aquesta adreça.</string>
     <string name="login_sessionexpired">La sessió ha caducat. Torna a entrar a Fem-ho.</string>
+    <string name="login_sessionrestorefailed">No s’ha pogut recuperar la sessió desada. Comprova la connexió i torna-ho a provar.</string>
+    <string name="login_signinwithpassword">Entra amb la contrasenya</string>
     <string name="login_submit">Entrar</string>
     <string name="login_subtitle">El gestor de tasques per a tu i la família</string>
     <string name="nav_add">Afegir</string>
@@ -862,6 +866,7 @@
     <string name="sync_synced">Sincronitzat</string>
     <string name="sync_title">Sincronització</string>
     <string name="sync_unknownoperation">Canvi pendent</string>
+    <string name="task_actions">Accions de la tasca</string>
     <string name="task_activity">Historial</string>
     <string name="task_addattachment">Adjuntar un fitxer</string>
     <string name="task_aiconversation">Conversa amb la IA</string>
@@ -893,6 +898,7 @@
     <string name="task_label_add">Posar aquesta etiqueta</string>
     <string name="task_label_remove">Treure aquesta etiqueta</string>
     <string name="task_labels">Etiquetes</string>
+    <string name="task_move">Mou a…</string>
     <string name="task_new">Nova tasca</string>
     <string name="task_newchecklist">+ Nova llista</string>
     <string name="task_newcomment">Escriu un comentari…</string>

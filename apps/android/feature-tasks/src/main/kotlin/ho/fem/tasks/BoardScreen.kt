@@ -1,7 +1,9 @@
 package ho.fem.tasks
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -14,20 +16,32 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PageSize
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -46,6 +60,7 @@ import ho.fem.designsystem.TaskCard
 import ho.fem.model.AiMode
 import ho.fem.model.Task
 import ho.fem.model.TaskStatus
+import java.time.Instant
 import kotlinx.coroutines.launch
 
 /**
@@ -72,6 +87,15 @@ data class BoardLabels(
     val claim: String,
 )
 
+data class TaskMenuLabels(
+    val openActions: String,
+    val edit: String,
+    val move: String,
+    val delete: String,
+    val deleteConfirm: String,
+    val cancel: String,
+)
+
 /**
  * El que la targeta ensenya per sota del títol: els blocs desplegables i el formulari
  * d'afegir-n'hi.
@@ -94,6 +118,12 @@ data class CardExtras(
 private val ORDER = listOf(TaskStatus.INBOX, TaskStatus.TODO, TaskStatus.DOING, TaskStatus.DONE)
 private val BoardMargin = 8.dp
 private val NextColumnPreview = 32.dp
+
+private enum class TaskDialog { Move, Delete }
+
+private fun Task.isLockedNow(): Boolean = lockedUntil?.let { until ->
+    runCatching { Instant.parse(until) }.getOrNull()?.isAfter(Instant.now()) == true
+} ?: false
 
 private object BoardPageSize : PageSize {
     override fun Density.calculateMainAxisPageSize(
@@ -133,6 +163,8 @@ fun BoardScreen(
     aiBoard: Boolean = false,
     requestedStatus: TaskStatus? = null,
     onStatusOpened: () -> Unit = {},
+    taskMenuLabels: TaskMenuLabels? = null,
+    onDelete: (Task) -> Unit = {},
 ) {
     val pager = rememberPagerState(pageCount = { ORDER.size })
     val scope = rememberCoroutineScope()
@@ -141,10 +173,38 @@ fun BoardScreen(
             task.status == TaskStatus.INBOX || (task.aiMode != AiMode.MANUAL) == aiBoard
         }.groupBy { it.status }
     }
+    var dialogTaskId by rememberSaveable(aiBoard) { mutableStateOf<String?>(null) }
+    var dialog by rememberSaveable(aiBoard) { mutableStateOf(TaskDialog.Move) }
+    val dialogTask = dialogTaskId?.let { id -> tasks.firstOrNull { it.id == id } }
+    val dismissDialog = { dialogTaskId = null }
     LaunchedEffect(requestedStatus) {
         requestedStatus?.let {
             pager.scrollToPage(ORDER.indexOf(it))
             onStatusOpened()
+        }
+    }
+
+    if (dialogTask != null && taskMenuLabels != null) {
+        when (dialog) {
+            TaskDialog.Move -> TaskMoveDialog(
+                task = dialogTask,
+                labels = taskMenuLabels,
+                columns = labels.columns,
+                onDismiss = dismissDialog,
+                onMove = { destination ->
+                    dismissDialog()
+                    if (dialogTask.isLockedNow()) onLocked(dialogTask) else onMove(dialogTask, destination)
+                },
+            )
+            TaskDialog.Delete -> TaskDeleteDialog(
+                task = dialogTask,
+                labels = taskMenuLabels,
+                onDismiss = dismissDialog,
+                onConfirm = {
+                    dismissDialog()
+                    onDelete(dialogTask)
+                },
+            )
         }
     }
 
@@ -226,46 +286,66 @@ fun BoardScreen(
                     } else {
                         items(ofColumn, key = { it.id }) { task ->
                             val extra = extras(task)
-                            // El pany de l'agent: locked_until al futur bloqueja la targeta
-                            val locked = task.lockedUntil?.let { until ->
-                                runCatching { java.time.Instant.parse(until) }
-                                    .getOrNull()?.isAfter(java.time.Instant.now()) ?: false
-                            } ?: false
-                            TaskCard(
-                                title = task.title,
-                                time = task.dueTime,
-                                checklistProgress = task.progress?.takeIf { it.total > 0 }
-                                    ?.let { "${it.done}/${it.total}" },
-                                done = task.status == TaskStatus.DONE,
-                                toggleLabel = labels.toggle,
-                                // Amb el pany, la casella no mou: mostra el motiu (el 409
-                                // que retornaria el servidor si ho intentéssim).
-                                onToggle = { if (locked) onLocked(task) else onToggle(task) },
-                                onOpen = { onOpen(task) },
-                                lockLabel = if (locked) labels.lock else null,
-                                attentionLabel = if (task.needsAttention) labels.attention else null,
-                                claimLabel = if (aiBoard) labels.claim else null,
-                                onClaim = if (aiBoard) ({ onClaim(task) }) else null,
-                                /**
-                                 * La fletxa **només fins a "Fent"**: a "Fent" i a "Fet" la
-                                 * barra és la casella d'estat, que és on acaba el recorregut.
-                                 * Amb el pany de l'agent, el moviment queda desactivat.
-                                 */
-                                onAdvance = if (locked) null else when (status) {
-                                    TaskStatus.INBOX -> ({ onMove(task, TaskStatus.TODO) })
-                                    TaskStatus.TODO -> ({ onMove(task, TaskStatus.DOING) })
-                                    else -> null
-                                },
-                                advanceLabel = labels.advance[status].orEmpty(),
-                                onEdit = extra?.onEdit,
-                                editLabel = extra?.editLabel.orEmpty(),
-                                lists = extra?.lists.orEmpty(),
-                                listsExpanded = extra?.expanded == true,
-                                listsToggleLabel = extra?.toggleLabel,
-                                onToggleLists = { extra?.onToggleLists?.invoke() },
-                                addForm = extra?.addForm,
-                                modifier = Modifier.testTag("board-task-${task.id}"),
-                            )
+                            val locked = task.isLockedNow()
+                            Box(Modifier.testTag("board-task-${task.id}")) {
+                                var actionsOpen by remember { mutableStateOf(false) }
+                                TaskCard(
+                                    title = task.title,
+                                    time = task.dueTime,
+                                    checklistProgress = task.progress?.takeIf { it.total > 0 }
+                                        ?.let { "${it.done}/${it.total}" },
+                                    done = task.status == TaskStatus.DONE,
+                                    toggleLabel = labels.toggle,
+                                    // Amb el pany, la casella mostra el motiu del bloqueig.
+                                    onToggle = { if (locked) onLocked(task) else onToggle(task) },
+                                    onOpen = { onOpen(task) },
+                                    lockLabel = if (locked) labels.lock else null,
+                                    attentionLabel = if (task.needsAttention) labels.attention else null,
+                                    claimLabel = if (aiBoard) labels.claim else null,
+                                    onClaim = if (aiBoard) ({ onClaim(task) }) else null,
+                                    // A "Fent" i a "Fet" la barra és la casella d'estat.
+                                    onAdvance = if (locked) null else when (status) {
+                                        TaskStatus.INBOX -> ({ onMove(task, TaskStatus.TODO) })
+                                        TaskStatus.TODO -> ({ onMove(task, TaskStatus.DOING) })
+                                        else -> null
+                                    },
+                                    advanceLabel = labels.advance[status].orEmpty(),
+                                    onEdit = extra?.onEdit,
+                                    editLabel = extra?.editLabel.orEmpty(),
+                                    lists = extra?.lists.orEmpty(),
+                                    listsExpanded = extra?.expanded == true,
+                                    listsToggleLabel = extra?.toggleLabel,
+                                    onToggleLists = { extra?.onToggleLists?.invoke() },
+                                    addForm = extra?.addForm,
+                                    onLongPress = taskMenuLabels?.let { { actionsOpen = true } },
+                                    longPressLabel = taskMenuLabels?.openActions,
+                                )
+                                if (taskMenuLabels != null) {
+                                    TaskActionsMenu(
+                                        expanded = actionsOpen,
+                                        labels = taskMenuLabels,
+                                        onDismiss = { actionsOpen = false },
+                                        onOpen = {
+                                            actionsOpen = false
+                                            onOpen(task)
+                                        },
+                                        onMove = {
+                                            actionsOpen = false
+                                            if (task.isLockedNow()) {
+                                                onLocked(task)
+                                            } else {
+                                                dialogTaskId = task.id
+                                                dialog = TaskDialog.Move
+                                            }
+                                        },
+                                        onDelete = {
+                                            actionsOpen = false
+                                            dialogTaskId = task.id
+                                            dialog = TaskDialog.Delete
+                                        },
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -274,4 +354,110 @@ fun BoardScreen(
             }
         }
     }
+}
+
+@Composable
+private fun TaskActionsMenu(
+    expanded: Boolean,
+    labels: TaskMenuLabels,
+    onDismiss: () -> Unit,
+    onOpen: () -> Unit,
+    onMove: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    DropdownMenu(
+        expanded = expanded,
+        onDismissRequest = onDismiss,
+        modifier = Modifier.testTag("board-task-actions"),
+        containerColor = Femho.colors.panelBg,
+        tonalElevation = 0.dp,
+        shadowElevation = 8.dp,
+        shape = RoundedCornerShape(FemhoShape.card),
+        border = BorderStroke(1.dp, Femho.colors.cardBorder),
+    ) {
+        DropdownMenuItem(
+            text = { Text(labels.edit, color = Femho.colors.ink) },
+            onClick = onOpen,
+            modifier = Modifier.testTag("board-task-edit"),
+        )
+        DropdownMenuItem(
+            text = { Text(labels.move, color = Femho.colors.ink) },
+            onClick = onMove,
+            modifier = Modifier.testTag("board-task-move"),
+        )
+        DropdownMenuItem(
+            text = { Text(labels.delete, color = Femho.colors.dangerText) },
+            onClick = onDelete,
+            modifier = Modifier.testTag("board-task-delete"),
+        )
+    }
+}
+
+@Composable
+private fun TaskMoveDialog(
+    task: Task,
+    labels: TaskMenuLabels,
+    columns: Map<TaskStatus, String>,
+    onDismiss: () -> Unit,
+    onMove: (TaskStatus) -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        modifier = Modifier.testTag("board-task-move-dialog"),
+        containerColor = Femho.colors.panelBg,
+        titleContentColor = Femho.colors.ink,
+        title = { Text(labels.move) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                for (status in ORDER) {
+                    val current = status == task.status
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                columns[status].orEmpty(),
+                                color = if (current) Femho.colors.inkSoft else Femho.colors.ink,
+                            )
+                        },
+                        onClick = { onMove(status) },
+                        enabled = !current,
+                        modifier = Modifier.testTag("board-task-move-${status.name.lowercase()}")
+                            .semantics { selected = current },
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss, modifier = Modifier.testTag("board-task-move-cancel")) {
+                Text(labels.cancel, color = Femho.colors.ink)
+            }
+        },
+    )
+}
+
+@Composable
+private fun TaskDeleteDialog(task: Task, labels: TaskMenuLabels, onDismiss: () -> Unit, onConfirm: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        modifier = Modifier.testTag("board-task-delete-dialog"),
+        containerColor = Femho.colors.panelBg,
+        titleContentColor = Femho.colors.ink,
+        textContentColor = Femho.colors.inkSoft,
+        title = { Text(labels.delete) },
+        text = {
+            Text(
+                labels.deleteConfirm.replace("{title}", task.title),
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm, modifier = Modifier.testTag("board-task-delete-confirm")) {
+                Text(labels.delete, color = Femho.colors.dangerText)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, modifier = Modifier.testTag("board-task-delete-cancel")) {
+                Text(labels.cancel, color = Femho.colors.ink)
+            }
+        },
+    )
 }
