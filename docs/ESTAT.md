@@ -7,6 +7,20 @@ Data de l'última verificació completa: **2026-11-19**.
 
 ---
 
+## Columna «Fet» a Android · 0.25.1
+
+La pestanya «Fet» compta i mostra les tasques acabades el dia seleccionat,
+segons el fus del perfil. El calendari obre l'històric i els controls «Netejar»
+i «Tot avui» comparteixen la preferència amb la web.
+
+Amb un servidor de proves, el mateix compte passa de 62 tasques a la versió
+anterior a 12 d'avui i 50 d'ahir. S'ha comprovat la neteja des de Chromium i
+la recuperació de la llista des de l'APK amb R8, així com la consulta sense
+connexió. Han passat 18 proves instrumentades a Android 14 i 9 de Chromium.
+S'ha revisat l'APK amb R8 a Android 16 amb lletra al 140 %.
+
+---
+
 ## Avisos d'activitat de connexions externes · 0.25.0
 
 El web i Android permeten triar els avisos per dispositiu i àmbit. Els canvis

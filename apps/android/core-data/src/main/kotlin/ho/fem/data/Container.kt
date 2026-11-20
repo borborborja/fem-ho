@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.room.Room
+import ho.fem.model.AuthSettingsEnvelope
 import ho.fem.model.AuthTokens
 import ho.fem.network.FemhoApi
 import ho.fem.network.InMemoryTokenStore
@@ -42,6 +43,7 @@ class Container(context: Context) {
     private class Workspace(val database: FemhoDatabase) {
         val syncLock = Mutex()
         val moveLock = Mutex()
+        val doneSettingsLock = Mutex()
     }
 
     private val workspaces = ConcurrentHashMap<String, Workspace>()
@@ -90,6 +92,20 @@ class Container(context: Context) {
 
     fun api(account: ActiveAccount): FemhoApi =
         client(account.identity.serverUrl, sessions.tokensFor(account))
+
+    suspend fun refreshUserSettings(account: ActiveAccount): AuthSettingsEnvelope =
+        workspace(account).doneSettingsLock.withLock {
+            api(account).settings().also { settings.cacheDoneClearedAt(account, it.settings.doneClearedAt) }
+        }
+
+    suspend fun setDoneClearedAt(account: ActiveAccount, value: String?) {
+        // L'escriptura i el refresc comparteixen el pany perquè un GET en vol no pugui
+        // restaurar a la memòria cau una neteja anterior a la que acaba de confirmar el PATCH.
+        workspace(account).doneSettingsLock.withLock {
+            val updated = api(account).setDoneClearedAt(value)
+            settings.cacheDoneClearedAt(account, updated.doneClearedAt)
+        }
+    }
 
     suspend fun authenticate(baseUrl: String, login: suspend (FemhoApi) -> AuthTokens): ActiveAccount =
         sessionChangeLock.withLock {
@@ -216,6 +232,15 @@ class Settings internal constructor(private val dataStore: DataStore<Preferences
         dataStore.edit {
             it[accountKey("profile_locale", account)] = locale
             it[accountKey("profile_timezone", account)] = timezone
+        }
+    }
+
+    fun doneClearedAt(account: ActiveAccount): Flow<String?> = read(accountKey("done_cleared_at", account))
+
+    internal suspend fun cacheDoneClearedAt(account: ActiveAccount, value: String?) {
+        val key = accountKey("done_cleared_at", account)
+        dataStore.edit { preferences ->
+            if (value == null) preferences.remove(key) else preferences[key] = value
         }
     }
 

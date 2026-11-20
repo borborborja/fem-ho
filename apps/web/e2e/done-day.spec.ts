@@ -173,3 +173,54 @@ test('una tasca importada a Fet apareix en el seu dia de finalització', async (
   await page.getByTestId(`day-${previous}`).click();
   await expect(done).toContainText('Dossier importat');
 });
+
+test.describe('fus del navegador diferent del perfil', () => {
+  test.use({ timezoneId: 'America/Los_Angeles' });
+
+  test('el recompte, la neteja i el calendari coincideixen amb el dia del perfil', async ({
+    page,
+  }) => {
+    await page.clock.setFixedTime(new Date('2025-11-19T23:15:00Z'));
+    await enterAsNew(page, { ...MEU, email: 'fetes-fus@example.com' });
+    const headers = { authorization: `Bearer ${await token(page)}` };
+    const profile = await page.request.patch('/api/v1/auth/me', {
+      headers,
+      data: { timezone: 'Europe/Madrid' },
+    });
+    expect(profile.ok()).toBe(true);
+    const settings = await page.request.patch('/api/v1/auth/settings', {
+      headers,
+      data: { done_cleared_at: '2025-11-19T23:10:00Z' },
+    });
+    expect(settings.ok()).toBe(true);
+    const context = await page.request.get('/api/v1/task-context', { headers });
+    const { scopes } = (await context.json()) as { scopes: { id: string }[] };
+    const scopeId = scopes[0]!.id;
+
+    for (const [title, completedAt] of [
+      ['Informe anterior', '2025-11-19T23:05:00Z'],
+      ['Informe posterior', '2025-11-19T23:12:00Z'],
+    ]) {
+      const task = await page.request.post('/api/v1/tasks', {
+        headers,
+        data: { scope_id: scopeId, title, status: 'done', completed_at: completedAt },
+      });
+      expect(task.status()).toBe(201);
+    }
+
+    await page.goto(`/board?scopes=${scopeId}`);
+    const done = page.getByTestId('column-done');
+    await expect(done).toContainText('Informe posterior');
+    await expect(done).not.toContainText('Informe anterior');
+    const count = done.locator('header').getByText('1', { exact: true });
+    await expect(count).toBeVisible();
+    await expect(page.getByTestId('done-back-today')).toHaveCount(0);
+    await page.getByTestId('done-calendar').click();
+    await expect(page.getByTestId('day-2025-11-20')).toBeEnabled();
+    await expect(page.getByTestId('day-2025-11-21')).toBeDisabled();
+    await page.getByTestId('day-2025-11-20').click();
+    await page.getByTestId('done-show-all').click();
+    await expect(done).toContainText('Informe anterior');
+    await expect(done.locator('header').getByText('2', { exact: true })).toBeVisible();
+  });
+});

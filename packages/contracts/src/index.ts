@@ -49,6 +49,7 @@ export {
   weekdayNames,
 } from './dates.js';
 export type { WeekStart, WeekStartChoice } from './dates.js';
+export { createDoneDayFilter } from './done-day.js';
 export { parseQuickAdd, revertToken } from './quickadd.js';
 export type {
   QuickAddContext,

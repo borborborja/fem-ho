@@ -10,10 +10,12 @@ import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsOff
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.isOn
@@ -24,11 +26,13 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performTextReplacement
+import androidx.lifecycle.Lifecycle
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import ho.fem.model.ActivityNotificationKind
 import java.net.HttpURLConnection
 import java.net.URL
+import java.time.LocalDate
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
@@ -70,6 +74,7 @@ class AndroidDailyFlowTest {
             hasAnyAncestor(hasTestTag("primary-view-tabs")) and hasClickAction(),
             useUnmergedTree = true,
         ).assertCountEquals(2)
+        verifyCompletedTasks(control, scope, token)
         tag("board-task-$task").performClick()
         tag("task-deadline").assertTextContains(date, substring = true)
         tag("task-close").performClick()
@@ -175,6 +180,85 @@ class AndroidDailyFlowTest {
         val focusedInbox = hasTestTag("quick-add") and hasAnyAncestor(hasTestTag("quick-add-inbox")) and isFocused()
         compose.waitUntil(15_000) {
             compose.onAllNodes(focusedInbox, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        }
+    }
+
+    private fun verifyCompletedTasks(base: String, scope: String, token: String) {
+        val current = "board-task-${argument("doneTodayId")}"
+        val previous = "board-task-${argument("doneYesterdayId")}"
+        val doneTab = "board-column-done"
+        val clear = "board-done-clear"
+        val showAll = "board-done-show-all"
+        val settingsPath = "/api/v1/auth/settings"
+
+        tag(doneTab).performClick()
+        waitForDoneCount(12)
+        tag(current)
+        compose.onNodeWithTag(previous).assertDoesNotExist()
+
+        tag("board-done-calendar").performClick()
+        val yesterday = argument("yesterday")
+        val today = LocalDate.parse(argument("today"))
+        val tomorrow = today.plusDays(1)
+        tag("board-done-calendar-next").assertIsNotEnabled()
+        if (tomorrow.month == today.month) tag("calendar-date-$tomorrow").assertIsNotEnabled()
+        if (LocalDate.parse(yesterday).month != today.month) {
+            tag("board-done-calendar-previous").performClick()
+        }
+        tag("calendar-date-$yesterday").performClick()
+        waitForDoneCount(50)
+        tag(previous)
+        compose.onNodeWithTag(current).assertDoesNotExist()
+        compose.onNodeWithTag(clear).assertDoesNotExist()
+        compose.onNodeWithTag(showAll).assertDoesNotExist()
+        tag("board-done-back-today").performClick()
+        waitForDoneCount(12)
+
+        tag(clear, enabled = true).performClick()
+        waitForDoneCount(0)
+        tag(showAll, enabled = true)
+        val cutoff = request(base, settingsPath, token = token).getJSONObject("settings")
+        check(!cutoff.isNull("done_cleared_at"))
+
+        val completed = try {
+            setOffline(true)
+            compose.activityRule.scenario.onActivity { it.viewModelStore.clear() }
+            compose.activityRule.scenario.recreate()
+            tag(doneTab).performClick()
+            waitForDoneCount(0)
+            tag(showAll)
+            request(
+                base, "/api/v1/tasks", "POST",
+                JSONObject().put("scope_id", scope).put("title", "Completed after clear").put("status", "done"), token,
+            )
+        } finally {
+            setOffline(false)
+        }
+        waitForDoneCount(1, timeoutMillis = 65_000)
+        tag("board-task-${completed.getString("id")}")
+        compose.onNodeWithTag(current).assertDoesNotExist()
+
+        tag(showAll, enabled = true).performClick()
+        waitForDoneCount(13)
+        val restored = request(base, settingsPath, token = token).getJSONObject("settings")
+        check(restored.has("done_cleared_at") && restored.isNull("done_cleared_at"))
+
+        compose.activityRule.scenario.moveToState(Lifecycle.State.CREATED)
+        request(
+            base, settingsPath, "PATCH",
+            JSONObject().put("done_cleared_at", completed.getString("completed_at")), token,
+        )
+        compose.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
+        waitForDoneCount(0)
+        tag(showAll, enabled = true).performClick()
+        waitForDoneCount(13)
+        tag("board-column-inbox").performClick()
+    }
+
+    private fun waitForDoneCount(count: Int, timeoutMillis: Long = 25_000) {
+        val countInTab = hasText(count.toString()) and hasAnyAncestor(hasTestTag("board-column-done"))
+        compose.waitUntil(timeoutMillis) {
+            compose.onAllNodes(countInTab, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
         }
     }
 

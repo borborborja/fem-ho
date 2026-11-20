@@ -52,6 +52,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import ho.fem.app.R
@@ -100,12 +101,14 @@ import ho.fem.tasks.TaskDetailLabels
 import ho.fem.tasks.TaskMenuLabels
 import ho.fem.model.AiMode
 import ho.fem.model.Dates
+import ho.fem.model.DoneDayFilter
 import ho.fem.model.QuickAddContext
 import ho.fem.model.QuickAddPerson
 import ho.fem.model.QuickAddProject
 import ho.fem.model.QuickAddScope
 import ho.fem.model.QuickAddTaskType
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
@@ -991,6 +994,24 @@ private fun BoardHost(
     val aiBoardLabel = stringResource(R.string.board_ia_toggle)
     val activeScopeIds by model.activeScopes.collectAsStateWithLifecycle()
     val active = activeScopeIds.toSet()
+    val timezone by model.profileTimezone.collectAsStateWithLifecycle()
+    val zone = remember(timezone) { runCatching { ZoneId.of(timezone) }.getOrElse { ZoneId.systemDefault() } }
+    val today = rememberProfileToday(zone)
+    var selectedDoneDay by rememberSaveable { mutableStateOf<String?>(null) }
+    val doneDay = selectedDoneDay?.let(LocalDate::parse)?.coerceAtMost(today) ?: today
+    val doneDayLabel = doneDateLabel(doneDay)
+    val doneEmptyLabel = if (doneDay == today) stringResource(R.string.board_empty_done)
+    else stringResource(R.string.board_done_emptyday).replace("{day}", doneDayLabel)
+    val doneClearedAt by model.doneClearedAt.collectAsStateWithLifecycle()
+    val doneSettingsSaving by model.doneSettingsSaving.collectAsStateWithLifecycle()
+    val weekStartChoice by model.preferenceWeekStart.collectAsStateWithLifecycle(initialValue = "auto")
+    val doneFilter = remember(zone, today, doneDay, doneClearedAt) {
+        DoneDayFilter(zone, today, doneDay, doneClearedAt)
+    }
+    LifecycleResumeEffect(model) {
+        model.loadProfile()
+        onPauseOrDispose { }
+    }
 
     // Els textos es resolen aquí i no dins dels callbacks: `stringResource` és
     // `@Composable` i no es pot cridar des d'una lambda que no ho és.
@@ -1108,6 +1129,19 @@ private fun BoardHost(
             requestedStatus = requestedStatus,
             onStatusOpened = onStatusOpened,
             tasks = visible,
+            doneDay = doneFilter,
+            doneHeader = {
+                DoneColumnHeader(
+                    day = doneDay,
+                    today = today,
+                    dayLabel = doneDayLabel,
+                    clearedToday = doneFilter.clearedToday,
+                    saving = doneSettingsSaving,
+                    weekStartChoice = weekStartChoice,
+                    onSelectDay = { date -> selectedDoneDay = date.takeUnless { it == today }?.toString() },
+                    onSetClearedAt = model::setDoneClearedAt,
+                )
+            },
             labels = BoardLabels(
                 columns = mapOf(
                     TaskStatus.INBOX to stringResource(R.string.board_column_inbox),
@@ -1119,7 +1153,7 @@ private fun BoardHost(
                     TaskStatus.INBOX to stringResource(R.string.board_empty_inbox),
                     TaskStatus.TODO to stringResource(R.string.board_empty_todo),
                     TaskStatus.DOING to stringResource(R.string.board_empty_doing),
-                    TaskStatus.DONE to stringResource(R.string.board_empty_done),
+                    TaskStatus.DONE to doneEmptyLabel,
                 ),
                 advance = mapOf(
                     TaskStatus.INBOX to advanceTemplate.replace(
