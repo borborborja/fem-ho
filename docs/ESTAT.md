@@ -7,7 +7,7 @@ Data de l'última verificació completa: **2026-11-19**.
 
 ---
 
-## Edició de subtasques i catàleg MCP
+## Edició de subtasques i catàleg MCP · 0.23.0
 
 El web i Android permeten editar el títol amb una pulsació llarga a la targeta i
 a la fitxa. Les accions d'edició i esborrat són a la fila. Plegar les llistes
