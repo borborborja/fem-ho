@@ -68,6 +68,10 @@ El catàleg té **20 eines**. Cada credencial veu les que corresponen als seus p
 
 ### Escriptura
 
+Les eines que escriuen accepten `origin`, una etiqueta opcional de la font que es
+desa amb l'acció a l'historial. La [guia de connexió](mcp-access.md#indicar-la-font-duna-acció-mcp)
+en mostra exemples de creació i edició.
+
 | Tool | Què fa |
 | --- | --- |
 | `create_task` | Crea en qualsevol columna amb les dades inicials. Respecta `can_create_tasks` de l'agent. |

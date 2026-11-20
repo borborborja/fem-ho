@@ -4,11 +4,13 @@ export type ActorFilter = 'all' | 'ai' | 'human';
 
 export interface ActivityEntryView {
   id: string;
+  entity_type?: string;
   verb: string;
   actor_type: string;
   actor_label: string | null;
   changes: Record<string, { from: unknown; to: unknown }> | null;
   created_at: string;
+  channel?: { label: string; origin: string | null };
   undoable?: boolean;
 }
 

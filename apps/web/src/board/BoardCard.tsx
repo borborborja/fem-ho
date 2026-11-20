@@ -15,6 +15,7 @@ import { dateTime, getLocale, relativeTime, t } from '@fem-ho/contracts';
 import { v7 as uuidv7 } from 'uuid';
 import { TaskCard, type CardList } from '@fem-ho/design-system/femho';
 import { DeleteTaskDialog } from './DeleteTaskDialog.js';
+import { McpSourceBadge } from './McpSourceBadge.js';
 import { TaskTimeBadge } from './TaskTimeBadge.js';
 import { SourceIcon } from './SourceIcon.js';
 import { useInlineTaskTitle } from './useInlineTaskTitle.js';
@@ -169,6 +170,7 @@ export function BoardCard({
         onTitleEdit={dragging ? undefined : inlineTitle.start}
         titleEditHint={t('task.titleEditHint')}
         sourceIcon={<SourceIcon kind={task.sourceKind} />}
+        sourceBadge={<McpSourceBadge activity={task.mcpActivity} />}
         project={task.project}
         assigneeInitials={task.assigneeInitials}
         time={task.time}

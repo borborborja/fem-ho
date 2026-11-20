@@ -47,6 +47,9 @@ next_task  →  move_task(doing)  →  treballar  →  add_comment  →  complet
    principal per reportar, i el que llegirà una persona d'aquí a tres dies.
 5. **\`complete_task\`** quan estigui feta.
 
+Quan un canvi vingui d'una font externa identificable, indica-la amb l'argument opcional
+\`origin\`, per exemple \`"WhatsApp"\` o \`"Correu electrònic"\`. Es desa amb el canvi a l'historial.
+
 ## La reserva és un pany
 
 Mentre la tinguis reservada, **la tasca està bloquejada per a la persona**: no la pot moure
@@ -138,6 +141,9 @@ next_task  →  move_task(doing)  →  work  →  add_comment  →  complete_tas
    to report, and what a person will read three days from now.
 5. **\`complete_task\`** when it is done.
 
+When acting on information from an identifiable external source, pass its label in the optional
+\`origin\` argument. For example, use \`"WhatsApp"\` or \`"Email"\`. The task history records it with the change.
+
 ## The claim is a lock
 
 While you hold it, **the task is locked for the person**: they cannot move it or take it
@@ -227,6 +233,9 @@ next_task  →  move_task(doing)  →  trabajar  →  add_comment  →  complete
 4. **\`add_comment\`** con lo que has hecho y con lo que has decidido por el camino. Es la vía
    principal para reportar, y lo que leerá una persona dentro de tres días.
 5. **\`complete_task\`** cuando esté hecha.
+
+Si un cambio viene de una fuente externa identificable, indícala con el argumento opcional
+\`origin\`. Por ejemplo, \`"WhatsApp"\` o \`"Correo electrónico"\`. Se guarda con el cambio en el historial.
 
 ## La reserva es un cerrojo
 

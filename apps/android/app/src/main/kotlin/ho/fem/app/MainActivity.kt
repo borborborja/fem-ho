@@ -68,6 +68,7 @@ import ho.fem.model.Checklist
 import ho.fem.model.CalendarDate
 import ho.fem.model.Project
 import ho.fem.model.Scope
+import ho.fem.model.Task
 import ho.fem.model.TaskStatus
 import ho.fem.model.UserProfile
 import ho.fem.calendar.CalendarLabels
@@ -89,6 +90,8 @@ import ho.fem.designsystem.CardList
 import ho.fem.designsystem.CardListItem
 import ho.fem.tasks.BoardScreen
 import ho.fem.tasks.CardExtras
+import ho.fem.tasks.McpProvenanceBadge
+import ho.fem.tasks.McpProvenanceLabels
 import ho.fem.tasks.QuickAddField
 import ho.fem.tasks.TaskDetail
 import ho.fem.tasks.TaskDetailLabels
@@ -100,6 +103,11 @@ import ho.fem.model.QuickAddPerson
 import ho.fem.model.QuickAddProject
 import ho.fem.model.QuickAddScope
 import ho.fem.model.QuickAddTaskType
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
+import java.util.Locale
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -1115,6 +1123,7 @@ private fun BoardHost(
                 cancel = stringResource(R.string.nav_cancel),
             ),
             onDelete = model::deleteTask,
+            mcpLabels = mcpProvenanceLabels(),
             onMove = { task, status -> model.move(task, status) },
             onToggle = { task ->
                 model.move(task, if (task.status == TaskStatus.DONE) TaskStatus.TODO else TaskStatus.DONE)
@@ -1318,11 +1327,26 @@ private fun SyncIssuesDialog(
 }
 
 @Composable
+private fun mcpProvenanceLabels() = McpProvenanceLabels(
+    badge = stringResource(R.string.source_mcp),
+    details = stringResource(R.string.source_mcpdetails),
+    creation = stringResource(R.string.source_mcpcreation),
+    lastChange = stringResource(R.string.source_mcplastchange),
+    unspecified = stringResource(R.string.source_mcpunspecified),
+)
+
+private fun mcpMetadata(task: Task): (@Composable () -> Unit)? {
+    val activity = task.mcpActivity ?: return null
+    return { McpProvenanceBadge(activity, mcpProvenanceLabels()) }
+}
+
+@Composable
 private fun TaskDetailSheet(model: AppViewModel) {
     val openTask by model.openTask.collectAsStateWithLifecycle()
     val openChecklists by model.openChecklists.collectAsStateWithLifecycle()
     val openComments by model.openComments.collectAsStateWithLifecycle()
     val openActivity by model.openActivity.collectAsStateWithLifecycle()
+    val timezone by model.profileTimezone.collectAsStateWithLifecycle()
     val openShares by model.openShares.collectAsStateWithLifecycle()
     val createdShareUrl by model.createdShareUrl.collectAsStateWithLifecycle()
     val openAttachments by model.openAttachments.collectAsStateWithLifecycle()
@@ -1340,6 +1364,11 @@ private fun TaskDetailSheet(model: AppViewModel) {
 
     openTask?.let { task ->
         val context = androidx.compose.ui.platform.LocalContext.current
+        val locale = androidx.compose.ui.platform.LocalConfiguration.current.locales[0] ?: Locale.getDefault()
+        val activityTime = remember(locale, timezone) {
+            val zone = runCatching { ZoneId.of(timezone) }.getOrElse { ZoneId.systemDefault() }
+            DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT).withLocale(locale).withZone(zone)
+        }
         val picker = androidx.activity.compose.rememberLauncherForActivityResult(
             androidx.activity.result.contract.ActivityResultContracts.GetContent(),
         ) { uri ->
@@ -1409,6 +1438,18 @@ private fun TaskDetailSheet(model: AppViewModel) {
                 emptyComments = stringResource(R.string.task_empty_comments),
                 activity = stringResource(R.string.task_activity),
                 undo = stringResource(R.string.activity_undo),
+                activitySources = mapOf(
+                    "api" to stringResource(R.string.activity_source_api),
+                    "android" to stringResource(R.string.activity_source_android),
+                    "caldav" to stringResource(R.string.activity_source_caldav),
+                    "federation" to stringResource(R.string.activity_source_federation),
+                    "mcp" to stringResource(R.string.activity_source_mcp),
+                    "share" to stringResource(R.string.activity_source_share),
+                    "system" to stringResource(R.string.activity_source_system),
+                    "web" to stringResource(R.string.activity_source_web),
+                ),
+                unknownActivitySource = stringResource(R.string.activity_source_unknown),
+                mcp = mcpProvenanceLabels(),
                 delete = stringResource(R.string.nav_delete),
                 cancel = stringResource(R.string.nav_cancel),
                 deleteConfirm = stringResource(R.string.task_deleteconfirm),
@@ -1441,7 +1482,13 @@ private fun TaskDetailSheet(model: AppViewModel) {
                 activityVerbs = mapOf(
                     "answered" to stringResource(R.string.activity_verb_answered),
                     "asked" to stringResource(R.string.activity_verb_asked),
+                    "attachment.created" to stringResource(R.string.activity_verb_attachment_created),
                     "cascade_complete" to stringResource(R.string.activity_verb_cascade_complete),
+                    "checklist.created" to stringResource(R.string.activity_verb_checklist_created),
+                    "checklist_item.completed" to stringResource(R.string.activity_verb_checklist_item_completed),
+                    "checklist_item.created" to stringResource(R.string.activity_verb_checklist_item_created),
+                    "checklist_item.reopened" to stringResource(R.string.activity_verb_checklist_item_reopened),
+                    "checklist_item.updated" to stringResource(R.string.activity_verb_checklist_item_updated),
                     "claimed" to stringResource(R.string.activity_verb_claimed),
                     "commented" to stringResource(R.string.activity_verb_commented),
                     "completed" to stringResource(R.string.activity_verb_completed),
@@ -1451,6 +1498,7 @@ private fun TaskDetailSheet(model: AppViewModel) {
                     "refreshed" to stringResource(R.string.activity_verb_refreshed),
                     "released" to stringResource(R.string.activity_verb_released),
                     "reopened" to stringResource(R.string.activity_verb_reopened),
+                    "subtask.created" to stringResource(R.string.activity_verb_subtask_created),
                     "token_created" to stringResource(R.string.activity_verb_token_created),
                     "token_revoked" to stringResource(R.string.activity_verb_token_revoked),
                     "updated" to stringResource(R.string.activity_verb_updated),
@@ -1489,6 +1537,7 @@ private fun TaskDetailSheet(model: AppViewModel) {
             onCreateLabel = { model.createTaskLabel(task, it) },
             onAddComment = { body, finished -> model.addComment(task.id, body, finished) },
             onUndoActivity = { model.undoActivity(it) },
+            formatActivityTime = { value -> runCatching { activityTime.format(Instant.parse(value)) }.getOrNull() },
             onDelete = { model.deleteTask(task) },
             onTakeOver = { model.takeOver(task, it) },
             onClose = model::closeTask,
@@ -1711,6 +1760,7 @@ private fun CalendarHost(
                 onEventToTask = { model.eventToTask(it, request) },
                 onEventToggle = { model.setEventInInbox(it, visible = !it.inInbox, request = request) },
                 eventTime = { CalendarDate.event(it.startsAt, it.allDay, zone)?.timeLabel.orEmpty() },
+                taskMetadata = { mcpMetadata(it)?.invoke() },
             )
         }
     }
@@ -2630,6 +2680,7 @@ private fun Section(
                     done = task.status == TaskStatus.DONE,
                     onOpen = { onOpen(task) },
                     modifier = Modifier.testTag("$testTag-task"),
+                    extraMetadata = mcpMetadata(task),
                 )
             }
         }
@@ -2701,6 +2752,7 @@ private fun SearchHost(model: AppViewModel, onBoard: () -> Unit) {
                     done = task.status == TaskStatus.DONE,
                     onOpen = { model.open(task) },
                     modifier = Modifier.testTag("search-result-${'$'}{task.id}"),
+                    extraMetadata = mcpMetadata(task),
                 )
             }
         }

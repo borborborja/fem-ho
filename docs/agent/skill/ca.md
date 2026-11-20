@@ -36,6 +36,9 @@ next_task  →  move_task(doing)  →  treballar  →  add_comment  →  complet
    principal per reportar, i el que llegirà una persona d'aquí a tres dies.
 5. **`complete_task`** quan estigui feta.
 
+Quan un canvi vingui d'una font externa identificable, indica-la amb l'argument opcional
+`origin`, per exemple `"WhatsApp"` o `"Correu electrònic"`. Es desa amb el canvi a l'historial.
+
 ## La reserva és un pany
 
 Mentre la tinguis reservada, **la tasca està bloquejada per a la persona**: no la pot moure

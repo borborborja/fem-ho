@@ -5935,7 +5935,11 @@ components:
         actor_label:
           type: [string, 'null']
           description: '"Borja", "IA · Claude", "Extern · Marta".'
-        source: { type: string }
+        source: { type: string, description: Canal d’escriptura registrat pel servidor. }
+        mcp_origin:
+          type: [string, 'null']
+          maxLength: 120
+          description: Etiqueta de la font declarada pel client MCP per a aquest canvi.
         changes:
           type: [object, 'null']
           description: |
@@ -6388,6 +6392,26 @@ components:
         ai_description: { type: string }
         position: { type: string }
 
+    McpTaskActivity:
+      type: object
+      additionalProperties: false
+      required: [origin]
+      properties:
+        origin:
+          type: [string, 'null']
+          maxLength: 120
+          description: Font declarada en l’última acció MCP de la tasca, si s’ha indicat.
+        creation:
+          type: object
+          additionalProperties: false
+          required: [origin]
+          description: Present quan la tasca es va crear per MCP.
+          properties:
+            origin:
+              type: [string, 'null']
+              maxLength: 120
+              description: Font declarada en crear la tasca, si s’ha indicat.
+
     Task:
       type: object
       additionalProperties: false
@@ -6464,6 +6488,10 @@ components:
             afegir una font nova sigui **un valor més i no una columna més**: les
             referències específiques de cada mena (`event_calendar_id`, `event_uid`…)
             diuen *quin* origen concret, i això diu *quina mena*.
+        mcp_activity:
+          $ref: '#/components/schemas/McpTaskActivity'
+          readOnly: true
+          description: Resum de les accions MCP. Absent quan la tasca no té activitat MCP o s’accedeix per un enllaç públic.
         progress:
           type: object
           required: [done, total, lists]

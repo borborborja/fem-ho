@@ -36,7 +36,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import ho.fem.designsystem.ChecklistRow
 import ho.fem.designsystem.EmptyState
@@ -79,6 +83,9 @@ data class TaskDetailLabels(
     val activity: String,
     val undo: String,
     val activityVerbs: Map<String, String>,
+    val activitySources: Map<String, String>,
+    val unknownActivitySource: String,
+    val mcp: McpProvenanceLabels,
     val delete: String,
     val cancel: String,
     val deleteConfirm: String,
@@ -167,6 +174,7 @@ fun TaskDetail(
     onPickAttachment: () -> Unit = {},
     onDownloadAttachment: (ho.fem.model.Attachment) -> Unit = {},
     onDeleteAttachment: (ho.fem.model.Attachment) -> Unit = {},
+    formatActivityTime: (String) -> String? = { null },
     modifier: Modifier = Modifier,
 ) {
     var edits by rememberSaveable(task.id, stateSaver = TaskEditsSaver) {
@@ -255,6 +263,8 @@ fun TaskDetail(
             label = { Text(labels.title) },
             modifier = Modifier.fillMaxWidth().testTag("task-title"),
         )
+
+        task.mcpActivity?.let { McpProvenanceBadge(it, labels.mcp) }
 
         OutlinedTextField(
             value = description,
@@ -703,10 +713,40 @@ fun TaskDetail(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
+                        val action = labels.activityVerbs["${entry.entityType}.${entry.verb}"]
+                            ?: labels.activityVerbs[entry.verb].orEmpty()
                         Text(
-                            text = "${entry.actorLabel.orEmpty()} ${labels.activityVerbs[entry.verb].orEmpty()}",
+                            text = "${entry.actorLabel.orEmpty()} $action",
                             color = Femho.colors.inkSoft,
                             fontSize = FemhoText.meta,
+                        )
+                        entry.changes.orEmpty().forEach { (field, change) ->
+                            if (change.from != change.to) {
+                                Text(
+                                    text = buildAnnotatedString {
+                                        withStyle(SpanStyle(textDecoration = TextDecoration.LineThrough)) {
+                                            append(change.from.orEmpty().ifEmpty { "—" })
+                                        }
+                                        append(" → ")
+                                        withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) {
+                                            append(change.to.orEmpty().ifEmpty { "—" })
+                                        }
+                                    },
+                                    color = Femho.colors.inkSoft,
+                                    fontSize = FemhoText.meta,
+                                    modifier = Modifier.testTag("task-activity-change-${entry.id}-$field"),
+                                )
+                            }
+                        }
+                        val channel = labels.activitySources[entry.source] ?: labels.unknownActivitySource
+                        val source = if (entry.source == "mcp") {
+                            "$channel · ${entry.mcpOrigin ?: labels.mcp.unspecified}"
+                        } else channel
+                        Text(
+                            text = listOfNotNull(source, formatActivityTime(entry.createdAt)).joinToString(" · "),
+                            color = Femho.colors.inkSoft,
+                            fontSize = FemhoText.meta,
+                            modifier = Modifier.testTag("task-activity-source-${entry.id}"),
                         )
                         if (entry.undoable) {
                             Text(

@@ -294,11 +294,17 @@ test("l'afegida ràpida encamina a #Àmbit/Projecte amb dades reals", async ({ p
 
   // I al servidor hi és amb el projecte posat, no només amb el títol net.
   // `GET /tasks` torna una pàgina (`data`, `next_cursor`, `has_more`), no una llista.
-  const page1 = (await (
-    await page.request.get(`/api/v1/tasks?scope_id=${scope.id}`, { headers: auth })
-  ).json()) as { data: { title: string; project_id: string | null }[] };
-  const creada = page1.data.find((task) => task.title === 'Canviar la caldera');
-  expect(creada?.project_id).toBe(obra.id);
+  await expect
+    .poll(async () => {
+      const response = await page.request.get(`/api/v1/tasks?scope_id=${scope.id}`, {
+        headers: auth,
+      });
+      const page1 = (await response.json()) as {
+        data: { title: string; project_id: string | null }[];
+      };
+      return page1.data.find((task) => task.title === 'Canviar la caldera')?.project_id;
+    })
+    .toBe(obra.id);
 });
 
 /**

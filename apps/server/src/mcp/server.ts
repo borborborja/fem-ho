@@ -48,6 +48,10 @@ export interface McpDeps {
 }
 
 type ToolResult = { content: { type: 'text'; text: string }[]; isError?: boolean };
+type ToolHandler = (
+  args: Record<string, unknown>,
+  origin: string | undefined,
+) => Promise<ToolResult>;
 
 function ok(value: unknown): ToolResult {
   return { content: [{ type: 'text', text: JSON.stringify(value, null, 2) }] };
@@ -121,11 +125,7 @@ export function buildMcpServer(deps: McpDeps): McpServer {
   return server;
 }
 
-function registerOne(
-  server: McpServer,
-  spec: ToolSpec,
-  handler: (args: Record<string, unknown>) => Promise<ToolResult>,
-): void {
+function registerOne(server: McpServer, spec: ToolSpec, handler: ToolHandler): void {
   server.registerTool(
     spec.name,
     {
@@ -134,9 +134,9 @@ function registerOne(
       inputSchema: spec.inputSchema,
       annotations: spec.annotations,
     },
-    (async (args: Record<string, unknown>) => {
+    (async ({ origin, ...args }: Record<string, unknown>) => {
       try {
-        return await handler(args);
+        return await handler(args, typeof origin === 'string' ? origin : undefined);
       } catch (error) {
         /**
          * Una fallada de permisos **no** arriba fins aquí com a resultat d'error: es
@@ -151,14 +151,14 @@ function registerOne(
   );
 }
 
-function buildHandlers(
-  deps: McpDeps,
-): Record<string, (args: Record<string, unknown>) => Promise<ToolResult>> {
+function buildHandlers(deps: McpDeps): Record<string, ToolHandler> {
   const { db } = deps.connection;
   const { principal } = deps;
   const engine = deps.connection.engine;
-  const write = <T>(work: Parameters<typeof auditedTransaction<T>>[2]): Promise<T> =>
-    auditedTransaction(db, principal, work, { engine });
+  const write = <T>(
+    mcpOrigin: string | undefined,
+    work: Parameters<typeof auditedTransaction<T>>[2],
+  ): Promise<T> => auditedTransaction(db, principal, work, { engine, mcpOrigin });
 
   return {
     whoami: async () =>
@@ -263,38 +263,40 @@ function buildHandlers(
       );
     },
 
-    create_task: async (args) => {
-      const { task, created } = await write((ctx) =>
+    create_task: async (args, origin) => {
+      const { task, created } = await write(origin, (ctx) =>
         createDeliveredTask(ctx, principal, args, engine),
       );
       return ok({ task: taskMutationReceipt(principal, task), created });
     },
 
-    update_task: async ({ task_id, ...input }) => {
-      const task = await write((ctx) =>
+    update_task: async ({ task_id, ...input }, origin) => {
+      const task = await write(origin, (ctx) =>
         updateDeliveredTask(ctx, principal, String(task_id), input),
       );
       return ok(taskMutationReceipt(principal, task));
     },
 
-    move_task: async ({ task_id, ...input }) => {
-      const task = await write((ctx) => moveDeliveredTask(ctx, principal, String(task_id), input));
+    move_task: async ({ task_id, ...input }, origin) => {
+      const task = await write(origin, (ctx) =>
+        moveDeliveredTask(ctx, principal, String(task_id), input),
+      );
       return ok(taskMutationReceipt(principal, task));
     },
 
-    complete_task: async (args) => {
-      const task = await write((ctx) => completeTask(ctx, principal, String(args.task_id)));
+    complete_task: async (args, origin) => {
+      const task = await write(origin, (ctx) => completeTask(ctx, principal, String(args.task_id)));
       return ok(taskMutationReceipt(principal, task));
     },
 
-    add_comment: async (args) =>
+    add_comment: async (args, origin) =>
       ok(
-        await write(async (ctx) =>
+        await write(origin, async (ctx) =>
           addComment(ctx, principal, String(args.task_id), String(args.body)),
         ),
       ),
 
-    add_task_attachment: async (args) => {
+    add_task_attachment: async (args, origin) => {
       const { url, content_base64: contentBase64 } = args;
       if ((typeof url === 'string') === (typeof contentBase64 === 'string')) {
         return fail('Provide exactly one of url or content_base64.');
@@ -314,35 +316,36 @@ function buildHandlers(
             dataDir: deps.dataDir,
             maxUploadBytes: deps.maxUploadBytes,
             reauthorize: deps.reauthorize,
+            mcpOrigin: origin,
           },
         ),
       );
     },
 
-    ask_user: async (args) =>
+    ask_user: async (args, origin) =>
       ok(
-        await write(async (ctx) =>
+        await write(origin, async (ctx) =>
           askUser(ctx, principal, String(args.task_id), String(args.question)),
         ),
       ),
 
-    resume_task: async (args) =>
+    resume_task: async (args, origin) =>
       ok(
-        await write(async (ctx) =>
+        await write(origin, async (ctx) =>
           resumeTask(ctx, principal, String(args.task_id), String(args.learned)),
         ),
       ),
 
-    update_checklist_item: async (args) =>
+    update_checklist_item: async (args, origin) =>
       ok(
-        await write(async (ctx) =>
+        await write(origin, async (ctx) =>
           updateChecklistItem(ctx, principal, String(args.item_id), { done: args.done === true }),
         ),
       ),
 
-    next_task: async (args) =>
+    next_task: async (args, origin) =>
       ok(
-        await write(async (ctx) => {
+        await write(origin, async (ctx) => {
           const found = await nextTask(ctx, principal, {
             ...(typeof args.scope_id === 'string' ? { scopeId: args.scope_id } : {}),
           });
@@ -354,8 +357,8 @@ function buildHandlers(
         }),
       ),
 
-    release_task: async (args) => {
-      await write(async (ctx) => {
+    release_task: async (args, origin) => {
+      await write(origin, async (ctx) => {
         await release(ctx, principal, String(args.task_id), String(args.reason ?? ''));
       });
       return ok({ released: args.task_id });

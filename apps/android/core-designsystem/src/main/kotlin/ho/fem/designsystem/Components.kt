@@ -176,6 +176,7 @@ fun TaskCard(
     addForm: CardAddForm? = null,
     onLongPress: (() -> Unit)? = null,
     longPressLabel: String? = null,
+    extraMetadata: (@Composable () -> Unit)? = null,
 ) {
     val openAction = if (onLongPress == null) {
         Modifier.clickable(onClick = onOpen)
@@ -225,12 +226,13 @@ fun TaskCard(
                     aiModeLabel,
                     checklistProgress,
                 )
-                if (metadata.isNotEmpty()) {
+                if (metadata.isNotEmpty() || extraMetadata != null) {
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
                         metadata.forEach { Pill(it) }
+                        extraMetadata?.invoke()
                     }
                 }
             }

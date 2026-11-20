@@ -20,7 +20,11 @@ FEMHO_PORT="$port" FEMHO_DAV_PORT="$dav_port" \
   FEMHO_BASE_URL="http://10.0.2.2:$port" FEMHO_ALLOW_REGISTRATION=true \
   node apps/server/dist/index.js > "$work_dir/server.log" 2>&1 &
 server_pid=$!
-trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+cleanup() {
+  adb -s "$serial" reverse --remove "tcp:$port" >/dev/null 2>&1 || true
+  kill "$server_pid" 2>/dev/null || true
+}
+trap cleanup EXIT
 for ((checks = 0; checks < 30; checks++)); do
   if curl --silent --fail "http://127.0.0.1:$port/healthz" > /dev/null; then break; fi
   sleep 1
@@ -34,6 +38,7 @@ fi
 apk_dir=apps/android/app/build/outputs/apk
 adb -s "$serial" install -r "$apk_dir/debug/app-debug.apk"
 adb -s "$serial" install -r "$apk_dir/androidTest/debug/app-debug-androidTest.apk"
+adb -s "$serial" reverse "tcp:$port" "tcp:$port"
 adb -s "$serial" shell input keyevent 82
 
 mapfile -t fixture < <(node --input-type=module - "$work_dir/fixture.json" <<'JS'
@@ -49,6 +54,7 @@ if [[ -n "${FEMHO_ANDROID_TEST_CLASS:-}" ]]; then
   selection=(-e class "$FEMHO_ANDROID_TEST_CLASS")
 fi
 adb -s "$serial" shell am instrument -w -r \
-  -e serverUrl "http://10.0.2.2:$port" "${fixture[@]}" "${selection[@]}" \
+  -e serverUrl "http://10.0.2.2:$port" -e controlUrl "http://localhost:$port" \
+  "${fixture[@]}" "${selection[@]}" \
   ho.fem.test/androidx.test.runner.AndroidJUnitRunner | tee "$work_dir/instrumentation.log"
 grep -E '^OK \([1-9][0-9]* tests?\)' "$work_dir/instrumentation.log"

@@ -33,6 +33,7 @@ export interface ActivityEntry {
   actor_agent_id: string | null;
   actor_label: string | null;
   source: string;
+  mcp_origin?: string | null;
   credential_id: string | null;
   changes: Record<string, { from: unknown; to: unknown }> | null;
   created_at: string;
@@ -50,6 +51,7 @@ interface Row {
   actor_agent_id: string | null;
   actor_label: string | null;
   source: string;
+  mcp_origin: string | null;
   credential_id: string | null;
   changes: string | null;
   created_at: string;
@@ -64,6 +66,61 @@ interface Row {
  * i Fem-ho no dona a la IA cap manera d'esborrar res (docs/08 §3).
  */
 const UNDOABLE_VERBS = new Set(['updated', 'moved', 'completed', 'reopened']);
+
+// Les primeres reserves només desaven l'identificador de tasca, que no canvia d'àmbit.
+const legacyLease = sql`a.scope_id IS NULL AND a.verb IN ('claimed', 'released')`;
+
+export interface McpActivity {
+  origin: string | null;
+  creation?: { origin: string | null };
+}
+
+/** Només s'hi passen identificadors de tasques que el principal ja pot llegir. */
+export async function mcpActivityForTasks(
+  db: MigrationDb,
+  taskIds: string[],
+): Promise<Map<string, McpActivity>> {
+  const found = await sql<{
+    task_id: string;
+    mcp_origin: string | null;
+    latest: number;
+    creation: number;
+  }>`
+    WITH visible_tasks AS (
+      SELECT id, scope_id FROM tasks WHERE id IN (${sql.join(taskIds)})
+    ), mcp_entries AS (
+      SELECT t.id AS task_id, a.id, a.mcp_origin, a.created_at,
+             CASE WHEN a.verb = 'created' THEN 1 ELSE 0 END AS creation
+      FROM visible_tasks t
+      JOIN activity_log a ON a.entity_type = 'task' AND a.entity_id = t.id
+        AND (a.scope_id = t.scope_id OR (${legacyLease}))
+      WHERE a.source = 'mcp'
+      UNION ALL
+      SELECT t.id, a.id, a.mcp_origin, a.created_at, 0
+      FROM visible_tasks t
+      JOIN activity_log a ON a.task_id = t.id AND a.scope_id = t.scope_id
+      WHERE a.source = 'mcp'
+    ), ranked AS (
+      SELECT task_id, mcp_origin, creation,
+             ROW_NUMBER() OVER (PARTITION BY task_id ORDER BY created_at DESC, id DESC) AS latest,
+             ROW_NUMBER() OVER (PARTITION BY task_id, creation ORDER BY created_at, id) AS first_kind
+      FROM mcp_entries
+    )
+    SELECT task_id, mcp_origin, latest,
+           CASE WHEN creation = 1 AND first_kind = 1 THEN 1 ELSE 0 END AS creation
+    FROM ranked
+    WHERE latest = 1 OR (creation = 1 AND first_kind = 1)
+  `.execute(db);
+
+  const badges = new Map<string, McpActivity>();
+  for (const row of found.rows) {
+    const badge = badges.get(row.task_id) ?? { origin: null };
+    if (row.latest === 1) badge.origin = row.mcp_origin;
+    if (row.creation === 1) badge.creation ??= { origin: row.mcp_origin };
+    badges.set(row.task_id, badge);
+  }
+  return badges;
+}
 
 export async function listActivity(
   db: MigrationDb,
@@ -87,14 +144,19 @@ export async function listActivity(
         ? sql`AND a.actor_type = 'user'`
         : sql``;
 
+  const includeMcp = principal.kind !== 'guest';
   const found = await sql<Row>`
     SELECT a.id, a.entity_type, a.entity_id, a.verb, a.actor_type, a.actor_user_id,
            a.actor_agent_id, a.actor_label, a.source, a.credential_id, a.changes, a.created_at,
+           ${includeMcp ? sql`a.mcp_origin` : sql`NULL`} AS mcp_origin,
            u.name AS user_name, g.name AS agent_name
     FROM activity_log a
     LEFT JOIN users u ON u.id = a.actor_user_id
     LEFT JOIN ai_agents g ON g.id = a.actor_agent_id
-    WHERE a.entity_id = ${taskId} ${actorFilter}
+    WHERE ((a.entity_type = 'task' AND a.entity_id = ${taskId}
+            AND (a.scope_id = ${row.scope_id} OR (${legacyLease})))
+      ${includeMcp ? sql`OR (a.source = 'mcp' AND a.task_id = ${taskId} AND a.scope_id = ${row.scope_id})` : sql``})
+      ${actorFilter}
     ORDER BY a.created_at, a.id
   `.execute(db);
 
@@ -123,12 +185,17 @@ function toEntry(row: Row): ActivityEntry {
     actor_agent_id: row.actor_agent_id,
     actor_label: labelOf(row),
     source: row.source,
+    ...(row.source === 'mcp' ? { mcp_origin: row.mcp_origin } : {}),
     credential_id: row.credential_id,
     changes,
     created_at: row.created_at,
     // Només els autònoms: un canvi que ha fet una persona no porta "Desfés" perquè ja
     // el pot desfer ella mateixa editant.
-    undoable: row.actor_type === 'ai_agent' && UNDOABLE_VERBS.has(row.verb) && changes !== null,
+    undoable:
+      row.entity_type === 'task' &&
+      row.actor_type === 'ai_agent' &&
+      UNDOABLE_VERBS.has(row.verb) &&
+      changes !== null,
   };
 }
 
@@ -163,7 +230,7 @@ export async function undo(
 
   const found = await sql<Row>`
     SELECT a.id, a.entity_type, a.entity_id, a.verb, a.actor_type, a.actor_user_id,
-           a.actor_agent_id, a.actor_label, a.source, a.credential_id, a.changes, a.created_at,
+           a.actor_agent_id, a.actor_label, a.source, a.credential_id, a.changes, a.created_at, a.mcp_origin,
            NULL AS user_name, NULL AS agent_name
     FROM activity_log a WHERE a.id = ${entryId}
   `.execute(ctx.tx);

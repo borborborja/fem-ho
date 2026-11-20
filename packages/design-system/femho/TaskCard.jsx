@@ -147,6 +147,7 @@ export function TaskCard({
   titleEditHint,
   project,
   sourceIcon,
+  sourceBadge,
   assigneeInitials,
   time,
   timeSpent,
@@ -603,6 +604,7 @@ export function TaskCard({
               ) : null}
             </span>
           </Body>
+          {sourceBadge}
         </div>
 
         {/*

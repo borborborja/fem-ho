@@ -7,6 +7,14 @@ Data de l'última verificació completa: **2026-11-19**.
 
 ---
 
+## Origen i historial de tasques MCP · 0.21.0
+
+Les eines MCP que modifiquen tasques accepten l'etiqueta opcional `origin`. El
+distintiu MCP del tauler i del detall mostra la font de la creació i de l'últim
+canvi MCP. A l'historial, cada entrada conserva el canal i, si el client l'ha
+indicada, la font del canvi. La migració 026 preserva l'activitat que ja hi havia.
+[Exemples per a clients MCP](mcp-access.md#indicar-la-font-duna-acció-mcp).
+
 ## Accions de tasca i recuperació de sessió · 0.20.3
 
 Una pulsació llarga sobre una targeta d'Android obre les accions d'editar,

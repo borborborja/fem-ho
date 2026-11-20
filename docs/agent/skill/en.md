@@ -39,6 +39,9 @@ next_task  →  move_task(doing)  →  work  →  add_comment  →  complete_tas
    to report, and what a person will read three days from now.
 5. **`complete_task`** when it is done.
 
+When acting on information from an identifiable external source, pass its label in the optional
+`origin` argument. For example, use `"WhatsApp"` or `"Email"`. The task history records it with the change.
+
 ## The claim is a lock
 
 While you hold it, **the task is locked for the person**: they cannot move it or take it

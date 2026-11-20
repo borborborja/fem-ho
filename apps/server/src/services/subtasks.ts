@@ -136,7 +136,7 @@ export async function insertSubtask(
             ${ctx.now}, ${ctx.now}, 1)
   `.execute(ctx.tx);
 
-  ctx.record({ entityType: 'subtask', entityId: id, scopeId, verb: 'created' });
+  ctx.record({ entityType: 'subtask', entityId: id, scopeId, taskId, verb: 'created' });
 
   const created = await sql<SubtaskRow>`
     SELECT id, task_id, title, done, position, version FROM subtasks WHERE id = ${id} AND deleted_at IS NULL
