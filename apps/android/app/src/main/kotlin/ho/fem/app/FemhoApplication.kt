@@ -25,10 +25,8 @@ class FemhoApplication : Application() {
         /**
          * La consulta periòdica es programa **sempre**.
          *
-         * Amb distribuïdor és redundant i barata —quinze minuts, i només amb xarxa—; i
-         * sense, és l'únic camí perquè arribin els recordatoris. Programar-la només quan
-         * no hi ha distribuïdor voldria dir saber-ho en arrencar, i això no se sap fins
-         * que el registre respon.
+         * Sense distribuïdor també recull els avisos d'activitat. Amb distribuïdor
+         * recupera els que no han arribat i confirma els que ja s'han mostrat.
          */
         Notifications.ensureChannel(this)
         Notifications.schedulePolling(this)

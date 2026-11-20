@@ -579,7 +579,13 @@ export async function deleteAttachment(
     WHERE id = ${id}
   `.execute(ctx.tx);
 
-  ctx.record({ entityType: 'attachment', entityId: id, scopeId: row.scope_id, verb: 'deleted' });
+  ctx.record({
+    entityType: 'attachment',
+    entityId: id,
+    scopeId: row.scope_id,
+    taskId: row.task_id ?? undefined,
+    verb: 'deleted',
+  });
 }
 
 /** Per a les proves i per al diagnòstic: la suma del contingut, sense treure'l del volum. */

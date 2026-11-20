@@ -21,6 +21,7 @@ import { sql } from 'kysely';
 import { v7 as uuidv7 } from 'uuid';
 import type { MigrationDb } from '../db/migration-db.js';
 import type { Principal } from '../policy/principal.js';
+import { enqueueAuditedTaskActivity } from './task-notification-activity.js';
 
 /** Els verbs de docs/01 §7. `cascade_complete` distingeix la cascada d'un gest directe. */
 export type AuditVerb =
@@ -184,6 +185,7 @@ export async function auditedTransaction<T>(
     for (const entry of entries) {
       await writeEntry(tx, principal, entry, now, options.mcpOrigin);
     }
+    await enqueueAuditedTaskActivity(tx, principal, entries, now);
 
     // El `seq` s'assigna AQUÍ, al final i sota bloqueig, no a mesura que es treballa.
     if (options.engine === 'postgres') {

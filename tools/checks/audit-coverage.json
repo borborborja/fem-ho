@@ -11,6 +11,8 @@
     "          defensar; 'no cal' no es un motiu."
   ],
   "audited": {
+    "putPushDeviceSettings": "apps/server/src/http/task-activity-notifications.test.ts · configuració privada i auditada",
+    "patchPushScopeSettings": "apps/server/src/http/task-activity-notifications.test.ts · configuració privada i auditada",
     "putTaskAiSettings": "apps/server/src/http/task-ai.test.ts · ajustos privats i credencials",
     "requestTaskAiExecution": "apps/server/src/http/task-ai.test.ts · clics concurrents i historial",
     "startGoogleMail": "apps/server/src/http/mail-oauth.test.ts",
@@ -116,6 +118,7 @@
     "revokeMcpOAuthToken": "apps/server/src/http/external-access.test.ts · un client revoca la seva sessió i el consentiment no es pot bescanviar caducat"
   },
   "exempt": {
+    "acknowledgePushActivity": "Confirma el lliurament d'un avís en un sol dispositiu. L'acció original ja és a activity_log i el transport no canvia la tasca.",
     "refresh": "Rotar un token de refresc no és un canvi d'estat del producte: no toca cap tasca, cap àmbit ni cap dada de l'usuari. La sessió ja va quedar registrada al login, i registrar cada refresc ofegaria la taula amb una entrada cada quinze minuts per dispositiu. La reutilització d'un token gastat SÍ que es registra, però al log del servidor i com a avís, perquè és un incident de seguretat i no una acció de ningú.",
     "changePassword": "Es registra com a `updated` de l'usuari, però el que compta aquí és el que NO s'hi escriu: ni la contrasenya vella ni la nova, ni cap pista sobre elles. La prova és apps/server/src/http/api-surface.test.ts · les preferències i el perfil; el canvi de contrasenya es cobreix a auth.test.ts. Es marca exempt perquè `audit-coverage` demana que la prova citada comprovi una entrada concreta, i aquí la propietat interessant és una absència.",
     "updateSettings": "Les preferències d'interfície no són un canvi d'estat del producte: la posició del rail d'Inbox o el plegat d'un grup no els ha de veure ningú més ni han d'arribar a cap altre client per l'historial. `done_cleared_at` es toca cada vegada que algú prem 'netejar' a la columna Fet, i registrar-ho ofegaria la taula amb soroll que amaga el que sí que importa. Sí que escriu a `activity_log` com a `user_settings`, però no s'hi exigeix prova d'auditoria.",

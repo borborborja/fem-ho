@@ -489,7 +489,7 @@ class FemhoApi(
      * servidor guarda `endpoint`, `p256dh` i `auth` a la mateixa taula i els fa servir
      * amb la mateixa crida, tant si venen d'un navegador com d'un distribuïdor.
      */
-    suspend fun subscribePush(endpoint: String, p256dh: String, auth: String): String = raw(
+    suspend fun subscribePush(endpoint: String, p256dh: String, auth: String, deviceId: String): String = raw(
         "POST",
         "/api/v1/push/subscriptions",
         encode(
@@ -498,10 +498,47 @@ class FemhoApi(
                 "p256dh" to p256dh,
                 "auth" to auth,
                 "platform" to "android",
+                "device_id" to deviceId,
             ),
         ),
         authenticated = true,
     )
+
+    suspend fun pushPublicKey(): String = get<Map<String, String>>("/api/v1/push/public-key").getValue("public_key")
+
+    suspend fun unsubscribePush(endpoint: String) {
+        val encoded = java.net.URLEncoder.encode(endpoint, Charsets.UTF_8.name())
+        raw("DELETE", "/api/v1/push/subscriptions?endpoint=$encoded", null, authenticated = true)
+    }
+
+    suspend fun activityNotificationDevice(deviceId: String): ho.fem.model.ActivityNotificationDevice =
+        get("/api/v1/push/devices/$deviceId")
+
+    suspend fun setActivityNotificationDevice(
+        deviceId: String,
+        enabled: Boolean,
+    ): ho.fem.model.ActivityNotificationDevice =
+        put("/api/v1/push/devices/$deviceId", mapOf("platform" to "android", "enabled" to enabled))
+
+    suspend fun setActivityNotificationScope(
+        deviceId: String,
+        scopeId: String,
+        kind: ho.fem.model.ActivityNotificationKind,
+        enabled: Boolean,
+    ): ho.fem.model.ActivityNotificationScope =
+        patch("/api/v1/push/devices/$deviceId/scopes/$scopeId", mapOf(kind.wire to enabled))
+
+    suspend fun pendingActivityNotifications(deviceId: String): List<ho.fem.model.ActivityNotification> =
+        get<ho.fem.model.ActivityNotificationsEnvelope>("/api/v1/push/devices/$deviceId/activity").items
+
+    suspend fun acknowledgeActivityNotifications(deviceId: String, ids: List<String>) {
+        raw(
+            "POST",
+            "/api/v1/push/devices/$deviceId/activity/ack",
+            encode(mapOf("ids" to ids)),
+            authenticated = true,
+        )
+    }
 
     /** El buidat de la cua de sortida (docs/06 §4). El cos ja ve serialitzat. */
     suspend fun syncBatch(body: String): String =

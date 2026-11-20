@@ -9,6 +9,7 @@
 
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { t } from '@fem-ho/contracts';
+import { validate as isUuid } from 'uuid';
 import { match, useRouter } from './router.js';
 import { useSession, useSessionData } from './session.js';
 import { needsScopeModeWizard, resolveScopeMode } from './scope-mode.js';
@@ -189,6 +190,9 @@ function AppShell() {
   const projectIds = projectsQuery === null || projectsQuery === '' ? [] : projectsQuery.split(',');
   const { notify, dismiss, clear: clearToasts } = useToasts();
   const [openTask, setOpenTask] = useState<string | null>(null);
+  const taskQuery = route.path === '/' ? route.query.get('task') : null;
+  const linkedTask = taskQuery !== null && isUuid(taskQuery) ? taskQuery : null;
+  const displayedTask = linkedTask ?? openTask;
   /** Una tasca nova des de l'edició completa: quina columna, i si és per a la IA. */
   const [newTask, setNewTask] = useState<NonNullable<TaskModalProps['create']> | null>(null);
   const [aiBoard, setAiBoard] = useState(false);
@@ -559,11 +563,14 @@ function AppShell() {
           />
         )}
 
-        {openTask === null ? null : (
+        {displayedTask === null ? null : (
           <TaskModal
-            key={openTask}
-            taskId={openTask}
-            onClose={() => setOpenTask(null)}
+            key={displayedTask}
+            taskId={displayedTask}
+            onClose={() => {
+              setOpenTask(null);
+              if (linkedTask !== null) setQuery({ task: null });
+            }}
             onChanged={() => setReloadKey((value) => value + 1)}
             onShare={setSharingTask}
             onOpenList={(checklistId) => {

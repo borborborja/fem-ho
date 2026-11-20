@@ -6,6 +6,10 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.core.app.NotificationCompat
+import ho.fem.data.Container
+import ho.fem.model.ActivityNotification
+import ho.fem.model.ActivityNotificationKind
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -28,8 +32,30 @@ import org.unifiedpush.android.connector.data.PushMessage
 class PushReceiver : MessagingReceiver() {
 
     override fun onMessage(context: Context, message: PushMessage, instance: String) {
-        val account = (context.applicationContext as FemhoApplication).container.account() ?: return
+        val container = Container.get(context)
+        val account = container.account() ?: return
+        if (!message.decrypted || !ActivityNotifications.accepts(context, account, instance)) return
         val payload = runCatching { JSONObject(String(message.content)) }.getOrNull() ?: return
+
+        if (payload.has("kind")) {
+            val kind = ActivityNotificationKind.entries.firstOrNull { it.wire == payload.optString("kind") } ?: return
+            val item = ActivityNotification(
+                id = payload.optString("id").ifEmpty { return },
+                kind = kind,
+                deviceId = payload.optString("device_id").ifEmpty { return },
+                taskId = payload.optString("task_id").ifEmpty { return },
+                title = payload.optString("title").ifEmpty { return },
+                body = payload.optString("body"),
+                createdAt = payload.optString("created_at").ifEmpty { return },
+            )
+            background {
+                if (ActivityNotifications.accepts(context, account, instance) &&
+                    ActivityNotifications.display(container, account, item)) {
+                    Notifications.requestSync(context, account)
+                }
+            }
+            return
+        }
 
         val title = payload.optString("title").ifEmpty { return }
         val body = payload.optString("body")
@@ -99,18 +125,11 @@ class PushReceiver : MessagingReceiver() {
      * mateixa taula i les fa servir amb la mateixa crida.
      */
     override fun onNewEndpoint(context: Context, endpoint: PushEndpoint, instance: String) {
-        val container = (context.applicationContext as FemhoApplication).container
-        val keys = endpoint.pubKeySet ?: return
-
-        CoroutineScope(Dispatchers.IO).launch {
-            val account = container.account() ?: return@launch
-            runCatching {
-                container.api(account).subscribePush(
-                    endpoint = endpoint.url,
-                    p256dh = keys.pubKey,
-                    auth = keys.auth,
-                )
-            }
+        val container = Container.get(context)
+        val account = container.account() ?: return
+        if (!ActivityNotifications.accepts(context, account, instance)) return
+        background {
+            ActivityNotifications.onEndpoint(container, account, instance, endpoint)
         }
     }
 
@@ -122,7 +141,10 @@ class PushReceiver : MessagingReceiver() {
      * la desinstal·lin. Es cau a la consulta periòdica i ja està.
      */
     override fun onUnregistered(context: Context, instance: String) {
-        Notifications.schedulePolling(context)
+        val container = Container.get(context)
+        val account = container.account() ?: return
+        if (!ActivityNotifications.accepts(context, account, instance)) return
+        background { ActivityNotifications.onUnregistered(container, account, instance) }
     }
 
     /**
@@ -133,7 +155,22 @@ class PushReceiver : MessagingReceiver() {
      * el pugui mirar.
      */
     override fun onRegistrationFailed(context: Context, reason: FailedReason, instance: String) {
-        android.util.Log.w("femho", "UnifiedPush no s'ha pogut registrar: ${'$'}reason")
-        Notifications.schedulePolling(context)
+        onUnregistered(context, instance)
+    }
+
+    /** Les confirmacions poden arribar amb l'activitat tancada. */
+    private fun background(work: suspend () -> Unit) {
+        val pending = goAsync()
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                work()
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                // Si el servidor no respon, la consulta periòdica conserva els avisos.
+            } finally {
+                pending?.finish()
+            }
+        }
     }
 }

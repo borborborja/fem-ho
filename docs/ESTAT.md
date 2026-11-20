@@ -7,6 +7,34 @@ Data de l'última verificació completa: **2026-11-19**.
 
 ---
 
+## Avisos d'activitat de connexions externes · 0.25.0
+
+El web i Android permeten triar els avisos per dispositiu i àmbit. Els canvis
+de connexions MCP i REST que generen avisos són les creacions, els canvis
+d'estat, l'activitat de la fitxa i les entrades a Inbox. Tots els tipus
+comencen desactivats. Android té quatre canals del sistema i recull avisos
+en sincronitzar si el dispositiu no té cap distribuïdor UnifiedPush.
+
+La migració 028 conserva les subscripcions existents. Les proves amb SQLite i
+PostgreSQL cobreixen les escriptures MCP i REST, la privadesa de cada
+dispositiu, la pèrdua d'accés, la baixa i la recuperació d'un enviament
+interromput. Amb el web construït i Google Chrome s'ha verificat una
+subscripció Web Push real, el lliurament amb la web en segon pla i
+l'obertura de la fitxa des de l'avís. La prova, contra un servidor aïllat,
+també ha confirmat que una tasca creada a Inbox amb l'avís desactivat no
+genera cap notificació.
+
+La prova instrumentada d'Android 16 ha exercitat els canals del sistema,
+la recepció per sincronització i la deduplicació contra un servidor de proves.
+Amb l'APK de publicació en Android 16 també s'ha rebut un avís xifrat de
+UnifiedPush a través de ntfy, amb Fem-ho en segon pla. L'app ha mostrat un
+sol avís i n'ha confirmat la recepció al servidor.
+
+En publicar, actualitza primer el servidor i després l'APK. Consulta la
+[guia de configuració](11-notificacions.md#12--avisos-dactivitat-de-connexions-externes).
+
+---
+
 ## Targetes de tasca compactes · 0.24.0
 
 Al web i a Android, l'acció IA apareix al peu de la barra dreta de les
@@ -622,10 +650,9 @@ s'abandona.
 No es pot verificar en aquesta màquina i **no s'ha verificat**:
 
 - `androidTest: airplane-mode-reconciliation` — cal un emulador o un telèfon.
-- **UnifiedPush amb un distribuïdor real** (ntfy, Sunup). El codi hi és i compila, però
-  no s'ha vist arribar cap notificació: cal un telèfon amb un distribuïdor instal·lat.
-  La consulta periòdica, que és el que tindrà la majoria de gent, sí que és independent
-  del distribuïdor.
+- **Recordatoris amb un distribuïdor real**. Els avisos d'activitat ja s'han
+  verificat amb UnifiedPush i ntfy a Android 16. La consulta periòdica dels avisos
+  d'activitat també s'ha comprovat sense distribuïdor.
 - La comparació de captures entre la web mòbil i l'app — el mateix.
 - **L'app d'Android en execució.** Compila, empaqueta i les proves de Kotlin passen, però
   aquí no hi ha ni emulador ni telèfon: el que s'ha vist funcionar de veritat és la web.

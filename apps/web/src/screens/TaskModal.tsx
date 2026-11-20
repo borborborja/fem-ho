@@ -25,7 +25,7 @@ import {
 } from '@fem-ho/contracts';
 import { v7 as uuidv7 } from 'uuid';
 import { ActivityTimeline, EmptyState } from '@fem-ho/design-system/femho';
-import { api, failureText } from '../app/api.js';
+import { api, ApiError, failureText } from '../app/api.js';
 import { Attachments } from '../app/Attachments.js';
 import { taskAiMethodLabel, taskAiStatusLabel, type TaskAiExecution } from '../app/task-ai.js';
 import { McpSourceBadge } from '../board/McpSourceBadge.js';
@@ -452,7 +452,23 @@ export function TaskModal({
         }}
       >
         {draft === null ? (
-          <p style={{ margin: 0, fontSize: 13, color: 'var(--ink-faint)' }}>{t('state.loading')}</p>
+          task.error === undefined ? (
+            <p style={{ margin: 0, fontSize: 13, color: 'var(--ink-faint)' }}>
+              {t('state.loading')}
+            </p>
+          ) : (
+            <>
+              <p role="alert" style={{ margin: 0 }}>
+                {task.error instanceof ApiError &&
+                (task.error.status === 403 || task.error.status === 404)
+                  ? t('notify.activity.taskUnavailable')
+                  : failureText(task.error)}
+              </p>
+              <button type="button" className="plou-btn plou-btn-ghost" onClick={onClose}>
+                {t('nav.close')}
+              </button>
+            </>
+          )
         ) : (
           <>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

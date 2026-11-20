@@ -1,6 +1,7 @@
 package ho.fem.app
 
 import android.app.LocaleManager
+import android.app.NotificationManager
 import android.content.Context
 import android.net.ConnectivityManager
 import android.os.ParcelFileDescriptor
@@ -8,6 +9,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsOn
+import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
@@ -24,6 +26,7 @@ import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performTextReplacement
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import ho.fem.model.ActivityNotificationKind
 import java.net.HttpURLConnection
 import java.net.URL
 import kotlinx.coroutines.flow.first
@@ -155,6 +158,7 @@ class AndroidDailyFlowTest {
             }
         }
 
+        verifyActivityNotifications(control, scope, token)
         tag("settings-tab-general").performScrollTo().performClick()
         tag("settings-logout").performScrollTo().performClick()
         signIn(argument("otherEmail"), password, language = "es")
@@ -172,6 +176,65 @@ class AndroidDailyFlowTest {
         compose.waitUntil(15_000) {
             compose.onAllNodes(focusedInbox, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
         }
+    }
+
+    private fun verifyActivityNotifications(base: String, scope: String, sessionToken: String) {
+        val manager = target.getSystemService(NotificationManager::class.java)
+        val container = (target.applicationContext as FemhoApplication).container
+        val account = requireNotNull(container.account())
+        val deviceId = ActivityNotifications.deviceId(target, account)
+        val api = container.api(account)
+        val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
+        ParcelFileDescriptor.AutoCloseInputStream(
+            automation.executeShellCommand("pm grant ${target.packageName} android.permission.POST_NOTIFICATIONS"),
+        ).use { it.readBytes() }
+
+        tag("settings-tab-notifications").performScrollTo().performClick()
+        val inboxToggle = "notifications-$scope-inbox_entry"
+        val createdToggle = "notifications-$scope-task_created"
+        tag(inboxToggle).performScrollTo().assertIsOff()
+        tag("notifications-device-toggle", enabled = true).performScrollTo().performClick()
+        tag(createdToggle, enabled = true).performScrollTo().performClick()
+        tag(createdToggle, enabled = true).assertIsOn()
+        tag(inboxToggle).assertIsOff()
+        assertEquals(
+            ActivityNotificationKind.entries.map(ActivityNotifications::channel).toSet(),
+            manager.notificationChannels.map { it.id }.filter { it.startsWith("external_") }.toSet(),
+        )
+
+        request(base, "/api/v1/external-access", "PATCH", JSONObject().put("api_enabled", true), sessionToken)
+        val pat = request(base, "/api/v1/tokens", "POST", JSONObject()
+            .put("name", "Notification smoke client")
+            .put("capabilities", org.json.JSONArray(listOf("tasks:create")))
+            .put("channels", org.json.JSONArray(listOf("api")))
+            .put("scope_ids", org.json.JSONArray(listOf(scope))), sessionToken).getString("token")
+        fun create(status: String, title: String) = request(base, "/api/v1/tasks", "POST", JSONObject()
+            .put("scope_id", scope).put("status", status).put("title", title), pat).getString("id")
+
+        val expected = create("todo", "Task from external API")
+        create("inbox", "Inbox alerts are off")
+        val item = runBlocking { api.pendingActivityNotifications(deviceId).single() }
+        assertEquals(expected, item.taskId)
+        runBlocking { ActivityNotifications.sync(container, account) }
+        val notification = manager.activeNotifications.single { it.tag == item.id }
+        assertEquals(ActivityNotifications.channel(ActivityNotificationKind.TASK_CREATED), notification.notification.channelId)
+        assertEquals(0, notification.notification.actions?.size ?: 0)
+        assertEquals(emptyList<Any>(), runBlocking { api.pendingActivityNotifications(deviceId) })
+
+        var launchIntent: android.content.Intent? = null
+        compose.activityRule.scenario.onActivity { launchIntent = it.intent }
+        try {
+            notification.notification.contentIntent.send()
+            tag("task-title").assertTextContains("Task from external API")
+        } finally {
+            // La notificació empra un URI propi i ActivityScenario encara espera el del llançador.
+            compose.activityRule.scenario.onActivity { it.intent = launchIntent }
+        }
+        manager.cancel(notification.tag, notification.id)
+        check(ActivityNotifications.display(container, account, item))
+        assertEquals(0, manager.activeNotifications.count { it.tag == item.id })
+        tag("task-close").performClick()
+        tag("open-settings").performClick()
     }
 
     private fun signIn(email: String, password: String, language: String) {

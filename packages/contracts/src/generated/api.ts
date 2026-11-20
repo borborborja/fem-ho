@@ -893,8 +893,8 @@ export interface paths {
         /**
          * Registrar una subscripció de push
          * @description **La mateixa ruta per a Web Push i per a UnifiedPush**: comparteixen RFC i
-         *     xifratge (docs/11 §1). El mateix `endpoint` actualitza la fila en comptes de
-         *     crear-ne una de nova.
+         *     xifratge (docs/11 §1). El mateix `endpoint` actualitza la fila del compte.
+         *     Amb `device_id` es vincula a un dispositiu d'activitat activat per la sessió.
          */
         post: operations["subscribePush"];
         /** Treure una subscripció */
@@ -918,6 +918,77 @@ export interface paths {
         get: operations["getVapidPublicKey"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/push/devices/{device_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                device_id: string;
+            };
+            cookie?: never;
+        };
+        /** Consultar l'activació i els àmbits accessibles del dispositiu actual */
+        get: operations["getPushDeviceSettings"];
+        /** Activar o desactivar l'activitat en un dispositiu propi */
+        put: operations["putPushDeviceSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/push/devices/{device_id}/scopes/{scope_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Triar els tipus d'avís d'un àmbit al dispositiu */
+        patch: operations["patchPushScopeSettings"];
+        trace?: never;
+    };
+    "/push/devices/{device_id}/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Consultar fins a 50 avisos pendents del dispositiu Android */
+        get: operations["listPendingPushActivity"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/push/devices/{device_id}/activity/ack": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Confirmar avisos rebuts pel dispositiu Android */
+        post: operations["acknowledgePushActivity"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2987,6 +3058,58 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        PushSubscriptionInput: {
+            endpoint: string;
+            p256dh: string;
+            auth: string;
+            /** @enum {string} */
+            platform: "web" | "android";
+            /**
+             * Format: uuid
+             * @description Dispositiu propi activat per rebre avisos d'activitat.
+             */
+            device_id?: string;
+        };
+        PushDeviceSettingsInput: {
+            /** @enum {string} */
+            platform: "web" | "android";
+            enabled: boolean;
+        };
+        PushScopeSettingsUpdate: {
+            task_created?: boolean;
+            status_changed?: boolean;
+            task_activity?: boolean;
+            inbox_entry?: boolean;
+        };
+        PushScopeSettings: {
+            /** Format: uuid */
+            scope_id: string;
+            scope_name: string;
+            task_created: boolean;
+            status_changed: boolean;
+            task_activity: boolean;
+            inbox_entry: boolean;
+        };
+        PushDeviceSettings: {
+            enabled: boolean;
+            subscribed: boolean;
+            scopes: components["schemas"]["PushScopeSettings"][];
+        };
+        /** @enum {string} */
+        TaskActivityKind: "task_created" | "status_changed" | "task_activity" | "inbox_entry";
+        TaskActivityNotification: {
+            kind: components["schemas"]["TaskActivityKind"];
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            device_id: string;
+            /** Format: uuid */
+            task_id: string;
+            title: string;
+            body: string;
+            /** Format: date-time */
+            created_at: string;
+        };
         McpOAuthClient: {
             client_name?: string;
             redirect_uris: string[];
@@ -6792,13 +6915,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": {
-                    endpoint: string;
-                    p256dh: string;
-                    auth: string;
-                    /** @enum {string} */
-                    platform: "web" | "android";
-                };
+                "application/json": components["schemas"]["PushSubscriptionInput"];
             };
         };
         responses: {
@@ -6807,9 +6924,24 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        id: string;
+                    };
+                };
             };
             401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            /** @description L'endpoint ja es fa servir en una altra connexió. Cal renovar la subscripció. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     unsubscribePush: {
@@ -6854,6 +6986,142 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+        };
+    };
+    getPushDeviceSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                device_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Preferències del dispositiu, amb els avisos desactivats per defecte. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PushDeviceSettings"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    putPushDeviceSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                device_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PushDeviceSettingsInput"];
+            };
+        };
+        responses: {
+            /** @description Activació desada. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PushDeviceSettings"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    patchPushScopeSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                device_id: string;
+                scope_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PushScopeSettingsUpdate"];
+            };
+        };
+        responses: {
+            /** @description Preferència desada. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PushScopeSettings"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listPendingPushActivity: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                device_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Avisos pendents, del més antic al més recent. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["TaskActivityNotification"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    acknowledgePushActivity: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                device_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    ids: string[];
+                };
+            };
+        };
+        responses: {
+            /** @description Confirmats. La crida es pot repetir. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
         };
     };
     setAiMode: {

@@ -74,13 +74,15 @@ export async function ensureVapidKeys(db: MigrationDb, now: string): Promise<Vap
   }
 
   const generated = webpush.generateVAPIDKeys();
-  await sql`
+  const inserted = await sql`
     INSERT INTO instance_settings (key, value, created_at, updated_at)
     VALUES (${VAPID_PUBLIC_KEY}, ${generated.publicKey}, ${now}, ${now}),
            (${VAPID_PRIVATE_KEY}, ${generated.privateKey}, ${now}, ${now})
+    ON CONFLICT (key) DO NOTHING
   `.execute(db);
 
-  return generated;
+  // En una instal·lació nova, el planificador i el primer navegador es poden avançar l'un a l'altre.
+  return inserted.numAffectedRows === 2n ? generated : ensureVapidKeys(db, now);
 }
 
 export interface SubscriptionInput {
@@ -89,6 +91,7 @@ export interface SubscriptionInput {
   auth: string;
   platform: 'web' | 'android';
   user_agent?: string | undefined;
+  activityOnly?: boolean | undefined;
 }
 
 function pushEndpoint(raw: string): URL {
@@ -117,30 +120,37 @@ export async function subscribe(
   input: SubscriptionInput,
 ): Promise<{ id: string; created: boolean }> {
   pushEndpoint(input.endpoint);
-  const found = await sql<{ id: string }>`
-    SELECT id FROM push_subscriptions WHERE endpoint = ${input.endpoint}
+  const id = uuidv7();
+  const inserted = await sql<{ id: string }>`
+    INSERT INTO push_subscriptions (id, user_id, endpoint, p256dh, auth, platform,
+                                    user_agent, created_at, fail_count, activity_only)
+    VALUES (${id}, ${userId}, ${input.endpoint}, ${input.p256dh}, ${input.auth},
+            ${input.platform}, ${input.user_agent ?? null}, ${ctx.now}, 0,
+            ${Number(input.activityOnly === true)})
+    ON CONFLICT (endpoint) DO NOTHING
+    RETURNING id
   `.execute(ctx.tx);
-
-  const existing = found.rows[0];
-  if (existing !== undefined) {
-    await sql`
+  if (inserted.rows.length === 0) {
+    const updated = await sql<{ id: string }>`
       UPDATE push_subscriptions
-      SET user_id = ${userId}, p256dh = ${input.p256dh}, auth = ${input.auth},
-          platform = ${input.platform}, user_agent = ${input.user_agent ?? null},
-          fail_count = 0
-      WHERE id = ${existing.id}
+      SET p256dh = ${input.p256dh}, auth = ${input.auth},
+          user_agent = ${input.user_agent ?? null}, fail_count = 0,
+          activity_only = CASE WHEN ${Number(input.activityOnly === true)} = 0 THEN 0 ELSE activity_only END
+      WHERE endpoint = ${input.endpoint} AND user_id = ${userId} AND platform = ${input.platform}
+      RETURNING id
     `.execute(ctx.tx);
+    const existing = updated.rows[0];
+    if (!existing) {
+      throw new PolicyError(
+        'push-subscription-in-use',
+        'Subscription in use',
+        409,
+        'Renew the push subscription on this device.',
+      );
+    }
     ctx.noChange();
     return { id: existing.id, created: false };
   }
-
-  const id = uuidv7();
-  await sql`
-    INSERT INTO push_subscriptions (id, user_id, endpoint, p256dh, auth, platform,
-                                    user_agent, created_at, fail_count)
-    VALUES (${id}, ${userId}, ${input.endpoint}, ${input.p256dh}, ${input.auth},
-            ${input.platform}, ${input.user_agent ?? null}, ${ctx.now}, 0)
-  `.execute(ctx.tx);
 
   ctx.record({
     entityType: 'push_subscription',
@@ -191,6 +201,7 @@ export type PushSender = (
   payload: string,
   options: {
     TTL: number;
+    topic?: string;
     vapidDetails: { subject: string; publicKey: string; privateKey: string };
   },
 ) => Promise<{ statusCode: number }>;
@@ -199,6 +210,36 @@ export interface SendResult {
   sent: number;
   removed: number;
   failed: number;
+}
+
+export async function recordPushOutcome(
+  db: MigrationDb,
+  subscriptionId: string,
+  now: string,
+  errorStatus?: number,
+): Promise<keyof SendResult> {
+  // Per a una subscripció compartida amb l'activitat, conservem el mateix ordre de bloqueig
+  // que la renovació i la baixa. Esborrar la subscripció també toca la fila del dispositiu.
+  await sql`UPDATE notification_devices SET enabled = enabled WHERE subscription_id = ${subscriptionId}`.execute(
+    db,
+  );
+  if (errorStatus === undefined) {
+    await sql`UPDATE push_subscriptions SET last_ok_at = ${now}, fail_count = 0 WHERE id = ${subscriptionId}`.execute(
+      db,
+    );
+    return 'sent';
+  }
+  if (errorStatus !== 404 && errorStatus !== 410) {
+    const updated = await sql<{ fail_count: number }>`
+      UPDATE push_subscriptions SET fail_count = fail_count + 1 WHERE id = ${subscriptionId}
+      RETURNING fail_count
+    `.execute(db);
+    if ((updated.rows[0]?.fail_count ?? 0) < 10) return 'failed';
+  }
+  const removed = await sql`DELETE FROM push_subscriptions WHERE id = ${subscriptionId}`.execute(
+    db,
+  );
+  return removed.numAffectedRows === 1n ? 'removed' : 'failed';
 }
 
 /**
@@ -220,15 +261,15 @@ export async function sendToUser(
     endpoint: string;
     p256dh: string;
     auth: string;
-    fail_count: number;
   }>`
-    SELECT id, endpoint, p256dh, auth, fail_count FROM push_subscriptions
-    WHERE user_id = ${userId}
+    SELECT id, endpoint, p256dh, auth FROM push_subscriptions
+    WHERE user_id = ${userId} AND activity_only = 0
   `.execute(ctx.tx);
 
   const result: SendResult = { sent: 0, removed: 0, failed: 0 };
 
   for (const row of found.rows) {
+    let errorStatus: number | undefined;
     try {
       await send(
         { endpoint: row.endpoint, keys: { p256dh: row.p256dh, auth: row.auth } },
@@ -239,31 +280,10 @@ export async function sendToUser(
           vapidDetails: { subject, publicKey: keys.publicKey, privateKey: keys.privateKey },
         },
       );
-
-      await sql`
-        UPDATE push_subscriptions SET last_ok_at = ${ctx.now}, fail_count = 0 WHERE id = ${row.id}
-      `.execute(ctx.tx);
-      result.sent += 1;
     } catch (error) {
-      const status = (error as { statusCode?: number }).statusCode ?? 0;
-
-      if (status === 404 || status === 410) {
-        await sql`DELETE FROM push_subscriptions WHERE id = ${row.id}`.execute(ctx.tx);
-        result.removed += 1;
-        continue;
-      }
-
-      const fails = row.fail_count + 1;
-      if (fails >= 10) {
-        await sql`DELETE FROM push_subscriptions WHERE id = ${row.id}`.execute(ctx.tx);
-        result.removed += 1;
-      } else {
-        await sql`
-          UPDATE push_subscriptions SET fail_count = ${fails} WHERE id = ${row.id}
-        `.execute(ctx.tx);
-        result.failed += 1;
-      }
+      errorStatus = (error as { statusCode?: number }).statusCode ?? 0;
     }
+    result[await recordPushOutcome(ctx.tx, row.id, ctx.now, errorStatus)] += 1;
   }
 
   /**

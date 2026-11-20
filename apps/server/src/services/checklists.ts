@@ -505,19 +505,22 @@ async function applyCascade(
     `.execute(ctx.tx);
 
     if (Number(others.rows[0]?.n ?? 0) === 0) {
-      await sql`
+      const changed = await sql`
         UPDATE subtasks SET done = ${dbBool(true)}, updated_at = ${ctx.now}, version = version + 1
         WHERE id = ${checklist.subtask_id} AND done = ${dbBool(false)}
       `.execute(ctx.tx);
 
       result.subtask_completed = true;
-      ctx.record({
-        entityType: 'subtask',
-        entityId: checklist.subtask_id,
-        scopeId,
-        taskId,
-        verb: 'cascade_complete',
-      });
+      if (Number(changed.numAffectedRows ?? 0) > 0) {
+        ctx.record({
+          entityType: 'subtask',
+          entityId: checklist.subtask_id,
+          scopeId,
+          taskId,
+          verb: 'cascade_complete',
+          changes: { done: { from: false, to: true } },
+        });
+      }
     }
   }
 
@@ -556,12 +559,18 @@ export async function setPinned(
 ): Promise<void> {
   if (!hasCapability(principal, 'checklists:write')) throw missingCapability('checklists:write');
 
-  const { scopeId } = await taskOfChecklist(ctx.tx, checklistId);
+  const { checklist, taskId, scopeId } = await taskOfChecklist(ctx.tx, checklistId);
   await assertScopeAccess(ctx.tx, principal, scopeId);
+  const wasPinned = isTrue(checklist.pinned);
+  const pinnedBy = pinned ? principal.userId : null;
+  if (wasPinned === pinned && checklist.pinned_by === pinnedBy) {
+    ctx.noChange();
+    return;
+  }
 
   await sql`
     UPDATE checklists SET pinned = ${dbBool(pinned)},
-                          pinned_by = ${pinned ? principal.userId : null},
+                          pinned_by = ${pinnedBy},
                           updated_at = ${ctx.now}, version = version + 1
     WHERE id = ${checklistId}
   `.execute(ctx.tx);
@@ -570,8 +579,14 @@ export async function setPinned(
     entityType: 'checklist',
     entityId: checklistId,
     scopeId,
+    taskId,
     verb: 'updated',
-    changes: { pinned: { from: !pinned, to: pinned } },
+    changes: {
+      ...(wasPinned !== pinned ? { pinned: { from: wasPinned, to: pinned } } : {}),
+      ...(checklist.pinned_by !== pinnedBy
+        ? { pinned_by: { from: checklist.pinned_by, to: pinnedBy } }
+        : {}),
+    },
   });
 }
 
@@ -627,16 +642,21 @@ export async function updateChecklist(
   }
 
   const name = input.name?.trim() ?? checklist.name;
-  const inline = input.show_completed_inline ?? isTrue(checklist.show_completed_inline);
+  const wasInline = isTrue(checklist.show_completed_inline);
+  const inline = input.show_completed_inline ?? wasInline;
   const subtaskId = input.subtask_id === undefined ? checklist.subtask_id : input.subtask_id;
   const position = input.position ?? checklist.position;
-
-  const igual =
-    name === checklist.name &&
-    inline === isTrue(checklist.show_completed_inline) &&
-    subtaskId === checklist.subtask_id &&
-    position === checklist.position;
-  if (igual) {
+  const changes = {
+    ...(checklist.name !== name ? { name: { from: checklist.name, to: name } } : {}),
+    ...(wasInline !== inline ? { show_completed_inline: { from: wasInline, to: inline } } : {}),
+    ...(checklist.subtask_id !== subtaskId
+      ? { subtask_id: { from: checklist.subtask_id, to: subtaskId } }
+      : {}),
+    ...(checklist.position !== position
+      ? { position: { from: checklist.position, to: position } }
+      : {}),
+  };
+  if (Object.keys(changes).length === 0) {
     ctx.noChange();
     const items = await itemsOf(ctx.tx, [checklistId]);
     return toView(checklist, items.get(checklistId) ?? [], principal);
@@ -653,8 +673,9 @@ export async function updateChecklist(
     entityType: 'checklist',
     entityId: checklistId,
     scopeId,
+    taskId,
     verb: 'updated',
-    changes: { name: { from: checklist.name, to: name } },
+    changes,
   });
 
   const after = await taskOfChecklist(ctx.tx, checklistId);
@@ -669,7 +690,7 @@ export async function deleteChecklist(
 ): Promise<void> {
   if (!hasCapability(principal, 'checklists:write')) throw missingCapability('checklists:write');
 
-  const { scopeId } = await taskOfChecklist(ctx.tx, checklistId);
+  const { taskId, scopeId } = await taskOfChecklist(ctx.tx, checklistId);
   await assertScopeAccess(ctx.tx, principal, scopeId);
 
   // Els ítems cauen amb la llista: no existeixen fora d'ella (P1).
@@ -683,7 +704,7 @@ export async function deleteChecklist(
     WHERE id = ${checklistId}
   `.execute(ctx.tx);
 
-  ctx.record({ entityType: 'checklist', entityId: checklistId, scopeId, verb: 'deleted' });
+  ctx.record({ entityType: 'checklist', entityId: checklistId, scopeId, taskId, verb: 'deleted' });
 }
 
 export async function deleteChecklistItem(
@@ -700,7 +721,7 @@ export async function deleteChecklistItem(
   const item = found.rows[0];
   if (item === undefined) throw notFound('item', itemId);
 
-  const { scopeId } = await taskOfChecklist(ctx.tx, item.checklist_id);
+  const { taskId, scopeId } = await taskOfChecklist(ctx.tx, item.checklist_id);
   await assertScopeAccess(ctx.tx, principal, scopeId);
 
   await sql`
@@ -709,5 +730,5 @@ export async function deleteChecklistItem(
     WHERE id = ${itemId}
   `.execute(ctx.tx);
 
-  ctx.record({ entityType: 'checklist_item', entityId: itemId, scopeId, verb: 'deleted' });
+  ctx.record({ entityType: 'checklist_item', entityId: itemId, scopeId, taskId, verb: 'deleted' });
 }

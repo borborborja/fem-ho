@@ -1698,25 +1698,30 @@ paths:
       summary: Registrar una subscripció de push
       description: |
         **La mateixa ruta per a Web Push i per a UnifiedPush**: comparteixen RFC i
-        xifratge (docs/11 §1). El mateix `endpoint` actualitza la fila en comptes de
-        crear-ne una de nova.
+        xifratge (docs/11 §1). El mateix `endpoint` actualitza la fila del compte.
+        Amb `device_id` es vincula a un dispositiu d'activitat activat per la sessió.
       requestBody:
         required: true
         content:
           application/json:
-            schema:
-              type: object
-              required: [endpoint, p256dh, auth, platform]
-              properties:
-                endpoint: { type: string }
-                p256dh: { type: string }
-                auth: { type: string }
-                platform: { type: string, enum: [web, android] }
+            schema: { $ref: '#/components/schemas/PushSubscriptionInput' }
       responses:
         '201':
           description: Registrada.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id]
+                properties:
+                  id: { type: string, format: uuid }
         '401':
           $ref: '#/components/responses/Unauthenticated'
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: L'endpoint ja es fa servir en una altra connexió. Cal renovar la subscripció.
+          content:
+            application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } }
     delete:
       tags: [notifications]
       operationId: unsubscribePush
@@ -1751,6 +1756,124 @@ paths:
                   public_key: { type: string }
         '401':
           $ref: '#/components/responses/Unauthenticated'
+
+  /push/devices/{device_id}:
+    parameters:
+      - name: device_id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [notifications]
+      operationId: getPushDeviceSettings
+      summary: Consultar l'activació i els àmbits accessibles del dispositiu actual
+      responses:
+        '200':
+          description: Preferències del dispositiu, amb els avisos desactivats per defecte.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PushDeviceSettings' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    put:
+      tags: [notifications]
+      operationId: putPushDeviceSettings
+      summary: Activar o desactivar l'activitat en un dispositiu propi
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PushDeviceSettingsInput' }
+      responses:
+        '200':
+          description: Activació desada.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PushDeviceSettings' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /push/devices/{device_id}/scopes/{scope_id}:
+    patch:
+      tags: [notifications]
+      operationId: patchPushScopeSettings
+      summary: Triar els tipus d'avís d'un àmbit al dispositiu
+      parameters:
+        - name: device_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: scope_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PushScopeSettingsUpdate' }
+      responses:
+        '200':
+          description: Preferència desada.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PushScopeSettings' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /push/devices/{device_id}/activity:
+    get:
+      tags: [notifications]
+      operationId: listPendingPushActivity
+      summary: Consultar fins a 50 avisos pendents del dispositiu Android
+      parameters:
+        - name: device_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Avisos pendents, del més antic al més recent.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/TaskActivityNotification' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /push/devices/{device_id}/activity/ack:
+    post:
+      tags: [notifications]
+      operationId: acknowledgePushActivity
+      summary: Confirmar avisos rebuts pel dispositiu Android
+      parameters:
+        - name: device_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ids]
+              properties:
+                ids:
+                  type: array
+                  minItems: 1
+                  maxItems: 50
+                  items: { type: string, format: uuid }
+      responses:
+        '204': { description: Confirmats. La crida es pot repetir. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
 
   /tasks/{id}/ai-mode:
     post:
@@ -4928,6 +5051,67 @@ paths:
 
 components:
   schemas:
+    PushSubscriptionInput:
+      type: object
+      required: [endpoint, p256dh, auth, platform]
+      properties:
+        endpoint: { type: string }
+        p256dh: { type: string }
+        auth: { type: string }
+        platform: { type: string, enum: [web, android] }
+        device_id:
+          type: string
+          format: uuid
+          description: Dispositiu propi activat per rebre avisos d'activitat.
+    PushDeviceSettingsInput:
+      type: object
+      additionalProperties: false
+      required: [platform, enabled]
+      properties:
+        platform: { type: string, enum: [web, android] }
+        enabled: { type: boolean }
+    PushScopeSettingsUpdate:
+      type: object
+      minProperties: 1
+      additionalProperties: false
+      properties:
+        task_created: { type: boolean }
+        status_changed: { type: boolean }
+        task_activity: { type: boolean }
+        inbox_entry: { type: boolean }
+    PushScopeSettings:
+      type: object
+      required: [scope_id, scope_name, task_created, status_changed, task_activity, inbox_entry]
+      properties:
+        scope_id: { type: string, format: uuid }
+        scope_name: { type: string }
+        task_created: { type: boolean }
+        status_changed: { type: boolean }
+        task_activity: { type: boolean }
+        inbox_entry: { type: boolean }
+    PushDeviceSettings:
+      type: object
+      required: [enabled, subscribed, scopes]
+      properties:
+        enabled: { type: boolean }
+        subscribed: { type: boolean }
+        scopes:
+          type: array
+          items: { $ref: '#/components/schemas/PushScopeSettings' }
+    TaskActivityKind:
+      type: string
+      enum: [task_created, status_changed, task_activity, inbox_entry]
+    TaskActivityNotification:
+      type: object
+      required: [kind, id, device_id, task_id, title, body, created_at]
+      properties:
+        kind: { $ref: '#/components/schemas/TaskActivityKind' }
+        id: { type: string, format: uuid }
+        device_id: { type: string, format: uuid }
+        task_id: { type: string, format: uuid }
+        title: { type: string }
+        body: { type: string }
+        created_at: { type: string, format: date-time }
     McpOAuthClient:
       type: object
       required: [redirect_uris]

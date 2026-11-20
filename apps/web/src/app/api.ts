@@ -128,7 +128,7 @@ export function saveTokens(tokens: Tokens | null): void {
 let tokens: Tokens | null = loadTokens();
 let refreshing: Promise<boolean> | null = null;
 let sessionEpoch = 0;
-let onSessionLost: (() => void) | null = null;
+let onSessionLost: ((userId: string | undefined) => void) | null = null;
 
 export function setTokens(next: Tokens | null): void {
   sessionEpoch += 1;
@@ -152,7 +152,7 @@ export function bindSessionUser(userId: string): void {
 }
 
 /** Es crida quan el refresc falla: la interfície ha de tornar al login. */
-export function onSessionExpired(handler: () => void): void {
+export function onSessionExpired(handler: (userId: string | undefined) => void): void {
   onSessionLost = handler;
 }
 
@@ -173,7 +173,7 @@ async function refresh(): Promise<boolean> {
     if (!res.ok) {
       if (res.status === 401) {
         setTokens(null);
-        onSessionLost?.();
+        onSessionLost?.(current.user_id);
         return false;
       }
       // Un 429 o un error del servidor no revoca cap credencial.
