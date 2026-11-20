@@ -229,6 +229,13 @@ no arrencar que arrencar amb l'esquema a mitges.
 Les etiquetes són `latest`, la versió sencera (`1.4.2`) i la major (`1`). Qui vulgui
 actualitzacions automàtiques fixa la major; qui vulgui control, la sencera.
 
+Si el contenidor ja serveix la versió nova però la web continua mostrant la
+interfície anterior, comprova les respostes d'`/info` i `/sw.js` al domini públic.
+En passar de 0.23.0 o anterior a 0.23.1, invalida al CDN les còpies antigues
+d'`/sw.js`, `/registerSW.js` i de l'HTML si encara les serveix. Si una pestanya
+continua oberta amb la interfície anterior, força'n una recàrrega amb
+**Ctrl+Maj+R**. Aquest gest conserva la sessió i la cua de canvis pendents.
+
 ---
 
 ## Còpies de seguretat

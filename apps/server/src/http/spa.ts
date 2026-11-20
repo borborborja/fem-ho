@@ -14,14 +14,14 @@
  *      `GET /api/v1/tasques-inexistents` tornaria l'HTML de l'app amb un 200 i el client
  *      es trobaria intentant fer `JSON.parse` d'un `<!doctype html>`.
  *
- *   2. **`index.html` no es guarda a la memòria cau.** Els fitxers amb hash al nom sí,
- *      un any, perquè el nom canvia quan canvia el contingut. L'`index.html` és el que
- *      apunta als altres: si un navegador se'l queda, l'app es queda clavada a la versió
- *      antiga i el desplegament següent no arriba mai.
+ *   2. **L'HTML i el service worker es comproven a cada desplegament.** Els fitxers
+ *      amb hash al nom es poden desar un any perquè un canvi també en canvia l'URL.
+ *      Si el navegador o el proxy conserva l'HTML o el service worker, la versió
+ *      anterior continua decidint quins fitxers obre l'app.
  */
 
 import { existsSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fastifyStatic from '@fastify/static';
 import type { FastifyInstance } from 'fastify';
@@ -55,6 +55,8 @@ const API_PREFIXES = [
   '/brand/',
 ];
 
+const HASHED_WEB_ASSET = /^(?:assets\/.+-|workbox-)[\w-]{8,}\.[a-z\d]+(?:\.map)?$/u;
+
 /**
  * On és la construcció de la web.
  *
@@ -74,8 +76,7 @@ function findWebRoot(): string | null {
   return candidates.find((path) => existsSync(join(path, 'index.html'))) ?? null;
 }
 
-export function registerSpaRoutes(app: FastifyInstance): boolean {
-  const root = findWebRoot();
+export function registerSpaRoutes(app: FastifyInstance, root = findWebRoot()): boolean {
   if (root === null) {
     app.log.info("sense construcció de la web: només se serveix l'API");
     return false;
@@ -83,9 +84,17 @@ export function registerSpaRoutes(app: FastifyInstance): boolean {
 
   void app.register(fastifyStatic, {
     root,
-    // Els actius porten un hash al nom (Vite): es poden guardar per sempre.
-    maxAge: '1y',
-    immutable: true,
+    // El plugin també genera capçaleres a sendFile() per a les rutes de l'app.
+    cacheControl: false,
+    setHeaders(reply, path) {
+      const asset = relative(root, path).split(sep).join('/');
+      reply.header(
+        'cache-control',
+        HASHED_WEB_ASSET.test(asset)
+          ? 'public, max-age=31536000, immutable'
+          : 'no-cache, no-store, must-revalidate',
+      );
+    },
     // L'`index.html` el serveix el gestor de sota, amb les seves capçaleres.
     index: false,
     wildcard: false,
@@ -115,11 +124,8 @@ export function registerSpaRoutes(app: FastifyInstance): boolean {
       return;
     }
 
-    // Regla 2: l'`index.html` no es guarda mai.
-    void reply
-      .header('cache-control', 'no-cache, no-store, must-revalidate')
-      .type('text/html; charset=utf-8')
-      .sendFile('index.html');
+    // `sendFile` aplica la mateixa política que la petició directa a `index.html`.
+    void reply.type('text/html; charset=utf-8').sendFile('index.html');
   });
 
   return true;

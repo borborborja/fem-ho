@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { enterAsNew, token } from './entrar.js';
 
@@ -23,6 +24,43 @@ async function addTodo(page: Page, title: string): Promise<void> {
   await input.press('Enter');
   await expect(page.getByTestId('column-todo')).toContainText(title);
 }
+
+test('la PWA registra el worker de la versió i deixa passar el diagnòstic', async ({ page }) => {
+  const { version } = JSON.parse(
+    readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
+  ) as { version: string };
+  await page.goto('/');
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const worker = navigator.serviceWorker.controller;
+        if (worker === null) return null;
+        const url = new URL(worker.scriptURL);
+        return `${url.pathname}${url.search}`;
+      }),
+    )
+    .toBe(`/sw.js?v=${version}`);
+  const updateViaCache = await page.evaluate(
+    async () => (await navigator.serviceWorker.ready).updateViaCache,
+  );
+  expect(updateViaCache).toBe('none');
+
+  for (const [path, expected] of [
+    ['/info', { version }],
+    ['/healthz', { status: 'ok' }],
+    ['/readyz', { status: 'ready' }],
+  ] as const) {
+    const response = await page.goto(path);
+    expect(response?.ok()).toBe(true);
+    expect(response?.fromServiceWorker()).toBe(false);
+    expect(await response?.json()).toMatchObject(expected);
+  }
+
+  // Un navegador amb un worker antic pot arribar a l'HTML nou per aquesta ruta.
+  const recovery = await page.goto('/connect/mcp?refresh=1');
+  expect(recovery?.ok()).toBe(true);
+  expect(recovery?.fromServiceWorker()).toBe(false);
+});
 
 test('el tauler conserva una captura i un moviment després de recarregar-se sense xarxa', async ({
   page,

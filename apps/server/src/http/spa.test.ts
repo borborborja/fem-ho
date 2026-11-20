@@ -16,12 +16,14 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import fastify from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../app.js';
 import { loadConfig } from '../config.js';
 import { connect, type Connection } from '../db/connection.js';
 import { migrateToLatest } from '../db/migrator.js';
+import { registerSpaRoutes } from './spa.js';
 
 const tmp = mkdtempSync(join(tmpdir(), 'femho-spa-'));
 
@@ -88,5 +90,69 @@ describe('les URL que són pàgina i endpoint alhora', () => {
     const res = await app.inject({ method: 'GET', url: '/api/v1/inventat' });
     expect(res.statusCode).toBe(404);
     expect(res.headers['content-type']).toContain('application/problem+json');
+  });
+});
+
+describe('la memòria cau dels fitxers web', () => {
+  const cacheRoot = join(tmp, 'web-cache');
+  const files = {
+    'index.html': '<!doctype html><title>Fem-ho</title>',
+    'sw.js': 'self.skipWaiting();',
+    'registerSW.js': "navigator.serviceWorker.register('/sw.js');",
+    'manifest.webmanifest': '{"name":"Fem-ho"}',
+    'favicon.svg': '<svg/>',
+    'workbox-da147c5a.js': 'export {};',
+    'assets/index-C3VvMzMj.js': 'export {};',
+    'assets/fixed.css': 'body {}',
+  };
+  let web: FastifyInstance;
+
+  beforeAll(async () => {
+    mkdirSync(join(cacheRoot, 'assets'), { recursive: true });
+    for (const [file, body] of Object.entries(files)) writeFileSync(join(cacheRoot, file), body);
+    web = fastify();
+    registerSpaRoutes(web, cacheRoot);
+    await web.ready();
+  });
+
+  afterAll(async () => {
+    await web.close();
+  });
+
+  it.each([
+    '/',
+    '/settings',
+    '/index.html',
+    '/sw.js',
+    '/registerSW.js',
+    '/manifest.webmanifest',
+    '/favicon.svg',
+    '/assets/fixed.css',
+  ])('només serveix una còpia actual de %s', async (url) => {
+    const response = await web.inject({ method: 'GET', url });
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['cache-control']).toBe('no-cache, no-store, must-revalidate');
+  });
+
+  it.each(['/assets/index-C3VvMzMj.js', '/workbox-da147c5a.js'])(
+    'pot conservar el fitxer amb hash %s',
+    async (url) => {
+      const response = await web.inject({ method: 'HEAD', url });
+      expect(response.statusCode).toBe(200);
+      expect(response.headers['cache-control']).toBe('public, max-age=31536000, immutable');
+    },
+  );
+
+  it('també envia la política correcta en revalidar el service worker', async () => {
+    const worker = await web.inject({ method: 'GET', url: '/sw.js' });
+    const etag = worker.headers.etag;
+    expect(etag).toEqual(expect.any(String));
+    const revalidated = await web.inject({
+      method: 'GET',
+      url: '/sw.js',
+      headers: { 'if-none-match': String(etag) },
+    });
+    expect(revalidated.statusCode).toBe(304);
+    expect(revalidated.headers['cache-control']).toBe('no-cache, no-store, must-revalidate');
   });
 });
