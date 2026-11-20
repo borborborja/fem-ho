@@ -6,8 +6,12 @@ type CreateTask = components['schemas']['TaskInput'];
 type MoveTask = components['schemas']['MoveInput'] & { ai_mode?: Task['ai_mode'] };
 
 /** El servidor conserva la versió de base. Les posicions i els temps locals s'hi projecten. */
-export function projectBoardTasks(base: Task[], pending: OutboxRow[]): Task[] {
+export function projectBoardTasks(base: Task[], pending: OutboxRow[], moved?: Task): Task[] {
   const tasks = new Map(base.map((task) => [task.id, task]));
+  if (moved !== undefined) {
+    const existing = tasks.get(moved.id);
+    if (existing !== undefined && moved.version > existing.version) tasks.set(moved.id, moved);
+  }
   const blocked = new Set<string>();
   for (const row of pending) {
     if (row.entity_type !== 'task') continue;

@@ -140,6 +140,20 @@ Tres resultats i prou. **Cada operació es resol per separat**: una que falli no
 
 `op_id` és la clau d'idempotència. Reenviar un lot després d'una caiguda no duplica res.
 
+### Pomodoro personal
+
+`GET /api/v1/pomodoro` torna l'estat del compte i l'hora del servidor en
+mil·lisegons. Les sessions humanes escriuen a `/sync/batch` amb l'entitat
+`pomodoro`, l'operació `update` i l'identificador del compte. La cua i el temporitzador
+tenen versions pròpies. Una ordre del temporitzador identifica també la fase.
+
+Les fases es poden calcular des del termini absolut. Desar una pausa o un nou
+inici és una operació, i el pas del rellotge es calcula localment. Iniciar un
+bloc amb una tasca de «Per fer» també la mou a «Fent» dins la mateixa transacció.
+Cada client desa la projecció i la cua abans d'enviar-les. Si dos dispositius
+inicien un Pomodoro desconnectats, el primer que confirma el servidor es
+comparteix. L'altre recupera l'estat confirmat i avisa del conflicte.
+
 ---
 
 ## 5 · Conflictes

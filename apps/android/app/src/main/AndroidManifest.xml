@@ -6,6 +6,7 @@
     <!-- Els recordatoris arriben per UnifiedPush (docs/11 §1); el permís de
          notificació és obligatori des d'Android 13. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
 
     <application
         android:name=".FemhoApplication"
@@ -153,5 +154,7 @@
                 <action android:name="ho.fem.notification.SNOOZE" />
             </intent-filter>
         </receiver>
+
+        <receiver android:name=".PomodoroAlarmReceiver" android:exported="false" />
     </application>
 </manifest>

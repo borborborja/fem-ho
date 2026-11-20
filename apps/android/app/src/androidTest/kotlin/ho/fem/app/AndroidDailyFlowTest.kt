@@ -75,6 +75,7 @@ class AndroidDailyFlowTest {
             useUnmergedTree = true,
         ).assertCountEquals(2)
         verifyCompletedTasks(control, scope, token)
+        verifyPomodoro(control, scope, token)
         tag("board-task-$task").performClick()
         tag("task-deadline").assertTextContains(date, substring = true)
         tag("task-close").performClick()
@@ -169,6 +170,7 @@ class AndroidDailyFlowTest {
         signIn(argument("otherEmail"), password, language = "es")
         waitForText("Secondary account fixture")
         compose.onNodeWithTag("board-task-$task").assertDoesNotExist()
+        compose.onNodeWithTag("open-pomodoro").assertDoesNotExist()
         compose.activityRule.scenario.onActivity { activity ->
             val launchIntent = activity.intent
             InstrumentationRegistry.getInstrumentation().callActivityOnNewIntent(
@@ -260,6 +262,79 @@ class AndroidDailyFlowTest {
         compose.waitUntil(timeoutMillis) {
             compose.onAllNodes(countInTab, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
         }
+    }
+
+    private fun verifyPomodoro(base: String, scope: String, token: String) {
+        compose.onNodeWithTag("open-pomodoro").assertDoesNotExist()
+        val ids = listOf("First focus task", "Second focus task").map { title ->
+            request(base, "/api/v1/tasks", "POST", JSONObject().put("scope_id", scope).put("title", title)
+                .put("status", "todo"), token).getString("id")
+        }
+        val container = (target.applicationContext as FemhoApplication).container
+        Notifications.requestSync(target, requireNotNull(container.account()))
+        tag("board-column-todo").performClick()
+        ids.forEach { tag("board-task-$it", timeoutMillis = 65_000) }
+        tag("open-settings").performClick()
+        tag("settings-pomodoro").performScrollTo().assertIsOff()
+
+        try {
+            setOffline(true)
+            tag("settings-pomodoro").performClick()
+            waitForProjectSelection("settings-pomodoro")
+            tag("settings-back").performClick()
+            tag("open-pomodoro").performClick()
+            tag("pomodoro-countdown").assertTextContains("25:00")
+            tag("pomodoro-tomato")
+
+            for (id in ids) {
+                tag("pomodoro-add-task").performScrollTo().performClick()
+                tag("pomodoro-pick-$id").performClick()
+                tag("pomodoro-queue-$id")
+            }
+            tag("pomodoro-up-${ids[1]}").performScrollTo().performClick()
+            tag("pomodoro-select-${ids[1]}").performScrollTo().performClick()
+            tag("pomodoro-primary").performScrollTo().performClick()
+            waitForPomodoroPrimary("Pause")
+
+            compose.activityRule.scenario.onActivity { it.viewModelStore.clear() }
+            compose.activityRule.scenario.recreate()
+            waitForPomodoroPrimary("Pause")
+            tag("pomodoro-primary").performScrollTo().performClick()
+            waitForPomodoroPrimary("Resume")
+            compose.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+            tag("board-column-doing").performClick()
+            tag("board-task-${ids[1]}")
+            check(request(base, "/api/v1/tasks/${ids[1]}", token = token).getString("status") == "todo")
+            tag("open-pomodoro").performClick()
+            waitForPomodoroPrimary("Resume")
+        } finally {
+            setOffline(false)
+        }
+
+        compose.waitUntil(65_000) {
+            runCatching {
+                val state = request(base, "/api/v1/pomodoro", token = token)
+                val queue = state.getJSONArray("queue")
+                state.getJSONObject("settings").getBoolean("enabled") && queue.getString(0) == ids[1] &&
+                    queue.getString(1) == ids[0] && state.getJSONObject("timer").getString("status") == "paused" &&
+                    request(base, "/api/v1/tasks/${ids[1]}", token = token).getString("status") == "doing"
+            }.getOrDefault(false)
+        }
+
+        tag("pomodoro-settings").performScrollTo().performClick()
+        tag("pomodoro-mode-serious").performScrollTo().performClick()
+        tag("pomodoro-settings-save").performClick()
+        compose.waitUntil(15_000) {
+            compose.onAllNodes(hasTestTag("pomodoro-tomato"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty()
+        }
+        tag("pomodoro-stop").performScrollTo().performClick()
+        waitForPomodoroPrimary("Start")
+        compose.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+        tag("board-column-inbox").performClick()
+    }
+
+    private fun waitForPomodoroPrimary(label: String) = compose.waitUntil(15_000) {
+        compose.onAllNodes(hasTestTag("pomodoro-primary") and hasText(label)).fetchSemanticsNodes().isNotEmpty()
     }
 
     private fun verifyActivityNotifications(base: String, scope: String, sessionToken: String) {

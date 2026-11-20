@@ -40,6 +40,16 @@ button {
   font-family: inherit;
 }
 
+.topbar-wordmark > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.topbar-wordmark > img {
+  min-width: 0;
+  object-fit: contain;
+}
+
 /** Scroll vertical sense barra visible (docs/02 §4). */
 .femho-scroll {
   scrollbar-width: none;

@@ -14,6 +14,7 @@ import ho.fem.model.MailRule
 import ho.fem.model.MailSecurity
 import ho.fem.model.MailTestResult
 import ho.fem.model.Person
+import ho.fem.model.PomodoroSnapshot
 import ho.fem.model.Project
 import ho.fem.model.Scope
 import ho.fem.model.ScopeKind
@@ -30,6 +31,8 @@ import ho.fem.model.TaskProgress
 import ho.fem.model.TaskStatus
 import ho.fem.model.TaskType
 import ho.fem.model.UserProfile
+import ho.fem.model.applyPomodoroCommand
+import ho.fem.model.emptyPomodoroSnapshot
 import ho.fem.model.generatePosition
 import ho.fem.network.FemhoApi
 import kotlinx.coroutines.CancellationException
@@ -38,6 +41,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flowOf
 import java.time.Instant
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -79,6 +83,12 @@ data class SyncIssue(
 
 private val storedJson = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
+data class LocalPomodoro(
+    val snapshot: PomodoroSnapshot = emptyPomodoroSnapshot(),
+    val clockOffsetMs: Long = 0,
+    val issueId: String? = null,
+)
+
 /**
  * El repositori. docs/03 §11.
  *
@@ -93,6 +103,7 @@ class Repository(
     private val api: FemhoApi,
     private val flushLock: Mutex = Mutex(),
     private val moveLock: Mutex = Mutex(),
+    private val ownerId: String? = null,
 ) {
 
     val tasks: Flow<List<Task>> = combine(dao.tasks(), dao.outboxFlow()) { _, _ ->
@@ -111,6 +122,10 @@ class Repository(
     val projects: Flow<List<Project>> = dao.projects().map { rows -> rows.map { it.toDomain() } }
     val people: Flow<List<Person>> = dao.people().map { rows -> rows.map { Person(it.id, it.name) } }
     val pending: Flow<Int> = dao.outboxFlow().map { it.size }
+    val pomodoro: Flow<LocalPomodoro> = if (ownerId == null) flowOf(LocalPomodoro()) else
+        combine(dao.pomodoroCache(), dao.outboxFlow()) { _, _ ->
+            moveLock.withLock { localPomodoro() }
+        }.distinctUntilChanged()
     val syncIssues: Flow<List<SyncIssue>> = combine(dao.outboxFlow(), dao.tasks()) { queue, local ->
         val titles = local.associate { it.id to it.title }
         queue.filter { it.state != "pending" }.map {
@@ -141,6 +156,68 @@ class Repository(
         }
     }
 
+    suspend fun refreshPomodoro() = flushLock.withLock {
+        flushPending()
+        readPomodoro(refreshBoardOnChange = true)
+    }
+
+    private suspend fun readPomodoro(refreshBoardOnChange: Boolean = false) {
+        if (ownerId == null) return
+        val sentAt = System.currentTimeMillis()
+        val snapshot = try {
+            api.pomodoro()
+        } catch (error: FemhoApi.ApiException) {
+            if (error.status == 404) return
+            throw error
+        }
+        val offset = snapshot.serverTimeMs - (sentAt + (System.currentTimeMillis() - sentAt) / 2)
+        if (refreshBoardOnChange) {
+            val previous = dao.pomodoroCacheOnce()?.let { storedJson.decodeFromString<PomodoroSnapshot>(it.snapshot) }
+            val taskId = snapshot.timer?.taskId
+            // Un inici en un altre aparell també pot haver mogut la targeta, i una tasca
+            // afegida remotament a la cua encara pot faltar a la còpia del tauler.
+            if ((taskId != null && taskId != previous?.timer?.taskId) ||
+                snapshot.queue.toSet() != previous?.queue.orEmpty().toSet()) refreshBoard(emptyList(), null)
+        }
+        moveLock.withLock {
+            dao.putPomodoroCache(snapshot.toCache(offset, dao.pomodoroCacheOnce()?.issueId))
+        }
+    }
+
+    private suspend fun localPomodoro(): LocalPomodoro {
+        val cache = dao.pomodoroCacheOnce()
+        val initial = cache?.let { storedJson.decodeFromString<PomodoroSnapshot>(it.snapshot) }
+            ?: emptyPomodoroSnapshot()
+        val snapshot = dao.outbox().asSequence().filter { it.entity == "pomodoro" && it.state == "pending" }
+            .fold(initial) { state, queued -> applyPomodoroCommand(state, objectFrom(queued.payload)) ?: state }
+        return LocalPomodoro(snapshot, cache?.clockOffsetMs ?: 0, cache?.issueId)
+    }
+
+    suspend fun dismissPomodoroIssue(issueId: String) = moveLock.withLock { dao.clearPomodoroIssue(issueId) }
+
+    suspend fun enqueuePomodoro(createCommand: (PomodoroSnapshot, Long) -> JsonObject?): Boolean = moveLock.withLock {
+        val owner = checkNotNull(ownerId)
+        val state = localPomodoro()
+        val at = System.currentTimeMillis()
+        val command = createCommand(state.snapshot, at + state.clockOffsetMs) ?: return@withLock false
+        val taskId = command.string("task_id")
+        val requestedTask = taskId?.let { dao.taskRow(it) }
+        if (taskId != null && (requestedTask == null || requestedTask.deleted ||
+                (requestedTask.status != "todo" && requestedTask.status != "doing"))) return@withLock false
+        val position = requestedTask?.takeIf { it.status == "todo" }?.let {
+            generatePosition(dao.lastPosition(it.scopeId, "doing"), null)
+        }
+        val data = if (position == null) command else JsonObject(command + ("position" to JsonPrimitive(position)))
+        if (applyPomodoroCommand(state.snapshot, data) == null) return@withLock false
+        val moved = requestedTask?.takeIf { position != null }
+        val base = moved?.let { buildJsonObject { put("position", it.position) } }
+        val pending = operation("pomodoro", "update", owner, 0, data, taskId = moved?.id, base = base, time = at)
+        if (moved != null && position != null) {
+            dao.putTaskAndEnqueue(moved.toDomain().copy(status = TaskStatus.DOING, position = position).toEntity(), pending)
+        } else dao.enqueue(pending)
+        true
+    }
+
     /**
      * Refresca-ho tot des del servidor.
      *
@@ -150,7 +227,11 @@ class Repository(
      */
     suspend fun refresh(scopeIds: List<String>, projectId: String?) = flushLock.withLock {
         flushPending()
+        refreshBoard(scopeIds, projectId)
+        readPomodoro()
+    }
 
+    private suspend fun refreshBoard(scopeIds: List<String>, projectId: String?) {
         val scopes = api.scopes()
         val projects = api.projects()
         val people = api.people()
@@ -186,6 +267,10 @@ class Repository(
         for (original in queued) {
             val operation = dao.operation(original.opId) ?: continue
             val entity = operation.entity to operation.entityId
+            if (operation.entity == "pomodoro" && (operation.state != "pending" || operation.rootTaskId() in blockedCreations)) {
+                moveLock.withLock { reconcilePomodoro(operation, null, rejected = true) }
+                continue
+            }
             if (entity in blocked || operation.parentId in blockedCreations ||
                 (operation.entity != "task" && operation.rootTaskId() in blockedCreations)
             ) {
@@ -203,6 +288,10 @@ class Repository(
                 throw cancelled
             } catch (error: FemhoApi.ApiException) {
                 if (error.status == 401 || error.status == 429 || error.status >= 500) throw error
+                if (operation.entity == "pomodoro") {
+                    moveLock.withLock { reconcilePomodoro(operation, null, rejected = true) }
+                    continue
+                }
                 dao.markIssue(operation.opId, if (error.status == 409) "conflict" else "rejected", error.detail, null)
                 blocked += entity
                 if (operation.op == "create") blockedCreations += operation.entityId
@@ -214,7 +303,12 @@ class Repository(
 
             val receipt = batchReceipt(response, operation.opId)
             when (val status = receipt?.string("status")) {
-                "ok" -> moveLock.withLock { acknowledge(operation, receipt?.get("entity") as? JsonObject) }
+                "ok" -> moveLock.withLock {
+                    val confirmed = receipt?.get("entity") as? JsonObject
+                    if (operation.entity == "pomodoro") {
+                        reconcilePomodoro(operation, confirmed, rejected = false)
+                    } else acknowledge(operation, confirmed)
+                }
                 "conflict", "rejected" -> {
                     val error = receipt?.get("error") as? JsonObject
                     val reportedStatus = error?.primitive("status")?.intOrNull
@@ -223,6 +317,10 @@ class Repository(
                         throw IOException("Sync operation should be retried")
                     }
                     val server = receipt?.get("server_entity") as? JsonObject
+                    if (operation.entity == "pomodoro") {
+                        moveLock.withLock { reconcilePomodoro(operation, server, rejected = true) }
+                        continue
+                    }
                     if (operation.entity == "task" && server?.get("deleted_at")?.let { it != JsonNull } == true) {
                         moveLock.withLock { dao.markDeletedConflict(operation, server.toString()) }
                     } else {
@@ -240,6 +338,42 @@ class Repository(
         }
     }
 
+    private suspend fun reconcilePomodoro(operation: OutboxEntity, entity: JsonObject?, rejected: Boolean) {
+        val cache = dao.pomodoroCacheOnce()
+        val initial = cache?.let { storedJson.decodeFromString<PomodoroSnapshot>(it.snapshot) }
+            ?: emptyPomodoroSnapshot()
+        val decoded = entity?.let { storedJson.decodeFromJsonElement<PomodoroSnapshot>(it) }
+        if (!rejected && decoded == null) throw IOException("The sync receipt did not include Pomodoro state")
+        val canonical = decoded ?: initial
+        val following = dao.outbox().dropWhile { it.opId != operation.opId }.drop(1)
+        var projected = canonical
+        val discarded = following.filter { next ->
+            if (next.entity != "pomodoro" || next.state != "pending") return@filter false
+            val applied = applyPomodoroCommand(projected, objectFrom(next.payload)) ?: return@filter true
+            projected = applied
+            false
+        }
+        val restored = (if (rejected) listOf(operation) + discarded else discarded).mapNotNull { next ->
+            val task = next.taskId?.let { dao.taskRow(it) } ?: return@mapNotNull null
+            val base = next.baseFields?.let(::objectFrom) ?: return@mapNotNull null
+            val before = base.string("position") ?: return@mapNotNull null
+            val projectedPosition = objectFrom(next.payload).string("position")
+            if (task.deleted || task.status != "doing" || task.position != projectedPosition) return@mapNotNull null
+            task.toDomain().copy(status = TaskStatus.TODO, position = before).toEntity()
+        }
+        val confirmed = if (rejected) null else canonical.movedTask
+        val (rebased, moved) = if (confirmed != null) {
+            rebaseTaskOperations(confirmed, following.filter { it.isPendingTaskEdit(confirmed.id) })
+        } else emptyList<OutboxEntity>() to null
+        val issueId = if (rejected || discarded.isNotEmpty()) operation.opId else cache?.issueId
+        dao.resolvePomodoroOperations(
+            canonical.toCache(cache?.clockOffsetMs ?: 0, issueId),
+            listOf(operation.opId) + discarded.map { it.opId },
+            (listOfNotNull(moved) + restored).distinctBy { it.id },
+            rebased,
+        )
+    }
+
     private suspend fun acknowledge(operation: OutboxEntity, entity: JsonObject?) {
         if (operation.entity == "task") {
             val canonical = entity?.toTaskOrNull()
@@ -250,18 +384,9 @@ class Repository(
                 dao.dequeue(operation.opId)
                 return
             }
-            val following = dao.outbox().filter { it.opId != operation.opId && it.entity == "task" && it.entityId == canonical.id }
-            var task: Task = canonical
-            val rebased = following.map { next ->
-                val base = next.baseFields?.let(::objectFrom)
-                val mayAdvance = next.state == "pending" && (
-                    next.op != "update" || (base != null && task.baseText(objectFrom(next.payload)) == base)
-                )
-                val current = if (mayAdvance) next.copy(baseVersion = canonical.version) else next
-                task = task.applyOperation(current)
-                current
-            }
-            dao.acknowledgeTask(operation.opId, rebased, task.toEntity(deleted = following.any { it.op == "delete" }))
+            val following = dao.outbox().filter { it.opId != operation.opId && it.isPendingTaskEdit(canonical.id) }
+            val (rebased, task) = rebaseTaskOperations(canonical, following)
+            dao.acknowledgeTask(operation.opId, rebased, task)
             return
         }
 
@@ -287,6 +412,30 @@ class Repository(
             } else emptyList()
             dao.acknowledgeChild(operation.opId, updated.toEntity(taskId), null, rebased, task)
         }
+    }
+
+    private fun rebaseTaskOperations(canonical: Task, following: List<OutboxEntity>): Pair<List<OutboxEntity>, TaskEntity> {
+        var task = canonical
+        val rebased = following.map { next ->
+            if (next.entity == "pomodoro") {
+                // Una edició anterior pot confirmar-se mentre la tasca ja ha entrat a Fent
+                // de manera optimista. La pantalla conserva el moviment fins al seu rebut.
+                if (task.status == TaskStatus.TODO) {
+                    objectFrom(next.payload).string("position")?.let {
+                        task = task.copy(status = TaskStatus.DOING, position = it)
+                    }
+                }
+                return@map next
+            }
+            val base = next.baseFields?.let(::objectFrom)
+            val mayAdvance = next.state == "pending" && (
+                next.op != "update" || (base != null && task.baseText(objectFrom(next.payload)) == base)
+            )
+            val current = if (mayAdvance) next.copy(baseVersion = canonical.version) else next
+            task = task.applyOperation(current)
+            current
+        }
+        return rebased to task.toEntity(deleted = following.any { it.op == "delete" })
     }
 
     private suspend fun rebaseSubtaskEdits(operation: OutboxEntity, updated: TaskLists): List<OutboxEntity> {
@@ -1021,13 +1170,20 @@ private fun Task.applyOperation(operation: OutboxEntity): Task {
 
 private fun operation(
     entity: String, op: String, id: String, baseVersion: Int, payload: JsonObject,
-    taskId: String, parentId: String? = null, base: JsonObject? = null, time: Long = System.currentTimeMillis(),
+    taskId: String?, parentId: String? = null, base: JsonObject? = null, time: Long = System.currentTimeMillis(),
 ): OutboxEntity = OutboxEntity(
     UUID.randomUUID().toString(), entity, op, id, baseVersion, payload.toString(), time,
     taskId = taskId, parentId = parentId, baseFields = base?.toString(),
 )
 
 private fun OutboxEntity.rootTaskId(): String? = taskId ?: entityId.takeIf { entity == "task" }
+
+private fun OutboxEntity.isPendingTaskEdit(task: String): Boolean =
+    (entity == "task" && entityId == task) || (entity == "pomodoro" && state == "pending" && taskId == task)
+
+private fun PomodoroSnapshot.toCache(offsetMs: Long, issueId: String?): PomodoroCacheEntity = PomodoroCacheEntity(
+    snapshot = storedJson.encodeToString(copy(movedTask = null)), clockOffsetMs = offsetMs, issueId = issueId,
+)
 
 private fun OutboxEntity.requestBody(): String = buildJsonObject {
     put("operations", kotlinx.serialization.json.JsonArray(listOf(buildJsonObject {

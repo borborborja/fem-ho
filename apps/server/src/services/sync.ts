@@ -13,6 +13,7 @@
 
 import { sql } from 'kysely';
 import type { AuditContext } from '../audit/audited-transaction.js';
+import type { Engine } from '../db/dialect.js';
 import type { MigrationDb } from '../db/migration-db.js';
 import { PolicyError, missingCapability } from '../policy/errors.js';
 import { hasCapability, type Principal } from '../policy/principal.js';
@@ -478,6 +479,20 @@ function opKey(principal: Principal): string {
 }
 
 type BatchIdentity = Pick<BatchOperation, 'op_id' | 'entity' | 'id' | 'op'>;
+
+/** Un rebut i el canvi que confirma es resolen una sola vegada, fins i tot des de lots diferents. */
+export async function lockSyncOp(
+  db: MigrationDb,
+  engine: Engine,
+  principal: Principal,
+  opId: string,
+): Promise<void> {
+  if (engine === 'postgres') {
+    await sql`SELECT pg_advisory_xact_lock(851004, hashtext(${principal.userId + opId}))`.execute(
+      db,
+    );
+  }
+}
 
 export async function rememberOp(
   db: MigrationDb,

@@ -29,6 +29,7 @@ import ho.fem.model.MailAccount
 import ho.fem.model.MailRule
 import ho.fem.model.MailTestResult
 import ho.fem.model.Person
+import ho.fem.model.PomodoroSnapshot
 import ho.fem.model.Project
 import ho.fem.model.Scope
 import ho.fem.model.ScopeSettings
@@ -331,6 +332,8 @@ class FemhoApi(
 
     /** Les settings de l'usuari: `scope_mode` decideix si cal el wizard (docs/12 §3). */
     suspend fun settings(): AuthSettingsEnvelope = get("/api/v1/auth/settings")
+
+    suspend fun pomodoro(): PomodoroSnapshot = get("/api/v1/pomodoro")
 
     suspend fun setDoneClearedAt(value: String?): UserSettingsView =
         patch("/api/v1/auth/settings", mapOf("done_cleared_at" to value))

@@ -2140,6 +2140,9 @@ paths:
         i `data.from_status` detecta canvis d'estat des d'un altre dispositiu.
         Un instant més de cinc minuts al futur es rebutja; els petits desajustos es limiten
         a l'hora del servidor. Un gest anterior al temps ja registrat retorna conflicte.
+        El Pomodoro personal usa `entity: pomodoro`, `op: update`, l'ID del compte com a `id`
+        i un `PomodoroCommand` a `data`. Els resultats confirmats i de conflicte porten
+        un `PomodoroSnapshot` a `entity` o `server_entity`, respectivament.
       requestBody:
         required: true
         content:
@@ -2155,6 +2158,23 @@ paths:
                 $ref: '#/components/schemas/SyncBatchResults'
         '401':
           $ref: '#/components/responses/Unauthenticated'
+
+  /pomodoro:
+    get:
+      tags: [sync]
+      operationId: getPomodoro
+      summary: Preferències, cua i temporitzador personal de Pomodoro
+      description: |
+        Només per a sessions humanes. Els canvis es desen amb `/sync/batch`.
+        El rellotge del servidor permet projectar les fases sense enviar cap tic.
+      responses:
+        '200':
+          description: Estat privat del compte i hora de referència.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PomodoroSnapshot' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
 
   /scopes/{id}:
     get:
@@ -6456,6 +6476,141 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/SyncBatchResult'
+
+    PomodoroTiming:
+      type: object
+      required:
+        [
+          focus_minutes,
+          short_break_minutes,
+          long_break_minutes,
+          long_break_every,
+          auto_start_focus,
+          auto_start_break,
+        ]
+      properties:
+        focus_minutes: { type: integer, minimum: 1, maximum: 180 }
+        short_break_minutes: { type: integer, minimum: 1, maximum: 180 }
+        long_break_minutes: { type: integer, minimum: 1, maximum: 180 }
+        long_break_every: { type: integer, minimum: 1, maximum: 20 }
+        auto_start_focus: { type: boolean }
+        auto_start_break: { type: boolean }
+
+    PomodoroSettings:
+      allOf:
+        - $ref: '#/components/schemas/PomodoroTiming'
+        - type: object
+          required: [enabled, mode, sound]
+          properties:
+            enabled: { type: boolean }
+            mode: { type: string, enum: [playful, serious] }
+            sound: { type: boolean }
+
+    PomodoroSettingsPatch:
+      type: object
+      additionalProperties: false
+      properties:
+        enabled: { type: boolean }
+        mode: { type: string, enum: [playful, serious] }
+        sound: { type: boolean }
+        focus_minutes: { type: integer, minimum: 1, maximum: 180 }
+        short_break_minutes: { type: integer, minimum: 1, maximum: 180 }
+        long_break_minutes: { type: integer, minimum: 1, maximum: 180 }
+        long_break_every: { type: integer, minimum: 1, maximum: 20 }
+        auto_start_focus: { type: boolean }
+        auto_start_break: { type: boolean }
+
+    PomodoroTimer:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          id,
+          version,
+          phase,
+          phase_number,
+          status,
+          end_at_ms,
+          remaining_ms,
+          completed_focus,
+          task_id,
+          device_id,
+          timing,
+        ]
+      properties:
+        id: { type: string, format: uuid }
+        version: { type: integer }
+        phase: { type: string, enum: [focus, short_break, long_break] }
+        phase_number: { type: integer }
+        status: { type: string, enum: [ready, running, paused] }
+        end_at_ms: { type: [integer, 'null'], format: int64 }
+        remaining_ms: { type: integer, format: int64 }
+        completed_focus: { type: integer }
+        task_id: { type: [string, 'null'], format: uuid }
+        device_id: { type: string }
+        timing: { $ref: '#/components/schemas/PomodoroTiming' }
+
+    PomodoroSnapshot:
+      type: object
+      additionalProperties: false
+      required: [settings, queue, queue_version, timer, server_time_ms]
+      properties:
+        settings: { $ref: '#/components/schemas/PomodoroSettings' }
+        queue:
+          type: array
+          items: { type: string, format: uuid }
+          maxItems: 500
+          uniqueItems: true
+        queue_version: { type: integer }
+        timer:
+          oneOf:
+            - $ref: '#/components/schemas/PomodoroTimer'
+            - type: 'null'
+        server_time_ms: { type: integer, format: int64 }
+        moved_task: { $ref: '#/components/schemas/Task' }
+
+    PomodoroCommand:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [kind, patch]
+          properties:
+            kind: { type: string, enum: [settings] }
+            patch: { $ref: '#/components/schemas/PomodoroSettingsPatch' }
+        - type: object
+          additionalProperties: false
+          required: [kind, expected_version, task_ids]
+          properties:
+            kind: { type: string, enum: [queue] }
+            expected_version: { type: integer }
+            task_ids:
+              type: array
+              items: { type: string, format: uuid }
+              maxItems: 500
+              uniqueItems: true
+        - type: object
+          additionalProperties: false
+          required: [kind, timer_id, at_ms, device_id, task_id]
+          properties:
+            kind: { type: string, enum: [start] }
+            timer_id: { type: string, format: uuid }
+            at_ms: { type: integer, format: int64 }
+            device_id: { type: string }
+            task_id: { type: [string, 'null'], format: uuid }
+            position: { type: string }
+        - type: object
+          additionalProperties: false
+          required: [kind, action, timer_id, expected_version, phase_number, at_ms, device_id]
+          properties:
+            kind: { type: string, enum: [control] }
+            action: { type: string, enum: [resume, pause, reset, skip, stop] }
+            timer_id: { type: string, format: uuid }
+            expected_version: { type: integer }
+            phase_number: { type: integer }
+            at_ms: { type: integer, format: int64 }
+            device_id: { type: string }
+            task_id: { type: [string, 'null'], format: uuid }
+            position: { type: string }
 
     Checklist:
       type: object

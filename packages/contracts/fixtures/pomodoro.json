@@ -1,0 +1,296 @@
+[
+  {
+    "name": "Conserva la cua, la configuració del bloc i la pausa en reprendre en un altre dispositiu",
+    "steps": [
+      {
+        "expect": {
+          "settings": {
+            "enabled": false,
+            "mode": "playful",
+            "focus_minutes": 25,
+            "short_break_minutes": 5,
+            "long_break_minutes": 15,
+            "long_break_every": 4,
+            "auto_start_focus": false,
+            "auto_start_break": false,
+            "sound": true
+          },
+          "timer": null
+        }
+      },
+      { "command": { "kind": "settings", "patch": { "enabled": true } } },
+      {
+        "command": { "kind": "queue", "expected_version": 0, "task_ids": ["task-a", "task-b"] },
+        "expect": { "queue": ["task-a", "task-b"], "queue_version": 1 }
+      },
+      {
+        "command": {
+          "kind": "start",
+          "timer_id": "timer-a",
+          "at_ms": 1000,
+          "device_id": "web",
+          "task_id": "task-a",
+          "position": "a0"
+        },
+        "expect": {
+          "timer": {
+            "phase": "focus",
+            "phase_number": 1,
+            "end_at_ms": 1501000,
+            "task_id": "task-a"
+          }
+        }
+      },
+      {
+        "command": {
+          "kind": "start",
+          "timer_id": "timer-b",
+          "at_ms": 1000,
+          "device_id": "android",
+          "task_id": "task-b"
+        },
+        "conflict": true
+      },
+      {
+        "command": {
+          "kind": "control",
+          "action": "pause",
+          "timer_id": "timer-a",
+          "expected_version": 1,
+          "phase_number": 1,
+          "at_ms": 601000,
+          "device_id": "web"
+        },
+        "expect": {
+          "timer": { "version": 2, "status": "paused", "end_at_ms": null, "remaining_ms": 900000 }
+        }
+      },
+      {
+        "command": {
+          "kind": "settings",
+          "patch": { "mode": "serious", "focus_minutes": 30, "sound": false }
+        },
+        "expect": {
+          "settings": { "mode": "serious", "sound": false },
+          "timer": { "timing": { "focus_minutes": 25 } }
+        }
+      },
+      {
+        "command": {
+          "kind": "control",
+          "action": "resume",
+          "timer_id": "timer-a",
+          "expected_version": 1,
+          "phase_number": 1,
+          "at_ms": 3601000,
+          "device_id": "android"
+        },
+        "conflict": true
+      },
+      {
+        "command": {
+          "kind": "control",
+          "action": "resume",
+          "timer_id": "timer-a",
+          "expected_version": 2,
+          "phase_number": 1,
+          "at_ms": 3601000,
+          "device_id": "android"
+        },
+        "now_ms": 4500999,
+        "expect": {
+          "timer": { "version": 3, "device_id": "android", "task_id": "task-a", "remaining_ms": 1 }
+        }
+      },
+      {
+        "now_ms": 4501000,
+        "expect": {
+          "timer": {
+            "phase": "short_break",
+            "phase_number": 2,
+            "status": "ready",
+            "remaining_ms": 300000,
+            "completed_focus": 1,
+            "task_id": "task-a"
+          }
+        }
+      },
+      {
+        "command": { "kind": "queue", "expected_version": 0, "task_ids": ["task-b"] },
+        "conflict": true
+      },
+      {
+        "command": { "kind": "settings", "patch": { "enabled": false } },
+        "expect": {
+          "timer": null,
+          "queue": ["task-a", "task-b"],
+          "settings": { "focus_minutes": 30, "mode": "serious", "sound": false }
+        }
+      }
+    ]
+  },
+  {
+    "name": "El quart bloc obre la pausa llarga i avançar molts dies conserva el cicle",
+    "steps": [
+      {
+        "command": {
+          "kind": "settings",
+          "patch": {
+            "enabled": true,
+            "focus_minutes": 1,
+            "short_break_minutes": 1,
+            "long_break_minutes": 2,
+            "auto_start_focus": true,
+            "auto_start_break": true
+          }
+        }
+      },
+      {
+        "command": {
+          "kind": "start",
+          "timer_id": "timer-a",
+          "at_ms": 0,
+          "device_id": "web",
+          "task_id": null
+        }
+      },
+      {
+        "now_ms": 59999,
+        "expect": { "timer": { "phase": "focus", "phase_number": 1, "remaining_ms": 1 } }
+      },
+      {
+        "now_ms": 60000,
+        "expect": {
+          "timer": {
+            "phase": "short_break",
+            "phase_number": 2,
+            "status": "running",
+            "end_at_ms": 120000,
+            "completed_focus": 1
+          }
+        }
+      },
+      {
+        "now_ms": 420000,
+        "expect": {
+          "timer": {
+            "phase": "long_break",
+            "phase_number": 8,
+            "status": "running",
+            "end_at_ms": 540000,
+            "completed_focus": 4,
+            "version": 1
+          }
+        }
+      },
+      {
+        "now_ms": 540000,
+        "expect": { "timer": { "phase": "focus", "phase_number": 9, "end_at_ms": 600000 } }
+      },
+      {
+        "now_ms": 3240000000,
+        "expect": {
+          "timer": {
+            "phase": "focus",
+            "phase_number": 48001,
+            "end_at_ms": 3240060000,
+            "completed_focus": 24000,
+            "task_id": null
+          }
+        }
+      }
+    ]
+  },
+  {
+    "name": "Saltar un bloc no compta i els dos inicis automàtics són independents",
+    "steps": [
+      {
+        "command": {
+          "kind": "settings",
+          "patch": { "enabled": true, "focus_minutes": 1, "auto_start_focus": true }
+        }
+      },
+      {
+        "command": {
+          "kind": "start",
+          "timer_id": "timer-a",
+          "at_ms": 1000,
+          "device_id": "web",
+          "task_id": "task-a"
+        }
+      },
+      {
+        "command": {
+          "kind": "control",
+          "action": "skip",
+          "timer_id": "timer-a",
+          "expected_version": 1,
+          "phase_number": 1,
+          "at_ms": 7000,
+          "device_id": "web"
+        },
+        "expect": {
+          "timer": {
+            "phase_number": 2,
+            "phase": "short_break",
+            "status": "ready",
+            "completed_focus": 0
+          }
+        }
+      },
+      {
+        "command": {
+          "kind": "control",
+          "action": "skip",
+          "timer_id": "timer-a",
+          "expected_version": 2,
+          "phase_number": 2,
+          "at_ms": 8000,
+          "device_id": "web"
+        },
+        "expect": {
+          "timer": { "phase_number": 3, "phase": "focus", "status": "running", "end_at_ms": 68000 }
+        }
+      },
+      {
+        "command": {
+          "kind": "control",
+          "action": "reset",
+          "timer_id": "timer-a",
+          "expected_version": 3,
+          "phase_number": 3,
+          "at_ms": 9000,
+          "device_id": "web"
+        },
+        "expect": { "timer": { "version": 4, "status": "ready", "remaining_ms": 60000 } }
+      },
+      {
+        "command": {
+          "kind": "control",
+          "action": "resume",
+          "timer_id": "timer-a",
+          "expected_version": 4,
+          "phase_number": 3,
+          "at_ms": 10000,
+          "device_id": "android",
+          "task_id": null
+        },
+        "expect": {
+          "timer": { "version": 5, "task_id": null, "device_id": "android", "end_at_ms": 70000 }
+        }
+      },
+      {
+        "command": {
+          "kind": "control",
+          "action": "stop",
+          "timer_id": "timer-a",
+          "expected_version": 5,
+          "phase_number": 3,
+          "at_ms": 11000,
+          "device_id": "android"
+        },
+        "expect": { "timer": null }
+      }
+    ]
+  }
+]

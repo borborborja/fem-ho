@@ -335,6 +335,7 @@ export async function wipeInstance(
     'task_leases',
     // Registre de dedicació (fill de tasks, scopes i task_types).
     'task_sessions',
+    'pomodoro_states',
     'sessions',
     // Comentaris, adjunts i recordatoris.
     'comments',

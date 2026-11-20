@@ -22,6 +22,7 @@ import { Avatar } from './Avatar.js';
 import { useRouter } from './router.js';
 import { useSession, useSessionData } from './session.js';
 import type { Checklist, Scope } from './types.js';
+import { PomodoroTrigger } from '../pomodoro/PomodoroPanel.js';
 
 /**
  * Quin menú hi ha obert.
@@ -447,12 +448,13 @@ export function TopBar({
           flexDirection: mobile ? 'column' : 'row',
           alignItems: mobile ? 'stretch' : 'center',
           gap: mobile ? 10 : 22,
-          flexWrap: 'wrap',
+          flexWrap: mobile ? 'nowrap' : 'wrap',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 22 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: mobile ? 8 : 22, minWidth: 0 }}>
           <button
             type="button"
+            className="topbar-wordmark"
             data-testid="wordmark"
             aria-label={t('nav.openDashboard')}
             onClick={() => navigate('/dashboard')}
@@ -463,6 +465,7 @@ export function TopBar({
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
+              minWidth: 0,
             }}
           >
             {/* El nom de la instància, o el seu logo. Deia «Fem-ho» escrit a mà. */}
@@ -470,6 +473,7 @@ export function TopBar({
           </button>
 
           {mobile ? <div style={{ flex: 1 }} /> : null}
+          {mobile ? <PomodoroTrigger /> : null}
           {mobile ? profileButton() : null}
         </div>
 
@@ -480,6 +484,7 @@ export function TopBar({
             gap: mobile ? 10 : 22,
             flexWrap: 'wrap',
             flex: 1,
+            minWidth: 0,
           }}
         >
           {/*
@@ -561,7 +566,7 @@ export function TopBar({
                     navigate(`${tab.href}?${query.toString()}`);
                   }}
                   style={{
-                    padding: '7px 18px',
+                    padding: mobile ? '7px clamp(10px, 3.4vw, 18px)' : '7px 18px',
                     minHeight: mobile ? 44 : undefined,
                     borderRadius: 100,
                     border: 'none',
@@ -739,6 +744,7 @@ export function TopBar({
           </div>
 
           <div style={{ flex: 1 }} />
+          {mobile ? null : <PomodoroTrigger />}
           {mobile ? null : profileButton()}
         </div>
       </div>

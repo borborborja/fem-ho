@@ -336,6 +336,13 @@ Pestanyes: General · Àmbits · Calendaris · MCP i API · Usuari IA · Compart
 
 **General** — tema (sistema/clar/fosc) i accent (default/soft/mono-warm/mono-cool) com a `ChoiceChips`; elements del dashboard; posició del rail d'Inbox; si l'Inbox ensenya endarrerides; activar l'usuari IA.
 
+**Pomodoro** — es pot activar a General. La tomata de la capçalera obre el
+temporitzador i la cua personal. Es poden afegir i ordenar tasques de «Per fer»
+amb controls de teclat i tàctils. Iniciar un bloc amb una tasca la mou a «Fent».
+El mode Divertit mostra la tomata dins l'anell del temporitzador. El mode Seriós
+posa el temps al centre. Tant la vista com els controls es recuperen després de
+reobrir la PWA. L'avís sonor depèn de si el navegador manté la pàgina activa.
+
 **Àmbits** — *no és al prototip; brief línia 44.* Llista d'àmbits amb color i tipus. Crear-ne: nom, color, individual o col·lectiu. Si és col·lectiu, gestió de membres, que poden ser usuaris de l'eina, externs per CalDAV, o tots dos.
 
 **Calendaris** — per àmbit, el CalDAV d'origen, i botó per afegir-ne un per projecte. I la secció "Els teus CalDAV Fem-ho" amb les URL bidireccionals i botó de copiar. Cada àmbit en publica **dues** (D9): esdeveniments i tasques. Han d'estar etiquetades perquè s'entengui.

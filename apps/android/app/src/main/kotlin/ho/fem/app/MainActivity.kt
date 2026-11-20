@@ -170,6 +170,16 @@ class MainActivity : ComponentActivity() {
         pending.value = intent
     }
 
+    override fun onResume() {
+        super.onResume()
+        (application as FemhoApplication).pomodoroSignals.setForeground(true)
+    }
+
+    override fun onPause() {
+        (application as FemhoApplication).pomodoroSignals.setForeground(false)
+        super.onPause()
+    }
+
     override fun onStart() {
         super.onStart()
         val container = (application as FemhoApplication).container
@@ -197,6 +207,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun Root(model: AppViewModel, pending: MutableState<Intent?>) {
     val session by model.session.collectAsStateWithLifecycle()
+    val pomodoro by model.pomodoro.collectAsStateWithLifecycle()
     val openTask by model.openTask.collectAsStateWithLifecycle()
     val error by model.actionError.collectAsStateWithLifecycle()
     val snackbar = remember { androidx.compose.material3.SnackbarHostState() }
@@ -212,6 +223,7 @@ private fun Root(model: AppViewModel, pending: MutableState<Intent?>) {
         mutableStateOf(Screen.BOARD.name)
     }
     val screen = Route.currentScreen(route)
+    PomodoroSyncEffect(model, session is AppViewModel.Session.Ready, screen == Screen.POMODORO)
     fun go(destination: Screen) {
         if (destination == screen) return
         route = if (destination == Screen.BOARD) Screen.BOARD.name else "$route/${destination.name}"
@@ -318,6 +330,7 @@ private fun Root(model: AppViewModel, pending: MutableState<Intent?>) {
                             onCalendar = { go(Screen.CALENDAR) },
                             onSearch = { go(Screen.SEARCH) },
                             onDashboard = { go(Screen.DASHBOARD) },
+                            onPomodoro = if (pomodoro.snapshot.settings.enabled) ({ go(Screen.POMODORO) }) else null,
                         )
                         Screen.DASHBOARD -> DashboardHost(
                             model = model,
@@ -331,7 +344,9 @@ private fun Root(model: AppViewModel, pending: MutableState<Intent?>) {
                             onBoard = { go(Screen.BOARD) },
                             onDashboard = { go(Screen.DASHBOARD) },
                             onSearch = { go(Screen.SEARCH) },
+                            onPomodoro = if (pomodoro.snapshot.settings.enabled) ({ go(Screen.POMODORO) }) else null,
                         )
+                        Screen.POMODORO -> PomodoroHost(model, onBack = ::back)
                         Screen.SETTINGS -> SettingsHost(
                             model = model, serverUrl = state.serverUrl, onBack = ::back,
                         )
@@ -962,6 +977,7 @@ private fun BoardHost(
     onCalendar: () -> Unit,
     onSearch: () -> Unit,
     onDashboard: () -> Unit,
+    onPomodoro: (() -> Unit)?,
 ) {
     val tasks by model.tasks.collectAsStateWithLifecycle()
     val scopes by model.scopes.collectAsStateWithLifecycle()
@@ -1094,6 +1110,7 @@ private fun BoardHost(
             active = active,
             pending = pending,
             view = Screen.BOARD,
+            onPomodoro = onPomodoro,
             onToggle = model::toggleScope,
             onSettings = onSettings,
             onDashboard = onDashboard,
@@ -1667,6 +1684,7 @@ private fun CalendarHost(
     onBoard: () -> Unit,
     onDashboard: () -> Unit,
     onSearch: () -> Unit = {},
+    onPomodoro: (() -> Unit)? = null,
 ) {
     val scopes by model.scopes.collectAsStateWithLifecycle()
     val scopeIds by model.activeScopes.collectAsStateWithLifecycle()
@@ -1740,6 +1758,7 @@ private fun CalendarHost(
             active = scopeIds.toSet(),
             pending = pending,
             view = Screen.CALENDAR,
+            onPomodoro = onPomodoro,
             onToggle = model::toggleScope,
             onSettings = onSettings,
             onDashboard = onDashboard,
@@ -1876,6 +1895,7 @@ private fun TopBar(
     /** El wordmark obre el dashboard global (docs/03 §3:50). */
     onDashboard: () -> Unit,
     onView: (Screen) -> Unit,
+    onPomodoro: (() -> Unit)? = null,
     /** El commutador del tauler de la IA. Només surt si hi ha algun agent actiu. */
     aiEnabled: Boolean = false,
     aiBoardActive: Boolean = false,
@@ -1910,6 +1930,7 @@ private fun TopBar(
                     .padding(horizontal = 4.dp, vertical = 4.dp),
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
+                if (onPomodoro != null) PomodoroToolbarAction(onPomodoro)
                 val searchLabel = stringResource(R.string.nav_search)
                 Box(
                     modifier = Modifier
@@ -2165,6 +2186,7 @@ private fun Modifier.androidClickable(onClick: () -> Unit): Modifier = this.clic
 @Composable
 private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> Unit) {
     val locale by model.preferenceLocale.collectAsStateWithLifecycle(initialValue = "ca")
+    val pomodoro by model.pomodoro.collectAsStateWithLifecycle()
     val appLocale = androidx.compose.ui.platform.LocalConfiguration.current.locales[0]?.language ?: "ca"
     val firstDayLabel = stringResource(
         if (Dates.weekStart(appLocale) == Dates.SUNDAY) R.string.settings_day_sun else R.string.settings_day_mon,
@@ -2219,6 +2241,8 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
         showOverdueSection = showOverdueSection,
         inboxPosition = inboxPosition,
         inboxShowOverdue = inboxShowOverdue,
+        pomodoroEnabled = pomodoro.snapshot.settings.enabled,
+        onPomodoroEnabled = model::setPomodoroEnabled,
         labels = SettingsLabels(
             title = stringResource(R.string.settings_title),
             back = stringResource(R.string.nav_backtoboard),
@@ -2261,6 +2285,7 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
                 admin = stringResource(R.string.settings_empty_admin),
             ),
             // General tab
+            pomodoro = stringResource(R.string.pomodoro_enabled),
             language = stringResource(R.string.settings_language),
             languageOptions = listOf(
                 "ca" to "Català",
