@@ -15,6 +15,8 @@ export type PrincipalKind = 'user' | 'agent' | 'guest';
 export interface Principal {
   credentialType?: 'session' | 'pat' | 'oauth' | 'federation';
   credentialId?: string;
+  /** La sessió OAuth es manté quan la credencial d'accés es renova. */
+  oauthSessionId?: string;
   kind: PrincipalKind;
   /** Identitat efectiva. Per a un agent, la persona en nom de qui actua. */
   userId: string;

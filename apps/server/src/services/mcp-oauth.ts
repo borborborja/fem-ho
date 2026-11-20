@@ -5,7 +5,7 @@ import type { MigrationDb } from '../db/migration-db.js';
 import type { AuditContext } from '../audit/audited-transaction.js';
 import type { Principal } from '../policy/principal.js';
 import { hashToken, tokenHashEquals } from '../auth/tokens.js';
-import { TASK_OPERATIONS } from '../policy/capabilities.js';
+import { AI_EXECUTION_OPERATIONS, TASK_OPERATIONS } from '../policy/capabilities.js';
 import { PolicyError, unauthenticated } from '../policy/errors.js';
 import { resolveTokenId } from '../policy/resolve.js';
 import { createToken } from './tokens.js';
@@ -16,6 +16,7 @@ import {
 } from './external-access.js';
 
 export const MCP_OAUTH_SCOPES = ['femho:read', 'femho:write'] as const;
+const MCP_CONSENT_OPERATIONS = [...TASK_OPERATIONS, ...AI_EXECUTION_OPERATIONS];
 export const MCP_READ = [
   'tasks:read',
   'events:read',
@@ -51,13 +52,14 @@ function consentCapabilities(input: Record<string, unknown>, requestedScope: str
     !Array.isArray(capabilities) ||
     capabilities.length === 0 ||
     capabilities.some(
-      (capability) => !TASK_OPERATIONS.some((operation) => operation === capability),
+      (capability) => !MCP_CONSENT_OPERATIONS.some((operation) => operation === capability),
     )
   )
     throw oauthError('Select one or more task operations.');
   if (
     capabilities.some(
-      (capability) => !requested.has(capability === 'tasks:read' ? 'femho:read' : 'femho:write'),
+      (capability: string) =>
+        !requested.has(capability.endsWith(':read') ? 'femho:read' : 'femho:write'),
     )
   )
     throw oauthError('Client did not request these permissions.');
@@ -398,14 +400,15 @@ export async function resolveOAuth(
   token: string,
   resource: string,
   audience: string,
-) {
+): Promise<Principal> {
   if (resource !== 'mcp') throw unauthenticated('OAuth credential is only valid for MCP.');
   const { rows } = await sql<{
+    id: string;
     token_id: string;
     resource: string;
     access_expires_at: string;
     revoked_at: string | null;
-  }>`SELECT token_id, resource, access_expires_at, revoked_at FROM mcp_oauth_sessions WHERE access_hash = ${hashToken(token)}`.execute(
+  }>`SELECT id, token_id, resource, access_expires_at, revoked_at FROM mcp_oauth_sessions WHERE access_hash = ${hashToken(token)}`.execute(
     db,
   );
   const session = rows[0];
@@ -416,7 +419,8 @@ export async function resolveOAuth(
     Date.parse(session.access_expires_at) <= Date.now()
   )
     throw unauthenticated('Invalid OAuth access token.');
-  return resolveTokenId(db, session.token_id, 'mcp', new Date().toISOString());
+  const principal = await resolveTokenId(db, session.token_id, 'mcp', new Date().toISOString());
+  return { ...principal, oauthSessionId: session.id };
 }
 
 export async function revokeOAuth(ctx: AuditContext, clientId: string, token: string) {

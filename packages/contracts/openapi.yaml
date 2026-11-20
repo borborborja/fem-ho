@@ -1790,6 +1790,79 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /tasks/{id}/ai-context:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [ai]
+      operationId: getTaskAiContext
+      summary: Copiar el context d'una tasca amb IA activada
+      responses:
+        '200':
+          description: Context en text pla
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [text]
+                properties:
+                  text: { type: string }
+  /tasks/{id}/ai-executions:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [ai]
+      operationId: listTaskAiExecutions
+      summary: Consultar els enviaments propis d'una tasca
+      responses:
+        '200':
+          description: Execucions del compte autenticat
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/TaskAiExecution' }
+    post:
+      tags: [ai]
+      operationId: requestTaskAiExecution
+      summary: Sol·licitar un enviament d'una tasca amb el mètode configurat
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id:
+                  {
+                    type: string,
+                    format: uuid,
+                    description: UUIDv7 per recuperar el mateix intent.,
+                  }
+      responses:
+        '202':
+          description: Enviament registrat o intent recuperat amb el mateix identificador
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TaskAiExecution' }
+        '409':
+          description: Identificador en conflicte o destinació indisponible
+        '429':
+          description: La rutina ha assolit el límit d'enviaments. La resposta indica quan es pot reintentar.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
   /tasks/{id}/activity:
     get:
       tags: [tasks]
@@ -3421,6 +3494,80 @@ paths:
           content: { application/json: { schema: { $ref: '#/components/schemas/UserSettings' } } }
         '401': { $ref: '#/components/responses/Unauthenticated' }
 
+  /ai/task-settings:
+    get:
+      tags: [ai]
+      operationId: listTaskAiSettings
+      summary: Consultar els ajustos propis de tasques amb IA
+      responses:
+        '200':
+          description: Ajustos dels àmbits accessibles, inclosos els desactivats
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/TaskAiSettings' }
+  /ai/task-settings/{scope_id}:
+    parameters:
+      - name: scope_id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    put:
+      tags: [ai]
+      operationId: putTaskAiSettings
+      summary: Configurar el destí propi per a l'àmbit
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TaskAiSettingsInput' }
+      responses:
+        '200':
+          description: Configuració desada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TaskAiSettings' }
+  /ai/task-settings/{scope_id}/connections:
+    parameters:
+      - name: scope_id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [ai]
+      operationId: listTaskAiConnections
+      summary: Consultar les connexions i subscripcions pròpies de l'àmbit
+      responses:
+        '200':
+          description: Destinacions verificades i connexions elegibles
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [subscriptions, connections]
+                properties:
+                  subscriptions:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, label, expires_at]
+                      properties:
+                        id: { type: string }
+                        label: { type: string }
+                        expires_at: { type: string, format: date-time }
+                  connections:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, label]
+                      properties:
+                        id: { type: string, format: uuid }
+                        label: { type: string }
   /ai/agents:
     get:
       tags: [tasks]
@@ -5850,7 +5997,64 @@ components:
 
     TaskOperationCapability:
       type: string
-      enum: ['tasks:read', 'tasks:create', 'tasks:move', 'tasks:update', 'tasks:attach']
+      enum:
+        [
+          'tasks:read',
+          'tasks:create',
+          'tasks:move',
+          'tasks:update',
+          'tasks:attach',
+          'ai_executions:read',
+          'ai_executions:write',
+        ]
+
+    TaskAiMethod:
+      type: string
+      enum: [copy, mcp_events, claude_routine]
+    TaskAiSettings:
+      type: object
+      required:
+        [
+          scope_id,
+          enabled,
+          method,
+          ready,
+          can_dispatch,
+          subscription_id,
+          routine_id,
+          connection_id,
+          has_routine_token,
+        ]
+      properties:
+        scope_id: { type: string, format: uuid }
+        enabled: { type: boolean }
+        method: { $ref: '#/components/schemas/TaskAiMethod' }
+        ready: { type: boolean }
+        can_dispatch: { type: boolean }
+        subscription_id: { type: [string, 'null'] }
+        routine_id: { type: [string, 'null'] }
+        connection_id: { type: [string, 'null'], format: uuid }
+        has_routine_token: { type: boolean }
+    TaskAiSettingsInput:
+      type: object
+      required: [enabled, method]
+      properties:
+        enabled: { type: boolean }
+        method: { $ref: '#/components/schemas/TaskAiMethod' }
+        subscription_id: { type: [string, 'null'] }
+        routine_id: { type: [string, 'null'], pattern: '^trig_[A-Za-z0-9]+$' }
+        routine_token: { type: [string, 'null'], writeOnly: true }
+        connection_id: { type: [string, 'null'], format: uuid }
+    TaskAiExecution:
+      type: object
+      required: [id, method, status, session_url, retry_at, result_comment_id]
+      properties:
+        id: { type: string, format: uuid }
+        method: { type: string, enum: [mcp_events, claude_routine] }
+        status: { type: string, enum: [queued, sending, delivered, failed, cancelled, uncertain] }
+        session_url: { type: [string, 'null'], format: uri }
+        retry_at: { type: [string, 'null'], format: date-time }
+        result_comment_id: { type: [string, 'null'], format: uuid }
 
     ExternalAccessSwitches:
       type: object

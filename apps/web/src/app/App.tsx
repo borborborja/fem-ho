@@ -17,6 +17,7 @@ import { ToastProvider, useToasts } from './toasts.js';
 import { TopBar } from './TopBar.js';
 import type { Agent, Checklist } from './types.js';
 import { useApi } from './useApi.js';
+import { TaskAiProvider } from './task-ai.js';
 import { BoardScreen } from '../screens/BoardScreen.js';
 import { DashboardScreen } from '../screens/DashboardScreen.js';
 import { JoinScopeScreen } from '../screens/JoinScopeScreen.js';
@@ -134,7 +135,9 @@ function AppRoute() {
   return (
     <ToastProvider>
       <BoardSyncProvider key={state.data.profile.id} userId={state.data.profile.id}>
-        <AppShell />
+        <TaskAiProvider>
+          <AppShell />
+        </TaskAiProvider>
       </BoardSyncProvider>
     </ToastProvider>
   );

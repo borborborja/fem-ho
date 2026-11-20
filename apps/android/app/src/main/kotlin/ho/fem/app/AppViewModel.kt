@@ -9,7 +9,10 @@ import ho.fem.data.normalizeServerUrl
 import ho.fem.model.Agent
 import ho.fem.model.AgentDetail
 import ho.fem.model.AgentScopeAvailability
+import ho.fem.model.AiExecution
 import ho.fem.model.AiMode
+import ho.fem.model.AiTaskConnections
+import ho.fem.model.AiTaskSettings
 import ho.fem.model.ApiTokenSummary
 import ho.fem.model.Checklist
 import ho.fem.model.EventOccurrence
@@ -42,12 +45,15 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /**
@@ -114,6 +120,13 @@ class AppViewModel(private val container: Container) : ViewModel() {
 
     private val _scopeSettings = MutableStateFlow<Map<String, ScopeSettings>>(emptyMap())
     val scopeSettings: StateFlow<Map<String, ScopeSettings>> = _scopeSettings.asStateFlow()
+
+    private val _aiTaskSettings = MutableStateFlow<List<AiTaskSettings>?>(null)
+    val aiTaskSettings = _aiTaskSettings.asStateFlow()
+    private val aiTaskSettingsMutex = Mutex()
+    private val aiExecutionRequests = mutableMapOf<String, String>()
+    private val _aiExecutingTasks = MutableStateFlow<Set<String>>(emptySet())
+    val aiExecutingTasks = _aiExecutingTasks.asStateFlow()
 
     private val _pending = MutableStateFlow(0)
     val pending: StateFlow<Int> = _pending.asStateFlow()
@@ -501,6 +514,9 @@ class AppViewModel(private val container: Container) : ViewModel() {
         _labels.value = emptyList()
         _taskTypes.value = emptyList()
         _scopeSettings.value = emptyMap()
+        _aiTaskSettings.value = null
+        aiExecutionRequests.clear()
+        _aiExecutingTasks.value = emptySet()
         _pending.value = 0
         _syncIssues.value = emptyList()
         _actionError.value = null
@@ -1617,10 +1633,86 @@ class AppViewModel(private val container: Container) : ViewModel() {
      *
      * @param text el text a copiar
      */
-    fun copyToClipboard(text: String) {
+    fun copyToClipboard(text: String) = copyToClipboard(text, sensitive = false)
+
+    private fun copyToClipboard(text: String, sensitive: Boolean) {
         val clipboard = container.appContext.getSystemService(android.content.ClipboardManager::class.java)
         val clip = android.content.ClipData.newPlainText("Fem-ho", text)
+        if (sensitive) {
+            clip.description.extras = android.os.PersistableBundle().apply {
+                putBoolean("android.content.extra.IS_SENSITIVE", true)
+            }
+        }
         clipboard.setPrimaryClip(clip)
+    }
+
+    /** La resposta d'un compte anterior no pot modificar la pantalla ni el porta-retalls. */
+    private suspend fun <T> withAiAccount(block: suspend (ActiveAccount) -> T): T {
+        val account = activeAccount ?: throw CancellationException()
+        val result = block(account)
+        currentCoroutineContext().ensureActive()
+        if (activeAccount != account) throw CancellationException()
+        return result
+    }
+
+    suspend fun loadAiTaskSettings() = aiTaskSettingsMutex.withLock {
+        _aiTaskSettings.value = withAiAccount { container.api(it).aiTaskSettings() }
+    }
+
+    suspend fun aiTaskConnections(scopeId: String): AiTaskConnections = withAiAccount {
+        container.api(it).aiTaskConnections(scopeId)
+    }
+
+    suspend fun saveAiTaskSettings(
+        settings: AiTaskSettings,
+        previous: AiTaskSettings,
+        routineToken: String?,
+        removeRoutineToken: Boolean,
+    ) {
+        aiTaskSettingsMutex.withLock {
+            _aiTaskSettings.value = withAiAccount { account ->
+                val api = container.api(account)
+                api.saveAiTaskSettings(settings, previous, routineToken, removeRoutineToken)
+                api.aiTaskSettings()
+            }
+        }
+    }
+
+    suspend fun aiTaskContext(taskId: String): String = withAiAccount {
+        container.api(it).aiTaskContext(taskId)
+    }
+
+    fun copyAiContextToClipboard(text: String) = copyToClipboard(text, sensitive = true)
+
+    suspend fun aiExecutions(taskId: String): List<AiExecution> {
+        val executions = withAiAccount { container.api(it).aiExecutions(taskId) }
+        val requestId = aiExecutionRequests[taskId]
+        if (executions.any { it.id == requestId }) aiExecutionRequests.remove(taskId)
+        return executions
+    }
+
+    suspend fun requestAiExecution(taskId: String): AiExecution? {
+        val account = activeAccount ?: return null
+        if (taskId in _aiExecutingTasks.value) return null
+        _aiExecutingTasks.value += taskId
+        try {
+            // Si s'ha perdut la resposta, el tauler i la fitxa reintenten la mateixa petició.
+            val id = aiExecutionRequests.getOrPut(taskId, ::newExecutionId)
+            val execution = withAiAccount { container.api(it).sendTaskToAi(taskId, id) }
+            aiExecutionRequests.remove(taskId)
+            return execution
+        } finally {
+            if (activeAccount == account) _aiExecutingTasks.value -= taskId
+        }
+    }
+
+    fun refreshAiExecutionResult(taskId: String) {
+        val account = activeAccount ?: return
+        if (!isOpen(account, taskId)) return
+        sessionScope.launch {
+            launch { reloadActivity(account, taskId) }
+            launch { runCatching { container.repository(account).refreshComments(taskId) } }
+        }
     }
 
     /**

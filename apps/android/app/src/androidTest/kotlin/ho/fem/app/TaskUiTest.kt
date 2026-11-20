@@ -47,6 +47,7 @@ import ho.fem.model.Task
 import ho.fem.model.TaskStatus
 import ho.fem.tasks.BoardLabels
 import ho.fem.tasks.BoardScreen
+import ho.fem.tasks.CardAiAction
 import ho.fem.tasks.CardExtras
 import ho.fem.tasks.McpProvenanceLabels
 import ho.fem.tasks.QuickAddField
@@ -329,6 +330,50 @@ class TaskUiTest {
         compose.onNodeWithTag("board-task-delete").performClick()
         compose.onNodeWithTag("board-task-delete-confirm").performClick()
         compose.runOnIdle { assertEquals(listOf("delete:task"), calls.filter { it.startsWith("delete:") }) }
+    }
+
+    @Test
+    fun taskActionsCopyContextOnlyForEnabledScopes() {
+        val enabledTask = Task(id = "work-task", scopeId = "work", title = "Revisar pressupost", position = "a0")
+        val disabledTask = Task(id = "personal-task", scopeId = "personal", title = "Preparar motxilla", position = "a1")
+        val copied = mutableListOf<String>()
+        val primary = mutableListOf<String>()
+        compose.setContent {
+            FemhoTheme {
+                BoardScreen(
+                    tasks = listOf(enabledTask, disabledTask),
+                    labels = boardLabels,
+                    onOpen = {},
+                    onMove = { _, _ -> },
+                    onToggle = {},
+                    taskMenuLabels = taskMenuLabels.copy(copyContext = "Copia el context"),
+                    canCopyContext = { it.scopeId == enabledTask.scopeId },
+                    onCopyContext = { copied += it.id },
+                    aiAction = { task ->
+                        if (task.scopeId == enabledTask.scopeId) {
+                            CardAiAction("IA", "Envia a la IA", "Copia el context", true,
+                                onClick = { primary += task.id }, onCopy = { copied += task.id })
+                        } else null
+                    },
+                )
+            }
+        }
+
+        val copy = compose.onNodeWithTag("board-task-copy-context")
+        compose.onNodeWithText(disabledTask.title).performTouchInput { longClick() }
+        copy.assertDoesNotExist()
+        compose.onNodeWithTag("board-task-edit").performClick()
+
+        compose.onNodeWithText(enabledTask.title).performTouchInput { longClick() }
+        copy.assertIsDisplayed().performClick()
+        compose.onNodeWithTag("board-task-actions").assertDoesNotExist()
+        compose.onAllNodesWithTag("board-task-ai").assertCountEquals(1)
+        compose.onNodeWithTag("board-task-ai").performClick()
+        compose.onNodeWithTag("board-task-ai").performTouchInput { longClick() }
+        compose.runOnIdle {
+            assertEquals(listOf(enabledTask.id, enabledTask.id), copied)
+            assertEquals(listOf(enabledTask.id), primary)
+        }
     }
 
     @Test

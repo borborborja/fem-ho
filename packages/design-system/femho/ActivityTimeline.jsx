@@ -70,11 +70,13 @@ export function ActivityTimeline({
             <div style={{ flex: 1, minWidth: 0 }}>
               <span style={{ fontWeight: 600 }}>{entry.actor_label}</span>{' '}
               <span style={{ color: 'var(--ink-soft)' }}>
-                {labels.verbs[`${entry.entity_type}.${entry.verb}`] ??
+                {entry.message ??
+                  labels.verbs[`${entry.entity_type}.${entry.verb}`] ??
                   labels.verbs[entry.verb] ??
                   entry.verb}
               </span>
               <Changes changes={entry.changes} />
+              {entry.details}
               {entry.channel && (
                 <span
                   data-testid="activity-channel"

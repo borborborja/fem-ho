@@ -25,7 +25,7 @@ import { principalOf } from './auth.js';
  */
 const REALM = 'Fem-ho MCP';
 
-export function registerMcpRoutes(app: FastifyInstance): void {
+export function registerMcpRoutes(app: FastifyInstance, instanceSecret: () => string): void {
   /**
    * `POST /mcp` i no `/api/v1/mcp`: el camí MCP no és l'API REST versionada. Barrejar-los
    * faria pensar que una versió nova de l'API canvia el protocol, que són coses
@@ -52,6 +52,7 @@ export function registerMcpRoutes(app: FastifyInstance): void {
       dataDir: app.config.dataDir,
       maxUploadBytes: app.config.maxUploadBytes,
       reauthorize: () => principalOf(app, request, 'mcp'),
+      instanceSecret,
     });
 
     /**

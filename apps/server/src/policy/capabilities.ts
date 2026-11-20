@@ -18,8 +18,11 @@ export const TASK_OPERATIONS = [
   'tasks:attach',
 ] as const;
 
+export const AI_EXECUTION_OPERATIONS = ['ai_executions:read', 'ai_executions:write'] as const;
+
 export const CAPABILITIES = [
   ...TASK_OPERATIONS,
+  ...AI_EXECUTION_OPERATIONS,
   'tasks:write',
   'tasks:delete',
   'events:read',
@@ -76,7 +79,7 @@ export function capabilitiesForRole(role: 'admin' | 'member'): Capability[] {
  * escriptura, o personalitzat").
  */
 /**
- * **El correu no entra a cap predefinit, i s'exclou a mà.**
+ * **El correu i les execucions d'IA s'exclouen dels predefinits.**
  *
  * Els predefinits es deriven filtrant pel sufix, o sigui que `mail:read` hi entraria sol
  * i «només lectura» —el que la gent tria sense pensar— donaria **la bústia sencera de
@@ -85,7 +88,11 @@ export function capabilitiesForRole(role: 'admin' | 'member'): Capability[] {
  * És una llista i no un `endsWith` invertit perquè el dia que hi hagi Slack o Telegram,
  * la pregunta «això és tan sensible com el correu?» s'ha de respondre escrivint-hi el nom.
  */
-const FORA_DELS_PREDEFINITS: readonly string[] = ['mail:read', 'mail:write'];
+const FORA_DELS_PREDEFINITS: readonly string[] = [
+  'mail:read',
+  'mail:write',
+  ...AI_EXECUTION_OPERATIONS,
+];
 
 const perPredefinit = (sufixos: string[]): Capability[] =>
   CAPABILITIES.filter(

@@ -955,6 +955,10 @@ private fun BoardHost(
     // El detall de tasca llegeix etiquetes i tipologies; si no es carreguen aquí, la
     // secció del detall surt buida fins que s'obren els Ajustos.
     LaunchedEffect(Unit) { model.loadEntityData() }
+    LaunchedEffect(Unit) { aiResponse { model.loadAiTaskSettings() } }
+    val aiTaskSettings by model.aiTaskSettings.collectAsStateWithLifecycle()
+    val copyTaskContext = rememberCopyTaskContext(model)
+    val cardAiAction = rememberCardAiAction(model, copyTaskContext)
     val quickAddDraft by model.quickAddDraft.collectAsStateWithLifecycle()
     val quickAddTexts by model.quickAddTexts.collectAsStateWithLifecycle()
     val quickAddSaving by model.quickAddSaving.collectAsStateWithLifecycle()
@@ -1121,8 +1125,12 @@ private fun BoardHost(
                 delete = stringResource(R.string.nav_delete),
                 deleteConfirm = stringResource(R.string.task_deleteconfirm),
                 cancel = stringResource(R.string.nav_cancel),
+                copyContext = stringResource(R.string.ai_tasks_copy),
             ),
             onDelete = model::deleteTask,
+            canCopyContext = { task -> aiTaskSettings.orEmpty().any { it.scopeId == task.scopeId && it.enabled } },
+            onCopyContext = { task -> copyTaskContext(task.id) },
+            aiAction = cardAiAction,
             mcpLabels = mcpProvenanceLabels(),
             onMove = { task, status -> model.move(task, status) },
             onToggle = { task ->
@@ -1480,6 +1488,9 @@ private fun TaskDetailSheet(model: AppViewModel) {
                 removeAttachment = stringResource(R.string.task_removeattachment),
                 attachmentTooBig = stringResource(R.string.task_attachmenttoobig),
                 activityVerbs = mapOf(
+                    "ai_execution_requested" to stringResource(R.string.activity_verb_ai_execution_requested),
+                    "ai_execution_updated" to stringResource(R.string.activity_verb_ai_execution_updated),
+                    "ai_execution_result" to stringResource(R.string.activity_verb_ai_execution_result),
                     "answered" to stringResource(R.string.activity_verb_answered),
                     "asked" to stringResource(R.string.activity_verb_asked),
                     "attachment.created" to stringResource(R.string.activity_verb_attachment_created),
@@ -1538,6 +1549,11 @@ private fun TaskDetailSheet(model: AppViewModel) {
             onAddComment = { body, finished -> model.addComment(task.id, body, finished) },
             onUndoActivity = { model.undoActivity(it) },
             formatActivityTime = { value -> runCatching { activityTime.format(Instant.parse(value)) }.getOrNull() },
+            aiTaskContent = {
+                TaskAiActions(model, task) { value ->
+                    runCatching { activityTime.format(Instant.parse(value)) }.getOrNull()
+                }
+            },
             onDelete = { model.deleteTask(task) },
             onTakeOver = { model.takeOver(task, it) },
             onClose = model::closeTask,
@@ -2147,6 +2163,7 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
                 mail = stringResource(R.string.settings_tab_mail),
                 mcp = stringResource(R.string.settings_tab_mcp),
                 ai = stringResource(R.string.settings_tab_ai),
+                aiTasks = stringResource(R.string.settings_tab_aitasks),
                 shares = stringResource(R.string.settings_tab_shares),
                 profile = stringResource(R.string.settings_tab_profile),
                 admin = stringResource(R.string.settings_tab_admin),
@@ -2369,6 +2386,7 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
         accent = accent,
         serverUrl = serverUrl,
         mcpContent = { McpSettingsHost(model, scopes, "$serverUrl/mcp") },
+        aiTasksContent = { AiTaskSettingsHost(model, scopes) },
         agents = agentsDetail,
         agentScopeAvailability = agentScopeAvailability,
         agentCredentials = agentCredentials,

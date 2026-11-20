@@ -11,6 +11,8 @@
     "          defensar; 'no cal' no es un motiu."
   ],
   "audited": {
+    "putTaskAiSettings": "apps/server/src/http/task-ai.test.ts · ajustos privats i credencials",
+    "requestTaskAiExecution": "apps/server/src/http/task-ai.test.ts · clics concurrents i historial",
     "startGoogleMail": "apps/server/src/http/mail-oauth.test.ts",
     "cancelMailOAuthAttempt": "apps/server/src/http/mail-oauth.test.ts",
     "confirmGoogleMail": "apps/server/src/http/mail-oauth.test.ts",

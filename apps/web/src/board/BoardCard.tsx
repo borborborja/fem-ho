@@ -17,9 +17,11 @@ import { TaskCard, type CardList } from '@fem-ho/design-system/femho';
 import { DeleteTaskDialog } from './DeleteTaskDialog.js';
 import { McpSourceBadge } from './McpSourceBadge.js';
 import { TaskTimeBadge } from './TaskTimeBadge.js';
+import { TaskAiAction } from './TaskAiAction.js';
 import { SourceIcon } from './SourceIcon.js';
 import { useInlineTaskTitle } from './useInlineTaskTitle.js';
 import { api } from '../app/api.js';
+import { useTaskAiSettings } from '../app/task-ai.js';
 import { useApi } from '../app/useApi.js';
 import type { Checklist, Subtask } from '../app/types.js';
 import type { BoardTask } from './KanbanBoard.js';
@@ -53,6 +55,9 @@ export function BoardCard({
   const [addOpen, setAddOpen] = useState(false);
   const [draft, setDraft] = useState('');
   const [deleting, setDeleting] = useState(false);
+  const aiActionEnabled = useTaskAiSettings()?.data?.data.some(
+    (setting) => setting.scope_id === task.scope_id && setting.enabled,
+  );
   const inlineTitle = useInlineTaskTitle(task.id, task.title, onChanged);
 
   /**
@@ -171,6 +176,11 @@ export function BoardCard({
         titleEditHint={t('task.titleEditHint')}
         sourceIcon={<SourceIcon kind={task.sourceKind} />}
         sourceBadge={<McpSourceBadge activity={task.mcpActivity} />}
+        taskActions={
+          aiActionEnabled && !dragging ? (
+            <TaskAiAction taskId={task.id} scopeId={task.scope_id} />
+          ) : undefined
+        }
         project={task.project}
         assigneeInitials={task.assigneeInitials}
         time={task.time}

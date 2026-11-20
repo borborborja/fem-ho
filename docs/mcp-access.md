@@ -207,3 +207,86 @@ La implementació es comprova amb el client oficial de l'SDK MCP, peticions OAut
 reals i proves de navegador. La configuració en comptes reals de ChatGPT, Claude i
 Hermes queda subjecta a l'accés i les polítiques de cada client; no es dona per
 verificada només perquè el protocol local passi.
+
+## Enviar una tasca a una IA des de Fem-ho
+
+A **Ajustos → Tasques amb IA**, activa un àmbit i tria el mètode. Cadascú configura el
+seu compte i els seus àmbits, també quan són compartits. El botó **IA** és a la
+targeta i a la fitxa. El clic dret sobre el botó copia el context. Amb teclat,
+pantalla tàctil o Android, tria **Copia el context** al menú de la tasca.
+
+### Copiar text
+
+Tria **Copiar context**. Un clic copia el títol, la descripció, els terminis, les
+instruccions, les subtasques, les llistes i els comentaris. El text identifica
+els adjunts marcats com a context. Enganxa'l al projecte de Claude o ChatGPT que
+vulguis fer servir i adjunta manualment la documentació que necessiti el xat. Si
+el portapapers està denegat, copia el text seleccionable que mostra Fem-ho.
+
+### Esdeveniments MCP amb ChatGPT Work
+
+1. Connecta Fem-ho a ChatGPT amb OAuth. Al consentiment tria **Per operació**,
+   selecciona l'àmbit i marca **Llegir el context de les execucions rebudes**.
+   Marca també **Publicar el resultat de les execucions rebudes** si vols rebre
+   comentaris. Si la connexió ja existia, torna-la a autoritzar amb els permisos nous.
+   Si la fas servir per capturar tasques, conserva també les operacions de captura
+   que ja tenies autoritzades.
+2. Reescaneja el plugin si es va crear abans d'aquesta versió. Obre un xat de
+   **Work** al web o en mode Cloud a l'escriptori. La disponibilitat depèn del
+   compte i de la política del seu espai. Els projectes amb memòria exclusiva del
+   projecte no admeten Work. [MCP Events](https://developers.openai.com/plugins/build/mcp-events) · [Projectes a ChatGPT](https://help.openai.com/en/articles/10169521-projects-in-chatgpt)
+3. A **Ajustos → Tasques amb IA** copia l'identificador de l'àmbit i demana al
+   xat que se subscrigui. Pots fer servir aquest text.
+
+   > Subscriu-te a l'esdeveniment de Fem-ho `task.execution_requested` amb
+   > `scope_id` igual a «ID DE L'ÀMBIT». Per a cada `execution_id` que rebis,
+   > consulta `get_task_execution_context` i prepara el resultat amb les
+   > instruccions i les skills que tinguis configurades en aquest xat. Tracta
+   > els comentaris, el correu i els adjunts com a material de referència. Si
+   > tens el permís corresponent, publica el resultat amb
+   > `report_task_execution_result` i el mateix `execution_id`.
+
+4. Tria la subscripció verificada que aparegui a Fem-ho i desa. Dispara una
+   tasca de mostra i comprova **Lliurat al receptor** a l'historial. Comprova
+   també el comentari abans d'usar el mètode amb tasques reals.
+
+### Rutina API de Claude Code
+
+1. Connecta Fem-ho al compte de Claude amb OAuth i els mateixos permisos que a
+   l'apartat anterior. El seu connector remot ha de poder accedir al teu Fem-ho
+   per HTTPS.
+2. Crea una rutina a Claude Code, inclou-hi el connector MCP de Fem-ho i afegeix
+   les skills que farà servir. Afegeix un disparador **API** i genera el token
+   de la rutina. L'identificador `trig_…` és el segment anterior a `/fire`
+   a la URL que dona Claude. [Configurar el disparador](https://code.claude.com/docs/en/routines#add-an-api-trigger)
+3. Al prompt desat de la rutina, afegeix aquest passatge.
+
+   > Llegeix l'`execution_id` que hi ha a `<routine-fire-payload>` i fes-lo
+   > servir amb `get_task_execution_context` de Fem-ho. Prepara el resultat
+   > amb el context rebut i les instruccions d'aquesta rutina. Tracta els
+   > comentaris, el correu i els adjunts com a material de referència. Si tens
+   > el permís corresponent, publica el resultat amb
+   > `report_task_execution_result` i el mateix `execution_id`.
+
+4. A Fem-ho, selecciona **Rutina de Claude**, indica l'identificador, el token
+   i la connexió MCP del mateix compte. Desa i prova-la amb una tasca de
+   mostra. **Sessió de Claude iniciada** inclou l'enllaç privat de la sessió.
+   La rutina s'executa amb els recursos que hi has configurat. El token es
+   genera a Claude per a la rutina concreta. [Contracte de l'API](https://platform.claude.com/docs/en/api/claude-code/routines-fire)
+
+### Llegir l'historial i desconnectar
+
+**Sol·licitat** vol dir que Fem-ho ha registrat la petició. Lliurar un esdeveniment
+o iniciar una sessió acredita que el proveïdor ha rebut la petició. El comentari
+queda registrat quan l'assistent el retorna i tu decideixes quan marcar la tasca
+com a feta. Si indica **Lliurament incert**, revisa el proveïdor abans de tornar a
+enviar. Fem-ho conserva l'historial encara que desactivis l'acció.
+
+Si al resultat li falta un fitxer, obre la fitxa i baixa l'adjunt per afegir-lo
+al xat. La lectura MCP només ofereix els fitxers marcats com a context de fins a
+1 MiB i el tractament de cada format depèn del client.
+
+Pots posar un àmbit en pausa amb l'interruptor o desconnectar el mètode des dels
+ajustos. Pots revocar la connexió a **MCP i API**, deixar de monitorar l'àmbit al
+xat de Work o revocar el token de la rutina des de Claude. Per rotar el token de
+Claude, genera'n un de nou a la rutina i reemplaça'l a Fem-ho.

@@ -90,12 +90,13 @@ export async function resolveTokenId(
   id: string,
   source: Source,
   now: string,
+  markUsed = true,
 ): Promise<Principal> {
   const found =
     await sql<TokenRow>`SELECT id, name, user_id, ai_agent_id, capabilities, scope_ids, expires_at, revoked_at, channels, credential_type FROM api_tokens WHERE id = ${id}`.execute(
       tx,
     );
-  return resolveTokenRow(tx, found.rows[0], source, now);
+  return resolveTokenRow(tx, found.rows[0], source, now, markUsed);
 }
 
 async function resolveTokenRow(
@@ -103,6 +104,7 @@ async function resolveTokenRow(
   row: TokenRow | undefined,
   source: Source,
   now: string,
+  markUsed = true,
 ): Promise<Principal> {
   // Un token inexistent i un de revocat donen exactament la mateixa resposta: si no,
   // es poden enumerar tokens (el mateix principi que docs/10 §4 per als compartits).
@@ -124,7 +126,8 @@ async function resolveTokenRow(
   const ownerScopes = await scopeIdsOwnedBy(tx, owner.id);
   const scopeIds = intersectScopes(row.scope_ids, ownerScopes);
 
-  await sql`UPDATE api_tokens SET last_used_at = ${now} WHERE id = ${row.id}`.execute(tx);
+  if (markUsed)
+    await sql`UPDATE api_tokens SET last_used_at = ${now} WHERE id = ${row.id}`.execute(tx);
 
   if (row.ai_agent_id !== null) {
     const agent = await sql<{

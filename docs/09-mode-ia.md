@@ -72,35 +72,15 @@ El color no és mai l'únic senyal: sempre porta icona i text.
 
 ## 4 · El traspàs
 
-Perquè una IA pugui fer una tasca de veritat li cal molt més que el títol. Això és el que retorna `get_task` i `next_task`:
+`get_task` retorna el registre d'una tasca i les seves instruccions. `next_task`
+retorna aquest registre dins de `task` i la caducitat de la reserva a
+`lease_expires_at`. El descobriment dels àmbits i els permisos continua a
+`whoami` i `get_briefing`.
 
-```json
-{
-  "task": { "id": "...", "title": "...", "description": "...",
-            "due_date": "...", "deadline": "...", "ai_mode": "delegated" },
-  "context": {
-    "scope":   { "name": "Feina", "instructions": "...", "description": "..." },
-    "project": { "name": "Client Salt", "instructions": "...", "description": "..." },
-    "task_instructions": "...",
-    "attachments": [ { "id": "...", "filename": "...", "mime_type": "...",
-                       "resource_uri": "femho://tasks/.../attachments/..." } ],
-    "comments": [ ],
-    "checklists": [ ],
-    "subtasks": [ ]
-  },
-  "constraints": {
-    "can_create_tasks": false,
-    "scope_ids": ["..."],
-    "lease_expires_at": "2026-08-05T16:30:00Z"
-  }
-}
-```
-
-Les instruccions d'àmbit i de projecte són les que el brief demana a la línia 52: *"En ajustos-IA hem de poder posar instruccions genèriques i descripcions per a cada àmbit i per a cada projecte."*
-
-Els adjunts es donen com a **enllaços a recurs**, no incrustats. Una tasca amb tres PDF no ha de fer explotar la finestra de context de qui només volia el títol.
-
-`constraints` és el que fa que l'agent sàpiga els seus límits **abans** de trobar-se un 403.
+Els enviaments puntuals des de **Tasques amb IA** inclouen instruccions d'àmbit
+i projecte, comentaris, subtasques, llistes i referències a adjunts. El pas de
+lectura i la recuperació d'un fitxer es descriuen a
+[Tasques amb IA des de la fitxa](#tasques-amb-ia-des-de-la-fitxa).
 
 ---
 
@@ -214,3 +194,29 @@ El text de les tasques i els adjunts els escriuen persones, i poden contenir ins
 - **Ensenyar-ho tot**: què pot tocar cada token a Ajustos, i què ha tocat a l'historial.
 
 La defensa real no és tècnica: és que l'usuari pugui veure el que ha passat i desfer-ho.
+
+## Tasques amb IA des de la fitxa
+
+**Tasques amb IA** configura un enviament puntual quan la persona prem el botó de
+la tasca. L'ajust té una clau per usuari i àmbit. Cada execució porta l'UUID de
+la tasca, el de la petició i la connexió escollida. L'acció es pot fer en
+qualsevol columna. L'estat de la tasca, el mode IA, les reserves i les preguntes
+pendents es mantenen amb la semàntica de la delegació descrita més amunt.
+
+L'API de sessió permet consultar els ajustos, copiar el context i demanar un
+enviament. La base arbitra els clics concurrents i permet recuperar el mateix
+intent amb l'UUID de la petició. El lliurament queda en cua fins que el treballador
+en comprova de nou la connexió i els permisos. L'historial registra la sol·licitud,
+l'estat del lliurament i el resultat rebut. Un comentari de resultat és idempotent
+per execució i es desa juntament amb l'entrada d'activitat.
+
+Els transports envien només identificadors. La connexió MCP seleccionada llegeix
+el context de la tasca concreta amb `get_task_execution_context`. Per als fitxers
+marcats com a context s'usa `get_task_execution_attachment`, amb un màxim d'1 MiB
+per fitxer. `report_task_execution_result` escriu el comentari quan el consentiment
+ho permet. Un connector perd l'accés si es revoca o perd l'àmbit. El portapapers
+consultat des de la fitxa usa el mateix servei de context i no crea cap registre
+d'enviament.
+
+Consulta [la guia de configuració](mcp-access.md#enviar-una-tasca-a-una-ia-des-de-fem-ho)
+per preparar un xat de Work o una rutina de Claude Code.

@@ -63,6 +63,7 @@ export async function insertTaskComment(
   scopeId: string,
   body: string,
   id = uuidv7(),
+  { executionResult = false } = {},
 ): Promise<Comment> {
   if (body.trim() === '') {
     throw new PolicyError(
@@ -85,7 +86,7 @@ export async function insertTaskComment(
    * esperant per sempre. Ho fa només una persona —un agent que comenta segueix parlant
    * sol— i queda dit a l'historial perquè es pugui llegir per què va marxar.
    */
-  if (principal.kind === 'user' && (await clearAttention(ctx, taskId))) {
+  if (!executionResult && principal.kind === 'user' && (await clearAttention(ctx, taskId))) {
     ctx.record({
       entityType: 'task',
       entityId: taskId,
@@ -99,13 +100,16 @@ export async function insertTaskComment(
    * l'historial d'una tasca vol veure-hi que algú hi ha dit una cosa, no haver de
    * buscar en un historial de comentaris a part.
    */
-  ctx.record({
-    entityType: 'task',
-    entityId: taskId,
-    scopeId,
-    verb: 'commented',
-    changes: { body: { from: null, to: body.trim() } },
-  });
+  // El servei d'execucions registra el resultat amb el seu ID i sense duplicar-ne el text.
+  if (!executionResult) {
+    ctx.record({
+      entityType: 'task',
+      entityId: taskId,
+      scopeId,
+      verb: 'commented',
+      changes: { body: { from: null, to: body.trim() } },
+    });
+  }
 
   return {
     id,

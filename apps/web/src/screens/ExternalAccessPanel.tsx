@@ -22,6 +22,11 @@ const TASK_OPERATIONS = [
 ] as const;
 
 type TaskOperation = (typeof TASK_OPERATIONS)[number][0];
+const EXECUTION_OPERATIONS = [
+  ['ai_executions:read', 'external.operation.executionRead'],
+  ['ai_executions:write', 'external.operation.executionWrite'],
+] as const;
+type ExecutionOperation = (typeof EXECUTION_OPERATIONS)[number][0];
 type Permission = 'read_only' | 'read_write' | 'custom';
 const DELETE_CAPABILITIES = ['tasks:delete', 'events:delete'];
 const OAUTH_CAPABILITIES: Record<string, string> = {
@@ -42,6 +47,7 @@ const OAUTH_CAPABILITIES: Record<string, string> = {
 function capabilityLabel(capability: string): string {
   const key =
     TASK_OPERATIONS.find(([operation]) => operation === capability)?.[1] ??
+    EXECUTION_OPERATIONS.find(([operation]) => operation === capability)?.[1] ??
     OAUTH_CAPABILITIES[capability];
   return key ? t(key) : capability;
 }
@@ -802,12 +808,18 @@ export function McpConsentScreen({ requestId }: { requestId: string }) {
   const [selectedOperations, setOperations] = useState<TaskOperation[]>(() =>
     TASK_OPERATIONS.map(([operation]) => operation),
   );
+  const [selectedExecutionOperations, setExecutionOperations] = useState<ExecutionOperation[]>([]);
   const [enable, setEnable] = useState(false);
   const readRequested = request.data?.read_requested !== false;
   const writeRequested = request.data?.write_requested === true;
   const canChoose = (operation: TaskOperation) =>
     operation === 'tasks:read' ? readRequested : writeRequested;
-  const capabilities = selectedOperations.filter(canChoose);
+  const canChooseExecution = (operation: ExecutionOperation) =>
+    operation === 'ai_executions:read' ? readRequested : writeRequested;
+  const capabilities = [
+    ...selectedOperations.filter(canChoose),
+    ...selectedExecutionOperations.filter(canChooseExecution),
+  ];
   const submit = useMutation(async (approve: boolean) => {
     const input: ConsentInput = approve
       ? {
@@ -862,11 +874,35 @@ export function McpConsentScreen({ requestId }: { requestId: string }) {
               </label>
             ) : null}
             {permission === 'custom' ? (
-              <TaskOperationSelection
-                selected={capabilities}
-                onChange={setOperations}
-                canChoose={canChoose}
-              />
+              <>
+                <TaskOperationSelection
+                  selected={selectedOperations.filter(canChoose)}
+                  onChange={setOperations}
+                  canChoose={canChoose}
+                />
+                {EXECUTION_OPERATIONS.filter(([operation]) => canChooseExecution(operation)).map(
+                  ([operation, label]) => (
+                    <label
+                      key={operation}
+                      style={{ display: 'flex', alignItems: 'center', gap: 8 }}
+                    >
+                      <input
+                        type="checkbox"
+                        data-testid={`credential-operation-${operation}`}
+                        checked={selectedExecutionOperations.includes(operation)}
+                        onChange={(event) =>
+                          setExecutionOperations(
+                            event.target.checked
+                              ? [...selectedExecutionOperations, operation]
+                              : selectedExecutionOperations.filter((value) => value !== operation),
+                          )
+                        }
+                      />
+                      {t(label)}
+                    </label>
+                  ),
+                )}
+              </>
             ) : access.data ? (
               <p style={{ margin: 0 }}>
                 {access.data.presets[permission].map(capabilityLabel).join(' · ')}

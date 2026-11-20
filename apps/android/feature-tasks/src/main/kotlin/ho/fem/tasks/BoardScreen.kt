@@ -2,6 +2,7 @@ package ho.fem.tasks
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -94,6 +95,16 @@ data class TaskMenuLabels(
     val delete: String,
     val deleteConfirm: String,
     val cancel: String,
+    val copyContext: String? = null,
+)
+
+data class CardAiAction(
+    val label: String,
+    val actionLabel: String,
+    val copyLabel: String,
+    val enabled: Boolean,
+    val onClick: () -> Unit,
+    val onCopy: () -> Unit,
 )
 
 /**
@@ -166,6 +177,9 @@ fun BoardScreen(
     taskMenuLabels: TaskMenuLabels? = null,
     onDelete: (Task) -> Unit = {},
     mcpLabels: McpProvenanceLabels? = null,
+    canCopyContext: (Task) -> Boolean = { false },
+    onCopyContext: (Task) -> Unit = {},
+    aiAction: (Task) -> CardAiAction? = { null },
 ) {
     val pager = rememberPagerState(pageCount = { ORDER.size })
     val scope = rememberCoroutineScope()
@@ -291,6 +305,7 @@ fun BoardScreen(
                             val mcp = task.mcpActivity
                             Box(Modifier.testTag("board-task-${task.id}")) {
                                 var actionsOpen by remember { mutableStateOf(false) }
+                                val ai = aiAction(task)
                                 TaskCard(
                                     title = task.title,
                                     time = task.dueTime,
@@ -321,8 +336,11 @@ fun BoardScreen(
                                     addForm = extra?.addForm,
                                     onLongPress = taskMenuLabels?.let { { actionsOpen = true } },
                                     longPressLabel = taskMenuLabels?.openActions,
-                                    extraMetadata = if (mcp != null && mcpLabels != null) {
-                                        { McpProvenanceBadge(mcp, mcpLabels) }
+                                    extraMetadata = if (ai != null || (mcp != null && mcpLabels != null)) {
+                                        {
+                                            if (mcp != null && mcpLabels != null) McpProvenanceBadge(mcp, mcpLabels)
+                                            if (ai != null) CardAiButton(ai)
+                                        }
                                     } else null,
                                 )
                                 if (taskMenuLabels != null) {
@@ -348,6 +366,12 @@ fun BoardScreen(
                                             dialogTaskId = task.id
                                             dialog = TaskDialog.Delete
                                         },
+                                        onCopyContext = if (canCopyContext(task)) {
+                                            {
+                                                actionsOpen = false
+                                                onCopyContext(task)
+                                            }
+                                        } else null,
                                     )
                                 }
                             }
@@ -362,6 +386,34 @@ fun BoardScreen(
 }
 
 @Composable
+private fun CardAiButton(action: CardAiAction) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(FemhoShape.pill))
+            .background(Femho.colors.ghostBg)
+            .combinedClickable(
+                enabled = action.enabled,
+                role = Role.Button,
+                onClickLabel = action.actionLabel,
+                onLongClickLabel = action.copyLabel,
+                onClick = action.onClick,
+                onLongClick = action.onCopy,
+            )
+            .heightIn(min = FemhoSize.touch)
+            .padding(horizontal = 10.dp)
+            .testTag("board-task-ai"),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            action.label,
+            color = if (action.enabled) Femho.colors.ink else Femho.colors.inkFaint,
+            fontSize = FemhoText.meta,
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
+}
+
+@Composable
 private fun TaskActionsMenu(
     expanded: Boolean,
     labels: TaskMenuLabels,
@@ -369,6 +421,7 @@ private fun TaskActionsMenu(
     onOpen: () -> Unit,
     onMove: () -> Unit,
     onDelete: () -> Unit,
+    onCopyContext: (() -> Unit)?,
 ) {
     DropdownMenu(
         expanded = expanded,
@@ -390,6 +443,13 @@ private fun TaskActionsMenu(
             onClick = onMove,
             modifier = Modifier.testTag("board-task-move"),
         )
+        if (onCopyContext != null && labels.copyContext != null) {
+            DropdownMenuItem(
+                text = { Text(labels.copyContext, color = Femho.colors.ink) },
+                onClick = onCopyContext,
+                modifier = Modifier.testTag("board-task-copy-context"),
+            )
+        }
         DropdownMenuItem(
             text = { Text(labels.delete, color = Femho.colors.dangerText) },
             onClick = onDelete,

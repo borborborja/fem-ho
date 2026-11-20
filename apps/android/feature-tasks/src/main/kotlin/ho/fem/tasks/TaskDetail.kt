@@ -176,6 +176,7 @@ fun TaskDetail(
     onDeleteAttachment: (ho.fem.model.Attachment) -> Unit = {},
     formatActivityTime: (String) -> String? = { null },
     modifier: Modifier = Modifier,
+    aiTaskContent: @Composable () -> Unit = {},
 ) {
     var edits by rememberSaveable(task.id, stateSaver = TaskEditsSaver) {
         mutableStateOf<Map<String, String?>>(emptyMap())
@@ -273,6 +274,8 @@ fun TaskDetail(
             label = { Text(labels.description) },
             modifier = Modifier.fillMaxWidth().testTag("task-description"),
         )
+
+        aiTaskContent()
 
         Text(labels.project, color = Femho.colors.inkSoft, fontSize = FemhoText.meta)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {

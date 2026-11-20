@@ -50,7 +50,7 @@ El token que arriba a Fem-ho és **per a Fem-ho**. S'ha de validar que ho sigui,
 
 S'ordenen **alfabèticament** a la llista: els clients cacheguen, i un ordre estable millora els encerts de la memòria cau de prompts.
 
-El catàleg té **20 eines**. Cada credencial veu les que corresponen als seus permisos.
+Cada credencial veu les eines que corresponen als seus permisos.
 
 ### Lectura
 
@@ -63,6 +63,8 @@ El catàleg té **20 eines**. Cada credencial veu les que corresponen als seus p
 | `list_tasks` | Tasques amb filtres i paginació. |
 | `get_task` | La fitxa d'una tasca. |
 | `get_task_context` | Identificadors d'àmbits i, dins d'un àmbit, projectes, tipologies, etiquetes i responsables. |
+| `get_task_execution_context` | Context de la tasca de l'execució lliurada al connector OAuth. |
+| `get_task_execution_attachment` | Un adjunt marcat com a context de la tasca de l'execució, fins a 1 MiB. |
 | `search_tasks` | Cerca de text. |
 | `list_events` | Esdeveniments en una finestra. **Requereix `from` i `to`.** |
 
@@ -79,6 +81,7 @@ en mostra exemples de creació i edició.
 | `move_task` | Canvia `status` i `position`. |
 | `complete_task` | Completa, amb cascada i recurrència. |
 | `add_comment` | Comenta. **És la via principal perquè un agent reporti.** |
+| `report_task_execution_result` | Publica un comentari de resultat per execució. Repetir la crida recupera el mateix comentari. |
 | `add_task_attachment` | Adjunta un fitxer per Base64 o per URL HTTPS. Reutilitza l'UUID per reintentar. |
 | `ask_user` | Pregunta **i s'atura**: el comentari surt igual, la tasca passa a demanar atenció i **la reserva es deixa anar** —qui espera no treballa—. La marca la baixa una resposta d'una persona, o completar la tasca. Mai un «vist». |
 | `resume_task` | L'agent ha sabut per un altre canal el que li faltava: ho deixa escrit, la marca cau i **torna a reservar** la tasca. El text és obligatori: primer es documenta, després es desbloqueja. |
@@ -144,19 +147,19 @@ Des de l'app, «Com s'hi connecta» (Ajustos ▸ Usuari IA) dona l'URL, el `.mcp
 
 ---
 
-## 4 · Recursos
+## 4 · Fitxers i esdeveniments
 
-Els clients actuals gairebé no fan servir recursos: prioritza les tools. Els que hi ha:
+Els fitxers es poden baixar per l'API REST amb els permisos d'adjunts. Per a una
+execució iniciada des del botó IA, `get_task_execution_attachment` torna el
+contingut d'un adjunt autoritzat dins del resultat de l'eina.
 
-| Recurs | Què és |
-| --- | --- |
-| `femho://scopes/{id}/instructions` | Instruccions de l'àmbit |
-| `femho://projects/{id}/instructions` | Instruccions del projecte |
-| `femho://tasks/{id}/attachments/{id}` | Un fitxer de context |
-| `femho://guide` | Com parlar amb Fem-ho: vocabulari, columnes, què vol dir cada mode d'IA |
-
-Els fitxers es poden baixar per l'API REST amb els permisos d'adjunts. `get_task` torna
-la fitxa de la tasca.
+La capacitat `events` s'anuncia a connexions OAuth amb permís per llegir execucions.
+`events/list` descriu `task.execution_requested` i el filtre obligatori `scope_id`.
+`events/subscribe` verifica i renova el callback HTTPS. `events/unsubscribe`
+retira la subscripció. Un clic emet l'esdeveniment només a la subscripció escollida
+als ajustos. El payload conté `execution_id`, `task_id` i `scope_id`, amb
+`cursor: null`. El receptor pot demanar el context a Fem-ho amb la mateixa connexió.
+[Configuració a ChatGPT Work](mcp-access.md#esdeveniments-mcp-amb-chatgpt-work).
 
 ---
 

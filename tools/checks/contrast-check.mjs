@@ -74,6 +74,12 @@ const PAIRS = [
     what: 'text de botó fantasma',
   },
   {
+    fg: '--on-brand',
+    stack: ['--plou-blue'],
+    min: AA_NORMAL,
+    what: 'text del botó de tasques amb IA a Android',
+  },
+  {
     fg: '--column-bg',
     stack: ['--panel-bg'],
     min: 0,

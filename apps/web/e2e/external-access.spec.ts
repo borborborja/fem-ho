@@ -143,6 +143,8 @@ for (const theme of ['light', 'dark'] as const) {
     for (const capability of ['read', 'create', 'move', 'update', 'attach']) {
       await expect(operation(page, `tasks:${capability}`)).toBeChecked();
     }
+    await expect(operation(page, 'ai_executions:read')).not.toBeChecked();
+    await expect(operation(page, 'ai_executions:write')).not.toBeChecked();
     await page.getByLabel('Personal MCP', { exact: true }).check();
     await page.getByLabel('Feina MCP', { exact: true }).check();
     for (const capability of ['create', 'update', 'attach']) {
@@ -239,6 +241,8 @@ test('OAuth conserva la petició al login i només activa MCP en autoritzar-lo',
     await expect(anonymous.getByRole('heading', { name: 'Client sense sessió' })).toBeVisible();
     await expect(operation(anonymous, 'tasks:read')).toBeChecked();
     await expect(operation(anonymous, 'tasks:create')).toHaveCount(0);
+    await expect(operation(anonymous, 'ai_executions:read')).not.toBeChecked();
+    await expect(operation(anonymous, 'ai_executions:write')).toHaveCount(0);
     await anonymous.getByLabel('Personal login MCP', { exact: true }).check();
     await anonymous.getByTestId('mcp-consent-enable').check();
     await anonymous.getByRole('button', { name: 'Denegar', exact: true }).click();
@@ -262,6 +266,7 @@ test('OAuth conserva la petició al login i només activa MCP en autoritzar-lo',
     const allow = anonymous.getByRole('button', { name: 'Autoritzar', exact: true });
     await expect(allow).toBeDisabled();
     await anonymous.getByTestId('mcp-consent-enable').check();
+    await operation(anonymous, 'ai_executions:read').check();
     await allow.click();
     await anonymous.waitForURL('**/oauth-test-callback?**');
     const confirmed = new URL(anonymous.url());
@@ -272,6 +277,9 @@ test('OAuth conserva la petició al login i només activa MCP en autoritzar-lo',
       confirmed.searchParams.get('code')!,
     );
     expect(issued.scope).toBe('femho:read');
+    expect(await (await callMcp(anonymous, issued.access_token, 'tools/list')).text()).toContain(
+      'get_task_execution_context',
+    );
     const updated = await page.request.get('/api/v1/external-access', { headers });
     expect(await updated.json()).toMatchObject({ mcp_enabled: true, api_enabled: false });
   } finally {
