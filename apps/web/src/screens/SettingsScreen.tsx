@@ -53,6 +53,7 @@ import { ExternalAccessPanel, AgentTokenEditor } from './ExternalAccessPanel.js'
 import { TaskAiSettingsPanel } from './TaskAiSettingsPanel.js';
 import { NotificationSettingsPanel } from './NotificationSettingsPanel.js';
 import { PomodoroSettingsFields } from '../pomodoro/PomodoroSettings.js';
+import { useCalendarSuggestions } from '../board/useCalendarSuggestions.js';
 
 /**
  * **El correu va en pestanya pròpia i no dins de «Calendaris».**
@@ -229,7 +230,7 @@ export function SettingsScreen() {
   );
 }
 
-function Group({ title, children }: { title: string; children: React.ReactNode }) {
+function Group({ title, children }: { title?: string; children: React.ReactNode }) {
   return (
     <section
       style={{
@@ -242,7 +243,9 @@ function Group({ title, children }: { title: string; children: React.ReactNode }
         gap: 12,
       }}
     >
-      <h2 style={{ margin: 0, fontSize: 14, fontWeight: 800, color: 'var(--ink)' }}>{title}</h2>
+      {title !== undefined && (
+        <h2 style={{ margin: 0, fontSize: 14, fontWeight: 800, color: 'var(--ink)' }}>{title}</h2>
+      )}
       {children}
     </section>
   );
@@ -326,6 +329,21 @@ function GeneralTab() {
   // `/info` és públic i sense autenticar: el dret al codi el té qualsevol que hi arribi.
   const info = useApi<Info>('/info').data ?? { version: '', license: '', source_url: '' };
   const { updateProfile, updateSettings } = useSession();
+  const calendarSuggestions = useCalendarSuggestions();
+  const [calendarEnabled, setCalendarEnabled] = useState(calendarSuggestions.enabled);
+  useEffect(
+    () => setCalendarEnabled(calendarSuggestions.enabled),
+    [calendarSuggestions.enabled, calendarSuggestions.configurationIssue],
+  );
+  const calendarPreference = useMutation(async (enabled: boolean) => {
+    setCalendarEnabled(enabled);
+    try {
+      await calendarSuggestions.stage({ type: 'configure', enabled });
+    } catch (cause) {
+      setCalendarEnabled(calendarSuggestions.enabled);
+      throw cause;
+    }
+  });
   const [showTaskTime, setShowTaskTime] = useState(settings.show_task_time !== false);
   useEffect(() => setShowTaskTime(settings.show_task_time !== false), [settings.show_task_time]);
   const timePreference = useMutation(async (value: boolean) => {
@@ -439,6 +457,19 @@ function GeneralTab() {
       <Group title={t('pomodoro.title')}>
         <PomodoroSettingsFields />
       </Group>
+      {calendarSuggestions.available && (
+        <Group>
+          <Toggle
+            testId="settings-calendar-suggestions"
+            checked={calendarEnabled}
+            disabled={calendarPreference.busy}
+            label={t('calendarSuggestions.setting')}
+            onChange={(enabled) => void calendarPreference.run(enabled)}
+          />
+          <p>{t('calendarSuggestions.settingHint')}</p>
+          {calendarPreference.error && <p role="alert">{failureText(calendarPreference.error)}</p>}
+        </Group>
+      )}
       <Group title={t('reports.title')}>
         <Toggle
           testId="settings-show-reports"

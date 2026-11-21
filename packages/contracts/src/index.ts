@@ -105,3 +105,4 @@ export function isSourceKind(value: unknown): value is SourceKind {
 
 export * from './timezone.js';
 export * from './pomodoro.js';
+export { calendarSuggestionWindow, isCurrentCalendarSuggestion } from './calendar-suggestions.js';

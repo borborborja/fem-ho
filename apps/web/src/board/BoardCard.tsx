@@ -18,7 +18,7 @@ import { DeleteTaskDialog } from './DeleteTaskDialog.js';
 import { McpSourceBadge } from './McpSourceBadge.js';
 import { TaskTimeBadge } from './TaskTimeBadge.js';
 import { TaskAiAction } from './TaskAiAction.js';
-import { SourceIcon } from './SourceIcon.js';
+import { CalendarOriginBadge, SourceIcon } from './SourceIcon.js';
 import { SubtaskRow } from './SubtaskRow.js';
 import { useInlineTaskTitle } from './useInlineTaskTitle.js';
 import { api, failureText } from '../app/api.js';
@@ -167,7 +167,9 @@ export function BoardCard({
         titleEditor={inlineTitle.editor}
         onTitleEdit={dragging ? undefined : inlineTitle.start}
         titleEditHint={t('task.titleEditHint')}
-        sourceIcon={<SourceIcon kind={task.sourceKind} />}
+        sourceIcon={
+          task.fromCalendar ? <CalendarOriginBadge /> : <SourceIcon kind={task.sourceKind} />
+        }
         sourceBadge={
           task.mcpActivity === undefined ? undefined : (
             <McpSourceBadge activity={task.mcpActivity} compact />

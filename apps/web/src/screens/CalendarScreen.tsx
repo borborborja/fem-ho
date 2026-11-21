@@ -546,6 +546,7 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
         status: task.status,
         scope_id: task.scope_id,
         sourceKind: task.source_kind,
+        fromCalendar: task.from_calendar,
         mcpActivity: task.mcp_activity,
         time: task.due_time ?? undefined,
       }))}
@@ -555,6 +556,7 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
         status: task.status,
         scope_id: task.scope_id,
         sourceKind: task.source_kind,
+        fromCalendar: task.from_calendar,
         mcpActivity: task.mcp_activity,
       }))}
       scopes={scopes

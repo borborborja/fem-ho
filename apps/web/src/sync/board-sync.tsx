@@ -25,6 +25,7 @@ import {
 } from './cache.js';
 import type { FemHoDatabase, OutboxRow } from './db.js';
 import {
+  calendarSuggestionTaskId,
   discardBoardOperation,
   markSending,
   nextBoardOperations,
@@ -42,6 +43,7 @@ type BoardMutation = Pick<
   | 'task_title'
   | 'parent_task_id'
   | 'observed_title'
+  | 'calendar_suggestion'
 > & { entity_type?: OutboxRow['entity_type'] };
 
 interface BoardSync {
@@ -254,7 +256,11 @@ export function BoardSyncProvider({ userId, children }: { userId: string; childr
         // Un PATCH directe passaria per davant del moviment compost que encara és a la cua.
         if (direct && row.entity_type === 'task') {
           const focus = await db.outbox
-            .filter((candidate) => pomodoroTaskIds(candidate).includes(row.entity_id))
+            .filter(
+              (candidate) =>
+                pomodoroTaskIds(candidate).includes(row.entity_id) ||
+                calendarSuggestionTaskId(candidate) === row.entity_id,
+            )
             .first();
           direct = focus === undefined;
         }
@@ -327,7 +333,14 @@ export function BoardSyncProvider({ userId, children }: { userId: string; childr
               </summary>
               {failures.map((row) => (
                 <div key={row.id} style={{ padding: 8 }}>
-                  <p>{row.entity_type === 'pomodoro' ? t('pomodoro.title') : row.task_title}</p>
+                  <p>
+                    {row.entity_type === 'pomodoro'
+                      ? t('pomodoro.title')
+                      : (row.task_title ??
+                        (row.entity_type === 'calendar_suggestions'
+                          ? t('calendarSuggestions.setting')
+                          : undefined))}
+                  </p>
                   <p>
                     {row.status === 'conflict'
                       ? t(row.entity_type === 'pomodoro' ? 'pomodoro.conflict' : 'sync.conflict')

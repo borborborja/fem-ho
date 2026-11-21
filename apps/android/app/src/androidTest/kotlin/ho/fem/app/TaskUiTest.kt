@@ -46,6 +46,8 @@ import ho.fem.designsystem.SubtaskRowActions
 import ho.fem.designsystem.SubtaskRowLabels
 import ho.fem.designsystem.TaskCard
 import ho.fem.model.AiMode
+import ho.fem.model.CalendarTaskStart
+import ho.fem.model.CalendarTaskSuggestion
 import ho.fem.model.DoneDayFilter
 import ho.fem.model.McpActivity
 import ho.fem.model.McpCreation
@@ -64,6 +66,7 @@ import ho.fem.tasks.CardExtras
 import ho.fem.tasks.McpProvenanceLabels
 import ho.fem.tasks.QuickAddField
 import ho.fem.tasks.TaskMenuLabels
+import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import org.junit.Assert.assertEquals
@@ -110,6 +113,42 @@ class TaskUiTest {
         deleteConfirm = "Vols esborrar «{title}»?",
         cancel = "Cancel·la",
     )
+
+    @Test
+    fun calendarCardOffersScheduledStartOnlyWhenTheEventIsDue() {
+        val starts = Instant.parse("2026-03-29T08:00:00Z")
+        val time = mutableStateOf(starts.minusSeconds(1))
+        val eventTitle = "Planificació"
+        val item = CalendarTaskSuggestion(
+            calendarId = "calendar", uid = "event", scopeId = "work", projectId = "client",
+            title = eventTitle, calendarName = "Feina", startsAt = starts.toString(),
+            endsAt = starts.plusSeconds(1800).toString(), allDay = false, declined = false,
+            canStart = true, requiresShareConfirmation = false, requiresTaskType = false,
+        )
+        var selected: CalendarTaskStart? = null
+        compose.setContent {
+            FemhoTheme {
+                val now = time.value
+                BoardScreen(
+                    tasks = emptyList(), labels = boardLabels, doneDay = boardDay,
+                    onOpen = {}, onMove = { _, _ -> }, onToggle = {}, requestedStatus = TaskStatus.TODO,
+                    calendarGroups = mapOf(item.column(now) to mapOf("work" to listOf(item))),
+                    calendarScopeLabel = { "Feina" },
+                    calendarSuggestionCard = { proposal, column ->
+                        CalendarSuggestionCard(proposal, column, now, profileZone,
+                            onStart = { selected = it }, onDecline = {})
+                    },
+                )
+            }
+        }
+        compose.onNodeWithTag("calendar-suggestion-start-now").assertIsDisplayed()
+        compose.onNodeWithTag("calendar-suggestion-start-planned").assertDoesNotExist()
+        compose.runOnIdle { time.value = starts.plusSeconds(600) }
+        compose.onNodeWithTag("board-column-doing").performClick()
+        compose.onNodeWithTag("calendar-suggestion-start-planned").assertIsDisplayed().performClick()
+        compose.runOnIdle { assertEquals(CalendarTaskStart.PLANNED, selected) }
+        compose.onNodeWithTag("calendar-suggestion-decline").assertIsDisplayed()
+    }
 
     @Test
     fun subtaskTitleLongPressEditsOnlyTheSubtaskAndMenuConfirmsDelete() {

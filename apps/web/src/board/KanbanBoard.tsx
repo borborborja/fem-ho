@@ -20,7 +20,9 @@ import {
 import { BoardCard } from './BoardCard.js';
 import { BoardDnd, DraggableCard, DroppableColumn, type DropPlacement } from './dnd.js';
 import { InboxRail } from './InboxRail.js';
-import type { InboxEvent, InboxMail, Task } from '../app/types.js';
+import { CalendarSuggestionCard, type CalendarStart } from './CalendarSuggestionCard.js';
+import { calendarSuggestionKey } from './useCalendarSuggestions.js';
+import type { CalendarTaskSuggestion, InboxEvent, InboxMail, Task } from '../app/types.js';
 
 export interface BoardTask {
   timeSummary?: import('@fem-ho/contracts').components['schemas']['TaskTimeSummary'] | undefined;
@@ -28,6 +30,7 @@ export interface BoardTask {
   title: string;
   /** De quina mena de font ve, o `undefined` si l'ha escrita una persona. */
   sourceKind?: SourceKind | null | undefined;
+  fromCalendar?: boolean | undefined;
   mcpActivity?: Task['mcp_activity'];
   status: TaskStatus;
   scope_id: string;
@@ -96,6 +99,9 @@ export interface BoardScope {
 
 export interface KanbanBoardProps {
   tasks: BoardTask[];
+  calendarSuggestions?: { item: CalendarTaskSuggestion; active: boolean }[];
+  onStartSuggestion?: (item: CalendarTaskSuggestion, start: CalendarStart) => void;
+  onDeclineSuggestion?: (item: CalendarTaskSuggestion) => void;
   timezone?: string | undefined;
   scopes: BoardScope[];
   /** Àmbits plegats, per columna. Persisteix a les preferències de l'usuari. */
@@ -207,6 +213,9 @@ const COLUMNS: { status: TaskStatus; labelKey: string; emptyKey: string }[] = [
 
 export function KanbanBoard({
   tasks,
+  calendarSuggestions = [],
+  onStartSuggestion,
+  onDeclineSuggestion,
   scopes,
   inboxHeader,
   inboxHeaderExtra,
@@ -255,6 +264,10 @@ export function KanbanBoard({
 
   const renderColumn = (column: (typeof COLUMNS)[number]) => {
     const ofColumn = tasks.filter((task) => task.status === column.status);
+    const suggestions = calendarSuggestions.filter(
+      ({ active }) => (active ? 'doing' : 'todo') === column.status,
+    );
+    const count = ofColumn.length + suggestions.length;
 
     const cardFor = (task: BoardTask) => (
       <DraggableCard
@@ -283,8 +296,19 @@ export function KanbanBoard({
       </DraggableCard>
     );
 
+    const suggestionFor = ({ item, active }: (typeof suggestions)[number]) => (
+      <CalendarSuggestionCard
+        key={calendarSuggestionKey(item)}
+        item={item}
+        active={active}
+        timezone={timezone}
+        onStart={(start) => onStartSuggestion?.(item, start)}
+        onDecline={() => onDeclineSuggestion?.(item)}
+      />
+    );
+
     let body: ReactNode;
-    if (ofColumn.length === 0) {
+    if (count === 0) {
       body = (
         <EmptyState>
           {column.status === 'done' && doneEmptyLabel !== undefined
@@ -293,10 +317,14 @@ export function KanbanBoard({
         </EmptyState>
       );
     } else if (!grouped) {
-      body = ofColumn.map(cardFor);
+      body = [...ofColumn.map(cardFor), ...suggestions.map(suggestionFor)];
     } else {
       body = scopes
-        .filter((scope) => ofColumn.some((task) => task.scope_id === scope.id))
+        .filter(
+          (scope) =>
+            ofColumn.some((task) => task.scope_id === scope.id) ||
+            suggestions.some(({ item }) => item.scope_id === scope.id),
+        )
         .map((scope) => {
           const key = `${column.status}:${scope.id}`;
           const open = collapsed[key] !== true;
@@ -346,7 +374,12 @@ export function KanbanBoard({
                   </>
                 }
               />
-              {open ? ofGroup.map(cardFor) : null}
+              {open ? (
+                <>
+                  {ofGroup.map(cardFor)}
+                  {suggestions.filter(({ item }) => item.scope_id === scope.id).map(suggestionFor)}
+                </>
+              ) : null}
             </div>
           );
         });
@@ -360,7 +393,7 @@ export function KanbanBoard({
             data-column-status={column.status}
             data-drop-target={over ? 'true' : 'false'}
             label={t(column.labelKey)}
-            count={ofColumn.length}
+            count={count}
             // Al mòbil cada columna és una targeta pròpia: no hi ha cap contenidor que
             // les agrupi, i sense fons no es veurien.
             variant={mobile ? 'default' : 'grouped'}
@@ -566,7 +599,6 @@ export function KanbanBoard({
           <div
             data-ai-board={aiBoard ? 'true' : 'false'}
             style={{
-              ...(mobile ? { display: 'contents' } : {}),
               /**
                * En repòs, **cap transformada**: `rotateY(0deg)` és visualment el mateix
                * que no tenir-ne, però és una transformada 3D i promou la capa, i llavors
@@ -575,7 +607,7 @@ export function KanbanBoard({
                */
               transform: flip?.transform ?? 'none',
               transition: flip?.transition,
-              display: 'flex',
+              display: mobile ? 'contents' : 'flex',
               flex: 1,
               minHeight: 0,
             }}

@@ -795,6 +795,7 @@ export interface Users {
 }
 
 export interface UserSettings {
+  calendar_task_suggestions: Generated<number>;
   collapsed_groups: string | null;
   daily_digest_at: string | null;
   done_cleared_at: string | null;
@@ -891,6 +892,12 @@ export interface DB {
   task_types: TaskTypes;
   tasks: Tasks;
   user_invites: UserInvites;
+  calendar_suggestion_declines: {
+    user_id: string;
+    calendar_id: string;
+    uid: string;
+    recurrence_key: string;
+  };
   user_settings: UserSettings;
   users: Users;
   webhooks: Webhooks;

@@ -7,6 +7,7 @@
  */
 
 import ICAL from 'ical.js';
+import { localTimeToInstant } from '@fem-ho/contracts';
 import { statusIn } from './ical.js';
 
 export class IcalError extends Error {
@@ -51,12 +52,16 @@ export interface ParsedEvent {
   summary: string;
   description: string | null;
   location: string | null;
+  startTime: ICAL.Time;
   startsAt: string;
   endsAt: string | null;
   allDay: boolean;
   timezone: string | null;
-  status: string | null;
+  status: 'TENTATIVE' | 'CONFIRMED' | 'CANCELLED';
+  transparency: 'OPAQUE' | 'TRANSPARENT';
   rrule: string | null;
+  rdate: string[];
+  exdate: string[];
   sequence: number;
 }
 
@@ -98,7 +103,7 @@ export function parseResource(ical: string): ParsedResource {
 
   return {
     todos: vtodos.map(toTodo),
-    events: vevents.map(toEvent),
+    events: vevents.map(parseEventComponent),
     componentName: vtodos.length > 0 ? 'VTODO' : vevents.length > 0 ? 'VEVENT' : undefined,
   };
 }
@@ -180,32 +185,85 @@ function parseChecklist(raw: string | null): ChecklistData[] | null {
   }
 }
 
-function toEvent(component: ICAL.Component): ParsedEvent {
+export function parseEventComponent(component: ICAL.Component): ParsedEvent {
   const uid = text(component, 'uid');
   if (uid === null) throw new IcalError('Un VEVENT sense UID no es pot guardar.');
 
-  const dtstart = component.getFirstProperty('dtstart');
+  const status = text(component, 'status')?.toUpperCase();
+  const recurrenceId = component.getFirstProperty('recurrence-id');
+  const dtstart =
+    component.getFirstProperty('dtstart') ?? (status === 'CANCELLED' ? recurrenceId : null);
   if (dtstart === null) throw new IcalError('Un VEVENT sense DTSTART no es pot guardar.');
 
-  const start = dtstart.getFirstValue() as ICAL.Time;
+  const start = propertyTime(dtstart, dtstart.getFirstValue() as ICAL.Time);
   const dtend = component.getFirstProperty('dtend');
-  const end = dtend === null ? null : (dtend.getFirstValue() as ICAL.Time);
-  const recurrenceId = component.getFirstProperty('recurrence-id');
+  const duration = component.getFirstPropertyValue('duration') as ICAL.Duration | null;
+  let end = dtend === null ? null : propertyTime(dtend, dtend.getFirstValue() as ICAL.Time);
+  if (end === null && (duration !== null || start.isDate)) {
+    end = start.clone();
+    end.addDuration(duration ?? ICAL.Duration.fromString('P1D'));
+  }
 
   return {
     uid,
-    recurrenceId: recurrenceId === null ? null : toIso(recurrenceId.getFirstValue() as ICAL.Time),
+    recurrenceId:
+      recurrenceId === null
+        ? null
+        : toIso(propertyTime(recurrenceId, recurrenceId.getFirstValue() as ICAL.Time)),
     summary: text(component, 'summary') ?? '(untitled)',
     description: text(component, 'description'),
     location: text(component, 'location'),
+    startTime: start,
     startsAt: toIso(start),
     endsAt: end === null ? null : toIso(end),
     allDay: start.isDate,
     timezone: (dtstart.getParameter('tzid') as string | undefined) ?? null,
-    status: text(component, 'status'),
+    status: status === 'CANCELLED' || status === 'TENTATIVE' ? status : 'CONFIRMED',
+    transparency:
+      text(component, 'transp')?.toUpperCase() === 'TRANSPARENT' ? 'TRANSPARENT' : 'OPAQUE',
     rrule: text(component, 'rrule'),
+    rdate: recurrenceDates(component, 'rdate'),
+    exdate: recurrenceDates(component, 'exdate'),
     sequence: Number(text(component, 'sequence') ?? '0'),
   };
+}
+
+function recurrenceDates(component: ICAL.Component, name: 'rdate' | 'exdate'): string[] {
+  return component.getAllProperties(name).flatMap((property) =>
+    property.getValues().flatMap((value: unknown) => {
+      const time = value instanceof ICAL.Period ? value.start : value;
+      return time instanceof ICAL.Time ? [toIso(propertyTime(property, time))] : [];
+    }),
+  );
+}
+
+function propertyTime(property: ICAL.Property, time: ICAL.Time): ICAL.Time {
+  if (time.isDate || time.zone !== ICAL.Timezone.localTimezone) return time;
+  const tzid = property.getParameter('tzid');
+  const zoned = time.clone();
+  zoned.zone = ICAL.Timezone.utcTimezone;
+  if (typeof tzid !== 'string') return zoned;
+
+  // Alguns orígens fan servir un TZID IANA sense VTIMEZONE. Conservem l'hora local
+  // de cada ocurrència, també després d'un canvi d'hora, amb les regles del sistema.
+  const zone = new ICAL.Timezone({ tzid });
+  try {
+    new Intl.DateTimeFormat('en', { timeZone: tzid });
+  } catch {
+    return zoned;
+  }
+  zone.utcOffset = (at) => {
+    const wallTime = isoTime(at);
+    const date = isoDate(at);
+    return (
+      (Date.parse(`${date}T${wallTime}Z`) -
+        Date.parse(localTimeToInstant(tzid, date, wallTime.slice(0, 5)))) /
+        1000 -
+      at.second
+    );
+  };
+  zoned.zone = zone;
+  return zoned;
 }
 
 function text(component: ICAL.Component, name: string): string | null {

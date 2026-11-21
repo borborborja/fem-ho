@@ -140,6 +140,12 @@ Tres resultats i prou. **Cada operació es resol per separat**: una que falli no
 
 `op_id` és la clau d'idempotència. Reenviar un lot després d'una caiguda no duplica res.
 
+### Propostes del calendari
+
+`GET /calendar-task-suggestions` retorna la finestra del dia del perfil i les propostes visibles. El web i Android desen la finestra per compte i calculen la columna a partir dels instants de l'esdeveniment. En reprendre l'app recalculen la columna i actualitzen les dades quan tenen connexió.
+
+L'entitat personal `calendar_suggestions` de `/sync/batch` rep `configure`, `decline` i `start`. Cada ordre conserva `op_id`. En començar, el servidor verifica l'ocurrència i desactiva la proposta amb el mateix canvi que crea o mou la tasca. La resposta inclou la finestra actual i la tasca confirmada. Actualitza primer el servidor i després els clients.
+
 ### Pomodoro personal
 
 `GET /api/v1/pomodoro` torna l'estat del compte i l'hora del servidor en

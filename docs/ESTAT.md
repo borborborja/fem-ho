@@ -7,6 +7,25 @@ Data de l'última verificació completa: **2026-11-19**.
 
 ---
 
+## Propostes del calendari al tauler
+
+Ajustos → General activa les propostes del calendari al web i a Android. Els
+esdeveniments visibles d'avui apareixen a «Per fer» agrupats per àmbit. Durant
+l'horari de la cita passen a «Fent» com a proposta. Es poden iniciar ara o des
+de l'hora prevista. Si la persona la rebutja o la cita acaba sense resposta,
+la proposta torna a «Per fer». L'historial conserva l'inici triat i el Registre
+el compta quan està activat a l'àmbit.
+
+Les proves amb SQLite i PostgreSQL cobreixen els reintents, les confirmacions
+concurrents i les cites privades. Chromium ha verificat el canvi de columna i
+la reconnexió fora de línia. Amb l'APK amb R8 a Android 14 s'ha comprovat el
+flux en tema fosc i amb lletra al 140 %. El tram desat comença a l'hora prevista.
+
+La migració 030 afegeix la preferència de compte i les marques de rebuig per
+ocurrència. En publicar, actualitza el servidor abans que els clients.
+
+---
+
 ## Pomodoro · 0.26.0
 
 Ajustos → General activa el Pomodoro, desactivat per defecte. El web i Android

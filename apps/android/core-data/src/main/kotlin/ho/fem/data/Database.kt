@@ -266,6 +266,13 @@ data class PomodoroCacheEntity(
     @ColumnInfo(name = "issue_id") val issueId: String? = null,
 )
 
+@Entity(tableName = "calendar_suggestions_cache")
+data class CalendarSuggestionsCacheEntity(
+    @PrimaryKey val id: Int = 0,
+    val snapshot: String,
+    @ColumnInfo(name = "issue_id") val issueId: String? = null,
+)
+
 /** El resultat de `countByStatus`. No és una taula: és la projecció d'un `GROUP BY`. */
 data class StatusCount(val status: String, val total: Int)
 
@@ -457,6 +464,36 @@ interface FemhoDao {
         removed.forEach { dequeue(it) }
     }
 
+    @Query("SELECT * FROM calendar_suggestions_cache WHERE id = 0")
+    fun calendarSuggestionsCache(): Flow<CalendarSuggestionsCacheEntity?>
+
+    @Query("SELECT * FROM calendar_suggestions_cache WHERE id = 0")
+    suspend fun calendarSuggestionsCacheOnce(): CalendarSuggestionsCacheEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun putCalendarSuggestionsCache(cache: CalendarSuggestionsCacheEntity)
+
+    @Query("UPDATE calendar_suggestions_cache SET issue_id = NULL WHERE id = 0 AND issue_id = :issueId")
+    suspend fun clearCalendarSuggestionsIssue(issueId: String)
+
+    @Query("DELETE FROM tasks WHERE id = :id")
+    suspend fun removeUnconfirmedCalendarTask(id: String)
+
+    @Transaction
+    suspend fun resolveCalendarSuggestionOperations(
+        cache: CalendarSuggestionsCacheEntity,
+        removed: List<String>,
+        tasks: List<TaskEntity>,
+        rebased: List<OutboxEntity>,
+        removeTaskId: String?,
+    ) {
+        putCalendarSuggestionsCache(cache)
+        if (removeTaskId != null) removeUnconfirmedCalendarTask(removeTaskId)
+        putTasks(tasks)
+        rebased.forEach { updateOperation(it) }
+        removed.forEach { dequeue(it) }
+    }
+
     @Query("SELECT * FROM tasks WHERE deleted=0 AND status=:status AND scope_id IN (:scopeIds) ORDER BY position, id LIMIT :limit")
     suspend fun columnTasks(status: String, scopeIds: List<String>, limit: Int): List<TaskEntity>
 
@@ -597,6 +634,12 @@ interface FemhoDao {
 
     @Query("DELETE FROM task_types")
     suspend fun clearTaskTypes()
+
+    @Transaction
+    suspend fun replaceTaskTypes(rows: List<TaskTypeEntity>) {
+        clearTaskTypes()
+        putTaskTypes(rows)
+    }
 
     // ------------------------------------------------------------- comentaris
 
@@ -747,8 +790,9 @@ interface FemhoDao {
         ScopeSettingsEntity::class,
         AgentEntity::class,
         PomodoroCacheEntity::class,
+        CalendarSuggestionsCacheEntity::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = false,
 )
 abstract class FemhoDatabase : RoomDatabase() {
@@ -765,6 +809,12 @@ abstract class FemhoDatabase : RoomDatabase() {
      * directament a v2 sense passar per la migració.
      */
     companion object {
+        val MIGRATION_5_6 = object : androidx.room.migration.Migration(5, 6) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS calendar_suggestions_cache (id INTEGER NOT NULL PRIMARY KEY, snapshot TEXT NOT NULL, issue_id TEXT)")
+            }
+        }
+
         val MIGRATION_4_5 = object : androidx.room.migration.Migration(4, 5) {
             override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
                 db.execSQL("CREATE TABLE IF NOT EXISTS pomodoro_cache (id INTEGER NOT NULL PRIMARY KEY, snapshot TEXT NOT NULL, clock_offset_ms INTEGER NOT NULL, issue_id TEXT)")

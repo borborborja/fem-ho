@@ -5,6 +5,9 @@ import ho.fem.model.Agent
 import ho.fem.model.AgentDetail
 import ho.fem.model.Calendar
 import ho.fem.model.CalendarOrigin
+import ho.fem.model.CalendarTaskStart
+import ho.fem.model.CalendarTaskSuggestion
+import ho.fem.model.CalendarTaskSuggestions
 import ho.fem.model.Comment
 import ho.fem.model.Checklist
 import ho.fem.model.ChecklistItem
@@ -29,6 +32,7 @@ import ho.fem.model.DashboardView
 import ho.fem.model.TaskPage
 import ho.fem.model.TaskProgress
 import ho.fem.model.TaskStatus
+import ho.fem.model.TaskTimeSummary
 import ho.fem.model.TaskType
 import ho.fem.model.UserProfile
 import ho.fem.model.applyPomodoroCommand
@@ -89,6 +93,13 @@ data class LocalPomodoro(
     val issueId: String? = null,
 )
 
+data class LocalCalendarSuggestions(
+    val snapshot: CalendarTaskSuggestions = CalendarTaskSuggestions(),
+    val issueId: String? = null,
+)
+
+private const val CALENDAR_SUGGESTIONS = "calendar_suggestions"
+
 /**
  * El repositori. docs/03 §11.
  *
@@ -125,6 +136,10 @@ class Repository(
     val pomodoro: Flow<LocalPomodoro> = if (ownerId == null) flowOf(LocalPomodoro()) else
         combine(dao.pomodoroCache(), dao.outboxFlow()) { _, _ ->
             moveLock.withLock { localPomodoro() }
+        }.distinctUntilChanged()
+    val calendarSuggestions: Flow<LocalCalendarSuggestions> = if (ownerId == null) flowOf(LocalCalendarSuggestions()) else
+        combine(dao.calendarSuggestionsCache(), dao.outboxFlow()) { _, _ ->
+            moveLock.withLock { localCalendarSuggestions() }
         }.distinctUntilChanged()
     val syncIssues: Flow<List<SyncIssue>> = combine(dao.outboxFlow(), dao.tasks()) { queue, local ->
         val titles = local.associate { it.id to it.title }
@@ -218,6 +233,104 @@ class Repository(
         true
     }
 
+    suspend fun refreshCalendarSuggestions() = flushLock.withLock {
+        if (ownerId == null) return@withLock
+        flushPending()
+        val snapshot = try {
+            api.calendarTaskSuggestions()
+        } catch (error: FemhoApi.ApiException) {
+            if (error.status == 404) return@withLock
+            throw error
+        }
+        val previous = dao.calendarSuggestionsCacheOnce()
+        val oldSnapshot = previous?.let { storedJson.decodeFromString<CalendarTaskSuggestions>(it.snapshot) }
+        moveLock.withLock {
+            dao.putCalendarSuggestionsCache(snapshot.toCache(dao.calendarSuggestionsCacheOnce()?.issueId))
+        }
+        if (snapshot.enabled && oldSnapshot?.items?.any { old ->
+                snapshot.items.none { it.occurrence == old.occurrence }
+            } == true) {
+            // Acceptar des d'un altre dispositiu pot haver substituït una proposta per una tasca.
+            refreshBoard(emptyList(), null)
+        }
+    }
+
+    private suspend fun localCalendarSuggestions(): LocalCalendarSuggestions {
+        val cache = dao.calendarSuggestionsCacheOnce()
+        val initial = cache?.let { storedJson.decodeFromString<CalendarTaskSuggestions>(it.snapshot) }
+            ?: CalendarTaskSuggestions()
+        val snapshot = dao.outbox().asSequence().filter { it.entity == CALENDAR_SUGGESTIONS && it.state == "pending" }
+            .fold(initial) { state, queued -> state.withCalendarCommand(objectFrom(queued.payload)) }
+        return LocalCalendarSuggestions(snapshot, cache?.issueId)
+    }
+
+    suspend fun dismissCalendarSuggestionsIssue(issueId: String) = moveLock.withLock {
+        dao.clearCalendarSuggestionsIssue(issueId)
+    }
+
+    suspend fun configureCalendarSuggestions(enabled: Boolean) = moveLock.withLock {
+        if (localCalendarSuggestions().snapshot.enabled == enabled) return@withLock
+        val data = buildJsonObject {
+            put("type", "configure")
+            put("enabled", enabled)
+        }
+        dao.enqueue(operation(CALENDAR_SUGGESTIONS, "update", checkNotNull(ownerId), 0, data, taskId = null))
+    }
+
+    suspend fun actOnCalendarSuggestion(
+        suggestion: CalendarTaskSuggestion,
+        actionAt: Instant,
+        start: CalendarTaskStart?,
+        confirmShare: Boolean,
+        taskTypeId: String?,
+    ): Boolean = moveLock.withLock {
+        val snapshot = localCalendarSuggestions().snapshot
+        val item = snapshot.visibleItems(actionAt).find { it.occurrence == suggestion.occurrence && it.startsAt == suggestion.startsAt }
+            ?: return@withLock false
+        if (start != null && (!item.canStart || (item.requiresShareConfirmation && !confirmShare) ||
+                (item.requiresTaskType && taskTypeId == null) ||
+                (start == CalendarTaskStart.PLANNED && !item.permitsPlannedStart(actionAt)))) return@withLock false
+        if (start == null && item.column(actionAt) != TaskStatus.DOING) return@withLock false
+
+        val row = if (start == null) null else item.taskId?.let { dao.taskRow(it) }
+        if (row?.deleted == true) return@withLock false
+        val task = row?.toDomain()
+        if (task != null && task.status !in listOf(TaskStatus.INBOX, TaskStatus.TODO)) return@withLock false
+        val taskId = if (start == null) null else item.taskId ?: calendarTaskId(actionAt)
+        val position = if (start == null) null else generatePosition(dao.lastPosition(item.scopeId, "doing"), null)
+        val data = buildJsonObject {
+            put("type", if (start == null) "decline" else "start")
+            put("occurrence", storedJson.encodeToJsonElement(item.occurrence))
+            put("starts_at", item.startsAt)
+            put("action_at", actionAt.toString())
+            if (start != null) {
+                put("start", start.name.lowercase())
+                put("task_id", checkNotNull(taskId))
+                put("position", checkNotNull(position))
+                if (confirmShare) put("confirm_share", true)
+                taskTypeId?.let { put("task_type_id", it) }
+            }
+        }
+        val previous = task?.let { storedJson.encodeToJsonElement(it).jsonObject }
+        val pending = operation(CALENDAR_SUGGESTIONS, "update", checkNotNull(ownerId), 0, data,
+            taskId = taskId, base = previous, time = actionAt.toEpochMilli())
+        if (taskId == null || position == null) {
+            dao.enqueue(pending)
+        } else {
+            val startedAt = if (start == CalendarTaskStart.PLANNED) item.startsAt else actionAt.toString()
+            val tracking = dao.scopeSettings(item.scopeId).first()?.timeTracking == true
+            val time = if (tracking) (task?.timeSummary ?: TaskTimeSummary()).let {
+                it.copy(segments = it.segments + 1, openStartedAt = it.openStartedAt + startedAt)
+            } else null
+            val optimistic = (task ?: Task(id = taskId, scopeId = item.scopeId, projectId = item.projectId,
+                title = item.title, position = position, taskTypeId = taskTypeId)).copy(
+                status = TaskStatus.DOING, position = position, fromCalendar = true, timeSummary = time,
+            )
+            dao.putTaskAndEnqueue(optimistic.toEntity(), pending)
+        }
+        true
+    }
+
     /**
      * Refresca-ho tot des del servidor.
      *
@@ -292,6 +405,10 @@ class Repository(
                     moveLock.withLock { reconcilePomodoro(operation, null, rejected = true) }
                     continue
                 }
+                if (operation.entity == CALENDAR_SUGGESTIONS) {
+                    moveLock.withLock { reconcileCalendarSuggestion(operation, null, rejected = true) }
+                    continue
+                }
                 dao.markIssue(operation.opId, if (error.status == 409) "conflict" else "rejected", error.detail, null)
                 blocked += entity
                 if (operation.op == "create") blockedCreations += operation.entityId
@@ -305,9 +422,11 @@ class Repository(
             when (val status = receipt?.string("status")) {
                 "ok" -> moveLock.withLock {
                     val confirmed = receipt?.get("entity") as? JsonObject
-                    if (operation.entity == "pomodoro") {
-                        reconcilePomodoro(operation, confirmed, rejected = false)
-                    } else acknowledge(operation, confirmed)
+                    when (operation.entity) {
+                        "pomodoro" -> reconcilePomodoro(operation, confirmed, rejected = false)
+                        CALENDAR_SUGGESTIONS -> reconcileCalendarSuggestion(operation, confirmed, rejected = false)
+                        else -> acknowledge(operation, confirmed)
+                    }
                 }
                 "conflict", "rejected" -> {
                     val error = receipt?.get("error") as? JsonObject
@@ -319,6 +438,10 @@ class Repository(
                     val server = receipt?.get("server_entity") as? JsonObject
                     if (operation.entity == "pomodoro") {
                         moveLock.withLock { reconcilePomodoro(operation, server, rejected = true) }
+                        continue
+                    }
+                    if (operation.entity == CALENDAR_SUGGESTIONS) {
+                        moveLock.withLock { reconcileCalendarSuggestion(operation, server, rejected = true) }
                         continue
                     }
                     if (operation.entity == "task" && server?.get("deleted_at")?.let { it != JsonNull } == true) {
@@ -374,6 +497,31 @@ class Repository(
         )
     }
 
+    private suspend fun reconcileCalendarSuggestion(operation: OutboxEntity, entity: JsonObject?, rejected: Boolean) {
+        val cache = dao.calendarSuggestionsCacheOnce()
+        val canonical = (entity?.get("snapshot") as? JsonObject)?.let {
+            storedJson.decodeFromJsonElement<CalendarTaskSuggestions>(it)
+        }
+        if (!rejected && canonical == null) throw IOException("The sync receipt did not include calendar suggestions")
+        val snapshot = canonical ?: cache?.let { storedJson.decodeFromString<CalendarTaskSuggestions>(it.snapshot) }
+            ?: CalendarTaskSuggestions()
+        val taskId = operation.taskId
+        val task = if (rejected) null else (entity?.get("task") as? JsonObject)?.toTaskOrNull()
+        val lostStart = taskId != null && task?.id != taskId
+        val following = if (taskId == null) emptyList() else dao.outbox()
+            .dropWhile { it.opId != operation.opId }.drop(1).filter { it.rootTaskId() == taskId }
+        val restored = if (lostStart) operation.baseFields?.let { objectFrom(it).toTaskOrNull() } else null
+        val (rebased, tasks) = if (task != null && !lostStart) {
+            val (edits, row) = rebaseTaskOperations(task, following.filter { it.isPendingTaskEdit(task.id) })
+            edits to listOf(row)
+        } else emptyList<OutboxEntity>() to listOfNotNull(restored?.toEntity(), task?.toEntity())
+        // Les edicions a una tasca provisional no es poden atribuir a la tasca d'un altre dispositiu.
+        val removed = listOf(operation.opId) + if (lostStart) following.map { it.opId } else emptyList()
+        val issue = if (rejected || (lostStart && (task == null || following.isNotEmpty()))) operation.opId else cache?.issueId
+        dao.resolveCalendarSuggestionOperations(snapshot.toCache(issue), removed, tasks, rebased,
+            removeTaskId = taskId.takeIf { lostStart && restored == null })
+    }
+
     private suspend fun acknowledge(operation: OutboxEntity, entity: JsonObject?) {
         if (operation.entity == "task") {
             val canonical = entity?.toTaskOrNull()
@@ -417,10 +565,10 @@ class Repository(
     private fun rebaseTaskOperations(canonical: Task, following: List<OutboxEntity>): Pair<List<OutboxEntity>, TaskEntity> {
         var task = canonical
         val rebased = following.map { next ->
-            if (next.entity == "pomodoro") {
+            if (next.entity == "pomodoro" || next.entity == CALENDAR_SUGGESTIONS) {
                 // Una edició anterior pot confirmar-se mentre la tasca ja ha entrat a Fent
                 // de manera optimista. La pantalla conserva el moviment fins al seu rebut.
-                if (task.status == TaskStatus.TODO) {
+                if (task.status == TaskStatus.TODO || (next.entity == CALENDAR_SUGGESTIONS && task.status == TaskStatus.INBOX)) {
                     objectFrom(next.payload).string("position")?.let {
                         task = task.copy(status = TaskStatus.DOING, position = it)
                     }
@@ -563,6 +711,10 @@ class Repository(
     // ---------------------------------------------------------- tipologies
 
     val taskTypes: Flow<List<TaskType>> = dao.taskTypes().map { rows -> rows.map { it.toDomain() } }
+
+    suspend fun refreshTaskTypes() {
+        dao.replaceTaskTypes(api.taskTypes().map { it.toEntity() })
+    }
 
     suspend fun createTaskType(scopeId: String, name: String, color: String?, required: Boolean): TaskType {
         val type = api.createTaskType(scopeId, name, color, required)
@@ -886,6 +1038,10 @@ class Repository(
     fun scopeSettings(scopeId: String): Flow<ScopeSettings> =
         dao.scopeSettings(scopeId).map { row -> row?.toDomain() ?: ScopeSettings() }
 
+    suspend fun refreshScopeSettings(scopeId: String): ScopeSettings = api.scopeSettings(scopeId).also {
+        dao.putScopeSettings(it.toEntity(scopeId))
+    }
+
     suspend fun updateScopeSettings(
         scopeId: String,
         timeTracking: Boolean? = null,
@@ -898,7 +1054,7 @@ class Repository(
         taskTypesEnabled: Boolean? = null,
     ): ScopeSettings {
         val settings = api.updateScopeSettings(scopeId, timeTracking, workStart, workEnd, workDays, overtimeVisible, longSessionHours, projectNoun, taskTypesEnabled)
-        dao.putScopeSettings(settings.toEntity())
+        dao.putScopeSettings(settings.toEntity(scopeId))
         return settings
     }
 
@@ -1179,11 +1335,35 @@ private fun operation(
 private fun OutboxEntity.rootTaskId(): String? = taskId ?: entityId.takeIf { entity == "task" }
 
 private fun OutboxEntity.isPendingTaskEdit(task: String): Boolean =
-    (entity == "task" && entityId == task) || (entity == "pomodoro" && state == "pending" && taskId == task)
+    (entity == "task" && entityId == task) ||
+        (entity in listOf("pomodoro", CALENDAR_SUGGESTIONS) && state == "pending" && taskId == task)
 
 private fun PomodoroSnapshot.toCache(offsetMs: Long, issueId: String?): PomodoroCacheEntity = PomodoroCacheEntity(
     snapshot = storedJson.encodeToString(copy(movedTask = null)), clockOffsetMs = offsetMs, issueId = issueId,
 )
+
+private fun CalendarTaskSuggestions.toCache(issueId: String?) = CalendarSuggestionsCacheEntity(
+    snapshot = storedJson.encodeToString(this), issueId = issueId,
+)
+
+private fun CalendarTaskSuggestions.withCalendarCommand(command: JsonObject): CalendarTaskSuggestions {
+    if (command.string("type") == "configure") return copy(enabled = command.bool("enabled") ?: enabled)
+    val occurrence = command["occurrence"] as? JsonObject ?: return this
+    val key = storedJson.decodeFromJsonElement<ho.fem.model.SourceEvent>(occurrence)
+    val started = command.string("type") == "start"
+    return copy(items = items.mapNotNull { item ->
+        if (item.occurrence != key || item.startsAt != command.string("starts_at")) item
+        else if (started) null
+        else item.copy(declined = true)
+    })
+}
+
+private fun calendarTaskId(at: Instant): String {
+    val random = UUID.randomUUID()
+    // L'hora que tria el timer és independent de la que ordena la creació de l'identificador.
+    val timestampAndVersion = (at.toEpochMilli() shl 16) or 0x7000L or (random.mostSignificantBits and 0xfffL)
+    return UUID(timestampAndVersion, random.leastSignificantBits).toString()
+}
 
 private fun OutboxEntity.requestBody(): String = buildJsonObject {
     put("operations", kotlinx.serialization.json.JsonArray(listOf(buildJsonObject {
@@ -1476,9 +1656,9 @@ internal fun ScopeSettingsEntity.toDomain(): ScopeSettings =
         taskTypesEnabled = taskTypesEnabled,
     )
 
-internal fun ScopeSettings.toEntity(): ScopeSettingsEntity =
+internal fun ScopeSettings.toEntity(scopeId: String): ScopeSettingsEntity =
     ScopeSettingsEntity(
-        scopeId = "", // es completa en escriure
+        scopeId = scopeId,
         timeTracking = timeTracking,
         workStart = workStart,
         workEnd = workEnd,

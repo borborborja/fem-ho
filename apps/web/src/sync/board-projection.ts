@@ -1,6 +1,7 @@
 import { comparePositions, type components } from '@fem-ho/contracts';
 import type { Task } from '../app/types.js';
 import type { OutboxRow } from './db.js';
+import { calendarSuggestionTaskId } from './outbox.js';
 
 type CreateTask = components['schemas']['TaskInput'];
 type MoveTask = components['schemas']['MoveInput'] & { ai_mode?: Task['ai_mode'] };
@@ -14,6 +15,37 @@ export function projectBoardTasks(base: Task[], pending: OutboxRow[], moved?: Ta
   }
   const blocked = new Set<string>();
   for (const row of pending) {
+    const taskId = calendarSuggestionTaskId(row);
+    const suggestion = row.calendar_suggestion;
+    if (taskId !== undefined && suggestion !== undefined) {
+      if (row.status === 'failed' || row.status === 'conflict') {
+        blocked.add(taskId);
+        continue;
+      }
+      if (blocked.has(taskId)) continue;
+      const task = tasks.get(taskId);
+      if (task?.status === 'doing' || task?.status === 'done') continue;
+      const position = row.payload.position as string;
+      tasks.set(taskId, {
+        ...(task ?? {
+          id: taskId,
+          scope_id: suggestion.scope_id,
+          project_id: suggestion.project_id,
+          title: suggestion.title,
+          view_mode: 'card',
+          ai_mode: 'manual',
+          needs_attention: false,
+          created_at: row.created_at,
+          updated_at: row.created_at,
+          version: 0,
+        }),
+        status: 'doing',
+        position,
+        from_calendar: true,
+        completed_at: null,
+      });
+      continue;
+    }
     if (row.entity_type !== 'task') continue;
     if (row.status === 'failed' || row.status === 'conflict') blocked.add(row.entity_id);
     if (blocked.has(row.entity_id)) continue;

@@ -19,6 +19,7 @@ import { connect, type Connection } from '../db/connection.js';
 import { migrateToLatest } from '../db/migrator.js';
 import { capabilitiesForRole } from '../policy/capabilities.js';
 import type { Principal } from '../policy/principal.js';
+import { listEventOccurrences } from '../services/events.js';
 import {
   DEFAULT_REFRESH_SECONDS,
   MIN_REFRESH_SECONDS,
@@ -228,6 +229,81 @@ describe('les alarmes', () => {
 });
 
 describe('el refresc', () => {
+  it('conserva els components d’una sèrie i les hores locals del calendari', async () => {
+    served = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//Origen//CA',
+      'BEGIN:VEVENT',
+      'UID:entrenament',
+      'SUMMARY:Entrenament',
+      'DTSTART;TZID=Europe/Madrid:20260328T100000',
+      'DURATION:PT30M',
+      'RRULE:FREQ=DAILY;COUNT=4',
+      'EXDATE;TZID=Europe/Madrid:20260329T100000',
+      'RDATE;TZID=Europe/Madrid:20260402T100000',
+      'END:VEVENT',
+      'BEGIN:VEVENT',
+      'UID:entrenament',
+      'SUMMARY:Entrenament reprogramat',
+      'RECURRENCE-ID;TZID=Europe/Madrid:20260330T100000',
+      'DTSTART;TZID=Europe/Madrid:20260401T111500',
+      'DURATION:PT30M',
+      'END:VEVENT',
+      'BEGIN:VEVENT',
+      'UID:entrenament',
+      'RECURRENCE-ID;TZID=Europe/Madrid:20260331T100000',
+      'STATUS:CANCELLED',
+      'END:VEVENT',
+      'END:VCALENDAR',
+    ].join('\r\n');
+    const refresh = async () =>
+      refreshSubscription(conn.db, principal, await subscription(), {
+        masterSecret: MASTER,
+        fetchOptions: permetLoopback,
+      });
+    expect(await refresh()).toEqual({ fetched: 3, created: 3, updated: 0, removed: 0 });
+    expect(await refresh()).toEqual({ fetched: 3, created: 0, updated: 0, removed: 0 });
+
+    const events = await listEventOccurrences(conn.db, principal, {
+      from: '2026-03-28T00:00:00Z',
+      to: '2026-04-03T00:00:00Z',
+    });
+    expect(
+      events.map(({ recurrence_id, starts_at, ends_at, status }) => ({
+        recurrence_id,
+        starts_at,
+        ends_at,
+        status,
+      })),
+    ).toEqual([
+      {
+        recurrence_id: '2026-03-28T09:00:00.000Z',
+        starts_at: '2026-03-28T09:00:00.000Z',
+        ends_at: '2026-03-28T09:30:00.000Z',
+        status: 'CONFIRMED',
+      },
+      {
+        recurrence_id: '2026-03-31T08:00:00.000Z',
+        starts_at: '2026-03-31T08:00:00.000Z',
+        ends_at: '2026-03-31T08:00:00.000Z',
+        status: 'CANCELLED',
+      },
+      {
+        recurrence_id: '2026-03-30T08:00:00.000Z',
+        starts_at: '2026-04-01T09:15:00.000Z',
+        ends_at: '2026-04-01T09:45:00.000Z',
+        status: 'CONFIRMED',
+      },
+      {
+        recurrence_id: '2026-04-02T08:00:00.000Z',
+        starts_at: '2026-04-02T08:00:00.000Z',
+        ends_at: '2026-04-02T08:30:00.000Z',
+        status: 'CONFIRMED',
+      },
+    ]);
+  });
+
   it('crea el que és nou', async () => {
     served = ics([
       { uid: 'a', summary: 'Sant Jordi' },

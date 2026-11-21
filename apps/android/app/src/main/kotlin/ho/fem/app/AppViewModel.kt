@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import ho.fem.data.ActiveAccount
 import ho.fem.data.Container
+import ho.fem.data.LocalCalendarSuggestions
 import ho.fem.data.LocalPomodoro
 import ho.fem.data.Repository
 import ho.fem.data.TaskLists
@@ -18,6 +19,8 @@ import ho.fem.model.AiMode
 import ho.fem.model.AiTaskConnections
 import ho.fem.model.AiTaskSettings
 import ho.fem.model.ApiTokenSummary
+import ho.fem.model.CalendarTaskStart
+import ho.fem.model.CalendarTaskSuggestion
 import ho.fem.model.Checklist
 import ho.fem.model.EventOccurrence
 import ho.fem.model.ExternalAccess
@@ -46,6 +49,7 @@ import ho.fem.network.certificateFingerprint
 import ho.fem.network.probeServerCertificate
 import java.util.UUID
 import java.io.IOException
+import java.time.Instant
 import java.time.ZoneId
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -171,6 +175,8 @@ class AppViewModel(private val container: Container) : ViewModel() {
     val doneSettingsSaving = _doneSettingsSaving.asStateFlow()
     private val _pomodoro = MutableStateFlow(LocalPomodoro())
     val pomodoro = _pomodoro.asStateFlow()
+    private val _calendarSuggestions = MutableStateFlow(LocalCalendarSuggestions())
+    val calendarSuggestions = _calendarSuggestions.asStateFlow()
 
     private val _activeScopes = MutableStateFlow<List<String>>(emptyList())
     val activeScopes = _activeScopes.asStateFlow()
@@ -507,6 +513,7 @@ class AppViewModel(private val container: Container) : ViewModel() {
     private var scopeModeJob: Job? = null
     private var profileLoadJob: Job? = null
     private var pomodoroLoadJob: Job? = null
+    private var calendarSuggestionsLoadJob: Job? = null
     private var sessionScope = CoroutineScope(viewModelScope.coroutineContext + Job().also { it.cancel() })
 
     private fun startSession(account: ActiveAccount) {
@@ -552,9 +559,11 @@ class AppViewModel(private val container: Container) : ViewModel() {
         _profileTimezone.value = defaultTimezone
         profileLoadJob = null
         pomodoroLoadJob = null
+        calendarSuggestionsLoadJob = null
         _doneClearedAt.value = null
         _doneSettingsSaving.value = false
         _pomodoro.value = LocalPomodoro()
+        _calendarSuggestions.value = LocalCalendarSuggestions()
         _activeScopes.value = emptyList()
         _instanceVersion.value = ""
         _needsScopeModeWizard.value = false
@@ -1516,6 +1525,48 @@ class AppViewModel(private val container: Container) : ViewModel() {
         }
     }
 
+    fun refreshCalendarSuggestions() {
+        val account = activeAccount ?: return
+        if (calendarSuggestionsLoadJob?.isActive == true) return
+        calendarSuggestionsLoadJob = sessionScope.launch {
+            try {
+                container.repository(account).refreshCalendarSuggestions()
+            } catch (error: Exception) {
+                if (error is CancellationException) throw error
+            }
+        }
+    }
+
+    fun setCalendarSuggestionsEnabled(enabled: Boolean) = submitCalendarSuggestion {
+        configureCalendarSuggestions(enabled)
+        true
+    }
+
+    fun actOnCalendarSuggestion(
+        suggestion: CalendarTaskSuggestion,
+        start: CalendarTaskStart?,
+        confirmShare: Boolean = false,
+        taskTypeId: String? = null,
+    ) {
+        val actionAt = Instant.now()
+        submitCalendarSuggestion { actOnCalendarSuggestion(suggestion, actionAt, start, confirmShare, taskTypeId) }
+    }
+
+    private fun submitCalendarSuggestion(command: suspend Repository.() -> Boolean) {
+        val account = activeAccount ?: return
+        sessionScope.launch {
+            try {
+                if (container.repository(account).command()) {
+                    Notifications.requestSync(container.appContext, account)
+                    refreshCalendarSuggestions()
+                } else if (activeAccount == account) _actionError.value = R.string.calendarsuggestions_saveerror
+            } catch (error: Exception) {
+                if (error is CancellationException) throw error
+                if (activeAccount == account) _actionError.value = R.string.calendarsuggestions_saveerror
+            }
+        }
+    }
+
     fun updatePomodoroSettings(patch: JsonObject) = submitPomodoro { _, _, _ ->
         buildJsonObject {
             put("kind", "settings")
@@ -1990,14 +2041,14 @@ class AppViewModel(private val container: Container) : ViewModel() {
     fun loadEntityData() {
         val sessionAccount = activeAccount ?: return
         sessionScope.launch {
+            val repository = container.repository(sessionAccount)
             runCatching { container.api(sessionAccount).labels() }
                 .onSuccess { _labels.value = it }
-            runCatching { container.api(sessionAccount).taskTypes() }
-                .onSuccess { _taskTypes.value = it }
+            runCatching { repository.refreshTaskTypes() }
             val available = runCatching { container.api(sessionAccount).scopes() }.getOrDefault(scopes.value)
             _scopeSettings.value = _scopeSettings.value.filterKeys { id -> available.any { it.id == id } }
             available.forEach { scope ->
-                runCatching { container.api(sessionAccount).scopeSettings(scope.id) }
+                runCatching { repository.refreshScopeSettings(scope.id) }
                     .onSuccess { settings ->
                         _scopeSettings.value = _scopeSettings.value + (scope.id to settings)
                     }
@@ -2582,6 +2633,15 @@ class AppViewModel(private val container: Container) : ViewModel() {
     private fun observe(account: ActiveAccount) {
         val repository = container.repository(account)
         sessionScope.launch {
+            repository.calendarSuggestions.collect { state ->
+                _calendarSuggestions.value = state
+                state.issueId?.let {
+                    _actionError.value = R.string.calendarsuggestions_saveerror
+                    repository.dismissCalendarSuggestionsIssue(it)
+                }
+            }
+        }
+        sessionScope.launch {
             repository.pomodoro.collect { state ->
                 _pomodoro.value = state
                 val app = container.appContext as FemhoApplication
@@ -2616,6 +2676,7 @@ class AppViewModel(private val container: Container) : ViewModel() {
         }
         sessionScope.launch { repository.projects.collect { _projects.value = it } }
         sessionScope.launch { repository.people.collect { _people.value = it } }
+        sessionScope.launch { repository.taskTypes.collect { _taskTypes.value = it } }
         sessionScope.launch { repository.pending.collect { _pending.value = it } }
         sessionScope.launch { repository.syncIssues.collect { _syncIssues.value = it } }
     }

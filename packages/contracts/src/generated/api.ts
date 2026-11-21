@@ -1174,6 +1174,9 @@ export interface paths {
          *     El Pomodoro personal usa `entity: pomodoro`, `op: update`, l'ID del compte com a `id`
          *     i un `PomodoroCommand` a `data`. Els resultats confirmats i de conflicte porten
          *     un `PomodoroSnapshot` a `entity` o `server_entity`, respectivament.
+         *     Les propostes del calendari usen `entity: calendar_suggestions`, `op: update`,
+         *     l'ID del compte i un `CalendarSuggestionCommand` a `data`. Un resultat confirmat
+         *     conté un `CalendarSuggestionResult` a `entity`.
          */
         post: operations["pushSync"];
         delete?: never;
@@ -1195,6 +1198,26 @@ export interface paths {
          *     El rellotge del servidor permet projectar les fases sense enviar cap tic.
          */
         get: operations["getPomodoro"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/calendar-task-suggestions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Propostes del calendari del dia del perfil
+         * @description Lectura privada d'una sessió humana. Els canvis es desen amb `/sync/batch`.
+         */
+        get: operations["getCalendarTaskSuggestions"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3744,6 +3767,7 @@ export interface components {
             /** @enum {string} */
             inbox_position?: "left" | "right" | "below";
             inbox_show_overdue?: boolean;
+            readonly calendar_task_suggestions?: boolean;
             /**
              * @description Què li passa a la cita quan s'esborra la tasca que en va sortir.
              *
@@ -4127,6 +4151,73 @@ export interface components {
             data?: {
                 [key: string]: unknown;
             };
+        };
+        CalendarSuggestionOccurrence: {
+            /** Format: uuid */
+            calendar_id: string;
+            uid: string;
+            recurrence_id: string | null;
+        };
+        CalendarTaskSuggestion: components["schemas"]["CalendarSuggestionOccurrence"] & {
+            /** Format: uuid */
+            scope_id: string;
+            /** Format: uuid */
+            project_id: string | null;
+            title: string;
+            calendar_name: string;
+            /** Format: date-time */
+            starts_at: string;
+            /** Format: date-time */
+            ends_at: string;
+            all_day: boolean;
+            declined: boolean;
+            can_start: boolean;
+            requires_share_confirmation: boolean;
+            requires_task_type: boolean;
+            /** Format: uuid */
+            task_id: string | null;
+        };
+        CalendarSuggestionSnapshot: {
+            enabled: boolean;
+            /** Format: date */
+            date: string;
+            timezone: string;
+            /** Format: date-time */
+            day_ends_at: string;
+            items: components["schemas"]["CalendarTaskSuggestion"][];
+        };
+        CalendarSuggestionCommand: {
+            /** @constant */
+            type: "configure";
+            enabled: boolean;
+        } | {
+            /** @constant */
+            type: "decline";
+            occurrence: components["schemas"]["CalendarSuggestionOccurrence"];
+            /** Format: date-time */
+            starts_at: string;
+            /** Format: date-time */
+            action_at: string;
+        } | {
+            /** @constant */
+            type: "start";
+            occurrence: components["schemas"]["CalendarSuggestionOccurrence"];
+            /** Format: date-time */
+            starts_at: string;
+            /** Format: date-time */
+            action_at: string;
+            /** @enum {string} */
+            start: "now" | "planned";
+            /** Format: uuid */
+            task_id: string;
+            position: string;
+            confirm_share?: boolean;
+            /** Format: uuid */
+            task_type_id?: string;
+        };
+        CalendarSuggestionResult: {
+            snapshot: components["schemas"]["CalendarSuggestionSnapshot"];
+            task?: components["schemas"]["Task"];
         };
         SyncBatch: {
             operations: components["schemas"]["SyncOperation"][];
@@ -4580,6 +4671,8 @@ export interface components {
              * @enum {string|null}
              */
             source_kind?: "caldav" | "ical" | "rss" | null;
+            /** @description La tasca prové d'un esdeveniment de calendari. */
+            readonly from_calendar?: boolean;
             /** @description Resum de les accions MCP. Absent quan la tasca no té activitat MCP o s’accedeix per un enllaç públic. */
             readonly mcp_activity?: components["schemas"]["McpTaskActivity"];
             /**
@@ -7533,6 +7626,28 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PomodoroSnapshot"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getCalendarTaskSuggestions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Preferència i propostes visibles. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalendarSuggestionSnapshot"];
                 };
             };
             401: components["responses"]["Unauthenticated"];

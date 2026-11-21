@@ -13,6 +13,7 @@
 
 import { sql } from 'kysely';
 import type { AuditContext } from '../audit/audited-transaction.js';
+import { isTrue } from '../db/bool.js';
 import type { Engine } from '../db/dialect.js';
 import type { MigrationDb } from '../db/migration-db.js';
 import { PolicyError, missingCapability } from '../policy/errors.js';
@@ -193,7 +194,7 @@ export async function pull(
       id: row.entity_id,
       op: data === null ? 'delete' : 'upsert',
       seq: row.seq,
-      ...(data === null ? {} : { data }),
+      ...(data === null ? {} : { data: row.entity_type === 'task' ? taskSyncView(data) : data }),
     });
   }
 
@@ -341,6 +342,16 @@ const COLUMNS_BY_ENTITY: Record<string, string> = {
                external_url, is_ai_context, uploaded_by, created_at, updated_at, deleted_at,
                version`,
 };
+
+export function taskSyncView(row: Record<string, unknown>): Record<string, unknown> {
+  // Compartir una tasca només comparteix el seu origen genèric, fins i tot si la cita era privada.
+  const { event_calendar_id, event_uid: _uid, event_recurrence_id: _recurrence, ...task } = row;
+  return {
+    ...task,
+    from_calendar:
+      isTrue(row.from_calendar) || (event_calendar_id != null && row.source_kind !== 'rss'),
+  };
+}
 
 export type BatchOperation = {
   op_id: string;

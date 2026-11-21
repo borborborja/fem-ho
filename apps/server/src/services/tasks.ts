@@ -72,6 +72,7 @@ export interface TaskRow {
    * mirar una columna més.
    */
   source_kind: SourceKind | null;
+  from_calendar?: boolean;
   /**
    * Si un agent espera resposta teva **ara**.
    *
@@ -135,6 +136,7 @@ const TASK_COLUMNS = sql`
   id, scope_id, project_id, title, description, status, position, due_date, due_time,
   deadline, completed_at, view_mode, ai_mode, ai_instructions, delegate_agent_id,
   rrule, recurrence_mode, recurrence_parent_id, source_kind,
+  (event_calendar_id IS NOT NULL AND COALESCE(source_kind, '') <> 'rss') AS from_calendar,
   needs_attention, attention_asked_at, last_activity_at, ai_last_read_at, ai_last_read_by,
   task_type_id, created_by,
   created_at, updated_at, version
@@ -239,6 +241,7 @@ async function withAssignees(
       ...row,
       // SQLite dona 0/1 i Postgres un booleà: qui ho llegeix ha de rebre sempre un booleà.
       needs_attention: isTrue(row.needs_attention),
+      from_calendar: isTrue(row.from_calendar),
       assignee_ids: (byTask.get(row.id) ?? []).sort(),
       label_ids: (labelsByTask.get(row.id) ?? []).sort(),
       locked_until: leaseByTask.get(row.id)?.expires_at ?? null,
@@ -471,6 +474,18 @@ export interface CreateTaskInput {
  */
 const POSITION_LOCK_ID = 851_002_027;
 
+export async function lockEventTaskSeries(
+  db: MigrationDb,
+  engine: 'sqlite' | 'postgres',
+  ref: { calendar_id: string; uid: string },
+): Promise<void> {
+  // La conversió des de l'Inbox i la del tauler han de competir pel mateix pany.
+  if (engine === 'postgres') {
+    const key = JSON.stringify([ref.calendar_id, ref.uid]);
+    await sql`SELECT pg_advisory_xact_lock(851006, hashtext(${key}))`.execute(db);
+  }
+}
+
 function deadlineInstant(value: string | null): string | null {
   if (value === null) return null;
   const time = Date.parse(value);
@@ -660,10 +675,13 @@ export async function createTask(
       );
     }
 
+    await lockEventTaskSeries(ctx.tx, engine, input.source_event);
+    const recurrence = input.source_event.recurrence_id ?? null;
     const ja = await sql<{ id: string }>`
       SELECT id FROM tasks
       WHERE deleted_at IS NULL AND event_calendar_id = ${input.source_event.calendar_id}
         AND event_uid = ${input.source_event.uid}
+        AND ${recurrence === null ? sql`event_recurrence_id IS NULL` : sql`event_recurrence_id = ${recurrence}`}
     `.execute(ctx.tx);
     if (ja.rows[0] !== undefined) {
       throw new PolicyError(

@@ -38,6 +38,7 @@ class RoomMigrationTest {
                 // Les altres taules tenen el mateix esquema a les dues versions.
                 legacy.execSQL("DROP TABLE task_lists")
                 legacy.execSQL("DROP TABLE pomodoro_cache")
+                legacy.execSQL("DROP TABLE calendar_suggestions_cache")
                 legacy.execSQL("ALTER TABLE tasks RENAME TO fixture_task")
                 legacy.execSQL(
                     "CREATE TABLE tasks (id TEXT NOT NULL PRIMARY KEY, scope_id TEXT NOT NULL, project_id TEXT, " +
@@ -66,13 +67,14 @@ class RoomMigrationTest {
                 legacy.version = 3
             }
             val migrated = Room.databaseBuilder(context, FemhoDatabase::class.java, name)
-                .addMigrations(FemhoDatabase.MIGRATION_3_4, FemhoDatabase.MIGRATION_4_5).build()
+                .addMigrations(FemhoDatabase.MIGRATION_3_4, FemhoDatabase.MIGRATION_4_5, FemhoDatabase.MIGRATION_5_6).build()
             try {
                 val dao = migrated.dao()
                 assertEquals(task, dao.task(task.id).first())
                 assertEquals(pending.copy(taskId = task.id), dao.outbox().single())
                 assertNull(dao.taskLists(task.id).first())
                 assertNull(dao.pomodoroCache().first())
+                assertNull(dao.calendarSuggestionsCache().first())
             } finally {
                 migrated.close()
             }

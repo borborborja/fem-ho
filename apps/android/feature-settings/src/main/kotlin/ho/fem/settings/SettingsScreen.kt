@@ -247,6 +247,8 @@ data class SettingsLabels(
     val shareRevoke: String,
     val shareRevoked: String,
     val pomodoro: String = "",
+    val calendarSuggestions: String = "",
+    val calendarSuggestionsHint: String = "",
 )
 
 data class SettingsTabs(
@@ -286,6 +288,8 @@ fun SettingsScreen(
     inboxShowOverdue: Boolean = true,
     pomodoroEnabled: Boolean? = null,
     onPomodoroEnabled: (Boolean) -> Unit = {},
+    calendarSuggestionsEnabled: Boolean? = null,
+    onCalendarSuggestionsEnabled: (Boolean) -> Unit = {},
     labels: SettingsLabels,
     theme: String,
     accent: String,
@@ -458,6 +462,8 @@ fun SettingsScreen(
                     inboxShowOverdue = inboxShowOverdue,
                     pomodoroEnabled = pomodoroEnabled,
                     onPomodoroEnabled = onPomodoroEnabled,
+                    calendarSuggestionsEnabled = calendarSuggestionsEnabled,
+                    onCalendarSuggestionsEnabled = onCalendarSuggestionsEnabled,
                     labels = labels,
                     theme = theme,
                     accent = accent,
@@ -587,6 +593,8 @@ private fun GeneralTab(
     inboxShowOverdue: Boolean,
     pomodoroEnabled: Boolean?,
     onPomodoroEnabled: (Boolean) -> Unit,
+    calendarSuggestionsEnabled: Boolean?,
+    onCalendarSuggestionsEnabled: (Boolean) -> Unit,
     labels: SettingsLabels,
     theme: String,
     accent: String,
@@ -615,6 +623,14 @@ private fun GeneralTab(
             onChange = onPomodoroEnabled,
             modifier = Modifier.testTag("settings-pomodoro"),
         )
+    }
+
+    if (calendarSuggestionsEnabled != null) {
+        Column {
+            Toggle(labels.calendarSuggestions, calendarSuggestionsEnabled, onCalendarSuggestionsEnabled,
+                modifier = Modifier.testTag("settings-calendar-suggestions"))
+            Text(labels.calendarSuggestionsHint, color = Femho.colors.inkSoft, fontSize = FemhoText.meta)
+        }
     }
 
     // Mode d'àmbits — decideix què hi ha a la barra superior
@@ -793,6 +809,7 @@ private fun Toggle(
     ) {
         Text(
             text = label,
+            modifier = Modifier.weight(1f).padding(end = 8.dp),
             color = Femho.colors.ink,
             fontSize = FemhoText.body,
         )

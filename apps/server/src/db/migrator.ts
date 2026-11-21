@@ -50,6 +50,7 @@ import * as mcpActivityOrigin from './migrations/026-mcp-activity-origin.js';
 import * as taskAi from './migrations/027-task-ai.js';
 import * as taskActivityNotifications from './migrations/028-task-activity-notifications.js';
 import * as pomodoro from './migrations/029-pomodoro.js';
+import * as calendarTaskSuggestions from './migrations/030-calendar-task-suggestions.js';
 
 export interface Migration {
   name: string;
@@ -140,6 +141,11 @@ export const MIGRATIONS: Migration[] = [
     down: taskActivityNotifications.down,
   },
   { name: '029-pomodoro', up: pomodoro.up, down: pomodoro.down },
+  {
+    name: '030-calendar-task-suggestions',
+    up: calendarTaskSuggestions.up,
+    down: calendarTaskSuggestions.down,
+  },
 ];
 
 const MIGRATIONS_TABLE = 'schema_migrations';

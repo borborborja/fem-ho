@@ -124,6 +124,8 @@ data class Task(
     @SerialName("source_event") val sourceEvent: SourceEvent? = null,
     val version: Int = 1,
     @SerialName("mcp_activity") val mcpActivity: McpActivity? = null,
+    @SerialName("from_calendar") val fromCalendar: Boolean = false,
+    @SerialName("time_summary") val timeSummary: TaskTimeSummary? = null,
 )
 
 @Serializable

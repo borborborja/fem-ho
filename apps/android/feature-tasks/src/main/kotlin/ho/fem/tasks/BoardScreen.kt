@@ -59,6 +59,7 @@ import ho.fem.designsystem.FemhoText
 import ho.fem.designsystem.KanbanColumn
 import ho.fem.designsystem.TaskCard
 import ho.fem.model.AiMode
+import ho.fem.model.CalendarTaskSuggestion
 import ho.fem.model.DoneDayFilter
 import ho.fem.model.Task
 import ho.fem.model.TaskStatus
@@ -183,6 +184,10 @@ fun BoardScreen(
     canCopyContext: (Task) -> Boolean = { false },
     onCopyContext: (Task) -> Unit = {},
     aiAction: (Task) -> CardAiAction? = { null },
+    calendarGroups: Map<TaskStatus, Map<String, List<CalendarTaskSuggestion>>> = emptyMap(),
+    calendarScopeLabel: (String) -> String = { "" },
+    calendarSuggestionCard: @Composable (CalendarTaskSuggestion, TaskStatus) -> Unit = { _, _ -> },
+    calendarTaskMetadata: (@Composable (Task) -> Unit)? = null,
 ) {
     val pager = rememberPagerState(pageCount = { ORDER.size })
     val scope = rememberCoroutineScope()
@@ -266,8 +271,9 @@ fun BoardScreen(
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
+                    val calendarCount = calendarGroups[status].orEmpty().values.sumOf { it.size }
                     Text(
-                        text = columns[status].orEmpty().size.toString(),
+                        text = (columns[status].orEmpty().size + calendarCount).toString(),
                         color = Femho.colors.inkSoft,
                         fontSize = FemhoText.meta,
                         lineHeight = 13.sp,
@@ -288,6 +294,7 @@ fun BoardScreen(
         ) { page ->
             val status = ORDER[page]
             val ofColumn = columns[status].orEmpty()
+            val fromCalendar = calendarGroups[status].orEmpty()
 
             KanbanColumn(
                 inbox = status == TaskStatus.INBOX,
@@ -301,7 +308,7 @@ fun BoardScreen(
                         .testTag("board-list-${status.name.lowercase()}"),
                     verticalArrangement = Arrangement.spacedBy(FemhoSize.cardGap),
                 ) {
-                    if (ofColumn.isEmpty()) {
+                    if (ofColumn.isEmpty() && fromCalendar.isEmpty()) {
                         item { EmptyState(labels.empty[status].orEmpty()) }
                     } else {
                         items(ofColumn, key = { it.id }) { task ->
@@ -341,8 +348,12 @@ fun BoardScreen(
                                     addForm = extra?.addForm,
                                     onLongPress = taskMenuLabels?.let { { actionsOpen = true } },
                                     longPressLabel = taskMenuLabels?.openActions,
-                                    extraMetadata = if (mcp != null && mcpLabels != null) {
-                                        { McpProvenanceBadge(mcp, mcpLabels, compact = true) }
+                                    extraMetadata = if ((mcp != null && mcpLabels != null) ||
+                                        (task.fromCalendar && calendarTaskMetadata != null)) {
+                                        {
+                                            if (task.fromCalendar) calendarTaskMetadata?.invoke(task)
+                                            if (mcp != null && mcpLabels != null) McpProvenanceBadge(mcp, mcpLabels, compact = true)
+                                        }
                                     } else null,
                                     railAction = ai?.let { action -> { CardAiButton(action) } },
                                 )
@@ -378,6 +389,16 @@ fun BoardScreen(
                                     )
                                 }
                             }
+                        }
+                    }
+                    fromCalendar.forEach { (scopeId, suggestions) ->
+                        item(key = "calendar-suggestions:$scopeId") {
+                            Text(calendarScopeLabel(scopeId), color = Femho.colors.inkSoft,
+                                fontSize = FemhoText.meta, fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 3.dp))
+                        }
+                        items(suggestions, key = { "${it.calendarId}\u0000${it.uid}\u0000${it.recurrenceId.orEmpty()}" }) {
+                            calendarSuggestionCard(it, status)
                         }
                     }
                 }

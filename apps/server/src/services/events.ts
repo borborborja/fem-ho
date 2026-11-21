@@ -5,8 +5,8 @@
  * CONFIRMED / CANCELLED, no els d'una tasca; té `TRANSP`, que una tasca no té; i un
  * calendari extern subscrit només en pot produir d'aquests.
  *
- * **Els esdeveniments no surten mai al kanban.** Apareixen al calendari i, el dia que
- * toca, a l'Inbox.
+ * L'Inbox i les propostes del tauler fan servir els esdeveniments com a font. La tasca
+ * que algú decideix iniciar conserva una identitat pròpia (docs/14 P28).
  */
 
 import { sql } from 'kysely';
@@ -14,8 +14,9 @@ import { v7 as uuidv7 } from 'uuid';
 import { localDayBounds } from '@fem-ho/contracts';
 import { dbBool, isTrue, maybeBool } from '../db/bool.js';
 import type { AuditContext } from '../audit/audited-transaction.js';
+import { parseResource, type ParsedEvent } from '../dav/parse-ical.js';
 import type { MigrationDb } from '../db/migration-db.js';
-import { expandOccurrences, splitSeries } from '../events/recurrence.js';
+import { expandOccurrences, overlapsWindow, splitSeries } from '../events/recurrence.js';
 import { PolicyError, missingCapability, notFound } from '../policy/errors.js';
 import { hasCapability, type Principal } from '../policy/principal.js';
 import { visibleCalendarIds } from '../policy/calendar-visibility.js';
@@ -164,6 +165,7 @@ export interface ListEventsOptions {
   from: string;
   to: string;
   scopeIds?: string[] | undefined;
+  calendarIds?: string[] | undefined;
 }
 
 export interface EventOccurrenceView {
@@ -213,6 +215,8 @@ export async function listEventOccurrences(
       '`from` and `to` have to be valid ISO-8601 instants.',
     );
   }
+  const { calendarIds } = options;
+  if (calendarIds?.length === 0) return [];
 
   const scopes = await listScopes(db, principal);
   const allowed = scopes
@@ -220,16 +224,20 @@ export async function listEventOccurrences(
     .filter((id) => options.scopeIds === undefined || options.scopeIds.includes(id));
   if (allowed.length === 0) return [];
 
-  const rows = await sql<EventRow & { scope_id: string }>`
+  const rows = await sql<
+    EventRow & { scope_id: string; raw_ical: string | null; calendar_origin: CalendarRow['origin'] }
+  >`
     SELECT e.id, e.calendar_id, e.uid, e.recurrence_id, e.summary, e.description,
            e.location, e.starts_at, e.ends_at, e.all_day, e.timezone, e.status,
-           e.transparency, e.rrule, e.rdate, e.exdate, e.version, c.scope_id
+           e.transparency, e.rrule, e.rdate, e.exdate, e.version, c.scope_id,
+           e.raw_ical, c.origin AS calendar_origin
     FROM events e
     JOIN calendars c ON c.id = e.calendar_id
     WHERE e.deleted_at IS NULL
       AND c.deleted_at IS NULL
       AND c.kind = 'events'
       AND c.scope_id IN (${sql.join(allowed)})
+      ${calendarIds === undefined ? sql`` : sql`AND c.id IN (${sql.join(calendarIds)})`}
   `.execute(db);
 
   // El mateix tall que a `listCalendars`: l'àmbit no basta, cal que el calendari s'hagi
@@ -237,69 +245,98 @@ export async function listEventOccurrences(
   const visible = await visibleCalendarIds(db, principal.userId);
   const rowsVisibles = rows.rows.filter((row) => visible.has(row.calendar_id));
 
-  const masters = rowsVisibles.filter((row) => row.recurrence_id === null);
-  const overrides = rowsVisibles.filter((row) => row.recurrence_id !== null);
-
-  // Les excepcions s'indexen per (uid, recurrence_id): és el que les lliga a
-  // l'ocurrència que substitueixen (D8).
-  const overrideByKey = new Map(
-    overrides.map((row) => [`${row.uid}|${new Date(row.recurrence_id!).toISOString()}`, row]),
-  );
-
+  const overrides = new Map<string, EventOccurrenceView>();
+  for (const row of rowsVisibles) {
+    if (row.recurrence_id === null) continue;
+    const view = toView(row, row.scope_id, true);
+    overrides.set(markKey(view.calendar_id, view.uid, view.recurrence_id), view);
+  }
   const out: EventOccurrenceView[] = [];
 
-  for (const master of masters) {
+  for (const master of rowsVisibles) {
+    if (master.recurrence_id !== null) continue;
+    const components = storedEventComponents(master.raw_ical);
+    const parsed = components.find((event) => event.recurrenceId === null);
+    // Un PUT de CalDAV conserva un sol recurs amb el mestre i les excepcions. La
+    // lectura del calendari les expandeix sense convertir-les en recursos DAV a part.
+    for (const event of components) {
+      if (event.recurrenceId === null || (parsed !== undefined && event.uid !== parsed.uid))
+        continue;
+      const key = markKey(master.calendar_id, master.uid, event.recurrenceId);
+      if (overrides.has(key)) continue;
+      overrides.set(key, {
+        ...toView(master, master.scope_id, true),
+        recurrence_id: event.recurrenceId,
+        summary: event.summary,
+        location: event.location,
+        starts_at: event.startsAt,
+        ends_at: event.endsAt ?? event.startsAt,
+        all_day: event.allDay,
+        status: event.status,
+      });
+    }
+    // Un recurs que només porta una excepció no ha de generar també un mestre fictici.
+    if (parsed === undefined && components.length > 0) continue;
+
+    // Les subscripcions antigues no desaven tota la informació del component. El
+    // VEVENT original serveix fins que el refresc següent actualitzi la fila.
+    const subscribed = master.calendar_origin === 'subscription' ? parsed : undefined;
+    const startsAt = subscribed?.startsAt ?? master.starts_at;
+    const rrule = master.rrule ?? parsed?.rrule;
+    const rdate = parseJsonArray(master.rdate) ?? parsed?.rdate;
+    const recurring = (rrule != null && rrule !== '') || (rdate?.length ?? 0) > 0;
     const occurrences = expandOccurrences({
-      startsAt: master.starts_at,
-      endsAt: master.ends_at,
-      rrule: master.rrule,
-      rdate: parseJsonArray(master.rdate),
-      exdate: parseJsonArray(master.exdate),
+      startsAt,
+      startTime:
+        parsed?.startsAt === new Date(startsAt).toISOString() ? parsed.startTime : undefined,
+      endsAt: subscribed?.endsAt ?? master.ends_at ?? parsed?.endsAt,
+      rrule,
+      rdate,
+      exdate: parseJsonArray(master.exdate) ?? parsed?.exdate,
       from: options.from,
       to: options.to,
     });
 
     for (const occurrence of occurrences) {
-      const override = overrideByKey.get(`${master.uid}|${occurrence.recurrenceId}`);
-      if (override !== undefined) {
-        // La instància modificada guanya i l'ocurrència del mestre desapareix: si
-        // sortissin totes dues, una reunió moguda es veuria dues vegades.
-        out.push(toView(override, master.scope_id, true));
-        continue;
-      }
+      if (overrides.has(markKey(master.calendar_id, master.uid, occurrence.recurrenceId))) continue;
       out.push({
         event_id: master.id,
         uid: master.uid,
-        recurrence_id: master.rrule == null ? null : occurrence.recurrenceId,
+        recurrence_id: recurring ? occurrence.recurrenceId : null,
         summary: master.summary,
         location: master.location,
         starts_at: occurrence.startsAt,
         ends_at: occurrence.endsAt,
-        all_day: master.all_day === 1,
+        all_day: isTrue(master.all_day),
         scope_id: master.scope_id,
         calendar_id: master.calendar_id,
-        status: master.status,
+        status: subscribed?.status ?? master.status,
         is_override: false,
       });
     }
   }
 
-  /**
-   * Una excepció òrfena —importada sense el seu mestre— també ha de sortir.
-   * `is_orphan_override` tolera aquest cas, que passa de veritat en importar
-   * calendaris de tercers (docs/01 §5).
-   */
-  for (const override of overrides) {
-    const hasMaster = masters.some((master) => master.uid === override.uid);
-    if (hasMaster) continue;
-    const start = new Date(override.starts_at).getTime();
-    if (start >= Date.parse(options.from) && start < Date.parse(options.to)) {
-      out.push(toView(override, override.scope_id, true));
+  // L'excepció pot haver entrat a la finestra des d'un altre dia o no tenir mestre.
+  // Compta la seva hora real, que pot quedar fora de la finestra de l'hora original.
+  const from = Date.parse(options.from);
+  const to = Date.parse(options.to);
+  for (const override of overrides.values()) {
+    if (overlapsWindow(Date.parse(override.starts_at), Date.parse(override.ends_at), from, to)) {
+      out.push(override);
     }
   }
 
   out.sort((a, b) => (a.starts_at < b.starts_at ? -1 : a.starts_at > b.starts_at ? 1 : 0));
   return out;
+}
+
+function storedEventComponents(raw: string | null): ParsedEvent[] {
+  if (raw === null) return [];
+  try {
+    return parseResource(raw).events;
+  } catch {
+    return [];
+  }
 }
 
 /**
@@ -477,13 +514,19 @@ export async function inboxFlags(
    * De quins d'aquests esdeveniments ja se n'ha fet una tasca que segueix viva. És el
    * nivell 0 de la resolució, i el que evita veure la mateixa obligació dues vegades.
    */
-  const derived = await sql<{ event_calendar_id: string; event_uid: string }>`
-    SELECT DISTINCT event_calendar_id, event_uid FROM tasks
+  const derived = await sql<{
+    event_calendar_id: string;
+    event_uid: string;
+    event_recurrence_id: string | null;
+  }>`
+    SELECT DISTINCT event_calendar_id, event_uid, event_recurrence_id FROM tasks
     WHERE deleted_at IS NULL AND event_uid IS NOT NULL
       AND event_calendar_id IN (${sql.join(calendarIds)})
   `.execute(db);
   const hasTask = new Set(
-    derived.rows.map((row) => `${row.event_calendar_id}\u0000${row.event_uid}`),
+    derived.rows.map((row) =>
+      markKey(row.event_calendar_id, row.event_uid, row.event_recurrence_id),
+    ),
   );
 
   for (const occurrence of occurrences) {
@@ -502,7 +545,9 @@ export async function inboxFlags(
             : (markAt.get(
                 markKey(occurrence.calendar_id, occurrence.uid, occurrence.recurrence_id),
               ) ?? null),
-        hasLiveTask: hasTask.has(`${occurrence.calendar_id}\u0000${occurrence.uid}`),
+        hasLiveTask: hasTask.has(
+          markKey(occurrence.calendar_id, occurrence.uid, occurrence.recurrence_id),
+        ),
       }),
     );
   }
@@ -699,12 +744,12 @@ function toView(
   return {
     event_id: row.id,
     uid: row.uid,
-    recurrence_id: row.recurrence_id,
+    recurrence_id: row.recurrence_id === null ? null : new Date(row.recurrence_id).toISOString(),
     summary: row.summary,
     location: row.location,
-    starts_at: row.starts_at,
-    ends_at: row.ends_at ?? row.starts_at,
-    all_day: row.all_day === 1,
+    starts_at: new Date(row.starts_at).toISOString(),
+    ends_at: new Date(row.ends_at ?? row.starts_at).toISOString(),
+    all_day: isTrue(row.all_day),
     scope_id: scopeId,
     calendar_id: row.calendar_id,
     status: row.status,
@@ -866,14 +911,16 @@ export async function updateEvent(
   if (mode === 'single') {
     // Una fila germana amb el mateix uid i el seu RECURRENCE-ID.
     const overrideId = uuidv7();
+    const startsAt = input.starts_at ?? occurrence!;
+    const endsAt = input.ends_at ?? shiftedEnd(master, startsAt);
     await sql`
       INSERT INTO events (id, calendar_id, uid, recurrence_id, summary, description,
                           location, starts_at, ends_at, all_day, timezone, status,
                           transparency, sequence, created_at, updated_at, version)
       VALUES (${overrideId}, ${master.calendar_id}, ${master.uid}, ${occurrence!},
               ${input.summary ?? master.summary}, ${input.description ?? master.description},
-              ${input.location ?? master.location}, ${input.starts_at ?? occurrence!},
-              ${input.ends_at ?? master.ends_at}, ${master.all_day},
+              ${input.location ?? master.location}, ${startsAt},
+              ${endsAt}, ${master.all_day},
               ${input.timezone ?? master.timezone}, ${input.status ?? master.status},
               ${input.transparency ?? master.transparency}, 0, ${ctx.now}, ${ctx.now}, 1)
     `.execute(ctx.tx);
@@ -891,6 +938,7 @@ export async function updateEvent(
 
   // `future`: partir la sèrie.
   const split = splitSeries(master.rrule, occurrence!, master.starts_at);
+  const startsAt = input.starts_at ?? split.newStartsAt;
 
   await sql`
     UPDATE events SET rrule = ${split.masterRrule}, updated_at = ${ctx.now},
@@ -905,8 +953,8 @@ export async function updateEvent(
                         sequence, created_at, updated_at, version)
     VALUES (${newId}, ${master.calendar_id}, ${newId},
             ${input.summary ?? master.summary}, ${input.description ?? master.description},
-            ${input.location ?? master.location}, ${input.starts_at ?? split.newStartsAt},
-            ${input.ends_at ?? master.ends_at}, ${master.all_day},
+            ${input.location ?? master.location}, ${startsAt},
+            ${input.ends_at ?? shiftedEnd(master, startsAt)}, ${master.all_day},
             ${input.timezone ?? master.timezone}, ${input.status ?? master.status},
             ${input.transparency ?? master.transparency}, ${split.newRrule},
             0, ${ctx.now}, ${ctx.now}, 1)
@@ -929,6 +977,12 @@ export async function updateEvent(
   });
 
   return reload(ctx.tx, newId);
+}
+
+function shiftedEnd(event: EventRow, startsAt: string): string | null {
+  if (event.ends_at === null) return null;
+  const duration = Math.max(0, Date.parse(event.ends_at) - Date.parse(event.starts_at));
+  return new Date(Date.parse(startsAt) + duration).toISOString();
 }
 
 async function applyFields(
