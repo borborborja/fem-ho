@@ -440,18 +440,17 @@ export function TopBar({
       }}
     >
       <div
+        className="topbar-layout"
         style={{
           maxWidth: 'var(--content-max, 1360px)',
           margin: '0 auto',
           padding: '10px 28px',
-          display: 'flex',
-          flexDirection: mobile ? 'column' : 'row',
-          alignItems: mobile ? 'stretch' : 'center',
-          gap: mobile ? 10 : 22,
-          flexWrap: mobile ? 'nowrap' : 'wrap',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: mobile ? 8 : 22, minWidth: 0 }}>
+        <div
+          className="topbar-brand-row"
+          style={{ display: 'flex', alignItems: 'center', minWidth: 0 }}
+        >
           <button
             type="button"
             className="topbar-wordmark"
@@ -478,10 +477,10 @@ export function TopBar({
         </div>
 
         <div
+          className="topbar-controls"
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: mobile ? 10 : 22,
             flexWrap: 'wrap',
             flex: 1,
             minWidth: 0,
@@ -528,6 +527,7 @@ export function TopBar({
               què tries, no una de les opcions.
             */
             aria-label={t('nav.view')}
+            className="topbar-views"
             data-testid="view-switch"
             style={{
               display: 'inline-flex',
@@ -566,8 +566,6 @@ export function TopBar({
                     navigate(`${tab.href}?${query.toString()}`);
                   }}
                   style={{
-                    padding: mobile ? '7px clamp(10px, 3.4vw, 18px)' : '7px 18px',
-                    minHeight: mobile ? 44 : undefined,
                     borderRadius: 100,
                     border: 'none',
                     cursor: 'pointer',

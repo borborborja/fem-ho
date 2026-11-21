@@ -40,6 +40,45 @@ button {
   font-family: inherit;
 }
 
+.topbar-layout {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  flex-wrap: wrap;
+}
+
+.topbar-brand-row,
+.topbar-controls {
+  gap: 22px;
+}
+
+.topbar-views > button {
+  padding: 7px 18px;
+}
+
+/* La disposició canvia amb l'amplada, abans que React mogui els controls de fila. */
+@media (max-width: 860px) {
+  .topbar-layout {
+    flex-direction: column;
+    align-items: stretch;
+    flex-wrap: nowrap;
+    gap: 10px;
+  }
+
+  .topbar-brand-row {
+    gap: 8px;
+  }
+
+  .topbar-controls {
+    gap: 10px;
+  }
+
+  .topbar-views > button {
+    padding: 7px clamp(10px, 3.4vw, 18px);
+    min-height: 44px;
+  }
+}
+
 .topbar-wordmark > span {
   overflow: hidden;
   text-overflow: ellipsis;
