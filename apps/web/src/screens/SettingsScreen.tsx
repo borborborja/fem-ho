@@ -52,6 +52,7 @@ import { GoogleMailPanel } from './GoogleMailPanel.js';
 import { ExternalAccessPanel, AgentTokenEditor } from './ExternalAccessPanel.js';
 import { TaskAiSettingsPanel } from './TaskAiSettingsPanel.js';
 import { NotificationSettingsPanel } from './NotificationSettingsPanel.js';
+import { PomodoroSettingsFields } from '../pomodoro/PomodoroSettings.js';
 
 /**
  * **El correu va en pestanya pròpia i no dins de «Calendaris».**
@@ -434,6 +435,9 @@ function GeneralTab() {
         />
         <p>{t('tracking.cardsHint')}</p>
         {timePreference.error && <p role="alert">{failureText(timePreference.error)}</p>}
+      </Group>
+      <Group title={t('pomodoro.title')}>
+        <PomodoroSettingsFields />
       </Group>
       <Group title={t('reports.title')}>
         <Toggle

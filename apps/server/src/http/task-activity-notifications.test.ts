@@ -7,7 +7,7 @@ import { hashPassword } from '../auth/password.js';
 import { generateApiToken } from '../auth/tokens.js';
 import { loadConfig } from '../config.js';
 import { connect } from '../db/connection.js';
-import { migrateDown, migrateToLatest } from '../db/migrator.js';
+import { MIGRATIONS, migrateDown, migrateToLatest } from '../db/migrator.js';
 import { connectTestSchema, postgresUrl } from '../db/test-postgres.js';
 import { deliverTaskActivity } from '../jobs/task-activity-notifications.js';
 import type { PushSender } from '../services/notifications.js';
@@ -53,7 +53,10 @@ beforeAll(async () => {
     teardown = schema.drop;
   }
   await migrateToLatest(db.db, { engine: db.engine });
-  expect(await migrateDown(db.db, db.engine)).toBe('028-task-activity-notifications');
+  for (const migration of [...MIGRATIONS].reverse()) {
+    expect(await migrateDown(db.db, db.engine)).toBe(migration.name);
+    if (migration.name === '028-task-activity-notifications') break;
+  }
   const password = await hashPassword(pass);
   await sql`INSERT INTO users (id, email, name, password_hash, kind, role, created_at, updated_at)
     VALUES (${owner}, 'owner@example.com', 'Main', ${password}, 'human', 'admin', ${now()}, ${now()}),

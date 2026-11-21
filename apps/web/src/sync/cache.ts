@@ -1,4 +1,5 @@
 import { v7 as uuidv7 } from 'uuid';
+import type { PomodoroSnapshot } from '@fem-ho/contracts';
 import { ApiError } from '../app/api.js';
 import type { Board, Checklist, Inbox, Subtask, Task } from '../app/types.js';
 import { FemHoDatabase, readMeta, writeMeta, type OutboxRow } from './db.js';
@@ -13,6 +14,8 @@ import {
 
 const BOARD_PATH = '/api/v1/board?';
 const INBOX_PATH = '/api/v1/inbox?';
+export const POMODORO_PATH = '/api/v1/pomodoro';
+export type CachedPomodoro = PomodoroSnapshot & { observed_at_ms?: number };
 const BOARD_CACHE_REVISION = 'board-cache-revision';
 const SNAPSHOT_PREFIX = 'snapshot:';
 
@@ -20,6 +23,7 @@ function protectsReceipts(path: string): boolean {
   return (
     path.startsWith(BOARD_PATH) ||
     path.startsWith(INBOX_PATH) ||
+    path === POMODORO_PATH ||
     /^\/api\/v1\/tasks\/[^/]+\/(subtasks|checklists)$/.test(path)
   );
 }
@@ -73,6 +77,14 @@ export async function saveBoardQuery<T>(
       // Un GET començat abans del rebut pot desfer un moviment o fer reaparèixer una subtasca.
       if ((await readMeta(db, BOARD_CACHE_REVISION)) !== startRevision)
         return (await readSnapshot<T>(db, path)) ?? value;
+      if (path === POMODORO_PATH) {
+        const latest = await readSnapshot<CachedPomodoro>(db, path);
+        // El GET no porta el moviment del rebut. Mantén-lo fins que el tauler torni a
+        // carregar, perquè l'optimisme no faci recular la targeta durant aquest interval.
+        const next = { ...value, moved_task: latest?.moved_task, observed_at_ms: Date.now() };
+        await writeSnapshot(db, path, next);
+        return next;
+      }
       await writeSnapshot(db, path, value);
       return value;
     })
@@ -173,10 +185,28 @@ export async function applyBoardResults(
     const confirmed: Task[] = [];
     const taskProgress = new Map<string, ListProgress>();
     let listsChanged = false;
+    let pomodoroChanged = false;
     for (const row of sent) {
       const result = byId.get(row.id);
       if (result === undefined) continue;
-      if (
+      if (row.entity_type === 'pomodoro') {
+        const raw = result.status === 'ok' ? result.entity : result.server_entity;
+        if (typeof raw?.server_time_ms !== 'number' || !Array.isArray(raw.queue)) continue;
+        const snapshot = raw as unknown as PomodoroSnapshot;
+        const previous = await readSnapshot<PomodoroSnapshot>(db, POMODORO_PATH);
+        const moved = snapshot.moved_task;
+        if (moved !== undefined) confirmed.push(moved);
+        await writeMeta(
+          db,
+          `${SNAPSHOT_PREFIX}${POMODORO_PATH}`,
+          JSON.stringify({
+            ...snapshot,
+            moved_task: moved ?? previous?.moved_task,
+            observed_at_ms: Date.now(),
+          }),
+        );
+        pomodoroChanged = true;
+      } else if (
         row.entity_type === 'task' &&
         result.status === 'ok' &&
         result.entity?.id === row.entity_id
@@ -254,7 +284,7 @@ export async function applyBoardResults(
         await db.meta.put({ key: snapshot.key, value: JSON.stringify(inbox) });
       }
     }
-    if (confirmed.length > 0 || listsChanged) {
+    if (confirmed.length > 0 || listsChanged || pomodoroChanged) {
       await writeMeta(db, BOARD_CACHE_REVISION, uuidv7());
     }
     // Després del rebut, la targeta ha de seguir visible en desconnectar abans del GET.

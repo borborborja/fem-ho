@@ -17,10 +17,13 @@ import ho.fem.data.Container
 class FemhoApplication : Application() {
     lateinit var container: Container
         private set
+    internal lateinit var pomodoroSignals: PomodoroSignals
+        private set
 
     override fun onCreate() {
         super.onCreate()
         container = Container.get(this)
+        pomodoroSignals = PomodoroSignals(this, container)
 
         /**
          * La consulta periòdica es programa **sempre**.

@@ -12,6 +12,7 @@ import {
   markSending,
   mergeInto,
   nextBatch,
+  nextBoardOperations,
   resolveConflict,
   topologicalOrder,
 } from './outbox.js';
@@ -38,6 +39,24 @@ beforeEach(async () => {
   db = new FemHoDatabase(`test-${Math.random()}`);
   await db.open();
   contador = 0;
+});
+
+it('envia el moviment del Pomodoro entre la creació local i el completat de la tasca', () => {
+  const create = row({ op: 'create' });
+  const focus = row({
+    entity_type: 'pomodoro',
+    entity_id: 'persona-1',
+    payload: { kind: 'start', task_id: create.entity_id },
+  });
+  const complete = row({ op: 'move', payload: { status: 'done' } });
+  const independent = row({ entity_id: 'tasca-2', op: 'move' });
+
+  expect(nextBoardOperations([create, focus, complete, independent])).toEqual([
+    create,
+    independent,
+  ]);
+  expect(nextBoardOperations([focus, complete])).toEqual([focus]);
+  expect(nextBoardOperations([complete])).toEqual([complete]);
 });
 
 describe('fusió', () => {

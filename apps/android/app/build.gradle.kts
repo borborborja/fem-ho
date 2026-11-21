@@ -25,8 +25,8 @@ android {
         applicationId = "ho.fem"
         minSdk = 26
         targetSdk = 36
-        versionCode = 33
-        versionName = "0.25.1"
+        versionCode = 34
+        versionName = "0.26.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -116,6 +116,7 @@ dependencies {
         exclude(group = "com.google.crypto.tink", module = "tink")
     }
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")
 
     androidTestImplementation(composeBom)
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")

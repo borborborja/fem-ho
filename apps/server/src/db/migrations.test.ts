@@ -43,6 +43,7 @@ const TAULES_ESPERADES = [
   'mail_rules',
   'mail_threads',
   'notification_devices',
+  'pomodoro_states',
   'projects',
   'push_subscriptions',
   'reminders',

@@ -18,6 +18,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.util.concurrent.ConcurrentHashMap
+import java.util.UUID
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -53,7 +54,7 @@ class Container(context: Context) {
             // L'antic femho.db no té cap marca de propietat. Es conserva sencer i
             // no s'obre en nom de cap compte: una cua antiga no es pot atribuir amb seguretat.
             Workspace(Room.databaseBuilder(app, FemhoDatabase::class.java, "femho-${account.identity.key}.db")
-                .addMigrations(FemhoDatabase.MIGRATION_1_2, FemhoDatabase.MIGRATION_2_3, FemhoDatabase.MIGRATION_3_4)
+                .addMigrations(FemhoDatabase.MIGRATION_1_2, FemhoDatabase.MIGRATION_2_3, FemhoDatabase.MIGRATION_3_4, FemhoDatabase.MIGRATION_4_5)
                 .build())
         }
 
@@ -130,7 +131,7 @@ class Container(context: Context) {
 
     fun repository(account: ActiveAccount): Repository {
         val workspace = workspace(account)
-        return Repository(workspace.database.dao(), api(account), workspace.syncLock, workspace.moveLock)
+        return Repository(workspace.database.dao(), api(account), workspace.syncLock, workspace.moveLock, account.identity.userId)
     }
 
     fun local(account: ActiveAccount): LocalReads = LocalReads(workspace(account).database.dao())
@@ -242,6 +243,23 @@ class Settings internal constructor(private val dataStore: DataStore<Preferences
         dataStore.edit { preferences ->
             if (value == null) preferences.remove(key) else preferences[key] = value
         }
+    }
+
+    suspend fun pomodoroDeviceId(account: ActiveAccount): String {
+        val key = accountKey("pomodoro_device", account)
+        return checkNotNull(dataStore.edit { if (it[key] == null) it[key] = UUID.randomUUID().toString() }[key])
+    }
+
+    suspend fun claimPomodoroSignal(account: ActiveAccount, signal: String): Boolean {
+        val key = accountKey("pomodoro_signal", account)
+        var claimed = false
+        dataStore.edit {
+            if (it[key] != signal) {
+                it[key] = signal
+                claimed = true
+            }
+        }
+        return claimed
     }
 
     fun activeProjects(account: ActiveAccount): Flow<List<String>> = readAccountList(projectsKey, account)

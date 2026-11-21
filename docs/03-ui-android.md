@@ -54,6 +54,12 @@ La capçalera s'organitza en files compactes.
 
 El Registre i les Estadístiques de dedicació es consulten a la web. Els canvis de tasca fets des d'Android continuen alimentant el seguiment de dedicació. En actualitzar, la navegació recupera els destins vàlids de la pila i els antics intents dels informes obren el tauler.
 
+El Pomodoro es pot activar a Ajustos → General. La tomata de la capçalera obre
+el temporitzador compartit i la cua personal. Es poden consultar i canviar en
+mode avió després que el compte hagi sincronitzat. Els avisos en segon pla fan
+servir una notificació local. Els permisos i l'estalvi de bateria del sistema
+en poden endarrerir o silenciar el so.
+
 ---
 
 ## 4 · Kanban

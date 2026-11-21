@@ -26,6 +26,7 @@ import { createTask, moveTask, updateTask, deleteTask, type Task } from '../serv
 import { addComment } from '../services/comments.js';
 import { createProject, deleteProject } from '../services/scopes.js';
 import { createEvent } from '../services/events.js';
+import { getPomodoro, syncPomodoro } from '../services/pomodoro.js';
 import {
   assertSyncContentAccess,
   assertSyncEditableFields,
@@ -37,6 +38,7 @@ import {
 import {
   decodeCursor,
   encodeCursor,
+  lockSyncOp,
   pull,
   recallOp,
   rememberOp,
@@ -69,6 +71,13 @@ async function handle<T>(
 }
 
 export function registerSyncRoutes(app: FastifyInstance): void {
+  app.get('/api/v1/pomodoro', async (request, reply) =>
+    handle(app, request, reply, async (principal) => {
+      void reply.header('cache-control', 'no-store');
+      return getPomodoro(app.connection!.db, principal);
+    }),
+  );
+
   app.get('/api/v1/sync', async (request, reply) =>
     handle(app, request, reply, async (principal) => {
       const query = request.query as Record<string, unknown>;
@@ -331,6 +340,15 @@ async function applyOne(
     };
   }
 
+  // El Pomodoro pertany al compte, i no a un àmbit dels que resol el lot general.
+  if (operation.entity === 'pomodoro') {
+    try {
+      return await syncPomodoro(app.connection!, principal, operation);
+    } catch (error) {
+      return rejectedOperation(operation.op_id, error);
+    }
+  }
+
   if (typeof operation.entity !== 'string' || !Object.hasOwn(SYNC_WRITES, operation.entity)) {
     return {
       op_id: operation.op_id,
@@ -358,10 +376,7 @@ async function applyOne(
       app.connection!.db,
       principal,
       async (ctx): Promise<BatchResult> => {
-        if (app.connection!.engine === 'postgres')
-          await sql`SELECT pg_advisory_xact_lock(851004, hashtext(${principal.userId + operation.op_id}))`.execute(
-            ctx.tx,
-          );
+        await lockSyncOp(ctx.tx, app.connection!.engine, principal, operation.op_id);
         const apply = async (): Promise<BatchResult> => {
           const found = await sql`
           SELECT * FROM ${sql.raw(table)} WHERE id = ${operation.id}
@@ -606,14 +621,17 @@ async function applyOne(
     }
     return result;
   } catch (error) {
-    const rejected: BatchResult = {
-      op_id: operation.op_id,
-      status: 'rejected',
-      error:
-        error instanceof PolicyError
-          ? error.toProblem()
-          : { detail: "No s'ha pogut aplicar aquesta operació." },
-    };
-    return rejected;
+    return rejectedOperation(operation.op_id, error);
   }
+}
+
+function rejectedOperation(opId: string, error: unknown): BatchResult {
+  return {
+    op_id: opId,
+    status: 'rejected',
+    error:
+      error instanceof PolicyError
+        ? error.toProblem()
+        : { detail: "No s'ha pogut aplicar aquesta operació." },
+  };
 }

@@ -38,6 +38,8 @@ import { DayNavigator } from '../board/DayNavigator.js';
 import { DoneHeader } from '../board/DoneColumnView.js';
 import { useBoardQuery, useBoardSync } from '../sync/board-sync.js';
 import { projectBoardTasks } from '../sync/board-projection.js';
+import { compareOperations } from '../sync/outbox.js';
+import { usePomodoroBoardProjection } from '../pomodoro/PomodoroProvider.js';
 
 export interface BoardScreenProps {
   activeScopeIds: string[];
@@ -189,6 +191,7 @@ export function BoardScreen({
   const { navigate } = useRouter();
   const { updateSettings } = useSession();
   const { pending, submit } = useBoardSync();
+  const { moves: pomodoroMoves, received: pomodoroReceipt } = usePomodoroBoardProjection();
   const today = localDateOf(profile.timezone, new Date());
 
   const path = useMemo(() => {
@@ -287,9 +290,10 @@ export function BoardScreen({
         ...(rail === undefined ? [] : [...rail.dated, ...rail.overdue, ...rail.undated]),
         ...(base ?? []),
       ],
-      pending,
+      [...pending, ...pomodoroMoves].sort(compareOperations),
+      pomodoroReceipt,
     ).filter((task) => activeScopeIds.includes(task.scope_id));
-  }, [board.data, inbox.data, pending, activeScopeIds]);
+  }, [board.data, inbox.data, pending, activeScopeIds, pomodoroMoves, pomodoroReceipt]);
 
   /**
    * **Refrescar és refrescar els dos.**
@@ -532,7 +536,10 @@ export function BoardScreen({
   );
 
   const move = (taskId: string, status: TaskStatus, placement?: DropPlacement) => {
-    if (!navigator.onLine || pending.some((row) => row.entity_id === taskId)) {
+    if (
+      !navigator.onLine ||
+      [...pending, ...pomodoroMoves].some((row) => row.entity_id === taskId)
+    ) {
       return performMove(taskId, status, {}, placement).catch((cause: unknown) =>
         notify(failureText(cause), { tone: 'error' }),
       );

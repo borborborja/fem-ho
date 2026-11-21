@@ -28,6 +28,7 @@ import {
   discardBoardOperation,
   markSending,
   nextBoardOperations,
+  pomodoroTaskIds,
   type OperationResult,
 } from './outbox.js';
 import { taskListPath } from './subtask-projection.js';
@@ -250,6 +251,13 @@ export function BoardSyncProvider({ userId, children }: { userId: string; childr
           .equals([row.entity_type, row.entity_id])
           .count();
         direct = direct && preceding === 0;
+        // Un PATCH directe passaria per davant del moviment compost que encara és a la cua.
+        if (direct && row.entity_type === 'task') {
+          const focus = await db.outbox
+            .filter((candidate) => pomodoroTaskIds(candidate).includes(row.entity_id))
+            .first();
+          direct = focus === undefined;
+        }
         await db.outbox.add({
           ...row,
           status: direct ? 'sending' : 'pending',
@@ -319,10 +327,10 @@ export function BoardSyncProvider({ userId, children }: { userId: string; childr
               </summary>
               {failures.map((row) => (
                 <div key={row.id} style={{ padding: 8 }}>
-                  <p>{row.task_title}</p>
+                  <p>{row.entity_type === 'pomodoro' ? t('pomodoro.title') : row.task_title}</p>
                   <p>
                     {row.status === 'conflict'
-                      ? t('sync.conflict')
+                      ? t(row.entity_type === 'pomodoro' ? 'pomodoro.conflict' : 'sync.conflict')
                       : (row.last_error ?? t('error.generic'))}
                   </p>
                   <button

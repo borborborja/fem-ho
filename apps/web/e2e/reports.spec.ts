@@ -120,10 +120,10 @@ test('filtres i resum llegibles als vuit temes i als tres idiomes', async ({ pag
 
 test('sis tasques fetes i dues amb temps tenen recomptes diferents i identificables', async ({
   page,
-}) => {
+}, testInfo) => {
   await enterAsNew(page, {
     name: 'Recomptes',
-    email: 'reports-counts@example.com',
+    email: `reports-counts-${testInfo.repeatEachIndex}-${testInfo.retry}@example.com`,
     password: 'la-contrasenya-de-prova',
   });
   const headers = { authorization: `Bearer ${await token(page)}` };

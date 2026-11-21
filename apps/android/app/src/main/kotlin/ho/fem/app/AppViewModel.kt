@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import ho.fem.data.ActiveAccount
 import ho.fem.data.Container
+import ho.fem.data.LocalPomodoro
 import ho.fem.data.Repository
 import ho.fem.data.TaskLists
 import ho.fem.data.normalizeServerUrl
@@ -24,6 +25,11 @@ import ho.fem.model.Inbox
 import ho.fem.model.InboxEvent
 import ho.fem.model.Label
 import ho.fem.model.Person
+import ho.fem.model.PomodoroAction
+import ho.fem.model.PomodoroPhase
+import ho.fem.model.PomodoroSnapshot
+import ho.fem.model.PomodoroStatus
+import ho.fem.model.PomodoroTimer
 import ho.fem.model.Project
 import ho.fem.model.QuickAddResult
 import ho.fem.model.Scope
@@ -33,6 +39,7 @@ import ho.fem.model.Task
 import ho.fem.model.TaskStatus
 import ho.fem.model.TaskType
 import ho.fem.model.UserProfile
+import ho.fem.model.projectPomodoroTimer
 import ho.fem.model.serverCandidates
 import ho.fem.network.FemhoApi
 import ho.fem.network.certificateFingerprint
@@ -57,6 +64,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 
 /**
  * L'estat de l'aplicació.
@@ -157,6 +169,8 @@ class AppViewModel(private val container: Container) : ViewModel() {
     val doneClearedAt = _doneClearedAt.asStateFlow()
     private val _doneSettingsSaving = MutableStateFlow(false)
     val doneSettingsSaving = _doneSettingsSaving.asStateFlow()
+    private val _pomodoro = MutableStateFlow(LocalPomodoro())
+    val pomodoro = _pomodoro.asStateFlow()
 
     private val _activeScopes = MutableStateFlow<List<String>>(emptyList())
     val activeScopes = _activeScopes.asStateFlow()
@@ -492,6 +506,7 @@ class AppViewModel(private val container: Container) : ViewModel() {
     private var openNotificationJob: Job? = null
     private var scopeModeJob: Job? = null
     private var profileLoadJob: Job? = null
+    private var pomodoroLoadJob: Job? = null
     private var sessionScope = CoroutineScope(viewModelScope.coroutineContext + Job().also { it.cancel() })
 
     private fun startSession(account: ActiveAccount) {
@@ -536,8 +551,10 @@ class AppViewModel(private val container: Container) : ViewModel() {
         _profile.value = null
         _profileTimezone.value = defaultTimezone
         profileLoadJob = null
+        pomodoroLoadJob = null
         _doneClearedAt.value = null
         _doneSettingsSaving.value = false
+        _pomodoro.value = LocalPomodoro()
         _activeScopes.value = emptyList()
         _instanceVersion.value = ""
         _needsScopeModeWizard.value = false
@@ -922,6 +939,7 @@ class AppViewModel(private val container: Container) : ViewModel() {
     private fun endSession(expired: Boolean) {
         val base = serverUrl ?: return
         val account = activeAccount
+        if (account != null) (container.appContext as FemhoApplication).pomodoroSignals.cancel(account)
         sessionScope.cancel()
         activeAccount = null
         clearSessionData()
@@ -1482,6 +1500,84 @@ class AppViewModel(private val container: Container) : ViewModel() {
                 actionFailed(error)
             } finally {
                 if (activeAccount == sessionAccount) _doneSettingsSaving.value = false
+            }
+        }
+    }
+
+    fun refreshPomodoro() {
+        val account = activeAccount ?: return
+        if (pomodoroLoadJob?.isActive == true) return
+        pomodoroLoadJob = sessionScope.launch {
+            try {
+                container.repository(account).refreshPomodoro()
+            } catch (error: Exception) {
+                if (error is CancellationException) throw error
+            }
+        }
+    }
+
+    fun updatePomodoroSettings(patch: JsonObject) = submitPomodoro { _, _, _ ->
+        buildJsonObject {
+            put("kind", "settings")
+            put("patch", patch)
+        }
+    }
+
+    fun setPomodoroEnabled(enabled: Boolean) = updatePomodoroSettings(buildJsonObject { put("enabled", enabled) })
+
+    fun updatePomodoroQueue(update: (List<String>) -> List<String>) = submitPomodoro { state, _, _ ->
+        buildJsonObject {
+            put("kind", "queue")
+            put("expected_version", state.queueVersion)
+            putJsonArray("task_ids") { update(state.queue).distinct().forEach { add(it) } }
+        }
+    }
+
+    fun startPomodoro(taskId: String?) = submitPomodoro { state, now, device ->
+        val timer = state.timer?.let { projectPomodoroTimer(it, now) }
+        if (timer == null) buildJsonObject {
+            put("kind", "start")
+            put("timer_id", UUID.randomUUID().toString())
+            put("at_ms", now)
+            put("device_id", device)
+            put("task_id", taskId)
+        } else if (timer.status != PomodoroStatus.RUNNING) {
+            val chooseTask = timer.phase == PomodoroPhase.FOCUS && timer.status == PomodoroStatus.READY
+            pomodoroControl(timer, PomodoroAction.RESUME, now, device, chooseTask, taskId)
+        } else null
+    }
+
+    fun controlPomodoro(action: PomodoroAction) = submitPomodoro { state, now, device ->
+        projectPomodoroTimer(state.timer, now)?.let { pomodoroControl(it, action, now, device) }
+    }
+
+    private fun pomodoroControl(
+        timer: PomodoroTimer, action: PomodoroAction, now: Long, device: String,
+        chooseTask: Boolean = false, taskId: String? = null,
+    ): JsonObject = buildJsonObject {
+        put("kind", "control")
+        put("action", action.wire)
+        put("timer_id", timer.id)
+        put("expected_version", timer.version)
+        put("phase_number", timer.phaseNumber)
+        put("at_ms", now)
+        put("device_id", device)
+        if (chooseTask) put("task_id", taskId)
+    }
+
+    private fun submitPomodoro(command: (PomodoroSnapshot, Long, String) -> JsonObject?) {
+        val account = activeAccount ?: return
+        sessionScope.launch {
+            try {
+                val device = container.settings.pomodoroDeviceId(account)
+                val saved = container.repository(account).enqueuePomodoro { state, at -> command(state, at, device) }
+                if (saved) {
+                    Notifications.requestSync(container.appContext, account)
+                    refreshPomodoro()
+                } else if (activeAccount == account) _actionError.value = R.string.pomodoro_taskunavailable
+            } catch (error: Exception) {
+                if (error is CancellationException) throw error
+                if (activeAccount == account) _actionError.value = R.string.pomodoro_saveerror
             }
         }
     }
@@ -2485,6 +2581,17 @@ class AppViewModel(private val container: Container) : ViewModel() {
 
     private fun observe(account: ActiveAccount) {
         val repository = container.repository(account)
+        sessionScope.launch {
+            repository.pomodoro.collect { state ->
+                _pomodoro.value = state
+                val app = container.appContext as FemhoApplication
+                app.pomodoroSignals.update(account, state)
+                state.issueId?.let {
+                    _actionError.value = R.string.pomodoro_conflict
+                    repository.dismissPomodoroIssue(it)
+                }
+            }
+        }
         sessionScope.launch {
             container.settings.doneClearedAt(account).collect { _doneClearedAt.value = it }
         }

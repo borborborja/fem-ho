@@ -1,0 +1,224 @@
+.pomodoro-trigger {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 9px;
+  border: 1px solid var(--card-border);
+  border-radius: 999px;
+  color: var(--ink);
+  background: var(--tag-bg);
+  font: inherit;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.pomodoro-trigger-icon {
+  width: 21px;
+  height: 21px;
+  background: currentColor;
+  mask-position: center;
+  mask-repeat: no-repeat;
+  mask-size: contain;
+}
+
+.pomodoro-dialog {
+  box-sizing: border-box;
+  width: min(calc(100vw - 24px), 460px);
+  max-height: calc(100dvh - 24px);
+  margin: auto;
+  padding: clamp(14px, 4vw, 24px);
+  overflow: auto;
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-card);
+  background: var(--panel-bg);
+  color: var(--ink);
+  box-shadow: var(--shadow-dialog);
+}
+
+.pomodoro-dialog::backdrop {
+  background: var(--dialog-backdrop);
+}
+
+.pomodoro-header,
+.pomodoro-queue-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.pomodoro-header h2,
+.pomodoro-queue h3 {
+  margin: 0;
+  color: var(--ink);
+}
+
+.pomodoro-header h2 {
+  font-size: var(--text-section);
+}
+
+.pomodoro-controls button,
+.pomodoro-header button,
+.pomodoro-queue-item button {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+.pomodoro-timer {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  margin: 14px 0;
+  padding: 14px 8px;
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-card);
+  background: var(--tag-bg);
+  text-align: center;
+}
+
+.pomodoro-theme-fun .pomodoro-timer {
+  background: var(--gradient-wash-warm);
+}
+
+.pomodoro-ring {
+  box-sizing: border-box;
+  width: min(100%, 168px);
+  aspect-ratio: 1;
+  padding: 6px;
+  border-radius: 50%;
+  background: conic-gradient(var(--kicker) var(--pomodoro-progress), var(--card-border) 0);
+}
+
+.pomodoro-clock-face {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: var(--panel-bg);
+}
+
+.pomodoro-tomato {
+  display: block;
+  width: 52px;
+  height: 52px;
+  background: var(--kicker);
+  mask-position: center;
+  mask-repeat: no-repeat;
+  mask-size: contain;
+}
+
+.pomodoro-timer select,
+.pomodoro-queue select {
+  width: 100%;
+  min-width: 0;
+}
+
+.pomodoro-countdown {
+  margin: 0;
+  color: var(--ink);
+  font-size: 38px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  line-height: 1.05;
+}
+
+.pomodoro-phase,
+.pomodoro-task {
+  margin: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  color: var(--ink-soft);
+}
+
+.pomodoro-task {
+  font-weight: 700;
+}
+
+.pomodoro-controls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.pomodoro-queue {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.pomodoro-queue-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pomodoro-queue-item {
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+  padding: 4px 8px;
+  background: var(--card-bg);
+}
+
+.pomodoro-queue-item[aria-current='true'] {
+  background: var(--tag-bg);
+}
+
+.pomodoro-queue-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.pomodoro-queue-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 4px;
+}
+
+.pomodoro-queue-actions button {
+  padding-inline: 8px;
+}
+
+.pomodoro-queue > p,
+.pomodoro-settings p {
+  margin: 0;
+  color: var(--ink-soft);
+}
+
+.pomodoro-settings {
+  display: grid;
+  gap: 12px;
+}
+
+.pomodoro-settings-times {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 145px), 1fr));
+  gap: 9px;
+}
+
+.pomodoro-settings-times label {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  min-width: 0;
+  color: var(--ink-soft);
+  font-size: 12.5px;
+}
+
+.pomodoro-settings-times input {
+  box-sizing: border-box;
+  width: 100%;
+}

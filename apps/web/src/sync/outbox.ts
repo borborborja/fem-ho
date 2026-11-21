@@ -118,6 +118,14 @@ export function compareOperations(a: OutboxRow, b: OutboxRow): number {
   return a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id);
 }
 
+export function pomodoroTaskIds(row: OutboxRow): string[] {
+  if (row.entity_type !== 'pomodoro') return [];
+  const { kind, task_id, task_ids } = row.payload;
+  if (kind === 'queue' && Array.isArray(task_ids))
+    return task_ids.filter((id): id is string => typeof id === 'string');
+  return typeof task_id === 'string' ? [task_id] : [];
+}
+
 export function nextBoardOperations(rows: OutboxRow[]): OutboxRow[] {
   const pendingParents = new Set(
     rows
@@ -125,10 +133,23 @@ export function nextBoardOperations(rows: OutboxRow[]): OutboxRow[] {
       .map((row) => row.entity_id),
   );
   const seen = new Set<string>();
+  const earlierTaskChanges = new Set<string>();
+  const earlierPomodoroTasks = new Set<string>();
   return topologicalOrder(rows)
     .filter((row) => {
-      if (seen.has(row.entity_id)) return false;
-      seen.add(row.entity_id);
+      const key = `${row.entity_type}:${row.entity_id}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      // Un inici ha de veure la tasca creada o moguda abans d'ell. Una edició posterior
+      // espera el rebut del moviment del Pomodoro, que també canvia la versió de la tasca.
+      if (row.entity_type === 'pomodoro') {
+        const tasks = pomodoroTaskIds(row);
+        for (const id of tasks) earlierPomodoroTasks.add(id);
+        if (tasks.some((id) => earlierTaskChanges.has(id))) return false;
+      } else if (row.entity_type === 'task') {
+        if (row.op !== 'update') earlierTaskChanges.add(row.entity_id);
+        if (earlierPomodoroTasks.has(row.entity_id)) return false;
+      }
       // Esperem el rebut de la tasca mare. Si la creació ha fallat, les seves subtasques
       // encara es poden enviar quan es resolgui l'error de la mare.
       if (row.parent_task_id !== undefined && pendingParents.has(row.parent_task_id)) return false;
@@ -240,6 +261,7 @@ export async function applyResults(
 
       if (result.status === 'ok') {
         await db.outbox.delete(row.id);
+        if (row.entity_type === 'pomodoro') continue;
         if (row.op === 'delete') {
           await db.entities.delete(row.entity_id);
         } else if (result.entity !== undefined) {
@@ -253,7 +275,7 @@ export async function applyResults(
 
       if (result.status === 'conflict') {
         await db.outbox.put({ ...row, status: 'conflict', server_entity: result.server_entity });
-        if (result.server_entity !== undefined) {
+        if (row.entity_type !== 'pomodoro' && result.server_entity !== undefined) {
           await db.entities.put({
             ...(result.server_entity as { id: string }),
             entity_type: row.entity_type,

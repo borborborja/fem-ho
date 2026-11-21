@@ -1,5 +1,7 @@
 package ho.fem.app
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.material3.Text
 import androidx.compose.runtime.CompositionLocalProvider
@@ -353,6 +355,30 @@ class TaskUiTest {
             swipeLeft(startX = this.width * 0.80f, endX = this.width * 0.15f, durationMillis = 350)
         }
         compose.onNodeWithTag("board-column-todo").assertIsSelected()
+    }
+
+    @Test
+    fun pomodoroHeaderKeepsTitleOnOneLineAtLargerFont() {
+        compose.setContent {
+            FemhoTheme {
+                CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, fontScale = 1.4f)) {
+                    Box(Modifier.requiredWidth(320.dp).padding(horizontal = 16.dp)) {
+                        PomodoroHeader("Pomodoro", "Back", "Settings", onBack = {}, onSettings = {})
+                    }
+                }
+            }
+        }
+        for (text in listOf("Pomodoro", "Settings")) {
+            val layouts = mutableListOf<TextLayoutResult>()
+            compose.onNodeWithText(text, useUnmergedTree = true)
+                .assertIsDisplayed()
+                .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+            val layout = layouts.single()
+            assertEquals(text, 1, layout.lineCount)
+            assertFalse(text, layout.isLineEllipsized(0))
+            val lineWidth = layout.getLineRight(0) - layout.getLineLeft(0)
+            assertTrue("$text width at 320dp and 140% font size: $lineWidth in ${layout.size}", lineWidth <= layout.size.width + 1)
+        }
     }
 
     @Test

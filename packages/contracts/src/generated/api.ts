@@ -1171,8 +1171,32 @@ export interface paths {
          *     i `data.from_status` detecta canvis d'estat des d'un altre dispositiu.
          *     Un instant més de cinc minuts al futur es rebutja; els petits desajustos es limiten
          *     a l'hora del servidor. Un gest anterior al temps ja registrat retorna conflicte.
+         *     El Pomodoro personal usa `entity: pomodoro`, `op: update`, l'ID del compte com a `id`
+         *     i un `PomodoroCommand` a `data`. Els resultats confirmats i de conflicte porten
+         *     un `PomodoroSnapshot` a `entity` o `server_entity`, respectivament.
          */
         post: operations["pushSync"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/pomodoro": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Preferències, cua i temporitzador personal de Pomodoro
+         * @description Només per a sessions humanes. Els canvis es desen amb `/sync/batch`.
+         *     El rellotge del servidor permet projectar les fases sense enviar cap tic.
+         */
+        get: operations["getPomodoro"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -4127,6 +4151,96 @@ export interface components {
         };
         SyncBatchResults: {
             results: components["schemas"]["SyncBatchResult"][];
+        };
+        PomodoroTiming: {
+            focus_minutes: number;
+            short_break_minutes: number;
+            long_break_minutes: number;
+            long_break_every: number;
+            auto_start_focus: boolean;
+            auto_start_break: boolean;
+        };
+        PomodoroSettings: components["schemas"]["PomodoroTiming"] & {
+            enabled: boolean;
+            /** @enum {string} */
+            mode: "playful" | "serious";
+            sound: boolean;
+        };
+        PomodoroSettingsPatch: {
+            enabled?: boolean;
+            /** @enum {string} */
+            mode?: "playful" | "serious";
+            sound?: boolean;
+            focus_minutes?: number;
+            short_break_minutes?: number;
+            long_break_minutes?: number;
+            long_break_every?: number;
+            auto_start_focus?: boolean;
+            auto_start_break?: boolean;
+        };
+        PomodoroTimer: {
+            /** Format: uuid */
+            id: string;
+            version: number;
+            /** @enum {string} */
+            phase: "focus" | "short_break" | "long_break";
+            phase_number: number;
+            /** @enum {string} */
+            status: "ready" | "running" | "paused";
+            /** Format: int64 */
+            end_at_ms: number | null;
+            /** Format: int64 */
+            remaining_ms: number;
+            completed_focus: number;
+            /** Format: uuid */
+            task_id: string | null;
+            device_id: string;
+            timing: components["schemas"]["PomodoroTiming"];
+        };
+        PomodoroSnapshot: {
+            settings: components["schemas"]["PomodoroSettings"];
+            queue: string[];
+            queue_version: number;
+            timer: components["schemas"]["PomodoroTimer"] | null;
+            /** Format: int64 */
+            server_time_ms: number;
+            moved_task?: components["schemas"]["Task"];
+        };
+        PomodoroCommand: {
+            /** @enum {string} */
+            kind: "settings";
+            patch: components["schemas"]["PomodoroSettingsPatch"];
+        } | {
+            /** @enum {string} */
+            kind: "queue";
+            expected_version: number;
+            task_ids: string[];
+        } | {
+            /** @enum {string} */
+            kind: "start";
+            /** Format: uuid */
+            timer_id: string;
+            /** Format: int64 */
+            at_ms: number;
+            device_id: string;
+            /** Format: uuid */
+            task_id: string | null;
+            position?: string;
+        } | {
+            /** @enum {string} */
+            kind: "control";
+            /** @enum {string} */
+            action: "resume" | "pause" | "reset" | "skip" | "stop";
+            /** Format: uuid */
+            timer_id: string;
+            expected_version: number;
+            phase_number: number;
+            /** Format: int64 */
+            at_ms: number;
+            device_id: string;
+            /** Format: uuid */
+            task_id?: string | null;
+            position?: string;
         };
         Checklist: {
             id: string;
@@ -7401,6 +7515,28 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+        };
+    };
+    getPomodoro: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Estat privat del compte i hora de referència. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PomodoroSnapshot"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
         };
     };
     getScope: {

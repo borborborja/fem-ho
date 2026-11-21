@@ -450,6 +450,11 @@ export interface NotificationDevices {
   user_id: string;
 }
 
+export interface PomodoroStates {
+  state: string;
+  user_id: string;
+}
+
 export interface Projects {
   ai_description: string | null;
   ai_instructions: string | null;
@@ -859,6 +864,7 @@ export interface DB {
   mcp_oauth_sessions: McpOauthSessions;
   mcp_oauth_used_refresh: McpOauthUsedRefresh;
   notification_devices: NotificationDevices;
+  pomodoro_states: PomodoroStates;
   projects: Projects;
   push_subscriptions: PushSubscriptions;
   reminders: Reminders;

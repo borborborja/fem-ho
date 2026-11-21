@@ -49,6 +49,7 @@ import * as federationOrigin from './migrations/025-federation-origin.js';
 import * as mcpActivityOrigin from './migrations/026-mcp-activity-origin.js';
 import * as taskAi from './migrations/027-task-ai.js';
 import * as taskActivityNotifications from './migrations/028-task-activity-notifications.js';
+import * as pomodoro from './migrations/029-pomodoro.js';
 
 export interface Migration {
   name: string;
@@ -138,6 +139,7 @@ export const MIGRATIONS: Migration[] = [
     up: taskActivityNotifications.up,
     down: taskActivityNotifications.down,
   },
+  { name: '029-pomodoro', up: pomodoro.up, down: pomodoro.down },
 ];
 
 const MIGRATIONS_TABLE = 'schema_migrations';

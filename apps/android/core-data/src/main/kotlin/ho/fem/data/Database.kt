@@ -258,6 +258,14 @@ data class OutboxEntity(
     val detail: String? = null,
 )
 
+@Entity(tableName = "pomodoro_cache")
+data class PomodoroCacheEntity(
+    @PrimaryKey val id: Int = 0,
+    val snapshot: String,
+    @ColumnInfo(name = "clock_offset_ms") val clockOffsetMs: Long,
+    @ColumnInfo(name = "issue_id") val issueId: String? = null,
+)
+
 /** El resultat de `countByStatus`. No és una taula: és la projecció d'un `GROUP BY`. */
 data class StatusCount(val status: String, val total: Int)
 
@@ -422,6 +430,31 @@ interface FemhoDao {
     suspend fun putTaskAndEnqueue(task: TaskEntity, operation: OutboxEntity) {
         putTasks(listOf(task))
         enqueue(operation)
+    }
+
+    @Query("SELECT * FROM pomodoro_cache WHERE id = 0")
+    fun pomodoroCache(): Flow<PomodoroCacheEntity?>
+
+    @Query("SELECT * FROM pomodoro_cache WHERE id = 0")
+    suspend fun pomodoroCacheOnce(): PomodoroCacheEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun putPomodoroCache(cache: PomodoroCacheEntity)
+
+    @Query("UPDATE pomodoro_cache SET issue_id = NULL WHERE id = 0 AND issue_id = :issueId")
+    suspend fun clearPomodoroIssue(issueId: String)
+
+    @Transaction
+    suspend fun resolvePomodoroOperations(
+        cache: PomodoroCacheEntity,
+        removed: List<String>,
+        tasks: List<TaskEntity>,
+        rebased: List<OutboxEntity>,
+    ) {
+        putPomodoroCache(cache)
+        putTasks(tasks)
+        rebased.forEach { updateOperation(it) }
+        removed.forEach { dequeue(it) }
     }
 
     @Query("SELECT * FROM tasks WHERE deleted=0 AND status=:status AND scope_id IN (:scopeIds) ORDER BY position, id LIMIT :limit")
@@ -713,8 +746,9 @@ interface FemhoDao {
         MailRuleEntity::class,
         ScopeSettingsEntity::class,
         AgentEntity::class,
+        PomodoroCacheEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = false,
 )
 abstract class FemhoDatabase : RoomDatabase() {
@@ -731,6 +765,12 @@ abstract class FemhoDatabase : RoomDatabase() {
      * directament a v2 sense passar per la migració.
      */
     companion object {
+        val MIGRATION_4_5 = object : androidx.room.migration.Migration(4, 5) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS pomodoro_cache (id INTEGER NOT NULL PRIMARY KEY, snapshot TEXT NOT NULL, clock_offset_ms INTEGER NOT NULL, issue_id TEXT)")
+            }
+        }
+
         val MIGRATION_3_4 = object : androidx.room.migration.Migration(3, 4) {
             override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE tasks ADD COLUMN task_json TEXT")

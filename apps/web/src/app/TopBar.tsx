@@ -22,6 +22,7 @@ import { Avatar } from './Avatar.js';
 import { useRouter } from './router.js';
 import { useSession, useSessionData } from './session.js';
 import type { Checklist, Scope } from './types.js';
+import { PomodoroTrigger } from '../pomodoro/PomodoroPanel.js';
 
 /**
  * Quin menú hi ha obert.
@@ -439,20 +440,20 @@ export function TopBar({
       }}
     >
       <div
+        className="topbar-layout"
         style={{
           maxWidth: 'var(--content-max, 1360px)',
           margin: '0 auto',
           padding: '10px 28px',
-          display: 'flex',
-          flexDirection: mobile ? 'column' : 'row',
-          alignItems: mobile ? 'stretch' : 'center',
-          gap: mobile ? 10 : 22,
-          flexWrap: 'wrap',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 22 }}>
+        <div
+          className="topbar-brand-row"
+          style={{ display: 'flex', alignItems: 'center', minWidth: 0 }}
+        >
           <button
             type="button"
+            className="topbar-wordmark"
             data-testid="wordmark"
             aria-label={t('nav.openDashboard')}
             onClick={() => navigate('/dashboard')}
@@ -463,6 +464,7 @@ export function TopBar({
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
+              minWidth: 0,
             }}
           >
             {/* El nom de la instància, o el seu logo. Deia «Fem-ho» escrit a mà. */}
@@ -470,16 +472,18 @@ export function TopBar({
           </button>
 
           {mobile ? <div style={{ flex: 1 }} /> : null}
+          {mobile ? <PomodoroTrigger /> : null}
           {mobile ? profileButton() : null}
         </div>
 
         <div
+          className="topbar-controls"
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: mobile ? 10 : 22,
             flexWrap: 'wrap',
             flex: 1,
+            minWidth: 0,
           }}
         >
           {/*
@@ -523,6 +527,7 @@ export function TopBar({
               què tries, no una de les opcions.
             */
             aria-label={t('nav.view')}
+            className="topbar-views"
             data-testid="view-switch"
             style={{
               display: 'inline-flex',
@@ -561,8 +566,6 @@ export function TopBar({
                     navigate(`${tab.href}?${query.toString()}`);
                   }}
                   style={{
-                    padding: '7px 18px',
-                    minHeight: mobile ? 44 : undefined,
                     borderRadius: 100,
                     border: 'none',
                     cursor: 'pointer',
@@ -739,6 +742,7 @@ export function TopBar({
           </div>
 
           <div style={{ flex: 1 }} />
+          {mobile ? null : <PomodoroTrigger />}
           {mobile ? null : profileButton()}
         </div>
       </div>

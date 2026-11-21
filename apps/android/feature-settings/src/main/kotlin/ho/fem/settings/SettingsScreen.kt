@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
@@ -27,6 +28,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import ho.fem.designsystem.Femho
@@ -244,6 +246,7 @@ data class SettingsLabels(
     val shareLastAccess: String,
     val shareRevoke: String,
     val shareRevoked: String,
+    val pomodoro: String = "",
 )
 
 data class SettingsTabs(
@@ -281,6 +284,8 @@ fun SettingsScreen(
     showOverdueSection: Boolean = true,
     inboxPosition: String = "right",
     inboxShowOverdue: Boolean = true,
+    pomodoroEnabled: Boolean? = null,
+    onPomodoroEnabled: (Boolean) -> Unit = {},
     labels: SettingsLabels,
     theme: String,
     accent: String,
@@ -451,6 +456,8 @@ fun SettingsScreen(
                     showOverdueSection = showOverdueSection,
                     inboxPosition = inboxPosition,
                     inboxShowOverdue = inboxShowOverdue,
+                    pomodoroEnabled = pomodoroEnabled,
+                    onPomodoroEnabled = onPomodoroEnabled,
                     labels = labels,
                     theme = theme,
                     accent = accent,
@@ -578,6 +585,8 @@ private fun GeneralTab(
     showOverdueSection: Boolean,
     inboxPosition: String,
     inboxShowOverdue: Boolean,
+    pomodoroEnabled: Boolean?,
+    onPomodoroEnabled: (Boolean) -> Unit,
     labels: SettingsLabels,
     theme: String,
     accent: String,
@@ -597,6 +606,15 @@ private fun GeneralTab(
     // Idioma — el primer, perquè és el que canvia la pantalla on l'estàs triant
     Group(labels.language) {
         Chips(labels.languageOptions, locale, onLocale, "language")
+    }
+
+    if (pomodoroEnabled != null) {
+        Toggle(
+            label = labels.pomodoro,
+            checked = pomodoroEnabled,
+            onChange = onPomodoroEnabled,
+            modifier = Modifier.testTag("settings-pomodoro"),
+        )
     }
 
     // Mode d'àmbits — decideix què hi ha a la barra superior
@@ -767,7 +785,7 @@ private fun Toggle(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clickable { onChange(!checked) }
+            .toggleable(value = checked, role = Role.Switch, onValueChange = onChange)
             .heightIn(min = FemhoSize.touch)
             .padding(vertical = 8.dp),
         horizontalArrangement = Arrangement.SpaceBetween,

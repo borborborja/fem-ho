@@ -34,6 +34,8 @@ import { WelcomeScreen } from '../screens/WelcomeScreen.js';
 import type { TaskModalProps } from '../screens/TaskModal.js';
 import { ShareTaskDialog } from '../screens/ShareTaskDialog.js';
 import { BoardSyncProvider } from '../sync/board-sync.js';
+import { PomodoroPanel } from '../pomodoro/PomodoroPanel.js';
+import { PomodoroProvider } from '../pomodoro/PomodoroProvider.js';
 
 const CalendarScreen = lazy(() =>
   import('../screens/CalendarScreen.js').then(({ CalendarScreen }) => ({
@@ -137,7 +139,10 @@ function AppRoute() {
     <ToastProvider>
       <BoardSyncProvider key={state.data.profile.id} userId={state.data.profile.id}>
         <TaskAiProvider>
-          <AppShell />
+          <PomodoroProvider>
+            <AppShell />
+            <PomodoroPanel />
+          </PomodoroProvider>
         </TaskAiProvider>
       </BoardSyncProvider>
     </ToastProvider>
