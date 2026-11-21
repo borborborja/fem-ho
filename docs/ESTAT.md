@@ -7,6 +7,21 @@ Data de l'última verificació completa: **2026-11-19**.
 
 ---
 
+## Propostes del calendari als ginys d'Android · 0.28.0
+
+«Avui», «Tasques» i «Tauler» permeten demanar una sincronització des del
+llançador. Si les propostes del calendari són actives, «Tasques» i «Tauler»
+mostren les cites pendents a «Per fer» i les suggereixen a «Fent» amb un
+rivet discontinu durant l'horari previst. En obrir la proposta es pot triar
+l'hora d'inici amb el mateix flux que al tauler de l'app.
+
+Amb l'APK amb R8 a Android 14 s'han verificat els tres botons de refresc, les
+dues opcions d'inici i el retorn automàtic a «Per fer» sense connexió. També
+s'ha revisat el tauler en tema fosc amb lletra al 140 %. Vegeu
+[els ginys d'Android](widget-tauler-android.md).
+
+---
+
 ## Propostes del calendari al tauler · 0.27.0
 
 Ajustos → General activa les propostes del calendari al web i a Android. Els
