@@ -115,7 +115,7 @@ class TaskUiTest {
     )
 
     @Test
-    fun calendarCardOffersScheduledStartOnlyWhenTheEventIsDue() {
+    fun calendarCardUsesBoardActionsAndOnlyOffersScheduledStartDuringTheEvent() {
         val starts = Instant.parse("2026-03-29T08:00:00Z")
         val time = mutableStateOf(starts.minusSeconds(1))
         val eventTitle = "Planificació"
@@ -125,29 +125,53 @@ class TaskUiTest {
             endsAt = starts.plusSeconds(1800).toString(), allDay = false, declined = false,
             canStart = true, requiresShareConfirmation = false, requiresTaskType = false,
         )
+        val calendarItem = mutableStateOf(item)
         var selected: CalendarTaskStart? = null
+        var returned = 0
         compose.setContent {
             FemhoTheme {
                 val now = time.value
                 BoardScreen(
                     tasks = emptyList(), labels = boardLabels, doneDay = boardDay,
                     onOpen = {}, onMove = { _, _ -> }, onToggle = {}, requestedStatus = TaskStatus.TODO,
-                    calendarGroups = mapOf(item.column(now) to mapOf("work" to listOf(item))),
+                    calendarGroups = mapOf(calendarItem.value.column(now) to mapOf("work" to listOf(calendarItem.value))),
                     calendarScopeLabel = { "Feina" },
+                    taskMenuLabels = taskMenuLabels,
                     calendarSuggestionCard = { proposal, column ->
                         CalendarSuggestionCard(proposal, column, now, profileZone,
-                            onStart = { selected = it }, onDecline = {})
+                            advanceLabel = boardLabels.advance.getValue(TaskStatus.TODO), onStart = { selected = it })
+                    },
+                    onReturnCalendarSuggestion = {
+                        returned += 1
+                        calendarItem.value = it.copy(declined = true)
                     },
                 )
             }
         }
-        compose.onNodeWithTag("calendar-suggestion-start-now").assertIsDisplayed()
+        compose.onNodeWithTag("calendar-suggestion-start-now").assertDoesNotExist()
         compose.onNodeWithTag("calendar-suggestion-start-planned").assertDoesNotExist()
+        compose.onNodeWithTag("card-advance").assertIsDisplayed().performClick()
+        compose.runOnIdle { assertEquals(CalendarTaskStart.NOW, selected) }
         compose.runOnIdle { time.value = starts.plusSeconds(600) }
         compose.onNodeWithTag("board-column-doing").performClick()
+        compose.onNodeWithTag("calendar-suggestion-start-now").assertIsDisplayed()
         compose.onNodeWithTag("calendar-suggestion-start-planned").assertIsDisplayed().performClick()
         compose.runOnIdle { assertEquals(CalendarTaskStart.PLANNED, selected) }
-        compose.onNodeWithTag("calendar-suggestion-decline").assertIsDisplayed()
+        compose.onNodeWithTag("calendar-suggestion-decline").assertDoesNotExist()
+        compose.onNodeWithText(eventTitle).performTouchInput { longClick() }
+        compose.onNodeWithTag("board-task-move").assertIsDisplayed().performClick()
+        compose.runOnIdle { assertEquals(1, returned) }
+        compose.onNodeWithTag("board-column-todo").performClick()
+        compose.onNodeWithTag("card-advance").assertIsDisplayed()
+
+        compose.runOnIdle { calendarItem.value = item }
+        compose.onNodeWithTag("board-column-doing").performClick()
+        compose.onNodeWithTag("calendar-suggestion-start-planned").assertIsDisplayed()
+        compose.runOnIdle { time.value = starts.plusSeconds(1800) }
+        compose.onNodeWithTag("board-column-todo").performClick()
+        compose.onNodeWithTag("card-advance").assertIsDisplayed()
+        compose.onNodeWithTag("calendar-suggestion-start-now").assertDoesNotExist()
+        compose.onNodeWithTag("calendar-suggestion-start-planned").assertDoesNotExist()
     }
 
     @Test

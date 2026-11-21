@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { getLocale, shortTime, t } from '@fem-ho/contracts';
+import { TaskCard } from '@fem-ho/design-system/femho';
 import { failureText } from '../app/api.js';
 import type { CalendarTaskSuggestion } from '../app/types.js';
 import { CalendarOriginBadge } from './SourceIcon.js';
@@ -11,14 +12,16 @@ export function CalendarSuggestionCard({
   item,
   active,
   timezone,
+  onOpen,
   onStart,
-  onDecline,
+  dragging = false,
 }: {
   item: CalendarTaskSuggestion;
   active: boolean;
   timezone?: string | undefined;
-  onStart: (start: CalendarStart) => void;
-  onDecline: () => void;
+  onOpen?: (() => void) | undefined;
+  onStart?: ((start: CalendarStart) => void) | undefined;
+  dragging?: boolean;
 }) {
   const locale = getLocale();
   const start = shortTime(locale, new Date(item.starts_at), timezone);
@@ -29,46 +32,56 @@ export function CalendarSuggestionCard({
       ? start
       : `${start}–${end}`;
 
+  if (!active) {
+    const advance = item.can_start && onStart !== undefined ? () => onStart('now') : undefined;
+    return (
+      <TaskCard
+        className="calendar-suggestion-pending"
+        role="article"
+        aria-label={item.title}
+        data-testid="calendar-suggestion"
+        data-calendar-active={false}
+        title={item.title}
+        sourceIcon={<CalendarOriginBadge />}
+        time={when}
+        dragging={dragging}
+        style={{
+          background: 'var(--calendar-origin-bg, var(--card-bg))',
+          borderInlineStart: 'var(--calendar-origin-rivet, 1px solid var(--card-border))',
+        }}
+        onOpen={onOpen}
+        onAdvance={advance}
+        advanceLabel={t('board.card.advance', { column: t('board.column.doing') })}
+      />
+    );
+  }
+
   return (
     <article
       aria-label={item.title}
       className="calendar-suggestion-card"
       data-testid="calendar-suggestion"
       data-calendar-active={active}
+      style={dragging ? { opacity: 0.4 } : undefined}
     >
       <div className="calendar-suggestion-meta">
         <CalendarOriginBadge />
-        <span>{active ? t('calendarSuggestions.suggested') : item.calendar_name}</span>
+        <span>{t('calendarSuggestions.suggested')}</span>
         <span>{when}</span>
       </div>
       <h3>{item.title}</h3>
-      {(item.can_start || active) && (
+      {item.can_start && onStart !== undefined && (
         <div className="calendar-suggestion-actions">
-          {item.can_start && (
-            <>
-              <button
-                type="button"
-                className="plou-btn plou-btn-ghost"
-                onClick={() => onStart('now')}
-              >
-                {t('calendarSuggestions.startNow')}
-              </button>
-              {active && (
-                <button
-                  type="button"
-                  className="plou-btn plou-btn-ghost"
-                  onClick={() => onStart('planned')}
-                >
-                  {t('calendarSuggestions.startPlanned', { time: start })}
-                </button>
-              )}
-            </>
-          )}
-          {active && (
-            <button type="button" className="plou-btn plou-btn-ghost" onClick={onDecline}>
-              {t('calendarSuggestions.decline')}
-            </button>
-          )}
+          <button type="button" className="plou-btn plou-btn-ghost" onClick={() => onStart('now')}>
+            {t('calendarSuggestions.startNow')}
+          </button>
+          <button
+            type="button"
+            className="plou-btn plou-btn-ghost"
+            onClick={() => onStart('planned')}
+          >
+            {t('calendarSuggestions.startPlanned', { time: start })}
+          </button>
         </div>
       )}
     </article>

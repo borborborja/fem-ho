@@ -719,19 +719,31 @@ button {
   color: var(--ink);
 }
 
+.calendar-suggestion-pending,
+.calendar-origin-task {
+  --calendar-origin-accent: var(--plou-blue-ink);
+  --calendar-origin-edge: color-mix(in srgb, var(--calendar-origin-accent) 78%, var(--ink));
+}
+[data-theme='dark'] :is(.calendar-suggestion-pending, .calendar-origin-task) {
+  --calendar-origin-accent: var(--plou-blue);
+}
+.calendar-origin-task {
+  --calendar-origin-bg: color-mix(in srgb, var(--calendar-origin-accent) 4%, var(--card-bg));
+  --calendar-origin-rivet: 3px solid var(--calendar-origin-edge);
+}
+.calendar-suggestion-pending {
+  --calendar-origin-bg: color-mix(in srgb, var(--calendar-origin-accent) 9%, var(--card-bg));
+  --calendar-origin-rivet: 4px solid var(--calendar-origin-edge);
+}
 .calendar-suggestion-card {
   display: grid;
   gap: 6px;
   min-width: 0;
-  border: 1px solid var(--card-border);
+  border: 2px dashed var(--ink-soft);
   border-radius: 12px;
   padding: 9px 11px;
-  background: var(--card-bg);
-  color: var(--ink);
-}
-.calendar-suggestion-card[data-calendar-active='true'] {
-  border-style: dashed;
   background: color-mix(in srgb, var(--card-bg) 60%, transparent);
+  color: var(--ink);
 }
 .calendar-suggestion-card h3 {
   margin: 0;
@@ -746,7 +758,7 @@ button {
   gap: 4px 8px;
 }
 .calendar-suggestion-meta {
-  color: var(--ink-soft);
+  color: color-mix(in srgb, var(--ink) 20%, var(--ink-soft));
   font-size: var(--text-meta);
   overflow-wrap: anywhere;
 }

@@ -232,7 +232,8 @@ export function TaskCard({
   const stateAction = onAdvance ?? onToggleDone;
   const stateLabel = advancing ? advanceLabel : toggleLabel;
   const { titleProps, suppressClick: suppressTitleClick } = useTitleHold(onTitleEdit);
-  const Body = titleEditor ? 'div' : 'button';
+  const bodyIsButton = !titleEditor && (onOpen !== undefined || onTitleEdit !== undefined);
+  const Body = bodyIsButton ? 'button' : 'div';
   const bodyRef = useRef(null);
   const wasEditing = useRef(false);
   useEffect(() => {
@@ -363,17 +364,17 @@ export function TaskCard({
         >
           <Body
             ref={bodyRef}
-            type={titleEditor ? undefined : 'button'}
+            type={bodyIsButton ? 'button' : undefined}
             onClick={
-              titleEditor
-                ? undefined
-                : () => {
+              bodyIsButton
+                ? () => {
                     if (suppressTitleClick.current) {
                       suppressTitleClick.current = false;
                       return;
                     }
                     onOpen?.();
                   }
+                : undefined
             }
             onKeyDown={(event) => {
               if (!titleEditor && onTitleEdit && event.key === 'F2') {
@@ -397,7 +398,7 @@ export function TaskCard({
               padding: 0,
               margin: 0,
               textAlign: 'left',
-              cursor: 'pointer',
+              cursor: bodyIsButton ? 'pointer' : undefined,
               fontFamily: 'var(--font-sans)',
             }}
           >

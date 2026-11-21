@@ -10,16 +10,19 @@ Data de l'última verificació completa: **2026-11-19**.
 ## Propostes del calendari al tauler
 
 Ajustos → General activa les propostes del calendari al web i a Android. Els
-esdeveniments visibles d'avui apareixen a «Per fer» agrupats per àmbit. Durant
-l'horari de la cita passen a «Fent» com a proposta. Es poden iniciar ara o des
-de l'hora prevista. Si la persona la rebutja o la cita acaba sense resposta,
-la proposta torna a «Per fer». L'historial conserva l'inici triat i el Registre
-el compta quan està activat a l'àmbit.
+esdeveniments visibles d'avui apareixen a «Per fer» agrupats per àmbit, amb un
+rivet de color i el control habitual per passar a «Fent». Durant la cita, una
+proposta pendent apareix a «Fent» amb un contorn neutre discontinu, un fons
+translúcid i les dues opcions d'inici.
+Quan acaba la cita, torna a «Per fer». També s'hi pot tornar arrossegant-la al
+web o amb el menú de moviment d'Android. L'historial conserva l'inici triat i
+el Registre el compta quan està activat a l'àmbit.
 
 Les proves amb SQLite i PostgreSQL cobreixen els reintents, les confirmacions
-concurrents i les cites privades. Chromium ha verificat el canvi de columna i
-la reconnexió fora de línia. Amb l'APK amb R8 a Android 14 s'ha comprovat el
-flux en tema fosc i amb lletra al 140 %. El tram desat comença a l'hora prevista.
+concurrents i les cites privades. Chromium ha verificat l'arrossegament amb
+ratolí i teclat, el retorn automàtic i la reconnexió fora de línia. Amb l'APK
+amb R8 a Android 14 s'ha revisat el contorn discontinu en tema fosc i amb
+lletra al 140 %. El tram desat comença a l'hora prevista.
 
 La migració 030 afegeix la preferència de compte i les marques de rebuig per
 ocurrència. En publicar, actualitza el servidor abans que els clients.

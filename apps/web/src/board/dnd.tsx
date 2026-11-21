@@ -49,6 +49,7 @@ function placementAt(
 ): DropPlacement | undefined {
   if (event.over === null) return undefined;
   const { active, activatorEvent, delta, over } = event;
+  if (active.data.current?.targetStatus !== undefined) return undefined;
   const translated = active.rect.current.translated;
   const y =
     'clientY' in activatorEvent
@@ -102,6 +103,7 @@ const jumpBetweenColumns: KeyboardCoordinateGetter = (event, { context }) => {
 
   const vertical = event.code === 'ArrowDown' ? 1 : event.code === 'ArrowUp' ? -1 : 0;
   if (vertical !== 0 && active !== null) {
+    if (active.data.current?.targetStatus !== undefined) return undefined;
     const columnId = over?.id ?? active.data.current?.status;
     const column = columnId === undefined ? undefined : droppableContainers.get(columnId);
     const cards = cardsIn(
@@ -130,8 +132,11 @@ const jumpBetweenColumns: KeyboardCoordinateGetter = (event, { context }) => {
 
   // Les columnes, ordenades per posició real a la pantalla i no per ordre de registre:
   // amb l'Inbox en una graella a part, l'ordre del DOM i el visual no coincideixen.
+  const target = active?.data.current?.targetStatus;
+  const origin = active?.data.current?.status;
   const columns = droppableContainers
     .toArray()
+    .filter((column) => target === undefined || column.id === target || column.id === origin)
     .map((container) => ({ id: container.id, rect: droppableRects.get(container.id) }))
     .filter((column): column is { id: string | number; rect: DOMRect } => column.rect != null)
     .sort((a, b) => a.rect.left - b.rect.left);
@@ -197,7 +202,16 @@ export function BoardDnd({
   return (
     <DndContext
       sensors={sensors}
-      collisionDetection={active?.pointer === true ? pointerWithin : rectIntersection}
+      collisionDetection={(args) => {
+        const detect = active?.pointer === true ? pointerWithin : rectIntersection;
+        const target = args.active.data.current?.targetStatus;
+        return target === undefined
+          ? detect(args)
+          : detect({
+              ...args,
+              droppableContainers: args.droppableContainers.filter(({ id }) => id === target),
+            });
+      }}
       accessibility={{
         // Els anuncis van a la regió aria-live que munta dnd-kit. En català, del
         // catàleg, perquè és el que sentirà qui faci servir un lector de pantalla.
@@ -273,6 +287,7 @@ export function DraggableCard({
   testId,
   scopeId,
   status,
+  targetStatus,
   insertEdge,
   children,
 }: {
@@ -280,19 +295,22 @@ export function DraggableCard({
   testId?: string | undefined;
   scopeId: string;
   status: TaskStatus;
+  /** Les propostes poden activar una acció de calendari en una sola columna. */
+  targetStatus?: TaskStatus;
   insertEdge?: 'top' | 'bottom' | undefined;
   children: ReactNode;
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id,
-    data: { scopeId, status },
+    data: { scopeId, status, targetStatus },
   });
 
   return (
     <div
       ref={setNodeRef}
       data-testid={testId}
-      data-draggable-id={id}
+      // Les propostes no són veïnes vàlides per calcular la posició d'una tasca.
+      data-draggable-id={targetStatus === undefined ? id : undefined}
       data-scope-id={scopeId}
       data-insert-edge={insertEdge}
       // Marca que aquest node l'injecta l'amfitrió pel punt d'extensió `wrapCard`, i

@@ -3,6 +3,7 @@ package ho.fem.tasks
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -39,8 +40,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -50,6 +53,7 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ho.fem.designsystem.CardAddForm
+import ho.fem.designsystem.CalendarCardVariant
 import ho.fem.designsystem.CardList
 import ho.fem.designsystem.EmptyState
 import ho.fem.designsystem.Femho
@@ -187,6 +191,7 @@ fun BoardScreen(
     calendarGroups: Map<TaskStatus, Map<String, List<CalendarTaskSuggestion>>> = emptyMap(),
     calendarScopeLabel: (String) -> String = { "" },
     calendarSuggestionCard: @Composable (CalendarTaskSuggestion, TaskStatus) -> Unit = { _, _ -> },
+    onReturnCalendarSuggestion: ((CalendarTaskSuggestion) -> Unit)? = null,
     calendarTaskMetadata: (@Composable (Task) -> Unit)? = null,
 ) {
     val pager = rememberPagerState(pageCount = { ORDER.size })
@@ -356,6 +361,7 @@ fun BoardScreen(
                                         }
                                     } else null,
                                     railAction = ai?.let { action -> { CardAiButton(action) } },
+                                    calendar = if (task.fromCalendar) CalendarCardVariant.TASK else null,
                                 )
                                 if (taskMenuLabels != null) {
                                     TaskActionsMenu(
@@ -398,7 +404,34 @@ fun BoardScreen(
                                 modifier = Modifier.padding(horizontal = 4.dp, vertical = 3.dp))
                         }
                         items(suggestions, key = { "${it.calendarId}\u0000${it.uid}\u0000${it.recurrenceId.orEmpty()}" }) {
-                            calendarSuggestionCard(it, status)
+                            if (status == TaskStatus.DOING && taskMenuLabels != null && onReturnCalendarSuggestion != null) {
+                                var actionsOpen by remember { mutableStateOf(false) }
+                                val openActions = { actionsOpen = true }
+                                // La pulsació llarga funciona com en una tasca i deixa lliure el lliscament del pager.
+                                Box(Modifier
+                                    .pointerInput(Unit) { detectTapGestures(onLongPress = { openActions() }) }
+                                    .semantics {
+                                        onLongClick(taskMenuLabels.openActions) {
+                                            openActions()
+                                            true
+                                        }
+                                    }
+                                    .testTag("board-calendar-actions"),
+                                ) {
+                                    calendarSuggestionCard(it, status)
+                                    TaskActionsMenu(
+                                        expanded = actionsOpen,
+                                        labels = taskMenuLabels.copy(move = labels.advance[TaskStatus.DOING] ?: taskMenuLabels.move),
+                                        onDismiss = { actionsOpen = false },
+                                        onMove = {
+                                            actionsOpen = false
+                                            onReturnCalendarSuggestion(it)
+                                        },
+                                    )
+                                }
+                            } else {
+                                calendarSuggestionCard(it, status)
+                            }
                         }
                     }
                 }
@@ -440,10 +473,10 @@ private fun TaskActionsMenu(
     expanded: Boolean,
     labels: TaskMenuLabels,
     onDismiss: () -> Unit,
-    onOpen: () -> Unit,
+    onOpen: (() -> Unit)? = null,
     onMove: () -> Unit,
-    onDelete: () -> Unit,
-    onCopyContext: (() -> Unit)?,
+    onDelete: (() -> Unit)? = null,
+    onCopyContext: (() -> Unit)? = null,
 ) {
     DropdownMenu(
         expanded = expanded,
@@ -455,7 +488,7 @@ private fun TaskActionsMenu(
         shape = RoundedCornerShape(FemhoShape.card),
         border = BorderStroke(1.dp, Femho.colors.cardBorder),
     ) {
-        DropdownMenuItem(
+        if (onOpen != null) DropdownMenuItem(
             text = { Text(labels.edit, color = Femho.colors.ink) },
             onClick = onOpen,
             modifier = Modifier.testTag("board-task-edit"),
@@ -472,7 +505,7 @@ private fun TaskActionsMenu(
                 modifier = Modifier.testTag("board-task-copy-context"),
             )
         }
-        DropdownMenuItem(
+        if (onDelete != null) DropdownMenuItem(
             text = { Text(labels.delete, color = Femho.colors.dangerText) },
             onClick = onDelete,
             modifier = Modifier.testTag("board-task-delete"),

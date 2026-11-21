@@ -172,7 +172,6 @@
     <string name="calendar_sources_show">Ver «{name}» en el calendario</string>
     <string name="calendar_week">Semanal</string>
     <string name="calendarsuggestions_allday">Todo el día</string>
-    <string name="calendarsuggestions_decline">No lo estoy haciendo</string>
     <string name="calendarsuggestions_origin">Origen calendario</string>
     <string name="calendarsuggestions_saveerror">No se ha podido guardar el cambio.</string>
     <string name="calendarsuggestions_setting">Sugerir eventos del calendario en el tablero</string>

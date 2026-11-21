@@ -211,6 +211,12 @@ const COLUMNS: { status: TaskStatus; labelKey: string; emptyKey: string }[] = [
   { status: 'done', labelKey: 'board.column.done', emptyKey: 'board.empty.done' },
 ];
 
+const CALENDAR_DRAG_PREFIX = 'calendar-suggestion:';
+
+function calendarDragId(item: CalendarTaskSuggestion): string {
+  return `${CALENDAR_DRAG_PREFIX}${calendarSuggestionKey(item)}`;
+}
+
 export function KanbanBoard({
   tasks,
   calendarSuggestions = [],
@@ -262,6 +268,27 @@ export function KanbanBoard({
    */
   const mobile = useIsMobile();
 
+  const draggedSuggestion = (id: string) =>
+    calendarSuggestions.find(({ item }) => calendarDragId(item) === id);
+
+  const suggestionCard = (
+    { item, active }: (typeof calendarSuggestions)[number],
+    dragging: boolean,
+  ) => {
+    const taskId = item.task_id;
+    return (
+      <CalendarSuggestionCard
+        key={calendarSuggestionKey(item)}
+        item={item}
+        active={active}
+        timezone={timezone}
+        dragging={dragging}
+        onOpen={taskId !== null && onOpen !== undefined ? () => onOpen(taskId) : undefined}
+        onStart={onStartSuggestion && ((start) => onStartSuggestion(item, start))}
+      />
+    );
+  };
+
   const renderColumn = (column: (typeof COLUMNS)[number]) => {
     const ofColumn = tasks.filter((task) => task.status === column.status);
     const suggestions = calendarSuggestions.filter(
@@ -296,16 +323,28 @@ export function KanbanBoard({
       </DraggableCard>
     );
 
-    const suggestionFor = ({ item, active }: (typeof suggestions)[number]) => (
-      <CalendarSuggestionCard
-        key={calendarSuggestionKey(item)}
-        item={item}
-        active={active}
-        timezone={timezone}
-        onStart={(start) => onStartSuggestion?.(item, start)}
-        onDecline={() => onDeclineSuggestion?.(item)}
-      />
-    );
+    const suggestionFor = (suggestion: (typeof suggestions)[number]) => {
+      const { item, active } = suggestion;
+      const id = calendarDragId(item);
+      const card = suggestionCard(suggestion, draggingId === id);
+      const canDrag = active
+        ? onDeclineSuggestion !== undefined
+        : item.can_start && onStartSuggestion !== undefined;
+      return canDrag ? (
+        <DraggableCard
+          key={id}
+          id={id}
+          testId="calendar-suggestion-drag"
+          scopeId={item.scope_id}
+          status={active ? 'doing' : 'todo'}
+          targetStatus={active ? 'todo' : 'doing'}
+        >
+          {card}
+        </DraggableCard>
+      ) : (
+        card
+      );
+    };
 
     let body: ReactNode;
     if (count === 0) {
@@ -427,7 +466,8 @@ export function KanbanBoard({
       return mailbox === 'own' ? own : !own;
     });
 
-  const titleOf = (taskId: string): string => tasks.find((task) => task.id === taskId)?.title ?? '';
+  const titleOf = (taskId: string): string =>
+    draggedSuggestion(taskId)?.item.title ?? tasks.find((task) => task.id === taskId)?.title ?? '';
   const labelOf = (status: TaskStatus): string =>
     t(COLUMNS.find((column) => column.status === status)?.labelKey ?? '');
 
@@ -445,6 +485,8 @@ export function KanbanBoard({
        * lloc és la que queda atenuada.
        */
       renderOverlay={(taskId) => {
+        const suggestion = draggedSuggestion(taskId);
+        if (suggestion !== undefined) return <div inert>{suggestionCard(suggestion, false)}</div>;
         const task = tasks.find((candidate) => candidate.id === taskId);
         if (task === undefined) return null;
         return (
@@ -465,7 +507,17 @@ export function KanbanBoard({
         setDraggingId(null);
         // `status` nul vol dir que s'ha deixat anar fora de qualsevol columna, o que
         // s'ha cancel·lat amb Escape. En cap dels dos casos es mou res.
-        if (status !== null && taskId !== '') onDrop?.(taskId, status, target);
+        if (status === null || taskId === '') return;
+        if (taskId.startsWith(CALENDAR_DRAG_PREFIX)) {
+          // El gest és una ordre sobre la proposta, amb els mateixos permisos que els seus botons.
+          const suggestion = draggedSuggestion(taskId);
+          if (suggestion === undefined) return;
+          if (suggestion.active && status === 'todo') onDeclineSuggestion?.(suggestion.item);
+          if (!suggestion.active && status === 'doing' && suggestion.item.can_start)
+            onStartSuggestion?.(suggestion.item, 'now');
+          return;
+        }
+        onDrop?.(taskId, status, target);
       }}
     >
       <div

@@ -1048,6 +1048,8 @@ private fun BoardHost(
     val addPlaceholder = stringResource(R.string.card_addplaceholder)
     val editLabel = stringResource(R.string.task_edit)
     val advanceTemplate = stringResource(R.string.board_card_advance)
+    val moveToDoing = advanceTemplate.replace("{column}", stringResource(R.string.board_column_doing))
+    val moveToTodo = advanceTemplate.replace("{column}", stringResource(R.string.board_column_todo))
     val pinLabel = stringResource(R.string.checklist_pin)
     val unpinLabel = stringResource(R.string.checklist_unpinaction)
     val toggleItemTemplate = stringResource(R.string.checklist_toggleitem)
@@ -1181,12 +1183,13 @@ private fun BoardHost(
             calendarGroups = calendarGroups,
             calendarScopeLabel = { id -> scopes.firstOrNull { it.id == id }?.name.orEmpty() },
             calendarSuggestionCard = { item, column ->
-                CalendarSuggestionCard(item, column, suggestionTime, zone,
+                CalendarSuggestionCard(item, column, suggestionTime, zone, advanceLabel = moveToDoing,
                     onStart = { start ->
                         if (item.requiresShareConfirmation || item.requiresTaskType) startConfirmation = item to start
                         else model.actOnCalendarSuggestion(item, start)
-                    }, onDecline = { model.actOnCalendarSuggestion(item, null) })
+                    }, onOpenTask = item.taskId?.let { id -> { model.openById(id) } })
             },
+            onReturnCalendarSuggestion = { model.actOnCalendarSuggestion(it, null) },
             calendarTaskMetadata = { CalendarTaskMetadata(it) },
             doneDay = doneFilter,
             doneHeader = {
@@ -1215,14 +1218,9 @@ private fun BoardHost(
                     TaskStatus.DONE to doneEmptyLabel,
                 ),
                 advance = mapOf(
-                    TaskStatus.INBOX to advanceTemplate.replace(
-                        "{column}",
-                        stringResource(R.string.board_column_todo),
-                    ),
-                    TaskStatus.TODO to advanceTemplate.replace(
-                        "{column}",
-                        stringResource(R.string.board_column_doing),
-                    ),
+                    TaskStatus.INBOX to moveToTodo,
+                    TaskStatus.TODO to moveToDoing,
+                    TaskStatus.DOING to moveToTodo,
                 ),
                 toggle = stringResource(R.string.sync_complete),
                 lock = stringResource(R.string.ai_lock_card),

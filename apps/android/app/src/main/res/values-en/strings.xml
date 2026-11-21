@@ -172,7 +172,6 @@
     <string name="calendar_sources_show">Show “{name}” in the calendar</string>
     <string name="calendar_week">Week</string>
     <string name="calendarsuggestions_allday">All day</string>
-    <string name="calendarsuggestions_decline">I’m not doing this</string>
     <string name="calendarsuggestions_origin">From the calendar</string>
     <string name="calendarsuggestions_saveerror">Couldn’t save the change.</string>
     <string name="calendarsuggestions_setting">Suggest calendar events on the board</string>

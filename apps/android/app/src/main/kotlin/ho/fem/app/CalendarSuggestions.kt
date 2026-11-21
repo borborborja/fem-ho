@@ -1,8 +1,6 @@
 package ho.fem.app
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -14,7 +12,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
@@ -44,9 +41,12 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
+import ho.fem.designsystem.CalendarCardVariant
 import ho.fem.designsystem.Femho
-import ho.fem.designsystem.FemhoShape
 import ho.fem.designsystem.FemhoText
+import ho.fem.designsystem.Pill
+import ho.fem.designsystem.TaskCard
+import ho.fem.designsystem.taskCardSurface
 import ho.fem.model.CalendarTaskStart
 import ho.fem.model.CalendarTaskSuggestion
 import ho.fem.model.CalendarTaskSuggestions
@@ -99,25 +99,37 @@ internal fun CalendarSuggestionCard(
     status: TaskStatus,
     now: Instant,
     zone: ZoneId,
+    advanceLabel: String,
     onStart: (CalendarTaskStart) -> Unit,
-    onDecline: () -> Unit,
+    onOpenTask: (() -> Unit)? = null,
 ) {
-    val suggestion = status == TaskStatus.DOING
-    val shape = RoundedCornerShape(FemhoShape.card)
     val from = Instant.parse(item.startsAt).atZone(zone).format(calendarTime)
     val to = Instant.parse(item.endsAt).atZone(zone).format(calendarTime)
     val range = if (item.allDay) stringResource(R.string.calendarsuggestions_allday) else "$from–$to"
+    val modifier = Modifier.fillMaxWidth().testTag("calendar-suggestion")
+    if (status == TaskStatus.TODO) {
+        TaskCard(
+            title = item.title,
+            modifier = modifier,
+            time = range,
+            onToggle = null,
+            onOpen = onOpenTask,
+            onAdvance = if (item.canStart) ({ onStart(CalendarTaskStart.NOW) }) else null,
+            advanceLabel = advanceLabel,
+            extraMetadata = {
+                CalendarOriginBadge()
+                Pill(item.calendarName)
+            },
+            calendar = CalendarCardVariant.TODO,
+        )
+        return
+    }
+
     val startNow = stringResource(R.string.calendarsuggestions_startnow)
     val startPlanned = stringResource(R.string.calendarsuggestions_startplanned).replace("{time}", from)
     val buttonColors = ButtonDefaults.textButtonColors(contentColor = Femho.colors.ink)
-    val card = Femho.colors.cardBg
-    // En fosc el token ja és blanc amb transparència. Fixar-ne l'alfa faria el fons més clar.
-    val background = if (suggestion) card.copy(alpha = card.alpha * 0.5f) else card
     Column(
-        Modifier.fillMaxWidth().testTag("calendar-suggestion")
-            .background(background, shape)
-            .border(1.dp, Femho.colors.cardBorder, shape)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+        modifier.taskCardSurface(CalendarCardVariant.DOING).padding(horizontal = 12.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -125,20 +137,14 @@ internal fun CalendarSuggestionCard(
             Text(item.title, color = Femho.colors.ink, fontSize = FemhoText.body, fontWeight = FontWeight.SemiBold)
         }
         Text("$range · ${item.calendarName}", color = Femho.colors.inkSoft, fontSize = FemhoText.meta)
-        if (suggestion) Text(stringResource(R.string.calendarsuggestions_suggested), color = Femho.colors.inkSoft, fontSize = FemhoText.meta)
-        if (item.canStart || suggestion) {
+        Text(stringResource(R.string.calendarsuggestions_suggested), color = Femho.colors.inkSoft, fontSize = FemhoText.meta)
+        if (item.canStart) {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                if (item.canStart) {
-                    TextButton(onClick = { onStart(CalendarTaskStart.NOW) }, colors = buttonColors,
-                        modifier = Modifier.testTag("calendar-suggestion-start-now")) { Text(startNow) }
-                    if (item.permitsPlannedStart(now)) {
-                        TextButton(onClick = { onStart(CalendarTaskStart.PLANNED) }, colors = buttonColors,
-                            modifier = Modifier.testTag("calendar-suggestion-start-planned")) { Text(startPlanned) }
-                    }
-                }
-                if (suggestion) {
-                    TextButton(onClick = onDecline, colors = buttonColors,
-                        modifier = Modifier.testTag("calendar-suggestion-decline")) { Text(stringResource(R.string.calendarsuggestions_decline)) }
+                TextButton(onClick = { onStart(CalendarTaskStart.NOW) }, colors = buttonColors,
+                    modifier = Modifier.testTag("calendar-suggestion-start-now")) { Text(startNow) }
+                if (item.permitsPlannedStart(now)) {
+                    TextButton(onClick = { onStart(CalendarTaskStart.PLANNED) }, colors = buttonColors,
+                        modifier = Modifier.testTag("calendar-suggestion-start-planned")) { Text(startPlanned) }
                 }
             }
         }

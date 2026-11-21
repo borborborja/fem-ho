@@ -172,7 +172,6 @@
     <string name="calendar_sources_show">Veure «{name}» al calendari</string>
     <string name="calendar_week">Setmanal</string>
     <string name="calendarsuggestions_allday">Tot el dia</string>
-    <string name="calendarsuggestions_decline">No l’estic fent</string>
     <string name="calendarsuggestions_origin">Origen calendari</string>
     <string name="calendarsuggestions_saveerror">No s’ha pogut desar el canvi.</string>
     <string name="calendarsuggestions_setting">Proposa esdeveniments del calendari al tauler</string>

@@ -161,8 +161,17 @@ export function BoardCard({
     <>
       <TaskCard
         data-status={task.status}
+        className={task.fromCalendar ? 'calendar-origin-task' : undefined}
         // Les d'algú altre, atenuades: es veuen, però es veu que no són teves.
-        style={task.assignedToOther === true ? { opacity: 0.55 } : undefined}
+        style={{
+          ...(task.fromCalendar
+            ? {
+                background: 'var(--calendar-origin-bg, var(--card-bg))',
+                borderInlineStart: 'var(--calendar-origin-rivet, 1px solid var(--card-border))',
+              }
+            : {}),
+          ...(task.assignedToOther === true ? { opacity: 0.55 } : {}),
+        }}
         title={inlineTitle.title}
         titleEditor={inlineTitle.editor}
         onTitleEdit={dragging ? undefined : inlineTitle.start}
