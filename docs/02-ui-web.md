@@ -334,7 +334,7 @@ Graella de 220px + contingut, màxim 1100px.
 
 Pestanyes: General · Àmbits · Calendaris · MCP i API · Usuari IA · Compartits · Perfil · Admin.
 
-**General** — tema (sistema/clar/fosc) i accent (default/soft/mono-warm/mono-cool) com a `ChoiceChips`; elements del dashboard; posició del rail d'Inbox; si l'Inbox ensenya endarrerides; activar l'usuari IA.
+**General** — tema (Sistema, Clar, Fosc, Alt contrast i Tinta electrònica), accent, elements del dashboard, posició del rail d'Inbox i visibilitat de les endarrerides. L'elecció d'Alt contrast o Tinta electrònica es desa al navegador. Alt contrast segueix l'últim tema habitual. Tinta electrònica fa servir una paleta monocroma clara.
 
 **Pomodoro** — es pot activar a General. La tomata de la capçalera obre el
 temporitzador i la cua personal. Es poden afegir i ordenar tasques de «Per fer»

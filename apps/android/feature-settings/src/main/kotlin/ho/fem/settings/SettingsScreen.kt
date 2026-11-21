@@ -7,6 +7,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -15,6 +16,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -27,8 +30,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import ho.fem.designsystem.Femho
@@ -53,6 +59,7 @@ data class SettingsLabels(
     val themeOptions: List<Pair<String, String>>,
     val accent: String,
     val accentOptions: List<Pair<String, String>>,
+    val einkAccentHint: String,
     val server: String,
     val logout: String,
     val tabs: SettingsTabs,
@@ -101,6 +108,7 @@ data class SettingsLabels(
     val scopeTypeIndividual: String,
     val scopeTypeCollective: String,
     val scopeColor: String,
+    val scopeColorChoice: String,
     val members: String,
     val memberRemove: String,
     val roleAdmin: String,
@@ -686,7 +694,8 @@ private fun GeneralTab(
 
     // Accent
     Group(labels.accent) {
-        Chips(labels.accentOptions, accent, onAccent, "accent")
+        Chips(labels.accentOptions, accent, onAccent, "accent", enabled = !Femho.isEink)
+        if (Femho.isEink) Text(labels.einkAccentHint, color = Femho.colors.inkSoft, fontSize = FemhoText.meta)
     }
 
     // Què es mostra al tauler general
@@ -765,22 +774,59 @@ private fun Chips(
     value: String,
     onChange: (String) -> Unit,
     tag: String,
+    enabled: Boolean = true,
 ) {
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    FlowRow(
+        modifier = Modifier.selectableGroup(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
         options.forEach { (key, label) ->
+            val selected = value == key
             Text(
                 text = label,
-                color = if (value == key) Femho.onBrand else Femho.colors.inkSoft,
+                color = if (selected && enabled) Femho.onBrand else Femho.colors.inkSoft,
                 fontSize = FemhoText.body,
-                fontWeight = if (value == key) FontWeight.Bold else FontWeight.Medium,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
                 modifier = Modifier
                     .clip(RoundedCornerShape(FemhoShape.pill))
-                    .background(if (value == key) Femho.colors.plouBlue else Femho.colors.ghostBg)
-                    .clickable { onChange(key) }
+                    .background(if (selected && enabled) Femho.colors.plouBlue else Femho.colors.ghostBg)
+                    .selectable(selected = selected, enabled = enabled, role = Role.RadioButton) { onChange(key) }
                     .heightIn(min = FemhoSize.touch)
                     .padding(horizontal = 16.dp, vertical = 12.dp)
                     .testTag("$tag-$key"),
             )
+        }
+    }
+}
+
+@Composable
+private fun ScopeColorChoices(
+    options: List<Pair<String, Color>>,
+    value: String,
+    label: String,
+    onChange: (String) -> Unit,
+) {
+    val monochrome = Femho.isEink
+    val shape = RoundedCornerShape(8.dp)
+    FlowRow(Modifier.selectableGroup(), Arrangement.spacedBy(8.dp), Arrangement.spacedBy(8.dp)) {
+        options.forEachIndexed { index, (token, color) ->
+            val selected = value == token
+            val choice = label.replace("{number}", (index + 1).toString())
+            val background = when {
+                !monochrome -> color
+                selected -> Femho.colors.plouBlue
+                else -> Femho.colors.panelBg
+            }
+            Box(
+                modifier = Modifier.size(FemhoSize.touch).clip(shape).background(background)
+                    .then(if (monochrome || selected) Modifier.border(if (selected) 2.dp else 1.dp, Femho.colors.ink, shape) else Modifier)
+                    .selectable(selected = selected, role = Role.RadioButton) { onChange(token) }
+                    .semantics { contentDescription = choice },
+                contentAlignment = Alignment.Center,
+            ) {
+                if (monochrome) Text((index + 1).toString(), color = if (selected) Femho.onBrand else Femho.colors.ink)
+            }
         }
     }
 }
@@ -1878,35 +1924,7 @@ private fun ScopesTab(
                                 },
                             )
 
-                            // Selector de color
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                modifier = Modifier.fillMaxWidth(),
-                            ) {
-                                scopeColors.forEach { (token, color) ->
-                                    val isSelected = editingColor == token
-                                    Box(
-                                        modifier = Modifier
-                                            .size(32.dp)
-                                            .background(
-                                                color = color,
-                                                shape = RoundedCornerShape(8.dp),
-                                            )
-                                            .then(
-                                                if (isSelected) {
-                                                    Modifier.border(
-                                                        width = 2.dp,
-                                                        color = Femho.colors.ink,
-                                                        shape = RoundedCornerShape(8.dp),
-                                                    )
-                                                } else {
-                                                    Modifier
-                                                },
-                                            )
-                                            .clickable { editingColor = token },
-                                    )
-                                }
-                            }
+                            ScopeColorChoices(scopeColors, editingColor, labels.scopeColorChoice) { editingColor = it }
 
                             // Selector de tipus
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -2346,35 +2364,7 @@ private fun ScopesTab(
                         },
                     )
 
-                    // Selector de color
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        scopeColors.forEach { (token, color) ->
-                            val isSelected = newScopeColor == token
-                            Box(
-                                modifier = Modifier
-                                    .size(32.dp)
-                                    .background(
-                                        color = color,
-                                        shape = RoundedCornerShape(8.dp),
-                                    )
-                                    .then(
-                                        if (isSelected) {
-                                            Modifier.border(
-                                                width = 2.dp,
-                                                color = Femho.colors.ink,
-                                                shape = RoundedCornerShape(8.dp),
-                                            )
-                                        } else {
-                                            Modifier
-                                        },
-                                    )
-                                    .clickable { newScopeColor = token },
-                            )
-                        }
-                    }
+                    ScopeColorChoices(scopeColors, newScopeColor, labels.scopeColorChoice) { newScopeColor = it }
 
                     // Selector de tipus
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

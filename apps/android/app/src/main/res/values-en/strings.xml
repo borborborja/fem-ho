@@ -230,6 +230,8 @@
     <string name="dashboard_quickadd">+ Add… #Scope @Person</string>
     <string name="dashboard_title">Overview</string>
     <string name="dashboard_today">Today</string>
+    <string name="duration_hoursminutes">{hours} h {minutes} min</string>
+    <string name="duration_minutes">{minutes} min</string>
     <string name="error_body_required">An empty comment says nothing: write the reason in it.</string>
     <string name="error_calendar_not_empty">“{name}” still has {count} events. Move or delete them first.</string>
     <string name="error_calendar_read_only">“{name}” is a read-only source and cannot be written to.</string>
@@ -844,6 +846,7 @@
     <string name="settings_role_viewer">Read only</string>
     <string name="settings_scopecancel">Cancel</string>
     <string name="settings_scopecolor">Colour</string>
+    <string name="settings_scopecolorchoice">Colour {number}</string>
     <string name="settings_scopedelete">Delete scope</string>
     <string name="settings_scopedeleteconfirm">“{name}” will be deleted. Only possible if it is empty.</string>
     <string name="settings_scopeedit">Edit</string>
@@ -910,6 +913,9 @@
     <string name="settings_tab_shares">Shared</string>
     <string name="settings_theme">Theme</string>
     <string name="settings_theme_dark">Dark</string>
+    <string name="settings_theme_eink">E-ink</string>
+    <string name="settings_theme_einkaccenthint">Your accent comes back when you switch to a colour theme.</string>
+    <string name="settings_theme_highcontrast">High contrast</string>
     <string name="settings_theme_light">Light</string>
     <string name="settings_theme_system">System</string>
     <string name="settings_timezone">Time zone</string>
@@ -1157,6 +1163,7 @@
     <string name="widget_taskboard_name">Fem-ho · Board</string>
     <string name="widget_taskboard_open">Open</string>
     <string name="widget_taskboard_viewall">View all</string>
+    <string name="widget_taskoverdue">Overdue task</string>
     <string name="widget_today_description">What is due today, with quick add.</string>
     <string name="widget_today_name">Fem-ho · Today</string>
 </resources>

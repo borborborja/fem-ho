@@ -1,16 +1,20 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { t } from '@fem-ho/contracts';
 import tomato from '../assets/pomodoro.svg';
+import { useAppearance } from '../app/theme.js';
 import { durationClock } from '../board/TaskTimeBadge.js';
 import { pomodoroPhaseLabel, usePomodoro } from './PomodoroProvider.js';
 import './pomodoro.css';
 
-function countdown(ms: number): string {
-  return durationClock(Math.ceil(ms / 1000));
+function countdown(ms: number, eink: boolean): string {
+  return eink && ms > 60_000
+    ? t('duration.minutes', { minutes: Math.ceil(ms / 60_000) })
+    : durationClock(Math.ceil(ms / 1_000));
 }
 
 export function PomodoroTrigger() {
   const focus = usePomodoro();
+  const eink = useAppearance() === 'eink';
   if (!focus?.settings.enabled) return null;
   return (
     <button
@@ -27,7 +31,7 @@ export function PomodoroTrigger() {
         aria-hidden="true"
         style={{ maskImage: `url("${tomato}")` }}
       />
-      {focus.timer !== null && <span aria-hidden="true">{countdown(focus.remainingMs)}</span>}
+      {focus.timer !== null && <span aria-hidden="true">{countdown(focus.remainingMs, eink)}</span>}
     </button>
   );
 }
@@ -40,6 +44,7 @@ export function PomodoroPanel() {
 type Focus = NonNullable<ReturnType<typeof usePomodoro>>;
 
 function OpenPomodoro({ focus }: { focus: Focus }) {
+  const eink = useAppearance() === 'eink';
   const dialog = useRef<HTMLDialogElement>(null);
   const [choice, setChoice] = useState<{ phase: string; id: string }>();
   const { timer, queue, tasks, task } = focus;
@@ -122,10 +127,10 @@ function OpenPomodoro({ focus }: { focus: Focus }) {
         <div
           className="pomodoro-ring"
           data-testid="pomodoro-ring"
-          style={{ '--pomodoro-progress': `${progress}%` } as CSSProperties}
+          style={eink ? undefined : ({ '--pomodoro-progress': `${progress}%` } as CSSProperties)}
         >
           <div className="pomodoro-clock-face">
-            {playful && (
+            {playful && !eink && (
               <span
                 className="pomodoro-tomato"
                 data-testid="pomodoro-tomato"
@@ -139,7 +144,7 @@ function OpenPomodoro({ focus }: { focus: Focus }) {
               aria-live="off"
               data-testid="pomodoro-countdown"
             >
-              {countdown(focus.remainingMs)}
+              {countdown(focus.remainingMs, eink)}
             </output>
           </div>
         </div>

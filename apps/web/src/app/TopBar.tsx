@@ -434,7 +434,7 @@ export function TopBar({
         top: 0,
         zIndex: 30,
         background: 'var(--sidebar-bg)',
-        backdropFilter: 'blur(14px)',
+        backdropFilter: 'var(--blur-sidebar)',
         borderBottom: '1px solid var(--card-border)',
         paddingTop: 'env(safe-area-inset-top, 0px)',
       }}

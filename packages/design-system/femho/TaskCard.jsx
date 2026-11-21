@@ -168,6 +168,7 @@ export function TaskCard({
   onDelete,
   deleteLabel,
   hasUnseenAiChange = false,
+  unseenAiChangeLabel,
   /**
    * «Espera resposta teva». Si hi ha text, la targeta va destacada **i el diu**: el color
    * mai és l'únic senyal (docs/04 §8), i «destacada» sense saber per què no és cap avís.
@@ -293,6 +294,8 @@ export function TaskCard({
 
   return (
     <div
+      data-card-dragging={dragging ? '' : undefined}
+      data-card-attention={attentionLabel ? '' : undefined}
       onMouseEnter={() => setActive(true)}
       onMouseLeave={() => setActive(false)}
       onFocus={() => setActive(true)}
@@ -312,7 +315,7 @@ export function TaskCard({
         overflow: 'hidden',
         position: 'relative',
         // Mentre s'arrossega, la targeta original queda a 0.4 (docs/02 §4).
-        opacity: dragging ? 0.4 : 1,
+        opacity: dragging ? 'var(--dimmed-opacity, 0.4)' : 1,
         flexShrink: 0,
         ...style,
       }}
@@ -329,7 +332,11 @@ export function TaskCard({
       {hasUnseenAiChange ? (
         <span
           data-testid="unseen-ai-change"
-          aria-hidden="true"
+          className="task-ai-unseen-indicator"
+          aria-hidden={unseenAiChangeLabel === undefined}
+          role={unseenAiChangeLabel === undefined ? undefined : 'img'}
+          aria-label={unseenAiChangeLabel}
+          title={unseenAiChangeLabel}
           style={{
             position: 'absolute',
             top: 6,

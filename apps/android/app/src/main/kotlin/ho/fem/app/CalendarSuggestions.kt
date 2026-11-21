@@ -236,18 +236,27 @@ internal fun CalendarTaskMetadata(task: Task) {
     val starts = task.timeSummary?.openStartedAt.orEmpty().map(Instant::parse)
     if (task.status != TaskStatus.DOING || starts.isEmpty()) return
     val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val eink = Femho.isEink
+    val logged = task.timeSummary?.seconds?.toLong() ?: 0L
+    fun elapsedAt(instant: Instant) = logged + starts.sumOf { Duration.between(it, instant).seconds.coerceAtLeast(0) }
     var now by remember(starts) { mutableStateOf(Instant.now()) }
-    LaunchedEffect(lifecycle, starts) {
+    LaunchedEffect(lifecycle, starts, logged, eink) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
             while (isActive) {
                 now = Instant.now()
-                delay(1000)
+                val millis = (60 - elapsedAt(now) % 60) * 1000 / starts.size
+                delay(if (eink) millis.coerceAtLeast(1000) else 1000)
             }
         }
     }
-    val seconds = (task.timeSummary?.seconds?.toLong() ?: 0L) + starts.sumOf { Duration.between(it, now).seconds.coerceAtLeast(0) }
+    val seconds = elapsedAt(now)
     val minutes = seconds / 60
     val digits = "${(minutes % 60).toString().padStart(2, '0')}:${(seconds % 60).toString().padStart(2, '0')}"
-    val elapsed = if (minutes >= 60) "${minutes / 60}:$digits" else digits
+    val elapsed = when {
+        !eink -> if (minutes >= 60) "${minutes / 60}:$digits" else digits
+        minutes >= 60 -> stringResource(R.string.duration_hoursminutes)
+            .replace("{hours}", (minutes / 60).toString()).replace("{minutes}", (minutes % 60).toString())
+        else -> stringResource(R.string.duration_minutes).replace("{minutes}", minutes.toString())
+    }
     Text(elapsed, color = Femho.colors.inkSoft, fontSize = FemhoText.meta, modifier = Modifier.testTag("calendar-task-elapsed"))
 }

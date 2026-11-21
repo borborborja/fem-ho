@@ -4,6 +4,7 @@ import android.content.Context
 import ho.fem.data.ActiveAccount
 import ho.fem.data.Container
 import ho.fem.data.TaskBoardSnapshot
+import ho.fem.designsystem.appearanceOf
 import ho.fem.widget.WidgetPalette
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -30,11 +31,11 @@ internal suspend fun WidgetContext.taskBoard(container: Container): TaskBoardSna
 
 suspend fun widgetContext(context: Context): WidgetContext = withContext(Dispatchers.IO) {
     val container = Container.get(context)
-    val settings = container.settings
+    val display = container.settings.display.first()
     val account = container.account()
     WidgetContext(
-        palette = WidgetPalette(theme = settings.theme.first(), accent = settings.accent.first()),
+        palette = WidgetPalette(display.theme, display.accent, appearanceOf(display.appearance)),
         account = account,
-        activeScopes = account?.let { settings.activeScopes(it) }.orEmpty(),
+        activeScopes = account?.let { container.settings.activeScopes(it) }.orEmpty(),
     )
 }

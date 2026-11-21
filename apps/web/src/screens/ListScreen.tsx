@@ -76,7 +76,7 @@ export function ListScreen({ checklistId, onOpenTask, onBack }: ListScreenProps)
         margin: '0 auto',
         display: 'grid',
         gap: 14,
-        opacity: list.revalidating ? 0.6 : 1,
+        opacity: list.revalidating ? 'var(--dimmed-opacity, 0.6)' : 1,
       }}
     >
       {list.error !== undefined ? <ErrorBanner onRetry={list.reload} /> : null}

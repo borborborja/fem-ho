@@ -53,6 +53,7 @@ data class AgendaEntry(
     val title: String,
     val color: Color,
     val time: String? = null,
+    val scopeName: String? = null,
     val onOpen: (() -> Unit)? = null,
 )
 
@@ -179,7 +180,8 @@ private fun DayCell(
                     Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                         // Fins a 3 punts amb els colors dels àmbits que hi tenen res.
                         dots.take(3).forEach { color ->
-                            Box(Modifier.size(5.dp).clip(CircleShape).background(color))
+                            val dot = if (selected && Femho.isEink) Femho.onBrand else color
+                            Box(Modifier.size(5.dp).clip(CircleShape).background(dot))
                         }
                     }
                 }
@@ -256,13 +258,11 @@ private fun AgendaRow(entry: AgendaEntry) {
         horizontalArrangement = Arrangement.spacedBy(9.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(7.dp).clip(CircleShape).background(entry.color))
-        Text(
-            text = entry.title,
-            color = Femho.colors.ink,
-            fontSize = FemhoText.body,
-            modifier = Modifier.weight(1f),
-        )
+        if (entry.scopeName == null) Box(Modifier.size(7.dp).clip(CircleShape).background(entry.color))
+        Column(Modifier.weight(1f)) {
+            Text(entry.title, color = Femho.colors.ink, fontSize = FemhoText.body)
+            entry.scopeName?.let { Text(it, color = Femho.colors.inkSoft, fontSize = FemhoText.meta) }
+        }
         entry.time?.let { Text(it, color = Femho.colors.inkSoft, fontSize = FemhoText.meta) }
     }
 }

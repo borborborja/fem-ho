@@ -43,6 +43,7 @@ function Card({
         }}
       >
         <h1
+          data-brand-wordmark=""
           style={{
             margin: 0,
             fontSize: 24,

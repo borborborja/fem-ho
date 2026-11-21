@@ -11,6 +11,7 @@ import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -29,6 +30,8 @@ import androidx.compose.ui.unit.sp
 val LocalFemhoColors = staticCompositionLocalOf { lightColors }
 val LocalFemhoAccent = staticCompositionLocalOf { FemhoAccent.DEFAULT }
 val LocalFemhoGradients = staticCompositionLocalOf { lightGradients }
+val LocalFemhoAppearance = staticCompositionLocalOf { FemhoAppearance.STANDARD }
+val LocalFemhoDark = staticCompositionLocalOf { false }
 
 object Femho {
     val colors: FemhoColors
@@ -36,6 +39,15 @@ object Femho {
 
     val gradients: FemhoGradientStops
         @Composable @ReadOnlyComposable get() = LocalFemhoGradients.current
+
+    val appearance: FemhoAppearance
+        @Composable @ReadOnlyComposable get() = LocalFemhoAppearance.current
+
+    val isEink: Boolean
+        @Composable @ReadOnlyComposable get() = appearance == FemhoAppearance.EINK
+
+    val dark: Boolean
+        @Composable @ReadOnlyComposable get() = LocalFemhoDark.current
 
     /**
      * El gradient de marca.
@@ -46,13 +58,13 @@ object Femho {
      * igual mentre la resta de la pantalla canvia de color.
      */
     val brandGradient: Brush
-        @Composable @ReadOnlyComposable get() = Brush.linearGradient(
+        @Composable @ReadOnlyComposable get() = if (isEink) SolidColor(colors.plouBlue) else Brush.linearGradient(
             listOf(colors.plouBlue, colors.plouOrange, colors.plouPink),
         )
 
     /** Les dues parades, per als elements petits: cercles d'estat, indicadors. */
     val brandGradient2: Brush
-        @Composable @ReadOnlyComposable get() = Brush.linearGradient(
+        @Composable @ReadOnlyComposable get() = if (isEink) SolidColor(colors.plouBlue) else Brush.linearGradient(
             listOf(colors.plouBlue, colors.plouOrange),
         )
 
@@ -65,7 +77,7 @@ object Femho {
      * donaria un fons que no s'assembla al de la web en cap mida de pantalla.
      */
     val pageBackground: Brush
-        @Composable @ReadOnlyComposable get() = Brush.linearGradient(gradients.pageBg)
+        @Composable @ReadOnlyComposable get() = if (isEink) SolidColor(colors.panelBg) else Brush.linearGradient(gradients.pageBg)
 
     /** El color del text damunt del gradient. Canvia amb l'accent (`soft` el passa a tinta). */
     val onBrand: Color
@@ -106,10 +118,52 @@ object FemhoText {
  * Tots els colors surten de `Femho.colors` i no de literals, per complir amb
  * la comprovació `no-hardcoded-colors`.
  */
-private fun femhoColorScheme(colors: FemhoColors, dark: Boolean): ColorScheme {
+private fun femhoColorScheme(colors: FemhoColors, dark: Boolean, appearance: FemhoAppearance): ColorScheme {
     // La base tria el tema: els components de Material 3 que no es toquen aquí
     // (superfícies de diàlegs, menús) han de seguir el tema del sistema.
     val base = if (dark) darkColorScheme() else lightColorScheme()
+    if (appearance != FemhoAppearance.STANDARD) {
+        // Els components de Material fan servir tots aquests rols segons l'estat. Mapar
+        // només primary i surface deixaria menús, seleccions i diàlegs amb lila de Material.
+        return base.copy(
+            primary = colors.plouBlue,
+            onPrimary = colors.onBrand,
+            primaryContainer = colors.plouBlue,
+            onPrimaryContainer = colors.onBrand,
+            inversePrimary = colors.onBrand,
+            secondary = colors.plouBlue,
+            onSecondary = colors.onBrand,
+            secondaryContainer = colors.ghostBg,
+            onSecondaryContainer = colors.ink,
+            tertiary = colors.plouBlue,
+            onTertiary = colors.onBrand,
+            tertiaryContainer = colors.ghostBg,
+            onTertiaryContainer = colors.ink,
+            background = colors.panelBg,
+            onBackground = colors.ink,
+            surface = colors.panelBg,
+            onSurface = colors.ink,
+            surfaceVariant = colors.ghostBg,
+            onSurfaceVariant = colors.inkSoft,
+            surfaceTint = colors.dialogBg,
+            inverseSurface = colors.ink,
+            inverseOnSurface = colors.panelBg,
+            error = colors.dangerText,
+            onError = colors.panelBg,
+            errorContainer = colors.dangerBg,
+            onErrorContainer = colors.dangerText,
+            outline = colors.inputBorder,
+            outlineVariant = colors.cardBorder,
+            scrim = colors.scrim,
+            surfaceBright = colors.dialogBg,
+            surfaceDim = colors.panelBg,
+            surfaceContainer = colors.dialogBg,
+            surfaceContainerHigh = colors.dialogBg,
+            surfaceContainerHighest = colors.dialogBg,
+            surfaceContainerLow = colors.dialogBg,
+            surfaceContainerLowest = colors.panelBg,
+        )
+    }
     return base.copy(
         primary = colors.plouBlueInk,
         onPrimary = colors.onBrand,
@@ -132,25 +186,24 @@ private fun femhoColorScheme(colors: FemhoColors, dark: Boolean): ColorScheme {
 fun FemhoTheme(
     theme: String = "system",
     accent: String = "default",
+    appearance: FemhoAppearance = FemhoAppearance.STANDARD,
     content: @Composable () -> Unit,
 ) {
-    val dark = when (theme) {
-        "dark" -> true
-        "light" -> false
-        else -> isSystemInDarkTheme()
-    }
+    val dark = femhoDarkTheme(theme, appearance, isSystemInDarkTheme())
 
     // La resolució viu a `Palette.kt` i no aquí: els widgets de la pantalla d'inici van
     // amb Glance, sense runtime de Compose, i han de donar exactament els mateixos
     // colors. Dos camins de resolució divergirien sense que cap prova ho digués.
-    val chosen = accentOf(accent)
-    val colors = femhoColorsOf(dark, accent)
+    val chosen = if (appearance == FemhoAppearance.EINK) FemhoAccent.DEFAULT else accentOf(accent)
+    val colors = femhoColorsOf(dark, accent, appearance)
 
     CompositionLocalProvider(
         LocalFemhoColors provides colors,
         LocalFemhoAccent provides chosen,
-        LocalFemhoGradients provides femhoGradientsOf(dark),
+        LocalFemhoGradients provides femhoGradientsOf(dark, appearance),
+        LocalFemhoAppearance provides appearance,
+        LocalFemhoDark provides dark,
     ) {
-        MaterialTheme(colorScheme = femhoColorScheme(colors, dark), content = content)
+        MaterialTheme(colorScheme = femhoColorScheme(colors, dark, appearance), content = content)
     }
 }

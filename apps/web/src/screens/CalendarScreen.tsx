@@ -29,6 +29,7 @@ import { generatePosition, type QuickAddContext } from '@fem-ho/contracts';
 import { api } from '../app/api.js';
 import { v7 as uuidv7 } from 'uuid';
 import { useSession, useSessionData } from '../app/session.js';
+import { useAppearance } from '../app/theme.js';
 import { useApi } from '../app/useApi.js';
 import { useRouter } from '../app/router.js';
 import type { Calendar, EventOccurrence, Inbox, InboxMail, Task, TaskPage } from '../app/types.js';
@@ -100,6 +101,7 @@ export interface CalendarScreenProps {
 
 export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: CalendarScreenProps) {
   const { scopes, projects, people, settings, profile } = useSessionData();
+  const appearance = useAppearance();
   const timezone = profile.timezone;
   const { updateSettings } = useSession();
   const mobile = useIsMobile();
@@ -241,6 +243,8 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
     const scope = scopes.find((candidate) => candidate.id === scopeId);
     return scope === undefined ? 'var(--ink-faint)' : `var(${scope.color})`;
   };
+  const scopeNameOf = (scopeId: string) =>
+    appearance === 'standard' ? undefined : scopes.find((scope) => scope.id === scopeId)?.name;
 
   /**
    * Les fonts de dades dels àmbits actius, i quines es veuen.
@@ -291,11 +295,16 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
    * Un punt de cinc píxels diu que el dia té alguna cosa i no diu quina, que és justament
    * la pregunta que un mes ha de respondre. Amb els títols, la vista serveix d'una ullada.
    */
-  const itemsByDate = useMemo<
-    Record<string, { id: string; title: string; color: string; muted?: boolean }[]>
-  >(() => {
+  const itemsByDate = useMemo(() => {
     /** `quan` és l'instant de debò, no el text: ordenar títols posa les 15:00 abans de les 9:00. */
-    type Item = { id: string; title: string; color: string; muted?: boolean; quan: number };
+    type Item = {
+      id: string;
+      title: string;
+      color: string;
+      muted?: boolean;
+      scopeName: string | undefined;
+      quan: number;
+    };
     const map: Record<string, Item[]> = {};
     const posa = (day: string, item: Item): void => {
       const list = map[day] ?? [];
@@ -311,6 +320,7 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
           ? occurrence.summary
           : `${shortTime(locale, new Date(occurrence.starts_at), timezone)} ${occurrence.summary}`,
         color: colorOf(occurrence.scope_id),
+        scopeName: scopeNameOf(occurrence.scope_id),
         muted: !occurrence.in_inbox,
       });
     }
@@ -321,6 +331,7 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
         id: `mail:${item.id}`,
         title: `${item.from_name ?? item.from_address ?? ''} — ${item.subject ?? ''}`.trim(),
         color: colorOf(item.scope_id),
+        scopeName: scopeNameOf(item.scope_id),
         muted: !item.in_inbox,
       });
     }
@@ -346,13 +357,28 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
             ? task.title
             : `${task.due_time} ${task.title}`,
         color: colorOf(task.scope_id),
+        scopeName: scopeNameOf(task.scope_id),
       });
     }
 
     // Per hora dins del dia: és l'ordre en què passaran les coses.
     for (const day of Object.keys(map)) map[day]!.sort((a, b) => a.quan - b.quan);
     return map;
-  }, [occurrences, mailByDay, ambData, scopes, locale, timezone]);
+  }, [occurrences, mailByDay, ambData, scopes, locale, timezone, appearance]);
+
+  const scopeNamesByDate = useMemo(() => {
+    if (appearance === 'standard') return undefined;
+    return Object.fromEntries(
+      Object.entries(itemsByDate).map(([day, items]) => [
+        day,
+        [
+          ...new Set(
+            items.flatMap(({ scopeName }) => (scopeName === undefined ? [] : [scopeName])),
+          ),
+        ],
+      ]),
+    );
+  }, [appearance, itemsByDate]);
 
   const dotsByDate = useMemo<Record<string, string[]>>(() => {
     const map: Record<string, string[]> = {};
@@ -398,6 +424,7 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
       id: `${occurrence.event_id}@${occurrence.starts_at}`,
       title: occurrence.summary,
       color: colorOf(occurrence.scope_id),
+      scopeName: scopeNameOf(occurrence.scope_id),
       time: occurrence.all_day
         ? undefined
         : shortTime(locale, new Date(occurrence.starts_at), timezone),
@@ -430,6 +457,7 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
           id: `mail:${item.id}`,
           title: `${item.from_name ?? item.from_address ?? ''} — ${item.subject ?? ''}`.trim(),
           color: colorOf(item.scope_id),
+          scopeName: scopeNameOf(item.scope_id),
           time: undefined,
           muted: !item.in_inbox,
           icon: <SourceIcon kind="mail" />,
@@ -447,6 +475,7 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
           id: `task:${task.id}`,
           title: task.title,
           color: colorOf(task.scope_id),
+          scopeName: scopeNameOf(task.scope_id),
           time: task.due_time ?? undefined,
           muted: false,
           icon: <SourceIcon kind={null} />,
@@ -471,14 +500,11 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
           ordenada i amb el correu i les tasques a dins. Filtrar-ho aquí una segona vegada
           era com el mes acabava ensenyant coses que la setmana callava.
         */
-        items: (itemsByDate[key] ?? []).map((item) => ({
-          id: item.id,
-          title: item.title,
-          color: item.color,
-        })),
+        items: itemsByDate[key] ?? [],
+        scopeNames: scopeNamesByDate?.[key],
       };
     });
-  }, [selected, itemsByDate, weekdays, start]);
+  }, [selected, itemsByDate, scopeNamesByDate, weekdays, start]);
 
   const position = mobile ? 'below' : (settings.inbox_position ?? 'right');
   const railFirst = position === 'left';
@@ -737,7 +763,10 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
 
       {events.error !== undefined ? <ErrorBanner onRetry={events.reload} /> : null}
 
-      <div style={{ opacity: events.revalidating ? 0.6 : 1 }}>
+      <div
+        aria-busy={events.revalidating}
+        style={{ opacity: events.revalidating ? 'var(--dimmed-opacity, 0.6)' : 1 }}
+      >
         {mode === 'month' ? (
           <MonthView
             year={cursor.getFullYear()}
@@ -758,6 +787,7 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
             selectedDate={selected}
             today={localDateOf(timezone, new Date())}
             dotsByDate={dotsByDate}
+            scopeNamesByDate={scopeNamesByDate}
             /*
               **Al mòbil, punts.** Una columna del mes hi fa quaranta píxels d'ample: un
               títol no hi cap i el que en surt és una lletra i mitja amb punts suspensius.
@@ -785,6 +815,7 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
             compact={mobile}
             days={weekDays}
             selectedDate={selected}
+            today={localDateOf(timezone, new Date())}
             onSelect={setSelected}
             emptyLabel={t('calendar.empty.week')}
             onAddOnDay={(iso) => setSelected(iso)}

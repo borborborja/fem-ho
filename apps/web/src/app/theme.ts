@@ -11,32 +11,92 @@
  * fins a recarregar.
  */
 
+import { useSyncExternalStore } from 'react';
 import type { Accent, Theme } from './types.js';
 
-const QUERY = '(prefers-color-scheme: dark)';
+export type Appearance = 'standard' | 'high-contrast' | 'eink';
 
-let current: Theme = 'system';
+const COLOR_SCHEME = '(prefers-color-scheme: dark)';
+const REDUCED_MOTION = '(prefers-reduced-motion: reduce)';
+const STORAGE_KEY = 'femho.appearance';
+const listeners = new Set<() => void>();
+
+interface DeviceAppearance {
+  appearance: Appearance;
+  base: Theme | null;
+}
+
+let profileTheme: Theme = 'system';
+let device = readDeviceAppearance();
 let listening = false;
+
+function readDeviceAppearance(): DeviceAppearance {
+  try {
+    const stored = JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? '{}') as DeviceAppearance;
+    const { appearance, base } = stored;
+    return {
+      appearance: appearance === 'high-contrast' || appearance === 'eink' ? appearance : 'standard',
+      base: base === 'system' || base === 'light' || base === 'dark' ? base : null,
+    };
+  } catch {
+    return { appearance: 'standard', base: null };
+  }
+}
 
 function resolve(theme: Theme): 'light' | 'dark' {
   if (theme !== 'system') return theme;
-  return typeof window !== 'undefined' && window.matchMedia(QUERY).matches ? 'dark' : 'light';
+  return window.matchMedia(COLOR_SCHEME).matches ? 'dark' : 'light';
 }
 
 function paint(): void {
-  document.documentElement.dataset.theme = resolve(current);
+  const root = document.documentElement;
+  const { appearance, base } = device;
+  root.dataset.appearance = appearance;
+  root.dataset.theme =
+    appearance === 'eink'
+      ? 'light'
+      : resolve(appearance === 'standard' ? profileTheme : (base ?? profileTheme));
 }
 
 export function applyTheme(theme: Theme): void {
-  current = theme;
+  profileTheme = theme;
   paint();
 
-  if (!listening && typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
-    listening = true;
-    window.matchMedia(QUERY).addEventListener('change', () => {
-      if (current === 'system') paint();
-    });
+  if (listening) return;
+  listening = true;
+  window.matchMedia(COLOR_SCHEME).addEventListener('change', paint);
+  window.addEventListener('storage', (event) => {
+    if (event.key !== STORAGE_KEY && event.key !== null) return;
+    device = readDeviceAppearance();
+    paint();
+    for (const notify of listeners) notify();
+  });
+}
+
+export function setAppearance(appearance: Appearance): void {
+  // En sortir de la tinta electrònica cal recuperar el tema de base, no el blanc forçat.
+  const base = device.appearance === 'standard' ? profileTheme : (device.base ?? profileTheme);
+  device = { appearance, base };
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(device));
+  } catch {
+    // La tria d'aquesta pestanya segueix disponible si el navegador bloqueja l'emmagatzematge.
   }
+  paint();
+  for (const notify of listeners) notify();
+}
+
+function subscribe(notify: () => void): () => void {
+  listeners.add(notify);
+  return () => listeners.delete(notify);
+}
+
+export function useAppearance(): Appearance {
+  return useSyncExternalStore(subscribe, () => device.appearance);
+}
+
+export function reduceMotion(): boolean {
+  return device.appearance === 'eink' || window.matchMedia(REDUCED_MOTION).matches;
 }
 
 export function applyAccent(accent: Accent): void {
@@ -47,7 +107,7 @@ export function applyAccent(accent: Accent): void {
  * El tema abans que hi hagi sessió.
  *
  * La pantalla de login i la pàgina pública d'un enllaç compartit també s'han de veure
- * bé, i no tenen perfil d'usuari: es fa servir el del sistema.
+ * bé sense perfil d'usuari. Els ajustos d'aquest dispositiu valen també abans d'entrar.
  */
 export function applyDefaults(): void {
   applyTheme('system');

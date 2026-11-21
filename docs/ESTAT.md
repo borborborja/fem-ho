@@ -7,6 +7,22 @@ Data de l'última verificació completa: **2026-11-19**.
 
 ---
 
+## Temes d'alt contrast i de tinta electrònica
+
+Ajustos → General → Tema ofereix Alt contrast i Tinta electrònica al web i a
+Android. La tria es desa al dispositiu. Alt contrast parteix de l'últim tema
+habitual. Tinta electrònica fa servir superfícies monocromes planes i
+comptadors per minuts, amb segons durant el darrer minut del Pomodoro.
+
+La comprovació de contrast cobreix 24 combinacions de tema i accent. Chromium
+ha comprovat la persistència local, el focus, els noms dels àmbits al calendari
+i el darrer minut del Pomodoro. Amb l'APK amb R8 s'han verificat els ginys als
+llançadors d'Android 11 i 14, el canvi clar/fosc i la represa sense connexió.
+Queda pendent comprovar el refresc i les imatges residuals en una pantalla
+física de tinta electrònica.
+
+---
+
 ## Propostes del calendari als ginys d'Android · 0.28.0
 
 «Avui», «Tasques» i «Tauler» permeten demanar una sincronització des del

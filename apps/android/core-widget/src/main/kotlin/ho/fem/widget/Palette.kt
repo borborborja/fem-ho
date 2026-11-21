@@ -6,6 +6,7 @@ import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.glance.unit.ColorProvider
+import ho.fem.designsystem.FemhoAppearance
 import ho.fem.designsystem.FemhoColors
 import ho.fem.designsystem.femhoColorsOf
 import ho.fem.designsystem.scopeColor
@@ -41,18 +42,69 @@ import androidx.glance.unit.ColorProvider as fixedProvider
 class WidgetPalette(
     val theme: String,
     val accent: String,
+    val appearance: FemhoAppearance = FemhoAppearance.STANDARD,
 ) {
-    val light: FemhoColors = femhoColorsOf(dark = false, accent = accent)
-    val dark: FemhoColors = femhoColorsOf(dark = true, accent = accent)
+    val light: FemhoColors = femhoColorsOf(dark = false, accent = accent, appearance = appearance)
+    val dark: FemhoColors = femhoColorsOf(dark = true, accent = accent, appearance = appearance)
+    val isEink: Boolean get() = appearance == FemhoAppearance.EINK
 
-    fun color(pick: FemhoColors.() -> Color): ColorProvider = when (theme) {
-        "light" -> fixedProvider(light.pick())
-        "dark" -> fixedProvider(dark.pick())
+    fun color(pick: FemhoColors.() -> Color): ColorProvider = when {
+        isEink || theme == "light" -> fixedProvider(light.pick())
+        theme == "dark" -> fixedProvider(dark.pick())
         else -> dayNightProvider(day = light.pick(), night = dark.pick())
     }
 
     /** El color d'un àmbit, pel nom del token que desa el servidor. */
     fun scope(token: String): ColorProvider = color { scopeColor(token) }
+
+    fun drawable(shape: WidgetShape): Int = when (appearance) {
+        FemhoAppearance.STANDARD -> shape.standard
+        FemhoAppearance.HIGH_CONTRAST -> when (theme) {
+            "light" -> shape.contrastLight
+            "dark" -> shape.contrastDark
+            else -> shape.contrastSystem
+        }
+        FemhoAppearance.EINK -> shape.eink
+    }
+}
+
+// El llançador resol els recursos de night. Les variants de tria explícita duen colors
+// fixos perquè la superfície i el text canviïn junts, també abans d'Android 12.
+enum class WidgetShape(
+    internal val standard: Int,
+    internal val contrastSystem: Int,
+    internal val contrastLight: Int,
+    internal val contrastDark: Int,
+    internal val eink: Int,
+) {
+    SURFACE(
+        R.drawable.femho_widget_surface,
+        R.drawable.femho_widget_contrast_surface,
+        R.drawable.femho_widget_contrast_light_surface,
+        R.drawable.femho_widget_contrast_dark_surface,
+        R.drawable.femho_widget_eink_surface,
+    ),
+    TILE(
+        R.drawable.femho_widget_tile,
+        R.drawable.femho_widget_contrast_tile,
+        R.drawable.femho_widget_contrast_light_tile,
+        R.drawable.femho_widget_contrast_dark_tile,
+        R.drawable.femho_widget_eink_tile,
+    ),
+    CALENDAR_SUGGESTION(
+        R.drawable.femho_widget_calendar_suggestion,
+        R.drawable.femho_widget_contrast_calendar_suggestion,
+        R.drawable.femho_widget_contrast_light_calendar_suggestion,
+        R.drawable.femho_widget_contrast_dark_calendar_suggestion,
+        R.drawable.femho_widget_eink_calendar_suggestion,
+    ),
+    DANGER_PILL(
+        R.drawable.femho_widget_danger_pill,
+        R.drawable.femho_widget_contrast_danger_pill,
+        R.drawable.femho_widget_contrast_light_danger_pill,
+        R.drawable.femho_widget_contrast_dark_danger_pill,
+        R.drawable.femho_widget_eink_danger_pill,
+    ),
 }
 
 private val LocalPalette = staticCompositionLocalOf<WidgetPalette> {

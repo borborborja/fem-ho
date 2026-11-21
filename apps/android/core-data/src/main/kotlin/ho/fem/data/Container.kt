@@ -169,6 +169,14 @@ class Container(context: Context) {
 
 private val Context.dataStore by preferencesDataStore(name = "femho")
 
+data class DisplaySettings(
+    val theme: String = "system",
+    val accent: String = "default",
+    val appearance: String = "standard",
+) {
+    val selection: String get() = if (appearance == "standard") theme else appearance
+}
+
 /**
  * Les preferències que **no** són secretes: la URL del servidor, els àmbits actius, el
  * tema. Els testimonis van a un altre lloc, xifrats.
@@ -189,6 +197,7 @@ class Settings internal constructor(private val dataStore: DataStore<Preferences
     private val projectsKey = "active_projects"
     private val themeKey = stringPreferencesKey("theme")
     private val accentKey = stringPreferencesKey("accent")
+    private val appearanceKey = stringPreferencesKey("appearance")
     // Preferències de la pestanya General (paritat amb la web)
     private val scopeModeKey = stringPreferencesKey("scope_mode")
     private val localeKey = stringPreferencesKey("locale")
@@ -263,8 +272,14 @@ class Settings internal constructor(private val dataStore: DataStore<Preferences
     }
 
     fun activeProjects(account: ActiveAccount): Flow<List<String>> = readAccountList(projectsKey, account)
-    val theme: Flow<String> = read(themeKey).map { it ?: "system" }
-    val accent: Flow<String> = read(accentKey).map { it ?: "default" }
+    val display: Flow<DisplaySettings> = dataStore.data.map { preferences ->
+        val defaults = DisplaySettings()
+        DisplaySettings(
+            theme = preferences[themeKey] ?: defaults.theme,
+            accent = preferences[accentKey] ?: defaults.accent,
+            appearance = preferences[appearanceKey] ?: defaults.appearance,
+        )
+    }
     val scopeMode: Flow<String> = read(scopeModeKey).map { it ?: "multi" }
     suspend fun setScopeMode(value: String) = write(scopeModeKey, value)
     val locale: Flow<String> = read(localeKey).map { it ?: "ca" }
@@ -302,7 +317,17 @@ class Settings internal constructor(private val dataStore: DataStore<Preferences
         }
     }
 
-    suspend fun setTheme(value: String) = write(themeKey, value)
+    suspend fun selectDisplay(value: String) {
+        dataStore.edit { preferences ->
+            when (value) {
+                "high-contrast", "eink" -> preferences[appearanceKey] = value
+                "system", "light", "dark" -> {
+                    preferences[themeKey] = value
+                    preferences.remove(appearanceKey)
+                }
+            }
+        }
+    }
     suspend fun setAccent(value: String) = write(accentKey, value)
     // Preferències de la pestanya General
     suspend fun setLocale(value: String) = write(localeKey, value)

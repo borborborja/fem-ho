@@ -14,6 +14,7 @@ import { match, useRouter } from './router.js';
 import { useSession, useSessionData } from './session.js';
 import { needsScopeModeWizard, resolveScopeMode } from './scope-mode.js';
 import { installShortcuts } from './shortcuts.js';
+import { reduceMotion } from './theme.js';
 import { ToastProvider, useToasts } from './toasts.js';
 import { TopBar } from './TopBar.js';
 import type { Agent, Checklist } from './types.js';
@@ -257,6 +258,10 @@ function AppShell() {
    * es veu com un gir de 180 graus a l'inrevés.
    */
   const toggleAiBoard = useCallback(() => {
+    if (reduceMotion()) {
+      setAiBoard((active) => !active);
+      return;
+    }
     setFlip({ transform: 'rotateY(90deg)', transition: 'transform 240ms cubic-bezier(0.4,0,1,1)' });
     setTimeout(() => {
       setAiBoard((active) => !active);

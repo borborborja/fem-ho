@@ -12,6 +12,7 @@ data class TaskBoardSnapshot(
     val columns: Map<TaskStatus, List<Task>>,
     val counts: Map<TaskStatus, Int>,
     val scopeColors: Map<String, String>,
+    val scopeNames: Map<String, String>,
     val suggestions: Map<TaskStatus, List<CalendarTaskSuggestion>>,
     val suggestionTimezone: String,
     val nextSuggestionAt: Instant?,

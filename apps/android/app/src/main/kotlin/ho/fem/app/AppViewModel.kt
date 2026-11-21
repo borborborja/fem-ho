@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import ho.fem.app.widget.FemhoWidgets
 import ho.fem.data.ActiveAccount
 import ho.fem.data.Container
+import ho.fem.data.DisplaySettings
 import ho.fem.data.LocalCalendarSuggestions
 import ho.fem.data.LocalPomodoro
 import ho.fem.data.Repository
@@ -159,11 +160,8 @@ class AppViewModel(private val container: Container) : ViewModel() {
     val actionError = _actionError.asStateFlow()
     fun consumeActionError() { _actionError.value = null }
 
-    private val _theme = MutableStateFlow("system")
-    val theme: StateFlow<String> = _theme.asStateFlow()
-
-    private val _accent = MutableStateFlow("default")
-    val accent: StateFlow<String> = _accent.asStateFlow()
+    private val _display = MutableStateFlow(DisplaySettings())
+    val display = _display.asStateFlow()
 
     private val _profile = MutableStateFlow<UserProfile?>(null)
     val profile: StateFlow<UserProfile?> = _profile.asStateFlow()
@@ -659,8 +657,7 @@ class AppViewModel(private val container: Container) : ViewModel() {
         _session.value = Session.Checking
         viewModelScope.launch {
             val (account, base, legacy) = try {
-                _theme.value = container.settings.theme.first()
-                _accent.value = container.settings.accent.first()
+                _display.value = container.settings.display.first()
                 val saved = container.settings.serverUrl.first()
                 val account = container.restoreAccount()
                 // La sessió xifrada vincula el servidor al compte. La preferència només
@@ -1422,13 +1419,19 @@ class AppViewModel(private val container: Container) : ViewModel() {
     }
 
     fun setTheme(value: String) {
-        _theme.value = value
-        sessionScope.launch { container.settings.setTheme(value) }
+        viewModelScope.launch {
+            container.settings.selectDisplay(value)
+            _display.value = container.settings.display.first()
+            FemhoWidgets.updateAll(container.appContext)
+        }
     }
 
     fun setAccent(value: String) {
-        _accent.value = value
-        sessionScope.launch { container.settings.setAccent(value) }
+        viewModelScope.launch {
+            container.settings.setAccent(value)
+            _display.value = container.settings.display.first()
+            FemhoWidgets.updateAll(container.appContext)
+        }
     }
 
     fun setLocale(value: String) {

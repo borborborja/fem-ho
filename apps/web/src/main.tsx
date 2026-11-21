@@ -13,6 +13,7 @@ import { negotiate, setLocale } from '@fem-ho/contracts';
 import { App } from './app/App.js';
 import { RouterProvider } from './app/router.js';
 import { SessionProvider } from './app/session.js';
+import { applyDefaults } from './app/theme.js';
 
 /**
  * L'idioma es tria **abans del primer render**, no en un efecte.
@@ -27,6 +28,7 @@ import { SessionProvider } from './app/session.js';
  */
 setLocale(negotiate(navigator.languages));
 document.documentElement.lang = negotiate(navigator.languages);
+applyDefaults();
 
 const root = document.getElementById('root');
 if (root === null) throw new Error('Falta #root');

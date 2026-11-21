@@ -29,6 +29,7 @@ import { Chips } from '../app/Chips.js';
 import { Brand } from '../app/Brand.js';
 import { useRouter } from '../app/router.js';
 import { useSession, useSessionData } from '../app/session.js';
+import { setAppearance, useAppearance } from '../app/theme.js';
 import { useApi, useMutation } from '../app/useApi.js';
 import type {
   AdminUser,
@@ -45,6 +46,7 @@ import type {
   Project,
   Scope,
   ShareSummary,
+  Theme,
   UpdateStatus,
 } from '../app/types.js';
 import { ErrorBanner } from './BoardScreen.js';
@@ -115,7 +117,7 @@ export function SettingsScreen() {
           top: 0,
           zIndex: 30,
           background: 'var(--sidebar-bg)',
-          backdropFilter: 'blur(14px)',
+          backdropFilter: 'var(--blur-sidebar)',
           borderBottom: '1px solid var(--card-border)',
         }}
       >
@@ -325,10 +327,15 @@ function UpdateNotice() {
 
 function GeneralTab() {
   const { profile, settings, instance } = useSessionData();
+  const appearance = useAppearance();
   const weekStart = resolveWeekStart(settings.week_start, getLocale());
   // `/info` és públic i sense autenticar: el dret al codi el té qualsevol que hi arribi.
   const info = useApi<Info>('/info').data ?? { version: '', license: '', source_url: '' };
   const { updateProfile, updateSettings } = useSession();
+  const saveTheme = useMutation(async (theme: Theme) => {
+    if (theme !== profile.theme) await updateProfile({ theme });
+    setAppearance('standard');
+  });
   const calendarSuggestions = useCalendarSuggestions();
   const [calendarEnabled, setCalendarEnabled] = useState(calendarSuggestions.enabled);
   useEffect(
@@ -562,20 +569,30 @@ function GeneralTab() {
       <Group title={t('settings.theme')}>
         <Chips
           testId="theme-chips"
-          value={profile.theme}
+          groupLabel={t('settings.theme')}
+          value={appearance === 'standard' ? profile.theme : appearance}
+          disabled={saveTheme.busy}
           options={[
             { key: 'system' as const, label: t('settings.theme.system') },
             { key: 'light' as const, label: t('settings.theme.light') },
             { key: 'dark' as const, label: t('settings.theme.dark') },
+            { key: 'high-contrast' as const, label: t('settings.theme.highContrast') },
+            { key: 'eink' as const, label: t('settings.theme.eink') },
           ]}
-          onChange={(theme) => void updateProfile({ theme })}
+          onChange={(theme) => {
+            if (theme === 'high-contrast' || theme === 'eink') setAppearance(theme);
+            else void saveTheme.run(theme);
+          }}
         />
+        {saveTheme.error && <p role="alert">{failureText(saveTheme.error)}</p>}
       </Group>
 
       <Group title={t('settings.accent')}>
         <Chips
           testId="accent-chips"
+          groupLabel={t('settings.accent')}
           value={profile.accent}
+          disabled={appearance === 'eink'}
           options={[
             { key: 'default' as const, label: t('settings.accent.default') },
             { key: 'soft' as const, label: t('settings.accent.soft') },
@@ -584,6 +601,7 @@ function GeneralTab() {
           ]}
           onChange={(accent) => void updateProfile({ accent })}
         />
+        {appearance === 'eink' && <p style={HINT}>{t('settings.theme.einkAccentHint')}</p>}
       </Group>
 
       <Group title={t('settings.dashboardItems')}>
@@ -651,6 +669,7 @@ function ColorPicker({
   onChange: (color: string) => void;
   testId: string;
 }) {
+  const appearance = useAppearance();
   return (
     <div
       role="radiogroup"
@@ -658,27 +677,30 @@ function ColorPicker({
       data-testid={testId}
       style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}
     >
-      {SCOPE_COLORS.map((color) => (
+      {SCOPE_COLORS.map((color, index) => (
         <button
           key={color}
           type="button"
           role="radio"
           aria-checked={value === color}
-          aria-label={color}
+          aria-label={t('settings.scopeColorChoice', { number: index + 1 })}
           data-testid={`${testId}-${color}`}
           onClick={() => onChange(color)}
           style={{
             width: 24,
             height: 24,
             borderRadius: '50%',
-            background: `var(${color})`,
+            background: appearance === 'eink' ? 'var(--panel-bg)' : `var(${color})`,
+            color: 'var(--ink)',
             cursor: 'pointer',
             // La selecció es marca amb un anell separat i no amb una vora, que taparia
             // el color just al color que s'està triant.
-            border: '2px solid var(--panel-bg)',
+            border: `2px solid var(${appearance === 'eink' ? '--essential-border' : '--panel-bg'})`,
             boxShadow: value === color ? '0 0 0 2px var(--ink)' : 'none',
           }}
-        />
+        >
+          {appearance === 'eink' ? index + 1 : null}
+        </button>
       ))}
     </div>
   );

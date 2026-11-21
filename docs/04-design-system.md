@@ -225,11 +225,16 @@ Els gradients es fan amb `Brush.linearGradient` amb les mateixes parades i el ma
 El readme de Plou reconeix que el focus **no està definit**: *"el codi font no en defineix cap, afegeix-ne un si ho publiques de veritat"*. Fem-ho l'ha de definir.
 
 - **Focus visible**: anell de 2px amb `var(--plou-blue)` i 2px de separació, a tot element interactiu. En elements amb gradient, l'anell va per fora.
-- **Contrast**: text normal 4.5:1, text gran 3:1, en els dos temes i els quatre accents. El control permanent comprova la cascada de tokens que utilitza l'aplicació i cada parada del gradient de marca.
+- **Contrast**: als temes habituals, text normal 4.5:1 i text gran 3:1. Als temes Alt contrast i Tinta electrònica, text normal 7:1 i indicadors visuals necessaris de controls i estats 3:1. El control permanent comprova les paletes efectives i cada parada dels gradients de marca.
 - **Objectius tàctils**: 44px mínim al mòbil.
 - **El kanban és navegable amb teclat**, incloent-hi moure targetes (veure [`02-ui-web.md`](02-ui-web.md) §4).
 - **El color no és mai l'únic senyal**: l'àmbit sempre porta text a més de color; el mode IA porta icona a més de color.
 - **`prefers-reduced-motion`**: ja gestionat pels tokens; no l'anul·lis amb animacions fetes a mà.
+
+Alt contrast té una paleta clara i una de fosca. Tinta electrònica utilitza superfícies
+planes i opaques, contorns i text. Els comptadors de dedicació mostren minuts i el
+Pomodoro mostra segons durant el darrer minut. El CSS de Fem-ho és la font dels
+colors de les dues aparences al web, a Compose i als ginys.
 
 ---
 

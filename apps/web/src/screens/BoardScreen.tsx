@@ -780,7 +780,7 @@ export function BoardScreen({
         gap: 16,
         // Contingut anterior amb opacitat mentre es revalida: res d'esquelets brillants,
         // que el design system prohibeix (docs/02 §12).
-        opacity: board.revalidating || inbox.revalidating ? 0.6 : 1,
+        opacity: board.revalidating || inbox.revalidating ? 'var(--dimmed-opacity, 0.6)' : 1,
       }}
     >
       {completion.dialog}

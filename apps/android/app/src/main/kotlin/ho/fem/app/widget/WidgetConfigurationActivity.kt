@@ -25,9 +25,11 @@ import androidx.glance.appwidget.state.getAppWidgetState
 import androidx.glance.appwidget.state.updateAppWidgetState
 import androidx.lifecycle.lifecycleScope
 import ho.fem.app.R
+import ho.fem.app.ApplySystemBarAppearance
 import ho.fem.data.Container
 import ho.fem.designsystem.Femho
 import ho.fem.designsystem.FemhoTheme
+import ho.fem.designsystem.appearanceOf
 import ho.fem.model.TaskStatus
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -44,12 +46,12 @@ class WidgetConfigurationActivity : ComponentActivity() {
             val glanceId = GlanceAppWidgetManager(this@WidgetConfigurationActivity).getGlanceIdBy(widgetId)
             val prefs = getAppWidgetState(this@WidgetConfigurationActivity, androidx.glance.state.PreferencesGlanceStateDefinition, glanceId)
             val settings = Container.get(this@WidgetConfigurationActivity).settings
-            val theme = settings.theme.first()
-            val accent = settings.accent.first()
+            val display = settings.display.first()
             setContent {
                 var chosen by remember { mutableStateOf(widgetColumn(prefs[WIDGET_COLUMN])) }
                 var saving by remember { mutableStateOf(false) }
-                FemhoTheme(theme, accent) {
+                FemhoTheme(display.theme, display.accent, appearanceOf(display.appearance)) {
+                    ApplySystemBarAppearance(window)
                     Column(Modifier.fillMaxSize().background(Femho.colors.panelBg).safeDrawingPadding().padding(24.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
                         Text(stringResource(R.string.widget_choosecolumn), color = Femho.colors.ink, fontSize = 22.sp)
                         Column(Modifier.selectableGroup()) {

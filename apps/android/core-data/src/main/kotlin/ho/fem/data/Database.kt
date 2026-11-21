@@ -547,6 +547,7 @@ interface FemhoDao {
                 (counts[key] ?: 0) - (replacedCounts[key] ?: 0) + suggestions[status].orEmpty().size
             },
             scopeColors = scopes.associate { it.id to it.color },
+            scopeNames = scopes.associate { it.id to it.name },
             suggestions = suggestions.mapValues { (_, items) -> items.take(WIDGET_COLUMN_LIMIT) },
             suggestionTimezone = calendar.timezone,
             nextSuggestionAt = calendar.nextBoundary(now, scheduled),

@@ -454,7 +454,7 @@ export function ReportsScreen({
         </EmptyState>
       ) : (
         ready && (
-          <div aria-busy={busy} style={{ opacity: busy ? 0.6 : 1 }}>
+          <div aria-busy={busy} style={{ opacity: busy ? 'var(--dimmed-opacity, 0.6)' : 1 }}>
             {tab === 'summary' && taskData && (
               <>
                 <div className="reports-cards">

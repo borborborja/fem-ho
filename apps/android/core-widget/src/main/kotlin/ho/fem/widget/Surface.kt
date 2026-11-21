@@ -76,7 +76,7 @@ fun WidgetSurface(
     var shell = GlanceModifier
         .fillMaxSize()
         .appWidgetBackground()
-        .background(ImageProvider(R.drawable.femho_widget_surface))
+        .background(ImageProvider(FemhoWidget.palette.drawable(WidgetShape.SURFACE)))
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         shell = shell.cornerRadius(WidgetSize.surfaceRadius)
     }

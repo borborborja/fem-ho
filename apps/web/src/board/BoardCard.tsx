@@ -161,6 +161,7 @@ export function BoardCard({
     <>
       <TaskCard
         data-status={task.status}
+        data-assigned-elsewhere={task.assignedToOther === true ? '' : undefined}
         className={task.fromCalendar ? 'calendar-origin-task' : undefined}
         // Les d'algú altre, atenuades: es veuen, però es veu que no són teves.
         style={{
@@ -170,7 +171,7 @@ export function BoardCard({
                 borderInlineStart: 'var(--calendar-origin-rivet, 1px solid var(--card-border))',
               }
             : {}),
-          ...(task.assignedToOther === true ? { opacity: 0.55 } : {}),
+          ...(task.assignedToOther === true ? { opacity: 'var(--dimmed-opacity, 0.55)' } : {}),
         }}
         title={inlineTitle.title}
         titleEditor={inlineTitle.editor}
@@ -207,6 +208,7 @@ export function BoardCard({
               : undefined
         }
         hasUnseenAiChange={task.hasUnseenAiChange ?? false}
+        unseenAiChangeLabel={t('ai.unseen')}
         attentionLabel={task.needsAttention === true ? t('ai.attention.card') : undefined}
         lockLabel={task.lockedUntil == null ? undefined : t('ai.lock.card')}
         activityLabel={

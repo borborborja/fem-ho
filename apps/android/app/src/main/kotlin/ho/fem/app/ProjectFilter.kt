@@ -92,7 +92,7 @@ internal fun ProjectFilter(
             onDismissRequest = { open = false },
             containerColor = Femho.colors.panelBg,
             tonalElevation = 0.dp,
-            shadowElevation = 8.dp,
+            shadowElevation = if (Femho.isEink) 0.dp else 8.dp,
             shape = RoundedCornerShape(FemhoShape.card),
             border = BorderStroke(1.dp, Femho.colors.cardBorder),
             modifier = Modifier.width(width).heightIn(max = height).testTag("projects-menu"),

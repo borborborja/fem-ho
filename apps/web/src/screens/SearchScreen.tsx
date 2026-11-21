@@ -63,7 +63,14 @@ export function SearchScreen({ onOpenTask }: SearchScreenProps) {
 
       {results.error !== undefined ? <ErrorBanner onRetry={results.reload} /> : null}
 
-      <div style={{ display: 'grid', gap: 9, opacity: results.revalidating ? 0.6 : 1 }}>
+      <div
+        aria-busy={results.revalidating}
+        style={{
+          display: 'grid',
+          gap: 9,
+          opacity: results.revalidating ? 'var(--dimmed-opacity, 0.6)' : 1,
+        }}
+      >
         {query.length >= 2 && tasks.length === 0 && !results.loading ? (
           <EmptyState>{t('state.empty.search')}</EmptyState>
         ) : null}

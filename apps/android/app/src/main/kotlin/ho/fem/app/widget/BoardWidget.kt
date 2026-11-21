@@ -99,6 +99,7 @@ class BoardWidget : GlanceAppWidget() {
                                 if (snapshot != null) items(suggestions) { suggestion ->
                                     CalendarSuggestionRow(
                                         suggestion, column, snapshot.scopeColors[suggestion.scopeId].orEmpty(),
+                                        snapshot.scopeNames[suggestion.scopeId],
                                         snapshot.suggestionTimezone, account,
                                     )
                                 }

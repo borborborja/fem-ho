@@ -24,6 +24,7 @@ import ho.fem.model.Task
 import ho.fem.model.TaskStatus
 import ho.fem.widget.*
 import ho.fem.widget.R as WidgetR
+import ho.fem.widget.WidgetShape
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -126,10 +127,13 @@ private fun BoardLane(
                 items(suggestions) { suggestion ->
                     CalendarSuggestionRow(
                         suggestion, column.status, snapshot.scopeColors[suggestion.scopeId].orEmpty(),
+                        snapshot.scopeNames[suggestion.scopeId],
                         snapshot.suggestionTimezone, account,
                     )
                 }
-                items(tasks) { task -> BoardTask(task, snapshot.scopeColors[task.scopeId].orEmpty(), account) }
+                items(tasks) { task ->
+                    BoardTask(task, snapshot.scopeColors[task.scopeId].orEmpty(), snapshot.scopeNames[task.scopeId], account)
+                }
                 if (count > tasks.size + suggestions.size) {
                     item {
                         Box(GlanceModifier.fillMaxWidth().height(48.dp).clickable(openBoard(context, column.status)), contentAlignment = Alignment.Center) {
@@ -160,7 +164,7 @@ private fun OpenBoardButton() {
 }
 
 @Composable
-private fun BoardTask(task: Task, scopeColor: String, account: String) {
+private fun BoardTask(task: Task, scopeColor: String, scopeName: String?, account: String) {
     val context = LocalContext.current
     val palette = FemhoWidget.palette
     val next = COLUMNS.first { it.status.ordinal == task.status.ordinal + 1 }
@@ -174,7 +178,7 @@ private fun BoardTask(task: Task, scopeColor: String, account: String) {
             GlanceModifier.fillMaxWidth().height(cardHeight)
                 // El recurs values/values-night evita que alguns llançadors pintin negre
                 // un drawable translúcid quan el tint de Glance porta ColorProvider.
-                .background(ImageProvider(WidgetR.drawable.femho_widget_tile))
+                .background(ImageProvider(palette.drawable(WidgetShape.TILE)))
                 .clickable(advanceTaskAction(task, account))
                 .semantics { contentDescription = description }
                 .padding(horizontal = 8.dp, vertical = 6.dp),
@@ -182,8 +186,13 @@ private fun BoardTask(task: Task, scopeColor: String, account: String) {
             Text(task.title, maxLines = 2, modifier = GlanceModifier.defaultWeight(),
                 style = TextStyle(color = palette.color { ink }, fontSize = WidgetText.row))
             Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Dot(palette.scope(scopeColor), size = 6.dp)
-                Spacer(GlanceModifier.defaultWeight())
+                if (palette.isEink && scopeName != null) {
+                    Text(scopeName, maxLines = 1, modifier = GlanceModifier.defaultWeight(),
+                        style = TextStyle(color = palette.color { inkSoft }, fontSize = WidgetText.meta))
+                } else {
+                    Dot(palette.scope(scopeColor), size = 6.dp)
+                    Spacer(GlanceModifier.defaultWeight())
+                }
                 if (task.fromCalendar) CalendarOriginGlyph()
                 Glyph(if (next.status == TaskStatus.DONE) WidgetR.drawable.femho_ring_done else WidgetR.drawable.femho_arrow,
                     palette.color { inkSoft }, size = 16.dp)

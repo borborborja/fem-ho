@@ -26,6 +26,7 @@ export const TOKEN_FILES = [
 
 export const THEMES = ['light', 'dark'];
 export const ACCENTS = ['default', 'soft', 'mono-warm', 'mono-cool'];
+export const APPEARANCES = ['standard', 'high-contrast', 'eink'];
 
 /**
  * Trosseja un fitxer CSS en blocs { selector, declarations }, en ordre d'aparició.
@@ -63,30 +64,47 @@ export function loadTokenBlocks(tokensDir, overrides) {
   return all;
 }
 
-/** Un selector aplica a aquesta combinació de tema i accent? */
-function selectorApplies(selector, theme, accent) {
-  return selector.split(',').some((part) => {
+/** Els blocs de tokens fan servir :root i conjuncions d’atributs sobre la mateixa arrel. */
+function specificity(selector, values) {
+  let best = 0;
+  for (const part of selector.split(',')) {
     const s = part.trim();
-    if (s === ':root') return true;
-    const themeMatch = s.match(/\[data-theme=["']([^"']+)["']\]/);
-    const accentMatch = s.match(/\[data-accent=["']([^"']+)["']\]/);
-    if (themeMatch !== null && themeMatch[1] !== theme) return false;
-    if (accentMatch !== null && accentMatch[1] !== accent) return false;
-    // Un selector amb data-accent no aplica mai a l'accent `default`, que és l'absència
-    // de l'atribut.
-    if (accentMatch !== null && accent === 'default') return false;
-    return themeMatch !== null || accentMatch !== null || s === ':root';
-  });
+    if (s === ':root') best = Math.max(best, 1);
+    else {
+      const attrs = [...s.matchAll(/\[data-(theme|accent|appearance)=["']([^"']+)["']\]/gu)];
+      if (attrs.map(([attr]) => attr).join('') !== s) continue;
+      if (attrs.every(([, key, value]) => values[key] === value))
+        best = Math.max(best, attrs.length);
+    }
+  }
+  return best;
 }
 
-/** Aplana els blocs a un mapa de variable → valor per a (tema, accent). */
-export function resolveTokens(blocks, theme, accent) {
-  const out = {};
+/** Aplana la cascada abans de resoldre les referències als colors efectius. */
+export function resolveTokens(blocks, theme, accent, appearance = 'standard') {
+  const properties = {};
+  const weights = {};
   for (const block of blocks) {
-    if (!selectorApplies(block.selector, theme, accent)) continue;
-    Object.assign(out, block.declarations);
+    const weight = specificity(block.selector, { theme, accent, appearance });
+    if (weight === 0) continue;
+    for (const [name, value] of Object.entries(block.declarations)) {
+      if (weight < (weights[name] ?? 0)) continue;
+      weights[name] = weight;
+      properties[name] = value;
+    }
   }
-  return out;
+
+  function expand(value, visited) {
+    return value.replace(/var\((--[\w-]+)\)/gu, (reference, name) =>
+      properties[name] === undefined || visited.includes(name)
+        ? reference
+        : expand(properties[name], [...visited, name]),
+    );
+  }
+
+  return Object.fromEntries(
+    Object.entries(properties).map(([name, value]) => [name, expand(value, [name])]),
+  );
 }
 
 // ---------------------------------------------------------------------------
