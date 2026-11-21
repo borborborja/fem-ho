@@ -7,7 +7,7 @@ Data de l'última verificació completa: **2026-11-19**.
 
 ---
 
-## Temes d'alt contrast i de tinta electrònica
+## Temes d'alt contrast i de tinta electrònica · 0.29.0
 
 Ajustos → General → Tema ofereix Alt contrast i Tinta electrònica al web i a
 Android. La tria es desa al dispositiu. Alt contrast parteix de l'últim tema
@@ -23,7 +23,7 @@ física de tinta electrònica.
 
 ---
 
-## Aturada automàtica de tasques a «Fent»
+## Aturada automàtica de tasques a «Fent» · 0.29.0
 
 Ajustos → General permet fixar al web i a Android quant de temps poden estar
 a «Fent» les tasques que hi ha posat el compte. El límit és opcional i es
