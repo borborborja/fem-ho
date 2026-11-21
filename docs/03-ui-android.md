@@ -135,6 +135,10 @@ Les pestanyes són una fila de píndoles desplaçable horitzontalment. Contingut
 
 Les mateixes pestanyes que a la web. La de **MCP i API** ha de poder ensenyar el token amb un botó de copiar i un codi QR, que en mòbil és molt més pràctic.
 
+**Aturada a Fent** — General comparteix amb el web el límit de temps del compte.
+Una tasca que hi ha posat el compte torna a «Per fer» quan el servidor la pot
+moure un cop vençut el límit. Els canvis fets sense connexió es desen a la cua.
+
 ---
 
 ## 7 · Offline

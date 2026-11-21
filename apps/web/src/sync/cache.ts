@@ -8,6 +8,7 @@ import type {
   Inbox,
   Subtask,
   Task,
+  UserSettings,
 } from '../app/types.js';
 import { FemHoDatabase, readMeta, writeMeta, type OutboxRow } from './db.js';
 import {
@@ -29,6 +30,8 @@ const BOARD_PATH = '/api/v1/board?';
 const INBOX_PATH = '/api/v1/inbox?';
 export const POMODORO_PATH = '/api/v1/pomodoro';
 export const CALENDAR_SUGGESTIONS_PATH = '/api/v1/calendar-task-suggestions';
+export const AUTH_SETTINGS_PATH = '/api/v1/auth/settings';
+export type CachedUserSettings = { settings: UserSettings };
 export type CachedPomodoro = PomodoroSnapshot & { observed_at_ms?: number };
 const BOARD_CACHE_REVISION = 'board-cache-revision';
 const SNAPSHOT_PREFIX = 'snapshot:';
@@ -39,6 +42,7 @@ function protectsReceipts(path: string): boolean {
     path.startsWith(INBOX_PATH) ||
     path === POMODORO_PATH ||
     path === CALENDAR_SUGGESTIONS_PATH ||
+    path === AUTH_SETTINGS_PATH ||
     /^\/api\/v1\/tasks\/[^/]+\/(subtasks|checklists)$/.test(path)
   );
 }
@@ -202,10 +206,33 @@ export async function applyBoardResults(
     let listsChanged = false;
     let pomodoroChanged = false;
     let calendarSuggestionsChanged = false;
+    let settingsChanged = false;
     for (const row of sent) {
       const result = byId.get(row.id);
       if (result === undefined) continue;
-      if (row.entity_type === 'pomodoro') {
+      if (row.entity_type === 'user_settings') {
+        const minutes = result.entity?.doing_auto_stop_minutes;
+        if (result.status !== 'ok' || (minutes !== null && typeof minutes !== 'number')) continue;
+        const previous = await readSnapshot<CachedUserSettings>(db, AUTH_SETTINGS_PATH);
+        await writeMeta(
+          db,
+          `${SNAPSHOT_PREFIX}${AUTH_SETTINGS_PATH}`,
+          JSON.stringify({
+            ...previous,
+            settings: { ...previous?.settings, doing_auto_stop_minutes: minutes },
+          }),
+        );
+        await db.outbox
+          .where('[entity_type+entity_id]')
+          .equals([row.entity_type, row.entity_id])
+          .and(
+            (previous) =>
+              (previous.status === 'failed' || previous.status === 'conflict') &&
+              compareOperations(previous, row) < 0,
+          )
+          .delete();
+        settingsChanged = true;
+      } else if (row.entity_type === 'pomodoro') {
         const raw = result.status === 'ok' ? result.entity : result.server_entity;
         if (typeof raw?.server_time_ms !== 'number' || !Array.isArray(raw.queue)) continue;
         const snapshot = raw as unknown as PomodoroSnapshot;
@@ -315,7 +342,13 @@ export async function applyBoardResults(
         await db.meta.put({ key: snapshot.key, value: JSON.stringify(inbox) });
       }
     }
-    if (confirmed.length > 0 || listsChanged || pomodoroChanged || calendarSuggestionsChanged) {
+    if (
+      confirmed.length > 0 ||
+      listsChanged ||
+      pomodoroChanged ||
+      calendarSuggestionsChanged ||
+      settingsChanged
+    ) {
       await writeMeta(db, BOARD_CACHE_REVISION, uuidv7());
     }
     // Després del rebut, la targeta ha de seguir visible en desconnectar abans del GET.

@@ -71,6 +71,7 @@ export interface UserSettings {
   scope_mode: UserScopeMode | null;
   show_task_time: boolean;
   calendar_task_suggestions: boolean;
+  doing_auto_stop_minutes: number | null;
   show_reports: boolean;
   show_calendar_widget: boolean;
   show_overdue_section: boolean;
@@ -288,6 +289,7 @@ const DEFAULT_SETTINGS: UserSettings = {
   scope_mode: null,
   show_task_time: true,
   calendar_task_suggestions: false,
+  doing_auto_stop_minutes: null,
   show_reports: true,
   show_calendar_widget: true,
   show_overdue_section: true,
@@ -316,6 +318,7 @@ export async function getSettings(db: MigrationDb, userId: string): Promise<User
     scope_mode: UserScopeMode | null;
     show_task_time: unknown;
     calendar_task_suggestions: unknown;
+    doing_auto_stop_minutes: number | null;
     show_reports: unknown;
     show_calendar_widget: unknown;
     show_overdue_section: unknown;
@@ -327,7 +330,8 @@ export async function getSettings(db: MigrationDb, userId: string): Promise<User
   }>`SELECT done_cleared_at, inbox_position, inbox_show_overdue, inbox_origin, collapsed_groups,
             hidden_calendar_ids, week_start, scope_mode,
             show_task_time, show_reports, show_calendar_widget, show_overdue_section, quiet_hours_start, quiet_hours_end,
-            daily_digest_at, gravatar, event_task_deleted, calendar_task_suggestions
+            daily_digest_at, gravatar, event_task_deleted, calendar_task_suggestions,
+            doing_auto_stop_minutes
      FROM user_settings WHERE user_id = ${userId}`.execute(db);
 
   const row = found.rows[0];
@@ -344,6 +348,7 @@ export async function getSettings(db: MigrationDb, userId: string): Promise<User
     scope_mode: row.scope_mode ?? null,
     show_task_time: isTrue(row.show_task_time),
     calendar_task_suggestions: isTrue(row.calendar_task_suggestions),
+    doing_auto_stop_minutes: row.doing_auto_stop_minutes,
     show_reports: isTrue(row.show_reports),
     show_calendar_widget: isTrue(row.show_calendar_widget),
     show_overdue_section: isTrue(row.show_overdue_section),
@@ -426,6 +431,7 @@ export async function updateSettings(
             ),
     show_task_time: input.show_task_time ?? before.show_task_time,
     calendar_task_suggestions: before.calendar_task_suggestions,
+    doing_auto_stop_minutes: before.doing_auto_stop_minutes,
     show_reports: input.show_reports ?? before.show_reports,
     show_calendar_widget: input.show_calendar_widget ?? before.show_calendar_widget,
     show_overdue_section: input.show_overdue_section ?? before.show_overdue_section,

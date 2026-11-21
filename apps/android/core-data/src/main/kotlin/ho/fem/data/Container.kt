@@ -54,7 +54,10 @@ class Container(context: Context) {
             // L'antic femho.db no té cap marca de propietat. Es conserva sencer i
             // no s'obre en nom de cap compte: una cua antiga no es pot atribuir amb seguretat.
             Workspace(Room.databaseBuilder(app, FemhoDatabase::class.java, "femho-${account.identity.key}.db")
-                .addMigrations(FemhoDatabase.MIGRATION_1_2, FemhoDatabase.MIGRATION_2_3, FemhoDatabase.MIGRATION_3_4, FemhoDatabase.MIGRATION_4_5, FemhoDatabase.MIGRATION_5_6)
+                .addMigrations(
+                    FemhoDatabase.MIGRATION_1_2, FemhoDatabase.MIGRATION_2_3, FemhoDatabase.MIGRATION_3_4,
+                    FemhoDatabase.MIGRATION_4_5, FemhoDatabase.MIGRATION_5_6, FemhoDatabase.MIGRATION_6_7,
+                )
                 .build())
         }
 
@@ -96,7 +99,7 @@ class Container(context: Context) {
 
     suspend fun refreshUserSettings(account: ActiveAccount): AuthSettingsEnvelope =
         workspace(account).doneSettingsLock.withLock {
-            api(account).settings().also { settings.cacheDoneClearedAt(account, it.settings.doneClearedAt) }
+            repository(account).readUserSettings().also { settings.cacheDoneClearedAt(account, it.settings.doneClearedAt) }
         }
 
     suspend fun setDoneClearedAt(account: ActiveAccount, value: String?) {

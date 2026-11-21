@@ -697,6 +697,13 @@
     <string name="settings_day_thu">dj</string>
     <string name="settings_day_tue">dt</string>
     <string name="settings_day_wed">dc</string>
+    <string name="settings_doingautostop">Atura automàticament les tasques a Fent</string>
+    <string name="settings_doingautostopduration">Durada màxima</string>
+    <string name="settings_doingautostophint">Les tasques que posis a Fent tornaran a Per fer quan arribin al límit.</string>
+    <string name="settings_doingautostophours">Hores</string>
+    <string name="settings_doingautostopinvalid">Tria una durada d’entre 1 minut i 7 dies.</string>
+    <string name="settings_doingautostopminutes">Minuts</string>
+    <string name="settings_doingautostopunit">Unitat</string>
     <string name="settings_empty_admin">Encara no hi ha contingut per a Admin.</string>
     <string name="settings_empty_agents">Encara no has creat cap agent.</string>
     <string name="settings_empty_ai">Encara no hi ha contingut per a Usuari IA.</string>

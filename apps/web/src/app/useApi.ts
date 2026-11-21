@@ -22,6 +22,7 @@ export interface QueryResult<T> {
   /** Cert mentre es revalida amb dades anteriors a la pantalla. */
   revalidating: boolean;
   reload: () => void;
+  reloadInBackground: () => void;
 }
 
 export function useApi<T>(
@@ -33,8 +34,10 @@ export function useApi<T>(
   const [error, setError] = useState<Error | undefined>(undefined);
   const [loading, setLoading] = useState(path !== null);
   const [revalidating, setRevalidating] = useState(false);
-  const [tick, setTick] = useState(0);
+  const [reloadRequest, setReloadRequest] = useState({ background: false });
+  const lastReload = useRef(reloadRequest);
   const hasData = useRef(false);
+  const loadingRequest = useRef(false);
 
   useEffect(() => {
     if (path === null) {
@@ -43,8 +46,13 @@ export function useApi<T>(
     }
 
     const controller = new AbortController();
-    if (hasData.current) setRevalidating(true);
-    else setLoading(true);
+    const background = lastReload.current !== reloadRequest && reloadRequest.background;
+    lastReload.current = reloadRequest;
+    loadingRequest.current = true;
+    if (!background) {
+      if (hasData.current) setRevalidating(true);
+      else setLoading(true);
+    }
 
     load(path, controller.signal)
       .then((result) => {
@@ -56,25 +64,32 @@ export function useApi<T>(
       .catch((cause: unknown) => {
         // Una petició cancel·lada per desmuntatge no és un error de l'usuari: no ha de
         // pintar cap banda vermella.
-        if (controller.signal.aborted) return;
+        if (controller.signal.aborted || background) return;
         setError(cause instanceof Error ? cause : new Error(String(cause)));
       })
       .finally(() => {
         if (controller.signal.aborted) return;
-        setLoading(false);
-        setRevalidating(false);
+        loadingRequest.current = false;
+        if (!background) {
+          setLoading(false);
+          setRevalidating(false);
+        }
       });
 
     return () => {
       controller.abort();
+      loadingRequest.current = false;
     };
-  }, [path, tick, load, ...deps]);
+  }, [path, reloadRequest, load, ...deps]);
 
   const reload = useCallback(() => {
-    setTick((value) => value + 1);
+    setReloadRequest({ background: false });
+  }, []);
+  const reloadInBackground = useCallback(() => {
+    if (hasData.current && !loadingRequest.current) setReloadRequest({ background: true });
   }, []);
 
-  return { data, error, loading, revalidating, reload };
+  return { data, error, loading, revalidating, reload, reloadInBackground };
 }
 
 /**

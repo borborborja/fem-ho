@@ -226,6 +226,25 @@ export function BoardScreen({
   }, [activeScopeIds]);
 
   const board = useBoardQuery<Board>(path);
+  const doing = board.data?.columns
+    .find((column) => column.status === 'doing')
+    ?.groups.some((group) => group.tasks.length > 0);
+  const reloadBoardInBackground = board.reloadInBackground;
+  useEffect(() => {
+    if (!doing) return;
+    const check = () => {
+      if (navigator.onLine && !document.hidden) reloadBoardInBackground();
+    };
+    // El planificador també pot moure les tasques iniciades des d'un altre dispositiu.
+    const timer = window.setInterval(check, 30_000);
+    window.addEventListener('focus', check);
+    document.addEventListener('visibilitychange', check);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('focus', check);
+      document.removeEventListener('visibilitychange', check);
+    };
+  }, [doing, reloadBoardInBackground]);
 
   const activeScopes = scopes.filter((scope) => activeScopeIds.includes(scope.id));
 

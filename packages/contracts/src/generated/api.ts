@@ -1177,6 +1177,9 @@ export interface paths {
          *     Les propostes del calendari usen `entity: calendar_suggestions`, `op: update`,
          *     l'ID del compte i un `CalendarSuggestionCommand` a `data`. Un resultat confirmat
          *     conté un `CalendarSuggestionResult` a `entity`.
+         *     El límit a «Fent» usa `entity: user_settings`, `op: update`, l'ID del compte
+         *     i un `DoingAutoStopSetting` a `data`. La confirmació porta el valor actual
+         *     a `entity`, també en un reintent.
          */
         post: operations["pushSync"];
         delete?: never;
@@ -3768,6 +3771,8 @@ export interface components {
             inbox_position?: "left" | "right" | "below";
             inbox_show_overdue?: boolean;
             readonly calendar_task_suggestions?: boolean;
+            /** @description Límit personal a «Fent». Amb `null` queda desactivat. */
+            readonly doing_auto_stop_minutes?: number | null;
             /**
              * @description Què li passa a la cita quan s'esborra la tasca que en va sortir.
              *
@@ -4151,6 +4156,10 @@ export interface components {
             data?: {
                 [key: string]: unknown;
             };
+        };
+        DoingAutoStopSetting: {
+            /** @description Minuts fins al retorn automàtic a «Per fer» o `null` per desactivar-lo. */
+            doing_auto_stop_minutes: number | null;
         };
         CalendarSuggestionOccurrence: {
             /** Format: uuid */

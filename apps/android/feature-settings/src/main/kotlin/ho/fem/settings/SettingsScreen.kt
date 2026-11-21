@@ -17,12 +17,16 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -30,11 +34,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import ho.fem.designsystem.Femho
 import ho.fem.designsystem.FemhoShape
 import ho.fem.designsystem.FemhoSize
 import ho.fem.designsystem.FemhoText
+import ho.fem.model.MAX_DOING_AUTO_STOP_MINUTES
 
 /**
  * Ajustos a Android. docs/03 §8, docs/02 §9.
@@ -249,6 +255,13 @@ data class SettingsLabels(
     val pomodoro: String = "",
     val calendarSuggestions: String = "",
     val calendarSuggestionsHint: String = "",
+    val doingAutoStop: String,
+    val doingAutoStopHint: String,
+    val doingAutoStopDuration: String,
+    val doingAutoStopUnit: String,
+    val doingAutoStopMinutes: String,
+    val doingAutoStopHours: String,
+    val doingAutoStopInvalid: String,
 )
 
 data class SettingsTabs(
@@ -290,6 +303,8 @@ fun SettingsScreen(
     onPomodoroEnabled: (Boolean) -> Unit = {},
     calendarSuggestionsEnabled: Boolean? = null,
     onCalendarSuggestionsEnabled: (Boolean) -> Unit = {},
+    doingAutoStopMinutes: Int? = null,
+    onDoingAutoStop: (Int?) -> Unit,
     labels: SettingsLabels,
     theme: String,
     accent: String,
@@ -464,6 +479,8 @@ fun SettingsScreen(
                     onPomodoroEnabled = onPomodoroEnabled,
                     calendarSuggestionsEnabled = calendarSuggestionsEnabled,
                     onCalendarSuggestionsEnabled = onCalendarSuggestionsEnabled,
+                    doingAutoStopMinutes = doingAutoStopMinutes,
+                    onDoingAutoStop = onDoingAutoStop,
                     labels = labels,
                     theme = theme,
                     accent = accent,
@@ -595,6 +612,8 @@ private fun GeneralTab(
     onPomodoroEnabled: (Boolean) -> Unit,
     calendarSuggestionsEnabled: Boolean?,
     onCalendarSuggestionsEnabled: (Boolean) -> Unit,
+    doingAutoStopMinutes: Int?,
+    onDoingAutoStop: (Int?) -> Unit,
     labels: SettingsLabels,
     theme: String,
     accent: String,
@@ -632,6 +651,8 @@ private fun GeneralTab(
             Text(labels.calendarSuggestionsHint, color = Femho.colors.inkSoft, fontSize = FemhoText.meta)
         }
     }
+
+    DoingAutoStopSetting(doingAutoStopMinutes, onDoingAutoStop, labels)
 
     // Mode d'àmbits — decideix què hi ha a la barra superior
     Group(labels.scopeMode) {
@@ -742,6 +763,51 @@ private fun GeneralTab(
             .padding(vertical = 12.dp)
             .testTag("settings-logout"),
     )
+}
+
+@Composable
+private fun DoingAutoStopSetting(minutes: Int?, onSave: (Int?) -> Unit, labels: SettingsLabels) {
+    val initialMinutes = minutes ?: 240
+    val inHours = initialMinutes % 60 == 0
+    var enabled by rememberSaveable(minutes) { mutableStateOf(minutes != null) }
+    var unit by rememberSaveable(minutes) { mutableStateOf(if (inHours) "hours" else "minutes") }
+    var amount by rememberSaveable(minutes) {
+        mutableStateOf((if (inHours) initialMinutes / 60 else initialMinutes).toString())
+    }
+    val multiplier = if (unit == "hours") 60 else 1
+    val validMinutes = amount.toIntOrNull()
+        ?.takeIf { it in 1..(MAX_DOING_AUTO_STOP_MINUTES / multiplier) }
+        ?.times(multiplier)
+    val nextMinutes = validMinutes.takeIf { enabled }
+    val canSave = (!enabled || validMinutes != null) && nextMinutes != minutes
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Toggle(labels.doingAutoStop, enabled, { enabled = it }, Modifier.testTag("settings-doing-auto-stop"))
+        Text(labels.doingAutoStopHint, color = Femho.colors.inkSoft, fontSize = FemhoText.meta)
+        if (enabled) {
+            val invalid = validMinutes == null
+            OutlinedTextField(
+                value = amount,
+                onValueChange = { if (it.length <= 5 && it.all(Char::isDigit)) amount = it },
+                singleLine = true,
+                label = { Text(labels.doingAutoStopDuration) },
+                supportingText = if (invalid) ({ Text(labels.doingAutoStopInvalid) }) else null,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                isError = invalid,
+                modifier = Modifier.fillMaxWidth().testTag("settings-doing-auto-stop-duration"),
+            )
+            Text(labels.doingAutoStopUnit, color = Femho.colors.inkSoft, fontSize = FemhoText.meta)
+            Chips(
+                listOf("minutes" to labels.doingAutoStopMinutes, "hours" to labels.doingAutoStopHours),
+                unit, { unit = it }, "settings-doing-auto-stop-unit",
+            )
+        }
+        Button(
+            enabled = canSave,
+            onClick = { onSave(nextMinutes) },
+            modifier = Modifier.testTag("settings-doing-auto-stop-save"),
+        ) { Text(labels.navSave) }
+    }
 }
 
 @Composable
