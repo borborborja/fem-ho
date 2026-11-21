@@ -107,7 +107,8 @@ class TodayWidget : GlanceAppWidget() {
             val frame by frames.collectAsState(initial)
             val (widget, data) = frame
             FemhoGlance(widget.palette) {
-                WidgetSurface {
+                val padding = if (LocalSize.current.height < 80.dp) 4.dp else WidgetSize.padding
+                WidgetSurface(contentPadding = padding) {
                     if (data == null) {
                         Box(
                             modifier = GlanceModifier
@@ -117,7 +118,7 @@ class TodayWidget : GlanceAppWidget() {
                             EmptyState(LocalContext.current.getString(R.string.widget_signedout))
                         }
                     } else {
-                        TodayContent(data)
+                        TodayContent(data, widget.account?.identity?.key.orEmpty())
                     }
                 }
             }
@@ -134,40 +135,44 @@ data class TodayData(
 )
 
 @Composable
-private fun TodayContent(data: TodayData) {
+private fun TodayContent(data: TodayData, account: String) {
     val size = LocalSize.current
     val context = LocalContext.current
     val palette = FemhoWidget.palette
 
-    // 4×1 · no hi cap cap llista: la xifra i el distintiu d'endarrerides.
+    // 4×1 · la fila deixa espai per tocar les dues accions amb el giny a l'alçada mínima.
     if (size.height < 80.dp) {
         Row(
-            modifier = GlanceModifier
-                .fillMaxSize()
-                .clickable(actionStartActivity<MainActivity>()),
+            modifier = GlanceModifier.fillMaxSize().padding(horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                text = data.tasks.size.toString(),
-                style = TextStyle(
-                    color = palette.color { plouOrange },
-                    fontSize = WidgetText.figure,
-                    fontWeight = FontWeight.Bold,
-                ),
-            )
-            Spacer(GlanceModifier.width(8.dp))
-            Text(
-                text = context.getString(R.string.dashboard_today).lowercase(),
-                style = TextStyle(color = palette.color { inkSoft }, fontSize = WidgetText.row),
-            )
-            Spacer(GlanceModifier.defaultWeight())
+            Row(
+                GlanceModifier.defaultWeight().clickable(actionStartActivity<MainActivity>()),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = data.tasks.size.toString(),
+                    style = TextStyle(
+                        color = palette.color { plouOrange },
+                        fontSize = WidgetText.figure,
+                        fontWeight = FontWeight.Bold,
+                    ),
+                )
+                Spacer(GlanceModifier.width(8.dp))
+                Text(
+                    text = context.getString(R.string.dashboard_today).lowercase(),
+                    maxLines = 1,
+                    style = TextStyle(color = palette.color { inkSoft }, fontSize = WidgetText.row),
+                )
+            }
+            WidgetRefreshButton(account)
             QuickAddButton()
         }
         return
     }
 
     Column(modifier = GlanceModifier.fillMaxSize()) {
-        Header(data)
+        Header(data, account)
         Spacer(GlanceModifier.height(WidgetSize.rowGap))
 
         if (data.tasks.isEmpty()) {
@@ -183,7 +188,7 @@ private fun TodayContent(data: TodayData) {
 }
 
 @Composable
-private fun Header(data: TodayData) {
+private fun Header(data: TodayData, account: String) {
     val palette = FemhoWidget.palette
     val context = LocalContext.current
 
@@ -214,6 +219,7 @@ private fun Header(data: TodayData) {
             OverdueBadge(data.overdue)
             Spacer(GlanceModifier.width(6.dp))
         }
+        WidgetRefreshButton(account)
         QuickAddButton()
     }
 }
@@ -296,6 +302,10 @@ private fun TaskRow(task: Task, data: TodayData) {
             modifier = GlanceModifier.width(WidgetSize.bar),
         )
         Spacer(GlanceModifier.width(9.dp))
+        if (task.fromCalendar) {
+            CalendarOriginGlyph()
+            Spacer(GlanceModifier.width(4.dp))
+        }
         Text(
             text = task.title,
             maxLines = 2,

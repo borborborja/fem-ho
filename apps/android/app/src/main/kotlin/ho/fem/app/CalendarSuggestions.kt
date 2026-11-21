@@ -81,11 +81,9 @@ internal fun rememberCalendarSuggestionTime(snapshot: CalendarTaskSuggestions): 
     var time by remember(snapshot) { mutableStateOf(Instant.now()) }
     LaunchedEffect(lifecycle, snapshot) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
-            val boundaries = snapshot.items.filterNot { it.allDay || it.declined }.flatMap { listOf(it.start, it.end) } +
-                listOfNotNull(snapshot.dayEndsAt.takeIf { it.isNotEmpty() }?.let(Instant::parse))
             while (isActive) {
                 time = Instant.now()
-                val next = boundaries.filter { it > time }.minOrNull() ?: break
+                val next = snapshot.nextBoundary(time) ?: break
                 delay(Duration.between(time, next).toMillis().coerceAtLeast(1))
             }
         }
@@ -149,6 +147,29 @@ internal fun CalendarSuggestionCard(
             }
         }
     }
+}
+
+@Composable
+internal fun CalendarSuggestionWidgetDialog(
+    item: CalendarTaskSuggestion,
+    now: Instant,
+    zone: ZoneId,
+    advanceLabel: String,
+    onStart: (CalendarTaskStart) -> Unit,
+    onOpenTask: (() -> Unit)?,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Femho.colors.dialogBg,
+        text = {
+            CalendarSuggestionCard(item, item.column(now), now, zone, advanceLabel, onStart, onOpenTask)
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.nav_close)) }
+        },
+        modifier = Modifier.testTag("widget-calendar-suggestion"),
+    )
 }
 
 @Composable

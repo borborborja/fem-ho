@@ -215,6 +215,7 @@ private fun Root(model: AppViewModel, pending: MutableState<Intent?>) {
     val snackbar = remember { androidx.compose.material3.SnackbarHostState() }
     val snackbarScope = androidx.compose.runtime.rememberCoroutineScope()
     val errorMessage = error?.let { stringResource(it) }
+    val suggestionUnavailable = stringResource(R.string.calendarsuggestions_unavailable)
     LaunchedEffect(errorMessage) {
         if (errorMessage != null) {
             snackbarScope.launch { snackbar.showSnackbar(errorMessage) }
@@ -234,6 +235,7 @@ private fun Root(model: AppViewModel, pending: MutableState<Intent?>) {
         route = route.substringBeforeLast('/', Screen.BOARD.name)
     }
     var requestedStatus by rememberSaveable { mutableStateOf<TaskStatus?>(null) }
+    var requestedCalendarSuggestion by remember { mutableStateOf<CalendarSuggestionTarget?>(null) }
     // El token d'un convit que arriba per deep link (femho://join|invite/{token}).
     var joinToken by rememberSaveable { mutableStateOf<String?>(null) }
     var inviteToken by rememberSaveable { mutableStateOf<String?>(null) }
@@ -246,6 +248,7 @@ private fun Root(model: AppViewModel, pending: MutableState<Intent?>) {
                 wasSignedIn = false
                 route = Screen.BOARD.name
                 requestedStatus = null
+                requestedCalendarSuggestion = null
                 joinToken = null
                 inviteToken = null
             }
@@ -265,10 +268,22 @@ private fun Root(model: AppViewModel, pending: MutableState<Intent?>) {
     LaunchedEffect(pending.value, session) {
         val intent = pending.value ?: return@LaunchedEffect
         val notificationAccount = intent.getStringExtra(Route.EXTRA_NOTIFICATION_ACCOUNT)
-        if (notificationAccount != null && session is AppViewModel.Session.Checking) return@LaunchedEffect
+        val calendarTarget = Route.calendarSuggestionOf(intent)
+        if ((notificationAccount != null || calendarTarget != null) && session is AppViewModel.Session.Checking) return@LaunchedEffect
         val destination = Route.screenOf(intent)
         route = if (destination == Screen.BOARD) destination.name else "${Screen.BOARD.name}/${destination.name}"
         requestedStatus = Route.statusOf(intent)
+        requestedCalendarSuggestion = null
+        if (calendarTarget != null && session is AppViewModel.Session.Ready) {
+            model.closeTask()
+            val item = model.resolveWidgetCalendarSuggestion(calendarTarget)
+            if (item != null) {
+                requestedStatus = item.column(Instant.now())
+                requestedCalendarSuggestion = calendarTarget
+            } else {
+                snackbarScope.launch { snackbar.showSnackbar(suggestionUnavailable) }
+            }
+        }
         Route.taskOf(intent)?.let { id ->
             if (notificationAccount == null) model.openById(id)
             else if (session is AppViewModel.Session.Ready) model.openNotificationTask(id, notificationAccount)
@@ -328,6 +343,12 @@ private fun Root(model: AppViewModel, pending: MutableState<Intent?>) {
                             model = model,
                             requestedStatus = requestedStatus,
                             onStatusOpened = { requestedStatus = null },
+                            requestedCalendarSuggestion = requestedCalendarSuggestion,
+                            onCalendarSuggestionClosed = { requestedCalendarSuggestion = null },
+                            onCalendarSuggestionUnavailable = {
+                                requestedCalendarSuggestion = null
+                                snackbarScope.launch { snackbar.showSnackbar(suggestionUnavailable) }
+                            },
                             onSettings = { go(Screen.SETTINGS) },
                             onCalendar = { go(Screen.CALENDAR) },
                             onSearch = { go(Screen.SEARCH) },
@@ -970,11 +991,20 @@ private fun WelcomeCard(title: String, body: String, testTag: String, onClick: (
     }
 }
 
+private data class CalendarStartConfirmation(
+    val item: CalendarTaskSuggestion,
+    val start: CalendarTaskStart,
+    val fromWidget: Boolean,
+)
+
 @Composable
 private fun BoardHost(
     model: AppViewModel,
     requestedStatus: TaskStatus?,
     onStatusOpened: () -> Unit,
+    requestedCalendarSuggestion: CalendarSuggestionTarget?,
+    onCalendarSuggestionClosed: () -> Unit,
+    onCalendarSuggestionUnavailable: () -> Unit,
     onSettings: () -> Unit,
     onCalendar: () -> Unit,
     onSearch: () -> Unit,
@@ -1101,19 +1131,51 @@ private fun BoardHost(
     val calendarSnapshot = calendarSuggestions.snapshot
     val suggestionTime = rememberCalendarSuggestionTime(calendarSnapshot)
     val availableScopes = scopes.map { it.id }.toSet()
+    val scopeSuggestions = calendarSnapshot.visibleItems(suggestionTime).filter { item ->
+        item.scopeId in availableScopes && (active.isEmpty() || item.scopeId in active)
+    }
     val visibleTasks = visible.associateBy { it.id }
-    val scheduled = if (aiBoard) emptyList() else calendarSnapshot.visibleItems(suggestionTime).filter { item ->
+    val scheduled = if (aiBoard) emptyList() else scopeSuggestions.filter { item ->
         val task = visibleTasks[item.taskId]
-        item.scopeId in availableScopes && (active.isEmpty() || item.scopeId in active) &&
-            (projects.none { it.scopeId == item.scopeId && it.id in activeProjects } || item.projectId in activeProjects) &&
+        (projects.none { it.scopeId == item.scopeId && it.id in activeProjects } || item.projectId in activeProjects) &&
             (task == null || task.status in listOf(TaskStatus.TODO, TaskStatus.INBOX))
     }
     val calendarGroups = scheduled.groupBy { it.column(suggestionTime) }
         .mapValues { (_, items) -> items.groupBy { it.scopeId } }
     val projectedTaskIds = scheduled.mapNotNull { it.taskId }.toSet()
-    var startConfirmation by remember { mutableStateOf<Pair<CalendarTaskSuggestion, CalendarTaskStart>?>(null) }
-    startConfirmation?.let { (item, start) ->
-        val current = scheduled.find { it.occurrence == item.occurrence && it.startsAt == item.startsAt && it.canStart }
+    var startConfirmation by remember { mutableStateOf<CalendarStartConfirmation?>(null) }
+    LaunchedEffect(requestedCalendarSuggestion) {
+        if (requestedCalendarSuggestion != null) startConfirmation = null
+    }
+    fun startCalendarSuggestion(item: CalendarTaskSuggestion, start: CalendarTaskStart, fromWidget: Boolean = false) {
+        if (item.requiresShareConfirmation || item.requiresTaskType) {
+            startConfirmation = CalendarStartConfirmation(item, start, fromWidget)
+        } else {
+            model.actOnCalendarSuggestion(item, start)
+        }
+    }
+    fun widgetSuggestionIsPending(item: CalendarTaskSuggestion): Boolean = tasks.none {
+        it.id == item.taskId && it.status != TaskStatus.TODO && it.status != TaskStatus.INBOX
+    }
+    if (requestedCalendarSuggestion != null) {
+        val item = scopeSuggestions.find(requestedCalendarSuggestion::matches)?.takeIf(::widgetSuggestionIsPending)
+        if (item != null) {
+            CalendarSuggestionWidgetDialog(item, suggestionTime, zone, moveToDoing,
+                onStart = { start ->
+                    onCalendarSuggestionClosed()
+                    startCalendarSuggestion(item, start, fromWidget = true)
+                }, onOpenTask = item.taskId?.let { id ->
+                    {
+                        onCalendarSuggestionClosed()
+                        model.openById(id)
+                    }
+                }, onDismiss = onCalendarSuggestionClosed)
+        } else if (calendarSnapshot.date.isNotEmpty() && availableScopes.isNotEmpty()) {
+            LaunchedEffect(requestedCalendarSuggestion) { onCalendarSuggestionUnavailable() }
+        }
+    } else startConfirmation?.let { (item, start, fromWidget) ->
+        val candidates = if (fromWidget) scopeSuggestions.filter(::widgetSuggestionIsPending) else scheduled
+        val current = candidates.find { it.occurrence == item.occurrence && it.startsAt == item.startsAt && it.canStart }
         if (current == null || (start == CalendarTaskStart.PLANNED && !current.permitsPlannedStart(suggestionTime))) {
             LaunchedEffect(item) { startConfirmation = null }
         } else {
@@ -1184,10 +1246,8 @@ private fun BoardHost(
             calendarScopeLabel = { id -> scopes.firstOrNull { it.id == id }?.name.orEmpty() },
             calendarSuggestionCard = { item, column ->
                 CalendarSuggestionCard(item, column, suggestionTime, zone, advanceLabel = moveToDoing,
-                    onStart = { start ->
-                        if (item.requiresShareConfirmation || item.requiresTaskType) startConfirmation = item to start
-                        else model.actOnCalendarSuggestion(item, start)
-                    }, onOpenTask = item.taskId?.let { id -> { model.openById(id) } })
+                    onStart = { start -> startCalendarSuggestion(item, start) },
+                    onOpenTask = item.taskId?.let { id -> { model.openById(id) } })
             },
             onReturnCalendarSuggestion = { model.actOnCalendarSuggestion(it, null) },
             calendarTaskMetadata = { CalendarTaskMetadata(it) },

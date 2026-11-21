@@ -25,4 +25,4 @@ data class AccountIdentity(val serverUrl: String, val userId: String) {
 
 /** El marcador de sessió evita que una crida en cua prengui les credencials d'un altre login. */
 @ConsistentCopyVisibility
-data class ActiveAccount internal constructor(val identity: AccountIdentity, internal val generation: String)
+data class ActiveAccount internal constructor(val identity: AccountIdentity, val generation: String)

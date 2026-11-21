@@ -3,6 +3,7 @@ package ho.fem.app.widget
 import android.content.Context
 import ho.fem.data.ActiveAccount
 import ho.fem.data.Container
+import ho.fem.data.TaskBoardSnapshot
 import ho.fem.widget.WidgetPalette
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -23,6 +24,9 @@ data class WidgetContext(
 ) {
     val signedIn: Boolean get() = account != null
 }
+
+internal suspend fun WidgetContext.taskBoard(container: Container): TaskBoardSnapshot? =
+    account?.let { container.local(it).taskBoard(activeScopes, container.settings.activeProjects(it).first()) }
 
 suspend fun widgetContext(context: Context): WidgetContext = withContext(Dispatchers.IO) {
     val container = Container.get(context)

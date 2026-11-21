@@ -55,8 +55,10 @@ class BoardWidget : GlanceAppWidget() {
         suspend fun read(): BoardFrame = withContext(Dispatchers.IO) {
             val widget = widgetContext(context)
             val container = Container.get(context)
+            val snapshot = widget.taskBoard(container)
+            FemhoWidgets.scheduleSuggestionUpdate(context, widget.account, snapshot?.nextSuggestionAt)
             BoardFrame(widget,
-                widget.account?.let { container.local(it).taskBoard(widget.activeScopes) },
+                snapshot,
                 (widget.account?.let { container.repository(it).pending.first() } ?: 0) > 0,
                 widget.account?.identity?.key.orEmpty())
         }
@@ -67,6 +69,7 @@ class BoardWidget : GlanceAppWidget() {
             val (widget, snapshot, pending, account) = frame
             val column = widgetColumn(currentState<Preferences>()[WIDGET_COLUMN])
             val data = snapshot?.columns?.get(column).orEmpty()
+            val suggestions = snapshot?.suggestions?.get(column).orEmpty()
             FemhoGlance(widget.palette) {
                 WidgetSurface {
                     if (!widget.signedIn) {
@@ -77,7 +80,7 @@ class BoardWidget : GlanceAppWidget() {
                         Column(GlanceModifier.fillMaxSize()) {
                             val widgetId = GlanceAppWidgetManager(context).getAppWidgetId(id)
                             Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                                Text(context.getString(COLUMNS.first { it.status == column }.label),
+                                Text(context.getString(COLUMNS.first { it.status == column }.label), maxLines = 1,
                                     style = TextStyle(color = FemhoWidget.palette.color { ink }, fontSize = WidgetText.title, fontWeight = FontWeight.Bold),
                                     modifier = GlanceModifier.defaultWeight())
                                 Text(context.getString(R.string.widget_configure),
@@ -86,12 +89,19 @@ class BoardWidget : GlanceAppWidget() {
                                         Intent(context, WidgetConfigurationActivity::class.java)
                                             .setData(Uri.Builder().scheme("femho").authority("widget-configure").appendPath(widgetId.toString()).build())
                                             .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId))))
+                                WidgetRefreshButton(account)
                             }
                             if (pending) {
                                 Text(context.getString(R.string.widget_pendingsync), style = TextStyle(color = FemhoWidget.palette.color { inkSoft }, fontSize = WidgetText.meta))
                             }
-                            if (data.isEmpty()) EmptyState(context.getString(R.string.widget_columnempty))
+                            if (data.isEmpty() && suggestions.isEmpty()) EmptyState(context.getString(R.string.widget_columnempty))
                             else LazyColumn(GlanceModifier.fillMaxSize()) {
+                                if (snapshot != null) items(suggestions) { suggestion ->
+                                    CalendarSuggestionRow(
+                                        suggestion, column, snapshot.scopeColors[suggestion.scopeId].orEmpty(),
+                                        snapshot.suggestionTimezone, account,
+                                    )
+                                }
                                 items(data) { task -> TaskRow(task, column, account) }
                             }
                         }
@@ -115,6 +125,10 @@ private fun TaskRow(task: Task, column: TaskStatus, account: String) {
     val next = TaskStatus.entries[column.ordinal + 1]
     val nextLabel = context.getString(COLUMNS.first { it.status == next }.label)
     Row(GlanceModifier.fillMaxWidth().padding(vertical = 10.dp).clickable(advanceTaskAction(task, account)), verticalAlignment = Alignment.CenterVertically) {
+        if (task.fromCalendar) {
+            CalendarOriginGlyph()
+            Spacer(GlanceModifier.width(4.dp))
+        }
         Text(task.title, maxLines = 2, style = TextStyle(color = FemhoWidget.palette.color { ink }, fontSize = WidgetText.row), modifier = GlanceModifier.defaultWeight())
         Spacer(GlanceModifier.width(8.dp))
         Text(context.getString(R.string.widget_advance).replace("{column}", nextLabel), maxLines = 1,

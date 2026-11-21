@@ -93,22 +93,27 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         val expected = inputData.getString(Notifications.SYNC_ACCOUNT)
         if (expected != null && expected != account.identity.key) return Result.success()
         return runCatching {
-            container.repository(account).refresh(emptyList(), null)
+            val repository = container.repository(account)
+            repository.refresh(emptyList(), null)
             ActivityNotifications.sync(container, account)
+            repository
         }
             .fold(
                 // Un error de xarxa és `retry`, no `failure`: la feina segueix sent
                 // vàlida i el sistema la tornarà a provar amb espera creixent.
-                onSuccess = {
+                onSuccess = { repository ->
                     // La reconnexió també ha de recuperar una neteja feta al web.
                     // Una fallada d'aquesta lectura no invalida el tauler sincronitzat.
                     runCatching { container.refreshUserSettings(account) }
                         .onFailure { if (it is CancellationException) throw it }
-                    // Els widgets es repinten **només si el refresc ha anat bé**: repintar
-                    // després d'un error ensenyaria les mateixes dades i gastaria una
-                    // transacció amb el llançador per no dir res de nou.
+                    val calendarSync = runCatching {
+                        if (FemhoWidgets.areTaskWidgetsPlaced(applicationContext) && container.account() == account) {
+                            repository.refreshCalendarSuggestions()
+                        }
+                    }.onFailure { if (it is CancellationException) throw it }
+                    // Les tasques ja desades es poden mostrar mentre WorkManager reintenta el calendari.
                     FemhoWidgets.updateAll(applicationContext)
-                    Result.success()
+                    if (calendarSync.isFailure && container.account() == account) Result.retry() else Result.success()
                 },
                 onFailure = {
                     if (it is CancellationException) throw it

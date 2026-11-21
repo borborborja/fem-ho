@@ -257,11 +257,7 @@ class Repository(
 
     private suspend fun localCalendarSuggestions(): LocalCalendarSuggestions {
         val cache = dao.calendarSuggestionsCacheOnce()
-        val initial = cache?.let { storedJson.decodeFromString<CalendarTaskSuggestions>(it.snapshot) }
-            ?: CalendarTaskSuggestions()
-        val snapshot = dao.outbox().asSequence().filter { it.entity == CALENDAR_SUGGESTIONS && it.state == "pending" }
-            .fold(initial) { state, queued -> state.withCalendarCommand(objectFrom(queued.payload)) }
-        return LocalCalendarSuggestions(snapshot, cache?.issueId)
+        return LocalCalendarSuggestions(projectCalendarSuggestions(cache, dao.outbox()), cache?.issueId)
     }
 
     suspend fun dismissCalendarSuggestionsIssue(issueId: String) = moveLock.withLock {
@@ -1345,6 +1341,13 @@ private fun PomodoroSnapshot.toCache(offsetMs: Long, issueId: String?): Pomodoro
 private fun CalendarTaskSuggestions.toCache(issueId: String?) = CalendarSuggestionsCacheEntity(
     snapshot = storedJson.encodeToString(this), issueId = issueId,
 )
+
+internal fun projectCalendarSuggestions(cache: CalendarSuggestionsCacheEntity?, outbox: List<OutboxEntity>): CalendarTaskSuggestions {
+    val initial = cache?.let { storedJson.decodeFromString<CalendarTaskSuggestions>(it.snapshot) }
+        ?: CalendarTaskSuggestions()
+    return outbox.asSequence().filter { it.entity == CALENDAR_SUGGESTIONS && it.state == "pending" }
+        .fold(initial) { state, queued -> state.withCalendarCommand(objectFrom(queued.payload)) }
+}
 
 private fun CalendarTaskSuggestions.withCalendarCommand(command: JsonObject): CalendarTaskSuggestions {
     if (command.string("type") == "configure") return copy(enabled = command.bool("enabled") ?: enabled)

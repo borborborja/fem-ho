@@ -1,6 +1,9 @@
 package ho.fem.app
 
 import android.content.Intent
+import ho.fem.model.CalendarTaskSuggestion
+import ho.fem.model.SourceEvent
+import ho.fem.model.TaskStatus
 
 /**
  * Com s'obre l'app des de fora.
@@ -17,11 +20,25 @@ import android.content.Intent
  */
 enum class Screen { BOARD, CALENDAR, SETTINGS, SEARCH, DASHBOARD, JOIN, INVITE, POMODORO }
 
+data class CalendarSuggestionTarget(
+    val occurrence: SourceEvent,
+    val startsAt: String,
+    val accountKey: String,
+) {
+    fun matches(item: CalendarTaskSuggestion): Boolean =
+        item.occurrence == occurrence && item.startsAt == startsAt
+}
+
 object Route {
     const val EXTRA_SCREEN = "ho.fem.screen"
     const val EXTRA_STATUS = "ho.fem.status"
     const val EXTRA_TASK = "ho.fem.task_id"
     const val EXTRA_NOTIFICATION_ACCOUNT = "ho.fem.notification_account"
+    private const val EXTRA_CALENDAR = "ho.fem.suggestion.calendar"
+    private const val EXTRA_EVENT_UID = "ho.fem.suggestion.event"
+    private const val EXTRA_RECURRENCE = "ho.fem.suggestion.recurrence"
+    private const val EXTRA_EVENT_START = "ho.fem.suggestion.starts_at"
+    private const val EXTRA_WIDGET_ACCOUNT = "ho.fem.widget_account"
 
     /** Obre l'afegida ràpida amb el camp enfocat i, si escau, un text ja escrit. */
     const val EXTRA_QUICK_ADD = "ho.fem.quick_add"
@@ -53,8 +70,8 @@ object Route {
         else -> Screen.BOARD
     }
 
-    fun statusOf(intent: Intent?): ho.fem.model.TaskStatus? =
-        ho.fem.model.TaskStatus.entries.firstOrNull { it.name == intent?.getStringExtra(EXTRA_STATUS) }
+    fun statusOf(intent: Intent?): TaskStatus? =
+        TaskStatus.entries.firstOrNull { it.name == intent?.getStringExtra(EXTRA_STATUS) }
 
     fun taskOf(intent: Intent?): String? = intent?.getStringExtra(EXTRA_TASK)
 
@@ -67,13 +84,30 @@ object Route {
         taskId: String? = null,
         quickAdd: Boolean = false,
         draft: String? = null,
-        status: ho.fem.model.TaskStatus? = null,
+        status: TaskStatus? = null,
     ): Intent = Intent().apply {
         putExtra(EXTRA_SCREEN, screen.name.lowercase())
         if (taskId != null) putExtra(EXTRA_TASK, taskId)
         if (quickAdd) putExtra(EXTRA_QUICK_ADD, true)
         if (draft != null) putExtra(EXTRA_DRAFT, draft)
         if (status != null) putExtra(EXTRA_STATUS, status.name)
+    }
+
+    fun intentToCalendarSuggestion(suggestion: CalendarTaskSuggestion, status: TaskStatus, accountKey: String): Intent =
+        intentTo(status = status).apply {
+            putExtra(EXTRA_CALENDAR, suggestion.calendarId)
+            putExtra(EXTRA_EVENT_UID, suggestion.uid)
+            putExtra(EXTRA_RECURRENCE, suggestion.recurrenceId)
+            putExtra(EXTRA_EVENT_START, suggestion.startsAt)
+            putExtra(EXTRA_WIDGET_ACCOUNT, accountKey)
+        }
+
+    fun calendarSuggestionOf(intent: Intent): CalendarSuggestionTarget? {
+        val calendarId = intent.getStringExtra(EXTRA_CALENDAR) ?: return null
+        val uid = intent.getStringExtra(EXTRA_EVENT_UID) ?: return null
+        val startsAt = intent.getStringExtra(EXTRA_EVENT_START) ?: return null
+        val accountKey = intent.getStringExtra(EXTRA_WIDGET_ACCOUNT) ?: return null
+        return CalendarSuggestionTarget(SourceEvent(calendarId, uid, intent.getStringExtra(EXTRA_RECURRENCE)), startsAt, accountKey)
     }
 
     /**

@@ -182,6 +182,7 @@
     <string name="calendarsuggestions_startplanned">I started at {time}</string>
     <string name="calendarsuggestions_suggested">Calendar suggestion</string>
     <string name="calendarsuggestions_tasktype">Task type</string>
+    <string name="calendarsuggestions_unavailable">This calendar suggestion is no longer available.</string>
     <string name="card_add">Add a subtask or a list</string>
     <string name="card_addplaceholder">New subtask… or #List item</string>
     <string name="card_lists_collapsed">▸ Lists ({count})</string>
@@ -1148,6 +1149,7 @@
     <string name="widget_pinned_name">Fem-ho · List</string>
     <string name="widget_quickadd_description">Jot down a task without opening the app.</string>
     <string name="widget_quickadd_name">Fem-ho · Add</string>
+    <string name="widget_refresh">Refresh widget</string>
     <string name="widget_signedout">Sign in to see your tasks.</string>
     <string name="widget_taskboard_advance">{task}. Move to {column}.</string>
     <string name="widget_taskboard_description">Inbox, To do and Doing. Tap a task to advance it.</string>
