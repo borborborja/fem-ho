@@ -13,10 +13,18 @@ data class CalendarTaskSuggestions(
     @SerialName("day_ends_at") val dayEndsAt: String = "",
     val items: List<CalendarTaskSuggestion> = emptyList(),
 ) {
-    fun visibleItems(now: Instant): List<CalendarTaskSuggestion> {
-        if (!enabled || dayEndsAt.isEmpty() || now >= Instant.parse(dayEndsAt)) return emptyList()
-        return if (now.atZone(ZoneId.of(timezone)).toLocalDate().toString() == date) items else emptyList()
+    fun visibleItems(now: Instant): List<CalendarTaskSuggestion> =
+        if (validUntil(now) != null) items else emptyList()
+
+    fun nextBoundary(now: Instant, visible: List<CalendarTaskSuggestion> = visibleItems(now)): Instant? {
+        val endOfDay = validUntil(now) ?: return null
+        val eventBoundary = visible.asSequence().filterNot { it.allDay || it.declined }
+            .flatMap { sequenceOf(it.start, it.end) }.filter { it > now }.minOrNull()
+        return minOf(endOfDay, eventBoundary ?: endOfDay)
     }
+
+    private fun validUntil(now: Instant): Instant? = dayEndsAt.takeIf { enabled && it.isNotEmpty() }
+        ?.let(Instant::parse)?.takeIf { now < it && now.atZone(ZoneId.of(timezone)).toLocalDate().toString() == date }
 }
 
 @Serializable

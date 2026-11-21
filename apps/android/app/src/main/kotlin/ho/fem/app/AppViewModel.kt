@@ -2,6 +2,7 @@ package ho.fem.app
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import ho.fem.app.widget.FemhoWidgets
 import ho.fem.data.ActiveAccount
 import ho.fem.data.Container
 import ho.fem.data.LocalCalendarSuggestions
@@ -1542,6 +1543,21 @@ class AppViewModel(private val container: Container) : ViewModel() {
         true
     }
 
+    /** A l'arrencada, l'intent del widget pot arribar abans del primer valor del flux. */
+    suspend fun resolveWidgetCalendarSuggestion(target: CalendarSuggestionTarget): CalendarTaskSuggestion? {
+        val account = activeAccount?.takeIf { it.identity.key == target.accountKey } ?: return null
+        val repository = container.repository(account)
+        val suggestion = repository.calendarSuggestions.first().snapshot.visibleItems(Instant.now()).find(target::matches)
+            ?: return null
+        val selected = container.settings.activeScopes(account)
+        if (selected.isNotEmpty() && suggestion.scopeId !in selected) return null
+        if (repository.scopes.first().none { it.id == suggestion.scopeId }) return null
+        if (suggestion.taskId != null && repository.tasks.first().any {
+                it.id == suggestion.taskId && it.status != TaskStatus.INBOX && it.status != TaskStatus.TODO
+            }) return null
+        return suggestion.takeIf { activeAccount == account }
+    }
+
     fun actOnCalendarSuggestion(
         suggestion: CalendarTaskSuggestion,
         start: CalendarTaskStart?,
@@ -2632,9 +2648,16 @@ class AppViewModel(private val container: Container) : ViewModel() {
 
     private fun observe(account: ActiveAccount) {
         val repository = container.repository(account)
+        fun refreshWidgets() {
+            if (FemhoWidgets.arePlaced(container.appContext)) {
+                sessionScope.launch { FemhoWidgets.updateAll(container.appContext) }
+            }
+        }
         sessionScope.launch {
             repository.calendarSuggestions.collect { state ->
+                val changed = state.snapshot != _calendarSuggestions.value.snapshot
                 _calendarSuggestions.value = state
+                if (changed) refreshWidgets()
                 state.issueId?.let {
                     _actionError.value = R.string.calendarsuggestions_saveerror
                     repository.dismissCalendarSuggestionsIssue(it)
@@ -2667,12 +2690,17 @@ class AppViewModel(private val container: Container) : ViewModel() {
             container.settings.activeScopeSelection(account).collect { selected ->
                 if (_activeScopes.value != selected) {
                     _activeScopes.value = selected
-                    launch { ho.fem.app.widget.FemhoWidgets.updateAll(container.appContext) }
+                    refreshWidgets()
                 }
             }
         }
         sessionScope.launch {
-            container.settings.activeProjects(account).collect { _activeProjects.value = it }
+            container.settings.activeProjects(account).collect { selected ->
+                if (_activeProjects.value != selected) {
+                    _activeProjects.value = selected
+                    refreshWidgets()
+                }
+            }
         }
         sessionScope.launch { repository.projects.collect { _projects.value = it } }
         sessionScope.launch { repository.people.collect { _people.value = it } }

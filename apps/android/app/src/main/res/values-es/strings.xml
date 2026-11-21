@@ -182,6 +182,7 @@
     <string name="calendarsuggestions_startplanned">Ya he empezado a las {time}</string>
     <string name="calendarsuggestions_suggested">Sugerencia del calendario</string>
     <string name="calendarsuggestions_tasktype">Tipología</string>
+    <string name="calendarsuggestions_unavailable">Esta propuesta del calendario ya no está disponible.</string>
     <string name="card_add">Añadir subtarea o lista</string>
     <string name="card_addplaceholder">Nueva subtarea… o #Lista elemento</string>
     <string name="card_lists_collapsed">▸ Listas ({count})</string>
@@ -1148,6 +1149,7 @@
     <string name="widget_pinned_name">Fem-ho · Lista</string>
     <string name="widget_quickadd_description">Apunta una tarea sin abrir la app.</string>
     <string name="widget_quickadd_name">Fem-ho · Añadir</string>
+    <string name="widget_refresh">Actualizar el widget</string>
     <string name="widget_signedout">Conéctate para ver tus tareas.</string>
     <string name="widget_taskboard_advance">{task}. Mover a {column}.</string>
     <string name="widget_taskboard_description">Inbox, Por hacer y En curso. Toca una tarea para avanzarla.</string>

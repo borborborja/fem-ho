@@ -37,9 +37,9 @@ class TaskBoardWidget : GlanceAppWidget() {
             val widget = widgetContext(context)
             return withContext(Dispatchers.IO) {
                 val container = Container.get(context)
-                TaskBoardFrame(widget,
-                    widget.account?.let { container.local(it).taskBoard(widget.activeScopes) },
-                    widget.account?.identity?.key.orEmpty())
+                val snapshot = widget.taskBoard(container)
+                FemhoWidgets.scheduleSuggestionUpdate(context, widget.account, snapshot?.nextSuggestionAt)
+                TaskBoardFrame(widget, snapshot, widget.account?.identity?.key.orEmpty())
             }
         }
         val initial = read()
@@ -70,19 +70,37 @@ private fun openBoard(context: Context, status: TaskStatus? = null) = actionStar
 
 @Composable
 private fun TaskBoardContent(snapshot: TaskBoardSnapshot, account: String) {
-    Row(GlanceModifier.fillMaxSize()) {
-        COLUMNS.filter { it.status != TaskStatus.DONE }.forEachIndexed { index, column ->
-            if (index > 0) Spacer(GlanceModifier.width(6.dp))
-            BoardLane(column, snapshot, account, GlanceModifier.defaultWeight().fillMaxHeight())
+    val fontScale = LocalContext.current.resources.configuration.fontScale.coerceAtLeast(1f)
+    // Si creix la lletra, les icones conserven la zona tàctil sense tapar els noms.
+    val separateActions = LocalSize.current.width / fontScale < 300.dp
+    Column(GlanceModifier.fillMaxSize()) {
+        if (separateActions) {
+            Row(GlanceModifier.fillMaxWidth(), horizontalAlignment = Alignment.End) {
+                WidgetRefreshButton(account)
+                OpenBoardButton()
+            }
+        }
+        Row(GlanceModifier.fillMaxWidth().defaultWeight()) {
+            COLUMNS.filter { it.status != TaskStatus.DONE }.forEachIndexed { index, column ->
+                if (index > 0) Spacer(GlanceModifier.width(6.dp))
+                BoardLane(column, snapshot, account, !separateActions, GlanceModifier.defaultWeight().fillMaxHeight())
+            }
         }
     }
 }
 
 @Composable
-private fun BoardLane(column: BoardColumn, snapshot: TaskBoardSnapshot, account: String, modifier: GlanceModifier) {
+private fun BoardLane(
+    column: BoardColumn,
+    snapshot: TaskBoardSnapshot,
+    account: String,
+    inlineActions: Boolean,
+    modifier: GlanceModifier,
+) {
     val context = LocalContext.current
     val palette = FemhoWidget.palette
     val tasks = snapshot.columns[column.status].orEmpty()
+    val suggestions = snapshot.suggestions[column.status].orEmpty()
     val count = snapshot.counts[column.status] ?: 0
     Column(modifier) {
         Row(GlanceModifier.fillMaxWidth().height(40.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -93,27 +111,26 @@ private fun BoardLane(column: BoardColumn, snapshot: TaskBoardSnapshot, account:
                 modifier = GlanceModifier.defaultWeight())
             Spacer(GlanceModifier.width(3.dp))
             Text(count.toString(), style = TextStyle(color = palette.color { inkSoft }, fontSize = WidgetText.meta))
-            if (column.status == TaskStatus.DOING) {
-                Box(
-                    GlanceModifier.size(40.dp).clickable(openBoard(context)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Glyph(
-                        WidgetR.drawable.femho_open,
-                        palette.color { inkSoft },
-                        size = 18.dp,
-                        description = context.getString(R.string.widget_taskboard_open),
-                    )
-                }
+            if (inlineActions && column.status == TaskStatus.INBOX) {
+                WidgetRefreshButton(account)
+            }
+            if (inlineActions && column.status == TaskStatus.DOING) {
+                OpenBoardButton()
             }
         }
-        if (tasks.isEmpty()) {
+        if (tasks.isEmpty() && suggestions.isEmpty()) {
             Text(context.getString(R.string.widget_taskboard_empty),
                 style = TextStyle(color = palette.color { inkSoft }, fontSize = WidgetText.meta))
         } else {
             LazyColumn(GlanceModifier.fillMaxWidth().defaultWeight()) {
+                items(suggestions) { suggestion ->
+                    CalendarSuggestionRow(
+                        suggestion, column.status, snapshot.scopeColors[suggestion.scopeId].orEmpty(),
+                        snapshot.suggestionTimezone, account,
+                    )
+                }
                 items(tasks) { task -> BoardTask(task, snapshot.scopeColors[task.scopeId].orEmpty(), account) }
-                if (count > tasks.size) {
+                if (count > tasks.size + suggestions.size) {
                     item {
                         Box(GlanceModifier.fillMaxWidth().height(48.dp).clickable(openBoard(context, column.status)), contentAlignment = Alignment.Center) {
                             Text(context.getString(R.string.widget_taskboard_viewall), maxLines = 2,
@@ -127,12 +144,29 @@ private fun BoardLane(column: BoardColumn, snapshot: TaskBoardSnapshot, account:
 }
 
 @Composable
+private fun OpenBoardButton() {
+    val context = LocalContext.current
+    Box(
+        GlanceModifier.size(WidgetSize.touch).clickable(openBoard(context)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Glyph(
+            WidgetR.drawable.femho_open,
+            FemhoWidget.palette.color { inkSoft },
+            size = 18.dp,
+            description = context.getString(R.string.widget_taskboard_open),
+        )
+    }
+}
+
+@Composable
 private fun BoardTask(task: Task, scopeColor: String, account: String) {
     val context = LocalContext.current
     val palette = FemhoWidget.palette
     val next = COLUMNS.first { it.status.ordinal == task.status.ordinal + 1 }
-    val description = context.getString(R.string.widget_taskboard_advance)
+    val advance = context.getString(R.string.widget_taskboard_advance)
         .replace("{task}", task.title).replace("{column}", context.getString(next.label))
+    val description = if (task.fromCalendar) "$advance ${context.getString(R.string.calendarsuggestions_origin)}" else advance
     // El text ampliat necessita més alçada; la zona tàctil mai baixa de 48 dp.
     val cardHeight = 64.dp * context.resources.configuration.fontScale.coerceAtLeast(1f)
     Box(GlanceModifier.fillMaxWidth().padding(bottom = WidgetSize.rowGap)) {
@@ -150,6 +184,7 @@ private fun BoardTask(task: Task, scopeColor: String, account: String) {
             Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Dot(palette.scope(scopeColor), size = 6.dp)
                 Spacer(GlanceModifier.defaultWeight())
+                if (task.fromCalendar) CalendarOriginGlyph()
                 Glyph(if (next.status == TaskStatus.DONE) WidgetR.drawable.femho_ring_done else WidgetR.drawable.femho_arrow,
                     palette.color { inkSoft }, size = 16.dp)
             }

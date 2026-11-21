@@ -182,6 +182,7 @@
     <string name="calendarsuggestions_startplanned">Ja he començat a les {time}</string>
     <string name="calendarsuggestions_suggested">Proposta del calendari</string>
     <string name="calendarsuggestions_tasktype">Tipologia</string>
+    <string name="calendarsuggestions_unavailable">Aquesta proposta del calendari ja no està disponible.</string>
     <string name="card_add">Afegir subtasca o llista</string>
     <string name="card_addplaceholder">Nova subtasca… o #Llista element</string>
     <string name="card_lists_collapsed">▸ Llistes ({count})</string>
@@ -1148,6 +1149,7 @@
     <string name="widget_pinned_name">Fem-ho · Llista</string>
     <string name="widget_quickadd_description">Apunta una tasca sense obrir l\'app.</string>
     <string name="widget_quickadd_name">Fem-ho · Afegir</string>
+    <string name="widget_refresh">Refresca el widget</string>
     <string name="widget_signedout">Connecta\'t per veure les teves tasques.</string>
     <string name="widget_taskboard_advance">{task}. Passa a {column}.</string>
     <string name="widget_taskboard_description">Inbox, Per fer i Fent. Toca una tasca per avançar-la.</string>

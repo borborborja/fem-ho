@@ -11,8 +11,14 @@ import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Update
 import androidx.room.RoomDatabase
+import ho.fem.model.CalendarTaskSuggestions
 import ho.fem.model.TaskStatus
 import kotlinx.coroutines.flow.Flow
+import java.time.Instant
+
+private const val WIDGET_COLUMN_LIMIT = 25
+
+private val UNSTARTED_TASK_STATUSES = setOf("inbox", "todo")
 
 /**
  * La base local. docs/03 §11, docs/06 §1.
@@ -287,6 +293,9 @@ interface FemhoDao {
     @Query("SELECT * FROM tasks WHERE id = :id")
     suspend fun taskRow(id: String): TaskEntity?
 
+    @Query("SELECT * FROM tasks WHERE id IN (:ids)")
+    suspend fun taskRowsByIds(ids: List<String>): List<TaskEntity>
+
     @Query("SELECT * FROM tasks")
     suspend fun taskRows(): List<TaskEntity>
 
@@ -498,16 +507,49 @@ interface FemhoDao {
     suspend fun columnTasks(status: String, scopeIds: List<String>, limit: Int): List<TaskEntity>
 
     @Transaction
-    suspend fun taskBoardSnapshot(activeScopeIds: List<String>): TaskBoardSnapshot {
-        val scopes = scopesOnce()
-        val ids = activeScopeIds.ifEmpty { scopes.map { it.id } }
+    suspend fun taskBoardSnapshot(activeScopeIds: List<String>, activeProjectIds: List<String>, now: Instant): TaskBoardSnapshot {
+        val scopes = scopesOnce().filter { activeScopeIds.isEmpty() || it.id in activeScopeIds }
+        val ids = scopes.map { it.id }
         val statuses = listOf(TaskStatus.INBOX, TaskStatus.TODO, TaskStatus.DOING)
         val counts = countByStatus(ids).associate { it.status to it.total }
-        // El sostre és per columna; el recompte conserva també les tasques no carregades.
+        val calendar = calendarSuggestionsCacheOnce()?.let { projectCalendarSuggestions(it, outbox()) }
+            ?: CalendarTaskSuggestions()
+        val visible = calendar.visibleItems(now)
+        val filteredScopes = if (visible.isEmpty() || activeProjectIds.isEmpty()) emptySet() else
+            projectsOnce().filter { it.id in activeProjectIds }.map { it.scopeId }.toSet()
+        val candidates = visible.filter {
+            it.scopeId in ids && (it.scopeId !in filteredScopes || it.projectId in activeProjectIds)
+        }
+        val linked = candidates.mapNotNull { it.taskId }.distinct().chunked(500)
+            .flatMap { taskRowsByIds(it) }.associateBy { it.id }
+        val scheduled = candidates.filter { suggestion ->
+            val task = linked[suggestion.taskId]
+            task == null || (!task.deleted && task.status in UNSTARTED_TASK_STATUSES)
+        }.distinctBy { it.taskId ?: it.occurrence }
+        val suggestions = scheduled.groupBy { it.column(now) }
+        // Una proposta substitueix la targeta vinculada encara que la tasca quedi
+        // fora de les primeres 25. Cal conservar el recompte i omplir el seu lloc.
+        val replacedIds = scheduled.mapNotNull { it.taskId }.toSet()
+        val replacedCounts = linked.values.filter { it.id in replacedIds && it.scopeId in ids }
+            .groupingBy { it.status }.eachCount()
         return TaskBoardSnapshot(
-            columns = statuses.associateWith { status -> columnTasks(status.name.lowercase(), ids, 25).map { it.toDomain() } },
-            counts = statuses.associateWith { counts[it.name.lowercase()] ?: 0 },
-            scopeColors = scopes.filter { it.id in ids }.associate { it.id to it.color },
+            columns = statuses.associateWith { status ->
+                val key = status.name.lowercase()
+                val remaining = (WIDGET_COLUMN_LIMIT - suggestions[status].orEmpty().size).coerceAtLeast(0)
+                if (remaining == 0) emptyList() else {
+                    val limit = remaining + (replacedCounts[key] ?: 0)
+                    columnTasks(key, ids, limit).asSequence().filterNot { it.id in replacedIds }
+                        .take(remaining).map { it.toDomain() }.toList()
+                }
+            },
+            counts = statuses.associateWith { status ->
+                val key = status.name.lowercase()
+                (counts[key] ?: 0) - (replacedCounts[key] ?: 0) + suggestions[status].orEmpty().size
+            },
+            scopeColors = scopes.associate { it.id to it.color },
+            suggestions = suggestions.mapValues { (_, items) -> items.take(WIDGET_COLUMN_LIMIT) },
+            suggestionTimezone = calendar.timezone,
+            nextSuggestionAt = calendar.nextBoundary(now, scheduled),
         )
     }
 

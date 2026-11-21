@@ -1,15 +1,20 @@
 package ho.fem.data
 
+import ho.fem.model.CalendarTaskSuggestion
 import ho.fem.model.Person
 import ho.fem.model.Project
 import ho.fem.model.Scope
 import ho.fem.model.Task
 import ho.fem.model.TaskStatus
+import java.time.Instant
 
 data class TaskBoardSnapshot(
     val columns: Map<TaskStatus, List<Task>>,
     val counts: Map<TaskStatus, Int>,
     val scopeColors: Map<String, String>,
+    val suggestions: Map<TaskStatus, List<CalendarTaskSuggestion>>,
+    val suggestionTimezone: String,
+    val nextSuggestionAt: Instant?,
 )
 
 /**
@@ -71,8 +76,11 @@ class LocalReads internal constructor(private val dao: FemhoDao) {
         dao.columnTasks(status.name.lowercase(), resolve(activeScopeIds), limit).map { it.toDomain() }
 
     /** Una sola instantània: un moviment no pot duplicar la tasca entre columnes. */
-    suspend fun taskBoard(activeScopeIds: List<String>): TaskBoardSnapshot =
-        dao.taskBoardSnapshot(activeScopeIds)
+    suspend fun taskBoard(
+        activeScopeIds: List<String>,
+        activeProjectIds: List<String> = emptyList(),
+        now: Instant = Instant.now(),
+    ): TaskBoardSnapshot = dao.taskBoardSnapshot(activeScopeIds, activeProjectIds, now)
 
     suspend fun scopes(): List<Scope> = dao.scopesOnce().map { it.toDomain() }
 
