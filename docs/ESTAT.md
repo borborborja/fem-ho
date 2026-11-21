@@ -7,7 +7,7 @@ Data de l'última verificació completa: **2026-11-19**.
 
 ---
 
-## Propostes del calendari al tauler
+## Propostes del calendari al tauler · 0.27.0
 
 Ajustos → General activa les propostes del calendari al web i a Android. Els
 esdeveniments visibles d'avui apareixen a «Per fer» agrupats per àmbit, amb un
