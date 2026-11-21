@@ -1,5 +1,6 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { enter, token } from './entrar.js';
+import { touchPoint } from './touch-point.js';
 
 test.describe.configure({ mode: 'serial' });
 
@@ -109,14 +110,17 @@ test('pulsació tàctil llarga i cancel·lació del gest', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   const { card } = await createTask(page);
   const title = card.getByTestId('card-title');
-  await title.scrollIntoViewIfNeeded();
-  const box = (await title.boundingBox())!;
   const cdp = await page.context().newCDPSession(page);
-  const point = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
-  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [point] });
+  await cdp.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: [await touchPoint(title)],
+  });
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchCancel', touchPoints: [] });
   await expect(card.getByTestId('card-title-input')).toHaveCount(0);
-  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [point] });
+  await cdp.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: [await touchPoint(title)],
+  });
   await page.waitForTimeout(650);
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   await expect(card.getByTestId('card-title-input')).toBeFocused();
