@@ -116,6 +116,19 @@ describe('expandOccurrences', () => {
     ]);
   });
 
+  it('una data afegida no duplica el DTSTART i un instant al límit inferior hi entra', () => {
+    const out = expandOccurrences({
+      startsAt: FROM,
+      rdate: [FROM, '2026-08-02T09:00:00Z'],
+      from: FROM,
+      to: TO,
+    });
+    expect(out.map((occurrence) => occurrence.recurrenceId)).toEqual([
+      '2026-08-01T00:00:00.000Z',
+      '2026-08-02T09:00:00.000Z',
+    ]);
+  });
+
   it('una ocurrència que SOLAPA la finestra hi surt, encara que hi comenci abans', () => {
     // RFC 4791 §9.9 defineix el solapament, no la inclusió. Un esdeveniment que va
     // començar ahir a les 23:00 i acaba avui a la 1:00 és d'avui també.

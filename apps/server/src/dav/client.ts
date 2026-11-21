@@ -20,6 +20,7 @@ import { safeFetch, type SafeFetchOptions } from './fetch-safe.js';
 import { etagOf } from './objects.js';
 import { extractFeedEvents } from './rss.js';
 import { safeFilename, sniffMime, storeAttachment } from '../services/attachments.js';
+import { parseEventComponent, type ParsedEvent } from './parse-ical.js';
 
 /**
  * L'interval mínim entre refrescos.
@@ -111,6 +112,7 @@ export interface FetchedComponent {
   raw: string;
   etag: string;
   attachments: FetchedAttachment[];
+  event?: ParsedEvent;
 }
 
 /**
@@ -192,10 +194,7 @@ export function extractEvents(
   return calendar.getAllSubcomponents('vevent').map((event) => {
     if (strip) stripAlarms(event);
 
-    const dtstart = event.getFirstProperty('dtstart');
-    const start = dtstart?.getFirstValue() as ICAL.Time | undefined;
-    const dtend = event.getFirstProperty('dtend');
-    const end = dtend?.getFirstValue() as ICAL.Time | undefined;
+    const parsed = parseEventComponent(event);
 
     // Cada component es guarda embolicat en el seu propi VCALENDAR: és el que un client
     // espera trobar-se en llegir el recurs, i el que fa que `raw_ical` sigui servible
@@ -203,19 +202,28 @@ export function extractEvents(
     const wrapper = new ICAL.Component('vcalendar');
     wrapper.updatePropertyWithValue('version', '2.0');
     wrapper.updatePropertyWithValue('prodid', '-//Fem-ho//CalDAV//EN');
+    const timezones = new Set(
+      event.getAllProperties().map((property) => property.getParameter('tzid')),
+    );
+    for (const timezone of calendar.getAllSubcomponents('vtimezone')) {
+      const tzid = timezone.getFirstPropertyValue('tzid');
+      if (typeof tzid === 'string' && timezones.has(tzid))
+        wrapper.addSubcomponent(new ICAL.Component(timezone.toJSON()));
+    }
     wrapper.addSubcomponent(event);
     const raw = wrapper.toString();
 
     return {
-      uid: String(event.getFirstPropertyValue('uid') ?? ''),
-      summary: String(event.getFirstPropertyValue('summary') ?? '(untitled)'),
-      startsAt: start === undefined ? new Date(0).toISOString() : start.toJSDate().toISOString(),
-      endsAt: end === undefined ? null : end.toJSDate().toISOString(),
-      allDay: start?.isDate === true,
-      timezone: (dtstart?.getParameter('tzid') as string | undefined) ?? null,
+      uid: parsed.uid,
+      summary: parsed.summary,
+      startsAt: parsed.startsAt,
+      endsAt: parsed.endsAt,
+      allDay: parsed.allDay,
+      timezone: parsed.timezone,
       raw,
       etag: etagOf(raw),
       attachments: extractAttachments(event),
+      event: parsed,
     };
   });
 }
@@ -230,7 +238,7 @@ export interface RefreshResult {
 /**
  * Refresca un origen.
  *
- * **Es comparen els UID i s'esborra el que ha desaparegut de l'origen** (docs/07 §9).
+ * **Es comparen els components i s'esborra el que ha desaparegut de l'origen** (docs/07 §9).
  * Sense això, un esdeveniment cancel·lat a l'origen es quedaria a Fem-ho per sempre.
  */
 export async function refreshSubscription(
@@ -272,7 +280,7 @@ export async function refreshSubscription(
    * Un RSS es llegeix diferent, però **a partir d'aquí és igual**.
    *
    * `extractFeedEvents` torna els mateixos components que `extractEvents`, o sigui que
-   * tot el que ve després —comparar UID, esborrar el que ha desaparegut, guardar el
+   * tot el que ve després —comparar components, esborrar el que ha desaparegut, guardar el
    * `raw_ical`— no sap ni li cal saber d'on venen.
    */
   const strip = isTrue(subscription.strip_alarms);
@@ -369,18 +377,40 @@ async function applyFetched(
   const existing = await sql<{
     id: string;
     uid: string;
+    recurrence_id: string | null;
     etag: string | null;
     deleted_at: string | null;
+    starts_at: string;
+    ends_at: string | null;
+    status: string;
+    transparency: string;
+    rrule: string | null;
+    rdate: string | null;
+    exdate: string | null;
   }>`
-    SELECT id, uid, etag, deleted_at FROM events WHERE calendar_id = ${subscription.id}
+    SELECT id, uid, recurrence_id, etag, deleted_at, starts_at, ends_at, status,
+           transparency, rrule, rdate, exdate
+    FROM events WHERE calendar_id = ${subscription.id}
   `.execute(ctx.tx);
 
-  const byUid = new Map(existing.rows.map((row) => [row.uid, row]));
+  const keyOf = (uid: string, recurrenceId: string | null) => `${uid}\u0000${recurrenceId ?? ''}`;
+  const remaining = new Map(existing.rows.map((row) => [keyOf(row.uid, row.recurrence_id), row]));
+  const fetchedKeys = new Set<string>();
   const result: RefreshResult = { fetched: components.length, created: 0, updated: 0, removed: 0 };
 
   for (const component of components) {
-    const row = byUid.get(component.uid);
-    byUid.delete(component.uid);
+    const event = component.event;
+    const recurrenceId = event?.recurrenceId ?? null;
+    const key = keyOf(component.uid, recurrenceId);
+    if (fetchedKeys.has(key)) continue;
+    fetchedKeys.add(key);
+    const row = remaining.get(key);
+    remaining.delete(key);
+    const status = event?.status ?? 'CONFIRMED';
+    const transparency = event?.transparency ?? 'OPAQUE';
+    const rrule = event?.rrule ?? null;
+    const rdate = event?.rdate.length ? JSON.stringify(event.rdate) : null;
+    const exdate = event?.exdate.length ? JSON.stringify(event.exdate) : null;
 
     /**
      * **Es compara l'etag amb què va arribar l'última vegada** (docs/07 §9, punt 1).
@@ -393,16 +423,33 @@ async function applyFetched(
      * que havia sortit de la finestra i ha tornat porta el mateix etag i s'ha de
      * ressuscitar igualment.
      */
-    if (row !== undefined && row.etag === component.etag && row.deleted_at === null) continue;
+    if (
+      row !== undefined &&
+      row.etag === component.etag &&
+      row.deleted_at === null &&
+      Date.parse(row.starts_at) === Date.parse(component.startsAt) &&
+      (row.ends_at === component.endsAt ||
+        (row.ends_at !== null &&
+          component.endsAt !== null &&
+          Date.parse(row.ends_at) === Date.parse(component.endsAt))) &&
+      row.status === status &&
+      row.transparency === transparency &&
+      row.rrule === rrule &&
+      row.rdate === rdate &&
+      row.exdate === exdate
+    )
+      continue;
 
     if (row === undefined) {
       const eventId = uuidv7();
       await sql`
-        INSERT INTO events (id, calendar_id, uid, summary, starts_at, ends_at, all_day,
-                            timezone, etag, raw_ical, created_at, updated_at)
-        VALUES (${eventId}, ${subscription.id}, ${component.uid}, ${component.summary},
+        INSERT INTO events (id, calendar_id, uid, recurrence_id, summary, starts_at,
+                            ends_at, all_day, timezone, status, transparency, rrule, rdate,
+                            exdate, etag, raw_ical, created_at, updated_at)
+        VALUES (${eventId}, ${subscription.id}, ${component.uid}, ${recurrenceId}, ${component.summary},
                 ${component.startsAt}, ${component.endsAt}, ${dbBool(component.allDay)},
-                ${component.timezone}, ${component.etag}, ${component.raw}, ${ctx.now}, ${ctx.now})
+                ${component.timezone}, ${status}, ${transparency}, ${rrule}, ${rdate}, ${exdate},
+                ${component.etag}, ${component.raw}, ${ctx.now}, ${ctx.now})
       `.execute(ctx.tx);
       await applyAttachments(ctx, subscription, eventId, component.attachments, dataDir);
       result.created += 1;
@@ -410,7 +457,8 @@ async function applyFetched(
       await sql`
         UPDATE events SET summary = ${component.summary}, starts_at = ${component.startsAt},
                           ends_at = ${component.endsAt}, all_day = ${dbBool(component.allDay)},
-                          timezone = ${component.timezone}, etag = ${component.etag},
+                          timezone = ${component.timezone}, status = ${status}, transparency = ${transparency},
+                          rrule = ${rrule}, rdate = ${rdate}, exdate = ${exdate}, etag = ${component.etag},
                           raw_ical = ${component.raw}, updated_at = ${ctx.now},
                           -- Si havia sortit de la finestra i ha tornat, torna a ser viva.
                           deleted_at = NULL,
@@ -430,7 +478,7 @@ async function applyFetched(
    * clients es rebaixessin el calendari cada hora sense que hagués canviat res, que és
    * exactament el que la comparació d'etags existeix per evitar.
    */
-  for (const [, row] of byUid) {
+  for (const row of remaining.values()) {
     if (row.deleted_at !== null) continue;
     await sql`
       UPDATE events SET deleted_at = ${ctx.now}, updated_at = ${ctx.now} WHERE id = ${row.id}

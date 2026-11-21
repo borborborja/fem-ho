@@ -1,9 +1,22 @@
 import { v7 as uuidv7 } from 'uuid';
 import type { PomodoroSnapshot } from '@fem-ho/contracts';
 import { ApiError } from '../app/api.js';
-import type { Board, Checklist, Inbox, Subtask, Task } from '../app/types.js';
+import type {
+  Board,
+  CalendarSuggestionResult,
+  Checklist,
+  Inbox,
+  Subtask,
+  Task,
+} from '../app/types.js';
 import { FemHoDatabase, readMeta, writeMeta, type OutboxRow } from './db.js';
-import { applyResults, compareOperations, type OperationResult } from './outbox.js';
+import {
+  applyResults,
+  calendarSuggestionTaskId,
+  compareOperations,
+  markCalendarTaskConflicts,
+  type OperationResult,
+} from './outbox.js';
 import {
   compareSubtasks,
   detachChecklists,
@@ -15,6 +28,7 @@ import {
 const BOARD_PATH = '/api/v1/board?';
 const INBOX_PATH = '/api/v1/inbox?';
 export const POMODORO_PATH = '/api/v1/pomodoro';
+export const CALENDAR_SUGGESTIONS_PATH = '/api/v1/calendar-task-suggestions';
 export type CachedPomodoro = PomodoroSnapshot & { observed_at_ms?: number };
 const BOARD_CACHE_REVISION = 'board-cache-revision';
 const SNAPSHOT_PREFIX = 'snapshot:';
@@ -24,6 +38,7 @@ function protectsReceipts(path: string): boolean {
     path.startsWith(BOARD_PATH) ||
     path.startsWith(INBOX_PATH) ||
     path === POMODORO_PATH ||
+    path === CALENDAR_SUGGESTIONS_PATH ||
     /^\/api\/v1\/tasks\/[^/]+\/(subtasks|checklists)$/.test(path)
   );
 }
@@ -186,6 +201,7 @@ export async function applyBoardResults(
     const taskProgress = new Map<string, ListProgress>();
     let listsChanged = false;
     let pomodoroChanged = false;
+    let calendarSuggestionsChanged = false;
     for (const row of sent) {
       const result = byId.get(row.id);
       if (result === undefined) continue;
@@ -206,6 +222,21 @@ export async function applyBoardResults(
           }),
         );
         pomodoroChanged = true;
+      } else if (row.entity_type === 'calendar_suggestions') {
+        const raw = (result.status === 'ok' ? result.entity : result.server_entity) as
+          CalendarSuggestionResult | undefined;
+        const { snapshot, task } = raw ?? {};
+        if (snapshot !== undefined)
+          await writeMeta(
+            db,
+            `${SNAPSHOT_PREFIX}${CALENDAR_SUGGESTIONS_PATH}`,
+            JSON.stringify(snapshot),
+          );
+        if (task !== undefined) confirmed.push(task);
+        const localTaskId = calendarSuggestionTaskId(row);
+        if (result.status === 'ok' && localTaskId !== undefined && localTaskId !== task?.id)
+          await markCalendarTaskConflicts(db, localTaskId);
+        calendarSuggestionsChanged = true;
       } else if (
         row.entity_type === 'task' &&
         result.status === 'ok' &&
@@ -284,7 +315,7 @@ export async function applyBoardResults(
         await db.meta.put({ key: snapshot.key, value: JSON.stringify(inbox) });
       }
     }
-    if (confirmed.length > 0 || listsChanged || pomodoroChanged) {
+    if (confirmed.length > 0 || listsChanged || pomodoroChanged || calendarSuggestionsChanged) {
       await writeMeta(db, BOARD_CACHE_REVISION, uuidv7());
     }
     // Després del rebut, la targeta ha de seguir visible en desconnectar abans del GET.

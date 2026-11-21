@@ -1,5 +1,6 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { enterAsNew, token } from './entrar.js';
+import { touchPoint } from './touch-point.js';
 
 async function taskWithSubtask(page: Page, account: string) {
   await enterAsNew(page, {
@@ -99,19 +100,10 @@ test.describe('amb toc', () => {
   }) => {
     const { card } = await taskWithSubtask(page, 'toc');
     const title = card.getByTestId('subtask-title');
-    await title.scrollIntoViewIfNeeded();
-    const bounds = (await title.boundingBox())!;
-    const target = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
-    expect(
-      await page.evaluate(
-        ({ x, y }) => document.elementFromPoint(x, y)?.getAttribute('data-testid'),
-        target,
-      ),
-    ).toBe('subtask-title');
     const cdp = await context.newCDPSession(page);
     await cdp.send('Input.dispatchTouchEvent', {
       type: 'touchStart',
-      touchPoints: [target],
+      touchPoints: [await touchPoint(title)],
     });
     await page.waitForTimeout(650);
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });

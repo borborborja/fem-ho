@@ -24,6 +24,35 @@
 
 import { t, type SourceKind } from '@fem-ho/contracts';
 
+export function CalendarOriginBadge() {
+  const label = t('calendarSuggestions.origin');
+  return (
+    <span
+      role="img"
+      aria-label={label}
+      title={label}
+      data-testid="calendar-task-origin"
+      style={{ display: 'inline-flex', color: 'var(--ink-soft)', flexShrink: 0 }}
+    >
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <path d="M9 20H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2v2M7 3v4m9-4v4M3 10h7" />
+        <circle cx="16" cy="16" r="5" />
+        <path d="M16 13.5v3l1.8 1" />
+      </svg>
+    </span>
+  );
+}
+
 /** Un `.ics` publicat o un CalDAV: un calendari, en tots dos casos. */
 function CalendarGlyph() {
   return (

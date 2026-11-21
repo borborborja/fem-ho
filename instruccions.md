@@ -72,9 +72,9 @@ Els identificadors els genera el client. Les posicions les calcula el client. Ca
 
 Un esdeveniment de calendari és una entitat pròpia. No és una tasca amb hora d'inici i de fi. Els seus `STATUS` són `TENTATIVE` / `CONFIRMED` / `CANCELLED`, no els d'una tasca; té `TRANSP` i assistents amb `PARTSTAT`, que una tasca no té; i un calendari extern subscrit només en pot produir d'aquests.
 
-**Un esdeveniment no té mai estat de kanban ni s'arrossega entre columnes. A la bústia hi pot sortir com a font, mai com a targeta de tasca.**
+**Un esdeveniment no té mai estat de kanban ni s'arrossega entre columnes.** La bústia el pot mostrar com a font. «Per fer» i «Fent» en poden mostrar una proposta independent quan la persona activa la funció. Confirmar-la crea o inicia una tasca amb identitat pròpia.
 
-Aquesta frase deia abans «els esdeveniments no surten mai al kanban», i es va acotar l'11 d'agost del 2026 en fer que les fonts subscrites conformessin la bústia diària —que és la primera columna del kanban—. El que protegia es manté sencer i ara es pot **comprovar** en comptes de discutir: un esdeveniment no té `status`, no té `position`, no és un `Task` en cap tipus, no s'arrossega, no té casella de fet, i cap identificador seu pot arribar a `POST /tasks/{id}/move`. Les tres columnes de treball vénen de `/board` i allà no hi entra cap esdeveniment. El raonament sencer és a [`docs/14`](docs/14-decisions.md) P9.
+La distinció es comprova al contracte. Un esdeveniment conserva l'estat de VEVENT i l'API de tasques accepta identificadors de tasca. `/board` retorna les tasques amb el seu `status` i `position`. Les propostes es consulten a `/calendar-task-suggestions` i comencen amb una ordre que resol l'ocurrència i comprova els permisos. El raonament és a [`docs/14`](docs/14-decisions.md) P9 i P28.
 
 ### 8. Una sola capa de política
 

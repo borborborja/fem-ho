@@ -126,6 +126,27 @@ export function pomodoroTaskIds(row: OutboxRow): string[] {
   return typeof task_id === 'string' ? [task_id] : [];
 }
 
+export function calendarSuggestionTaskId(row: OutboxRow): string | undefined {
+  return row.entity_type === 'calendar_suggestions' &&
+    row.payload.type === 'start' &&
+    typeof row.payload.task_id === 'string'
+    ? row.payload.task_id
+    : undefined;
+}
+
+export async function markCalendarTaskConflicts(db: FemHoDatabase, taskId: string): Promise<void> {
+  // Les edicions de la targeta provisional s’han escrit per a aquesta tasca concreta.
+  // Si una altra sessió n’ha començat una abans, l’usuari ha de veure el conflicte.
+  await db.outbox
+    .filter(
+      (row) =>
+        (row.entity_type === 'task' && row.entity_id === taskId) ||
+        row.parent_task_id === taskId ||
+        pomodoroTaskIds(row).includes(taskId),
+    )
+    .modify({ status: 'conflict' });
+}
+
 export function nextBoardOperations(rows: OutboxRow[]): OutboxRow[] {
   const pendingParents = new Set(
     rows
@@ -135,8 +156,16 @@ export function nextBoardOperations(rows: OutboxRow[]): OutboxRow[] {
   const seen = new Set<string>();
   const earlierTaskChanges = new Set<string>();
   const earlierPomodoroTasks = new Set<string>();
+  const earlierCalendarTasks = new Set<string>();
   return topologicalOrder(rows)
     .filter((row) => {
+      const calendarTaskId = calendarSuggestionTaskId(row);
+      if (calendarTaskId !== undefined) earlierCalendarTasks.add(calendarTaskId);
+      if (
+        row.entity_type === 'calendar_suggestions' &&
+        (row.status === 'failed' || row.status === 'conflict')
+      )
+        return false;
       const key = `${row.entity_type}:${row.entity_id}`;
       if (seen.has(key)) return false;
       seen.add(key);
@@ -145,14 +174,23 @@ export function nextBoardOperations(rows: OutboxRow[]): OutboxRow[] {
       if (row.entity_type === 'pomodoro') {
         const tasks = pomodoroTaskIds(row);
         for (const id of tasks) earlierPomodoroTasks.add(id);
-        if (tasks.some((id) => earlierTaskChanges.has(id))) return false;
+        if (tasks.some((id) => earlierTaskChanges.has(id) || earlierCalendarTasks.has(id)))
+          return false;
+      } else if (calendarTaskId !== undefined) {
+        if (earlierTaskChanges.has(calendarTaskId) || earlierPomodoroTasks.has(calendarTaskId))
+          return false;
       } else if (row.entity_type === 'task') {
         if (row.op !== 'update') earlierTaskChanges.add(row.entity_id);
-        if (earlierPomodoroTasks.has(row.entity_id)) return false;
+        if (earlierPomodoroTasks.has(row.entity_id) || earlierCalendarTasks.has(row.entity_id))
+          return false;
       }
       // Esperem el rebut de la tasca mare. Si la creació ha fallat, les seves subtasques
       // encara es poden enviar quan es resolgui l'error de la mare.
-      if (row.parent_task_id !== undefined && pendingParents.has(row.parent_task_id)) return false;
+      if (
+        row.parent_task_id !== undefined &&
+        (pendingParents.has(row.parent_task_id) || earlierCalendarTasks.has(row.parent_task_id))
+      )
+        return false;
       return row.status === 'pending' || row.status === 'sending';
     })
     .slice(0, 100);
@@ -172,6 +210,10 @@ export async function discardBoardOperation(db: FemHoDatabase, row: OutboxRow): 
         await db.outbox.where('parent_task_id').equals(row.entity_id).delete();
     } else {
       await db.outbox.delete(row.id);
+      const taskId = calendarSuggestionTaskId(row);
+      if (taskId !== undefined && row.calendar_suggestion?.task_id === null) {
+        await markCalendarTaskConflicts(db, taskId);
+      }
     }
   });
 }
@@ -261,7 +303,7 @@ export async function applyResults(
 
       if (result.status === 'ok') {
         await db.outbox.delete(row.id);
-        if (row.entity_type === 'pomodoro') continue;
+        if (row.entity_type === 'pomodoro' || row.entity_type === 'calendar_suggestions') continue;
         if (row.op === 'delete') {
           await db.entities.delete(row.entity_id);
         } else if (result.entity !== undefined) {
@@ -275,7 +317,11 @@ export async function applyResults(
 
       if (result.status === 'conflict') {
         await db.outbox.put({ ...row, status: 'conflict', server_entity: result.server_entity });
-        if (row.entity_type !== 'pomodoro' && result.server_entity !== undefined) {
+        if (
+          row.entity_type !== 'pomodoro' &&
+          row.entity_type !== 'calendar_suggestions' &&
+          result.server_entity !== undefined
+        ) {
           await db.entities.put({
             ...(result.server_entity as { id: string }),
             entity_type: row.entity_type,

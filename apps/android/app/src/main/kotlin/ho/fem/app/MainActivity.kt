@@ -67,6 +67,8 @@ import ho.fem.designsystem.TaskCard
 import ho.fem.designsystem.scopeColor
 import ho.fem.model.Checklist
 import ho.fem.model.CalendarDate
+import ho.fem.model.CalendarTaskStart
+import ho.fem.model.CalendarTaskSuggestion
 import ho.fem.model.Project
 import ho.fem.model.Scope
 import ho.fem.model.Task
@@ -1046,6 +1048,8 @@ private fun BoardHost(
     val addPlaceholder = stringResource(R.string.card_addplaceholder)
     val editLabel = stringResource(R.string.task_edit)
     val advanceTemplate = stringResource(R.string.board_card_advance)
+    val moveToDoing = advanceTemplate.replace("{column}", stringResource(R.string.board_column_doing))
+    val moveToTodo = advanceTemplate.replace("{column}", stringResource(R.string.board_column_todo))
     val pinLabel = stringResource(R.string.checklist_pin)
     val unpinLabel = stringResource(R.string.checklist_unpinaction)
     val toggleItemTemplate = stringResource(R.string.checklist_toggleitem)
@@ -1088,6 +1092,36 @@ private fun BoardHost(
         perAmbit.filter { task ->
             val teTria = projects.any { it.scopeId == task.scopeId && it.id in activeProjects }
             if (!teTria) true else task.projectId != null && task.projectId in activeProjects
+        }
+    }
+
+    CalendarSuggestionsSyncEffect(model)
+    LaunchedEffect(today) { model.refreshCalendarSuggestions() }
+    val calendarSuggestions by model.calendarSuggestions.collectAsStateWithLifecycle()
+    val calendarSnapshot = calendarSuggestions.snapshot
+    val suggestionTime = rememberCalendarSuggestionTime(calendarSnapshot)
+    val availableScopes = scopes.map { it.id }.toSet()
+    val visibleTasks = visible.associateBy { it.id }
+    val scheduled = if (aiBoard) emptyList() else calendarSnapshot.visibleItems(suggestionTime).filter { item ->
+        val task = visibleTasks[item.taskId]
+        item.scopeId in availableScopes && (active.isEmpty() || item.scopeId in active) &&
+            (projects.none { it.scopeId == item.scopeId && it.id in activeProjects } || item.projectId in activeProjects) &&
+            (task == null || task.status in listOf(TaskStatus.TODO, TaskStatus.INBOX))
+    }
+    val calendarGroups = scheduled.groupBy { it.column(suggestionTime) }
+        .mapValues { (_, items) -> items.groupBy { it.scopeId } }
+    val projectedTaskIds = scheduled.mapNotNull { it.taskId }.toSet()
+    var startConfirmation by remember { mutableStateOf<Pair<CalendarTaskSuggestion, CalendarTaskStart>?>(null) }
+    startConfirmation?.let { (item, start) ->
+        val current = scheduled.find { it.occurrence == item.occurrence && it.startsAt == item.startsAt && it.canStart }
+        if (current == null || (start == CalendarTaskStart.PLANNED && !current.permitsPlannedStart(suggestionTime))) {
+            LaunchedEffect(item) { startConfirmation = null }
+        } else {
+            CalendarSuggestionStartDialog(current, start, zone, taskTypes.filter { it.scopeId == current.scopeId },
+                onConfirm = { type ->
+                    startConfirmation = null
+                    model.actOnCalendarSuggestion(current, start, current.requiresShareConfirmation, type)
+                }, onDismiss = { startConfirmation = null })
         }
     }
 
@@ -1145,7 +1179,18 @@ private fun BoardHost(
         BoardScreen(
             requestedStatus = requestedStatus,
             onStatusOpened = onStatusOpened,
-            tasks = visible,
+            tasks = visible.filterNot { it.id in projectedTaskIds },
+            calendarGroups = calendarGroups,
+            calendarScopeLabel = { id -> scopes.firstOrNull { it.id == id }?.name.orEmpty() },
+            calendarSuggestionCard = { item, column ->
+                CalendarSuggestionCard(item, column, suggestionTime, zone, advanceLabel = moveToDoing,
+                    onStart = { start ->
+                        if (item.requiresShareConfirmation || item.requiresTaskType) startConfirmation = item to start
+                        else model.actOnCalendarSuggestion(item, start)
+                    }, onOpenTask = item.taskId?.let { id -> { model.openById(id) } })
+            },
+            onReturnCalendarSuggestion = { model.actOnCalendarSuggestion(it, null) },
+            calendarTaskMetadata = { CalendarTaskMetadata(it) },
             doneDay = doneFilter,
             doneHeader = {
                 DoneColumnHeader(
@@ -1173,14 +1218,9 @@ private fun BoardHost(
                     TaskStatus.DONE to doneEmptyLabel,
                 ),
                 advance = mapOf(
-                    TaskStatus.INBOX to advanceTemplate.replace(
-                        "{column}",
-                        stringResource(R.string.board_column_todo),
-                    ),
-                    TaskStatus.TODO to advanceTemplate.replace(
-                        "{column}",
-                        stringResource(R.string.board_column_doing),
-                    ),
+                    TaskStatus.INBOX to moveToTodo,
+                    TaskStatus.TODO to moveToDoing,
+                    TaskStatus.DOING to moveToTodo,
                 ),
                 toggle = stringResource(R.string.sync_complete),
                 lock = stringResource(R.string.ai_lock_card),
@@ -1414,9 +1454,13 @@ private fun mcpProvenanceLabels() = McpProvenanceLabels(
     unspecified = stringResource(R.string.source_mcpunspecified),
 )
 
-private fun mcpMetadata(task: Task): (@Composable () -> Unit)? {
-    val activity = task.mcpActivity ?: return null
-    return { McpProvenanceBadge(activity, mcpProvenanceLabels(), compact = true) }
+private fun taskOriginMetadata(task: Task): (@Composable () -> Unit)? {
+    val activity = task.mcpActivity
+    if (!task.fromCalendar && activity == null) return null
+    return {
+        if (task.fromCalendar) CalendarOriginBadge()
+        if (activity != null) McpProvenanceBadge(activity, mcpProvenanceLabels(), compact = true)
+    }
 }
 
 @Composable
@@ -1647,6 +1691,7 @@ private fun TaskDetailSheet(model: AppViewModel) {
             onAddComment = { body, finished -> model.addComment(task.id, body, finished) },
             onUndoActivity = { model.undoActivity(it) },
             formatActivityTime = { value -> runCatching { activityTime.format(Instant.parse(value)) }.getOrNull() },
+            calendarOrigin = { CalendarOriginBadge() },
             aiTaskContent = {
                 TaskAiActions(model, task) { value ->
                     runCatching { activityTime.format(Instant.parse(value)) }.getOrNull()
@@ -1876,7 +1921,7 @@ private fun CalendarHost(
                 onEventToTask = { model.eventToTask(it, request) },
                 onEventToggle = { model.setEventInInbox(it, visible = !it.inInbox, request = request) },
                 eventTime = { CalendarDate.event(it.startsAt, it.allDay, zone)?.timeLabel.orEmpty() },
-                taskMetadata = { mcpMetadata(it)?.invoke() },
+                taskMetadata = { taskOriginMetadata(it)?.invoke() },
             )
         }
     }
@@ -2187,6 +2232,8 @@ private fun Modifier.androidClickable(onClick: () -> Unit): Modifier = this.clic
 private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> Unit) {
     val locale by model.preferenceLocale.collectAsStateWithLifecycle(initialValue = "ca")
     val pomodoro by model.pomodoro.collectAsStateWithLifecycle()
+    val calendarSuggestions by model.calendarSuggestions.collectAsStateWithLifecycle()
+    CalendarSuggestionsSyncEffect(model)
     val appLocale = androidx.compose.ui.platform.LocalConfiguration.current.locales[0]?.language ?: "ca"
     val firstDayLabel = stringResource(
         if (Dates.weekStart(appLocale) == Dates.SUNDAY) R.string.settings_day_sun else R.string.settings_day_mon,
@@ -2243,6 +2290,8 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
         inboxShowOverdue = inboxShowOverdue,
         pomodoroEnabled = pomodoro.snapshot.settings.enabled,
         onPomodoroEnabled = model::setPomodoroEnabled,
+        calendarSuggestionsEnabled = calendarSuggestions.snapshot.enabled,
+        onCalendarSuggestionsEnabled = model::setCalendarSuggestionsEnabled,
         labels = SettingsLabels(
             title = stringResource(R.string.settings_title),
             back = stringResource(R.string.nav_backtoboard),
@@ -2286,6 +2335,8 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
             ),
             // General tab
             pomodoro = stringResource(R.string.pomodoro_enabled),
+            calendarSuggestions = stringResource(R.string.calendarsuggestions_setting),
+            calendarSuggestionsHint = stringResource(R.string.calendarsuggestions_settinghint),
             language = stringResource(R.string.settings_language),
             languageOptions = listOf(
                 "ca" to "Català",
@@ -2806,7 +2857,7 @@ private fun Section(
                     done = task.status == TaskStatus.DONE,
                     onOpen = { onOpen(task) },
                     modifier = Modifier.testTag("$testTag-task"),
-                    extraMetadata = mcpMetadata(task),
+                    extraMetadata = taskOriginMetadata(task),
                 )
             }
         }
@@ -2878,7 +2929,7 @@ private fun SearchHost(model: AppViewModel, onBoard: () -> Unit) {
                     done = task.status == TaskStatus.DONE,
                     onOpen = { model.open(task) },
                     modifier = Modifier.testTag("search-result-${'$'}{task.id}"),
-                    extraMetadata = mcpMetadata(task),
+                    extraMetadata = taskOriginMetadata(task),
                 )
             }
         }

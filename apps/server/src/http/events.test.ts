@@ -209,6 +209,43 @@ describe('GET /events', () => {
     // 2, 9, 16, 23 i 30 de setembre.
     expect(ocurrencies).toHaveLength(5);
   });
+
+  it('identifica cada RDATE i no barreja excepcions de calendaris amb el mateix UID', async () => {
+    const otherCalendar = uuidv7();
+    await sql`
+      INSERT INTO calendars (id, scope_id, name, kind, origin, created_at, updated_at)
+      VALUES (${otherCalendar}, ${scopeId}, 'Projecte', 'events', 'local', ${NOW}, ${NOW})
+    `.execute(conn.db);
+    const start = '2026-07-01T10:00:00.000Z';
+    const extra = '2026-07-02T10:00:00.000Z';
+    for (const calendarId of [eventsCalendar, otherCalendar]) {
+      await sql`
+        INSERT INTO events (id, calendar_id, uid, summary, starts_at, rdate, created_at, updated_at)
+        VALUES (${uuidv7()}, ${calendarId}, 'mateix-uid', 'Original', ${start},
+                ${JSON.stringify([extra])}, ${NOW}, ${NOW})
+      `.execute(conn.db);
+    }
+    await sql`
+      INSERT INTO events (id, calendar_id, uid, recurrence_id, summary, starts_at, created_at, updated_at)
+      VALUES (${uuidv7()}, ${eventsCalendar}, 'mateix-uid', ${extra}, 'Excepció',
+              '2026-07-02T11:00:00.000Z', ${NOW}, ${NOW})
+    `.execute(conn.db);
+
+    const response = await api(
+      'GET',
+      '/api/v1/events?from=2026-07-01T00:00:00Z&to=2026-07-03T00:00:00Z',
+    );
+    const events =
+      response.json<{ calendar_id: string; recurrence_id: string; summary: string }[]>();
+    expect(events.filter((event) => event.calendar_id === otherCalendar)).toMatchObject([
+      { recurrence_id: start, summary: 'Original' },
+      { recurrence_id: extra, summary: 'Original' },
+    ]);
+    expect(events.filter((event) => event.calendar_id === eventsCalendar)).toMatchObject([
+      { recurrence_id: start, summary: 'Original' },
+      { recurrence_id: extra, summary: 'Excepció' },
+    ]);
+  });
 });
 
 describe("AQUESTA és la de docs/13: 'aquest i els següents' parteix la sèrie", () => {
@@ -297,6 +334,24 @@ describe('mode instància', () => {
       .filter((o) => o.summary.startsWith('Gimnàs'));
     expect(gimnas).toHaveLength(5);
     expect(gimnas.filter((o) => o.summary.includes('moguda'))).toHaveLength(1);
+
+    const oldWindow = await api(
+      'GET',
+      '/api/v1/events?from=2026-11-04T06:00:00Z&to=2026-11-04T09:00:00Z',
+    );
+    expect(oldWindow.json()).toEqual([]);
+    const newWindow = await api(
+      'GET',
+      '/api/v1/events?from=2026-11-04T19:00:00Z&to=2026-11-04T20:30:00Z',
+    );
+    expect(newWindow.json()).toMatchObject([
+      {
+        recurrence_id: '2026-11-04T07:00:00.000Z',
+        starts_at: '2026-11-04T19:00:00.000Z',
+        ends_at: '2026-11-04T20:00:00.000Z',
+        summary: 'Gimnàs (moguda)',
+      },
+    ]);
   });
 
   it('els modes single i future exigeixen saber quina ocurrència', async () => {

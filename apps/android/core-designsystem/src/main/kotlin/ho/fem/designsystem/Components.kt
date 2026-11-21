@@ -27,20 +27,27 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 
 /**
@@ -129,12 +136,47 @@ data class CardAddForm(
     val onSubmit: () -> Unit,
 )
 
-/**
- * La targeta d'una tasca. docs/02 §4.
- *
- * Les accions ràpides són **només a les targetes de l'Inbox**: a la resta de columnes,
- * "→ Per fer" no vol dir res. Qui la munta decideix si n'hi posa.
- */
+enum class CalendarCardVariant { TASK, TODO, DOING }
+
+@Composable
+fun Modifier.taskCardSurface(calendar: CalendarCardVariant? = null): Modifier {
+    val colors = Femho.colors
+    val shape = RoundedCornerShape(FemhoShape.card)
+    if (calendar == null) return clip(shape).background(colors.cardBg).border(1.dp, colors.cardBorder, shape)
+
+    // La proposta en curs es reconeix pel traç, inclús sense distingir els accents de color.
+    if (calendar == CalendarCardVariant.DOING) {
+        return clip(shape).background(colors.cardBg.copy(alpha = colors.cardBg.alpha * 0.6f))
+            .drawWithContent {
+                drawContent()
+                val stroke = 2.dp.toPx()
+                val inset = stroke / 2f
+                val dash = PathEffect.dashPathEffect(floatArrayOf(5.dp.toPx(), 4.dp.toPx()))
+                drawRoundRect(
+                    color = colors.inkSoft.copy(alpha = 0.75f),
+                    topLeft = Offset(inset, inset),
+                    size = Size(size.width - stroke, size.height - stroke),
+                    cornerRadius = CornerRadius(FemhoShape.card.toPx() - inset),
+                    style = Stroke(stroke, pathEffect = dash),
+                )
+            }
+    }
+
+    val accent = if (colors.ink.luminance() > 0.5f) colors.plouBlue else colors.plouBlueInk
+    val tint = if (calendar == CalendarCardVariant.TODO) 0.08f else 0f
+    val surface = clip(shape)
+        .background(if (tint == 0f) colors.cardBg else accent.copy(alpha = tint).compositeOver(colors.cardBg))
+        .border(1.dp, if (tint == 0f) colors.cardBorder else accent.copy(alpha = 0.42f), shape)
+    // Només es tenyeix la superfície. El text i els controls mantenen el contrast habitual.
+    return surface.drawWithContent {
+        drawContent()
+        val width = if (calendar == CalendarCardVariant.TASK) 3.dp.toPx() else 5.dp.toPx()
+        val left = if (layoutDirection == LayoutDirection.Ltr) 0f else size.width - width
+        drawRect(accent, Offset(left, 0f), Size(width, size.height))
+    }
+}
+
+/** La targeta d'una tasca. L'acció de la barra lateral depèn de la columna (docs/02 §4). */
 @Composable
 fun TaskCard(
     title: String,
@@ -145,8 +187,8 @@ fun TaskCard(
     checklistProgress: String? = null,
     done: Boolean = false,
     toggleLabel: String = "",
-    onToggle: () -> Unit = {},
-    onOpen: () -> Unit = {},
+    onToggle: (() -> Unit)? = {},
+    onOpen: (() -> Unit)? = {},
     /** El pany de l'agent: "L'agent hi treballa". Si hi és, la targeta es veu 🔒. */
     lockLabel: String? = null,
     /** La marca d'atenció: "Espera resposta". Punt amb recompte al commutador d'IA. */
@@ -180,23 +222,22 @@ fun TaskCard(
     extraMetadata: (@Composable () -> Unit)? = null,
     /** Una acció independent al peu de la barra d'estat. */
     railAction: (@Composable () -> Unit)? = null,
+    calendar: CalendarCardVariant? = null,
 ) {
     val openAction = if (onLongPress == null) {
-        Modifier.clickable(onClick = onOpen)
+        onOpen?.let { Modifier.clickable(onClick = it) } ?: Modifier
     } else {
         Modifier.combinedClickable(
             role = Role.Button,
             onLongClickLabel = longPressLabel,
             onLongClick = onLongPress,
-            onClick = onOpen,
+            onClick = { onOpen?.invoke() },
         )
     }
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(FemhoShape.card))
-            .background(Femho.colors.cardBg)
-            .border(1.dp, Femho.colors.cardBorder, RoundedCornerShape(FemhoShape.card))
+            .taskCardSurface(calendar)
             .height(IntrinsicSize.Min)
             .testTag("task-card"),
     ) {
@@ -399,14 +440,14 @@ fun TaskCard(
      * **A la bústia i a "Per fer" és una fletxa**; a "Fent" i a "Fet", la casella
      * d'estat. Quan hi ha una segona acció, cadascuna té la seva àrea tàctil.
      */
-    Column(
+    if (onAdvance != null || onToggle != null || railAction != null) Column(
         modifier = Modifier
             .width(if (railAction == null) 26.dp else FemhoSize.touch)
             .fillMaxHeight()
             .background(Femho.colors.ghostBg)
             .testTag("card-rail"),
     ) {
-        Box(
+        if (onAdvance != null || onToggle != null) Box(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
@@ -417,7 +458,7 @@ fun TaskCard(
                 )
                 .clickable(
                     role = Role.Button,
-                    onClick = { if (onAdvance != null) onAdvance() else onToggle() },
+                    onClick = { if (onAdvance != null) onAdvance() else onToggle?.invoke() },
                 )
                 .semantics { contentDescription = if (onAdvance != null) advanceLabel else toggleLabel }
                 .testTag(if (onAdvance != null) "card-advance" else "card-toggle-done"),

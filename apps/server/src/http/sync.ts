@@ -28,6 +28,10 @@ import { createProject, deleteProject } from '../services/scopes.js';
 import { createEvent } from '../services/events.js';
 import { getPomodoro, syncPomodoro } from '../services/pomodoro.js';
 import {
+  getCalendarTaskSuggestions,
+  syncCalendarTaskSuggestions,
+} from '../services/calendar-task-suggestions.js';
+import {
   assertSyncContentAccess,
   assertSyncEditableFields,
   assertSyncWriteCapability,
@@ -44,6 +48,7 @@ import {
   rememberOp,
   resolveConflict,
   softDelete,
+  taskSyncView,
   type BatchOperation,
   type BatchResult,
 } from '../services/sync.js';
@@ -71,6 +76,13 @@ async function handle<T>(
 }
 
 export function registerSyncRoutes(app: FastifyInstance): void {
+  app.get('/api/v1/calendar-task-suggestions', async (request, reply) =>
+    handle(app, request, reply, async (principal) => {
+      void reply.header('cache-control', 'no-store');
+      return getCalendarTaskSuggestions(app.connection!.db, principal);
+    }),
+  );
+
   app.get('/api/v1/pomodoro', async (request, reply) =>
     handle(app, request, reply, async (principal) => {
       void reply.header('cache-control', 'no-store');
@@ -340,10 +352,12 @@ async function applyOne(
     };
   }
 
-  // El Pomodoro pertany al compte, i no a un àmbit dels que resol el lot general.
-  if (operation.entity === 'pomodoro') {
+  // Les ordres personals tenen els seus rebuts fora del lot d'entitats d'àmbit.
+  if (operation.entity === 'pomodoro' || operation.entity === 'calendar_suggestions') {
     try {
-      return await syncPomodoro(app.connection!, principal, operation);
+      return operation.entity === 'pomodoro'
+        ? await syncPomodoro(app.connection!, principal, operation)
+        : await syncCalendarTaskSuggestions(app.connection!, principal, operation);
     } catch (error) {
       return rejectedOperation(operation.op_id, error);
     }
@@ -609,7 +623,15 @@ async function applyOne(
       },
       { engine: app.connection!.engine },
     );
-    if (canReadSyncEntity(principal, entityType)) return result;
+    if (canReadSyncEntity(principal, entityType)) {
+      if (entityType === 'task') {
+        if (result.status === 'ok' && result.entity !== undefined)
+          return { ...result, entity: taskSyncView(result.entity) };
+        if (result.status === 'conflict')
+          return { ...result, server_entity: taskSyncView(result.server_entity) };
+      }
+      return result;
+    }
     if (result.status === 'ok') return { op_id: result.op_id, status: 'ok' };
     if (result.status === 'conflict') {
       throw new PolicyError(

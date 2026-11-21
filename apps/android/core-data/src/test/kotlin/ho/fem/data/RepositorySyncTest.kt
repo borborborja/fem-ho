@@ -1,6 +1,9 @@
 package ho.fem.data
 
 import ho.fem.model.AiMode
+import ho.fem.model.CalendarTaskStart
+import ho.fem.model.CalendarTaskSuggestion
+import ho.fem.model.CalendarTaskSuggestions
 import ho.fem.model.Checklist
 import ho.fem.model.RecurrenceMode
 import ho.fem.model.Subtask
@@ -24,9 +27,11 @@ import okhttp3.Response
 import okhttp3.ResponseBody.Companion.toResponseBody
 import java.io.IOException
 import java.lang.reflect.Proxy
+import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
 
 /** Prova la cua real amb un transport controlat, sense base ni servidor personals. */
 class RepositorySyncTest {
@@ -42,6 +47,8 @@ class RepositorySyncTest {
         requestBodies: MutableList<String> = mutableListOf(),
         tasks: MutableMap<String, TaskEntity> = mutableMapOf(),
         lists: MutableMap<String, TaskListsEntity> = mutableMapOf(),
+        calendarCache: MutableList<CalendarSuggestionsCacheEntity>? = null,
+        cachedScopeSettings: MutableMap<String, ScopeSettingsEntity> = mutableMapOf(),
     ): Repository {
         val dao = Proxy.newProxyInstance(
             FemhoDao::class.java.classLoader, arrayOf(FemhoDao::class.java),
@@ -100,6 +107,26 @@ class RepositorySyncTest {
                     Unit
                 }
                 "outboxFlow" -> flowOf(queue.toList())
+                "pomodoroCache" -> flowOf(null)
+                "calendarSuggestionsCache" -> flowOf(calendarCache?.firstOrNull())
+                "calendarSuggestionsCacheOnce" -> calendarCache?.firstOrNull()
+                "scopeSettings" -> flowOf(cachedScopeSettings[args!![0]])
+                "putScopeSettings" -> {
+                    val row = args!![0] as ScopeSettingsEntity
+                    cachedScopeSettings[row.scopeId] = row
+                    Unit
+                }
+                "resolveCalendarSuggestionOperations" -> {
+                    checkNotNull(calendarCache).clear()
+                    calendarCache.add(args!![0] as CalendarSuggestionsCacheEntity)
+                    queue.removeAll { it.opId in args[1] as List<*> }
+                    (args[4] as String?)?.let { tasks.remove(it) }
+                    (args[2] as List<*>).filterIsInstance<TaskEntity>().forEach { tasks[it.id] = it }
+                    (args[3] as List<*>).filterIsInstance<OutboxEntity>().forEach { edit ->
+                        queue[queue.indexOfFirst { it.opId == edit.opId }] = edit
+                    }
+                    Unit
+                }
                 "tasks" -> flowOf(tasks.values.toList())
                 "scopes", "projects", "people", "labels", "taskTypes", "sessions", "calendars", "mailAccounts", "mailRules", "agents" -> flowOf(emptyList<Any>())
                 else -> error("Crida inesperada: ${method.name}")
@@ -112,7 +139,63 @@ class RepositorySyncTest {
             Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
                 .code(200).message("OK").body(body.toResponseBody()).build()
         }.build()
-        return Repository(dao, FemhoApi("http://localhost", InMemoryTokenStore(), client))
+        return Repository(dao, FemhoApi("http://localhost", InMemoryTokenStore(), client),
+            ownerId = if (calendarCache == null) null else "account")
+    }
+
+    @Test
+    fun `l'inici del calendari i el moviment posterior sobreviuen a tornar a obrir la cua`() = runBlocking {
+        val planned = Instant.parse("2026-11-21T09:00:00Z")
+        val action = planned.plusSeconds(600)
+        val eventTitle = "Calendar fixture"
+        val item = CalendarTaskSuggestion(
+            calendarId = "calendar", uid = "event", scopeId = "work", title = eventTitle,
+            calendarName = "Work", startsAt = planned.toString(), endsAt = planned.plusSeconds(1800).toString(),
+            allDay = false, declined = false, canStart = true, requiresShareConfirmation = false,
+            requiresTaskType = false,
+        )
+        val snapshot = CalendarTaskSuggestions(true, "2026-11-21", "UTC", "2026-11-22T00:00:00Z", listOf(item))
+        val cache = mutableListOf(CalendarSuggestionsCacheEntity(snapshot = Json.encodeToString(snapshot)))
+        val queue = mutableListOf<OutboxEntity>()
+        val tasks = mutableMapOf<String, TaskEntity>()
+        val bodies = mutableListOf<String>()
+        val requests = mutableListOf<String>()
+        val scopeSettings = mutableMapOf<String, ScopeSettingsEntity>()
+        fun open() = repository(queue, { index ->
+            if (index == 0) {
+                """{"time_tracking":true}"""
+            } else {
+                val operation = queue.first()
+                val task = tasks.values.single().toDomain()
+                val acknowledged = if (index == 1) {
+                    val doing = task.copy(status = TaskStatus.DOING, version = 2)
+                    """{"snapshot":${Json.encodeToString(snapshot.copy(items = emptyList()))},"task":${Json.encodeToString(doing)}}"""
+                } else Json.encodeToString(task.copy(status = TaskStatus.DONE, version = 3))
+                """{"results":[{"op_id":"${operation.opId}","status":"ok","entity":$acknowledged}]}"""
+            }
+        }, requests, bodies, tasks, calendarCache = cache, cachedScopeSettings = scopeSettings)
+
+        open().refreshScopeSettings(item.scopeId)
+        val stale = open()
+        assertTrue(stale.actOnCalendarSuggestion(item, action, CalendarTaskStart.PLANNED, false, null))
+        val provisional = tasks.values.single().toDomain()
+        assertEquals(TaskStatus.DOING, provisional.status)
+        assertTrue(provisional.fromCalendar)
+        assertEquals(listOf(planned.toString()), provisional.timeSummary?.openStartedAt)
+        assertTrue(stale.calendarSuggestions.first().snapshot.items.isEmpty())
+        stale.moveTask(provisional, TaskStatus.DONE, null to null)
+
+        open().flush()
+        assertTrue(queue.isEmpty())
+        assertEquals(TaskStatus.DONE, tasks.values.single().toDomain().status)
+        val startOp = Json.parseToJsonElement(bodies[1]).jsonObject.getValue("operations").jsonArray.single().jsonObject
+        assertEquals("calendar_suggestions", startOp.getValue("entity").jsonPrimitive.content)
+        val startData = startOp.getValue("data").jsonObject
+        assertEquals(action.toString(), startData.getValue("action_at").jsonPrimitive.content)
+        assertEquals(planned.toString(), startData.getValue("starts_at").jsonPrimitive.content)
+        assertEquals("planned", startData.getValue("start").jsonPrimitive.content)
+        val move = Json.parseToJsonElement(bodies[2]).jsonObject.getValue("operations").jsonArray.single().jsonObject
+        assertEquals("2", move.getValue("base_version").jsonPrimitive.content)
     }
 
     @Test

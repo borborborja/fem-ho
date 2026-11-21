@@ -30,6 +30,8 @@ export interface Occurrence {
 export interface ExpandOptions {
   /** L'inici del mestre. */
   startsAt: string;
+  /** El DTSTART original, amb el fus del calendari, per iterar en hora local. */
+  startTime?: ICAL.Time | undefined;
   /** El final del mestre, per calcular la durada de cada ocurrència. */
   endsAt?: string | null | undefined;
   /** RRULE d'RFC 5545, sense el prefix `RRULE:`. */
@@ -70,20 +72,22 @@ export function expandOccurrences(options: ExpandOptions): Occurrence[] {
 
   const start = new Date(options.startsAt);
   const durationMs =
-    options.endsAt == null ? 0 : new Date(options.endsAt).getTime() - start.getTime();
+    options.endsAt == null ? 0 : Math.max(0, Date.parse(options.endsAt) - start.getTime());
 
   const excluded = new Set((options.exdate ?? []).map((iso) => new Date(iso).getTime()));
   const limit = options.limit ?? DEFAULT_LIMIT;
 
   const out: Occurrence[] = [];
+  const seen = new Set<number>();
 
   const push = (occurrenceStart: Date): void => {
     const time = occurrenceStart.getTime();
-    if (excluded.has(time)) return;
+    if (excluded.has(time) || seen.has(time)) return;
     const end = new Date(time + durationMs);
     // Una ocurrència compta si SOLAPA la finestra, no si hi comença: un esdeveniment
     // de tot el dia que va començar ahir també surt avui.
-    if (end.getTime() <= from || time >= to) return;
+    if (!overlapsWindow(time, end.getTime(), from, to)) return;
+    seen.add(time);
     out.push({
       startsAt: occurrenceStart.toISOString(),
       endsAt: end.toISOString(),
@@ -96,12 +100,14 @@ export function expandOccurrences(options: ExpandOptions): Occurrence[] {
     push(start);
   } else {
     const rule = ICAL.Recur.fromString(options.rrule);
-    const iterator = rule.iterator(toICALTime(options.startsAt));
+    const iterator = rule.iterator(options.startTime?.clone() ?? toICALTime(options.startsAt));
 
     let count = 0;
     let next = iterator.next();
     while (next !== null && count < limit) {
-      const occurrenceStart = next.toJSDate();
+      const occurrenceStart = next.isDate
+        ? new Date(`${next.toString()}T00:00:00.000Z`)
+        : next.toJSDate();
       if (occurrenceStart.getTime() >= to) break;
       push(occurrenceStart);
       count += 1;
@@ -113,6 +119,10 @@ export function expandOccurrences(options: ExpandOptions): Occurrence[] {
 
   out.sort((a, b) => (a.startsAt < b.startsAt ? -1 : a.startsAt > b.startsAt ? 1 : 0));
   return out;
+}
+
+export function overlapsWindow(start: number, end: number, from: number, to: number): boolean {
+  return start < to && (start >= from || end > from);
 }
 
 export interface SplitSeriesResult {

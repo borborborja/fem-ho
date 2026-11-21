@@ -13,6 +13,7 @@ import ho.fem.model.AuthSettingsEnvelope
 import ho.fem.model.AuthTokens
 import ho.fem.model.Board
 import ho.fem.model.Calendar
+import ho.fem.model.CalendarTaskSuggestions
 import ho.fem.model.Checklist
 import ho.fem.model.Comment
 import ho.fem.model.CredentialEnvelope
@@ -334,6 +335,8 @@ class FemhoApi(
     suspend fun settings(): AuthSettingsEnvelope = get("/api/v1/auth/settings")
 
     suspend fun pomodoro(): PomodoroSnapshot = get("/api/v1/pomodoro")
+
+    suspend fun calendarTaskSuggestions(): CalendarTaskSuggestions = get("/api/v1/calendar-task-suggestions")
 
     suspend fun setDoneClearedAt(value: String?): UserSettingsView =
         patch("/api/v1/auth/settings", mapOf("done_cleared_at" to value))

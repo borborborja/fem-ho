@@ -12,12 +12,13 @@
  */
 
 import { useTimeCompletion, type MoveExtra } from '../board/useTimeCompletion.js';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   comparePositions,
   createDoneDayFilter,
   eventDateOf,
   generatePosition,
+  isCurrentCalendarSuggestion,
   localDateOf,
   t,
   type QuickAddContext,
@@ -30,7 +31,7 @@ import { Chips } from '../app/Chips.js';
 import { useRouter } from '../app/router.js';
 import { useSessionData, useSession } from '../app/session.js';
 import { useApi } from '../app/useApi.js';
-import type { Board, Inbox, Task } from '../app/types.js';
+import type { Board, CalendarTaskSuggestion, Inbox, Task } from '../app/types.js';
 import { KanbanBoard, type BoardTask } from '../board/KanbanBoard.js';
 import type { DropPlacement } from '../board/dnd.js';
 import { ColumnQuickAdd, PlusIcon } from '../board/ColumnQuickAdd.js';
@@ -38,8 +39,17 @@ import { DayNavigator } from '../board/DayNavigator.js';
 import { DoneHeader } from '../board/DoneColumnView.js';
 import { useBoardQuery, useBoardSync } from '../sync/board-sync.js';
 import { projectBoardTasks } from '../sync/board-projection.js';
-import { compareOperations } from '../sync/outbox.js';
+import { calendarSuggestionTaskId, compareOperations } from '../sync/outbox.js';
 import { usePomodoroBoardProjection } from '../pomodoro/PomodoroProvider.js';
+import {
+  CalendarSuggestionStartDialog,
+  type CalendarStart,
+} from '../board/CalendarSuggestionCard.js';
+import {
+  calendarOccurrence,
+  calendarSuggestionKey,
+  useCalendarSuggestions,
+} from '../board/useCalendarSuggestions.js';
 
 export interface BoardScreenProps {
   activeScopeIds: string[];
@@ -75,6 +85,7 @@ function toBoardTask(
     status: task.status,
     scope_id: task.scope_id,
     sourceKind: task.source_kind,
+    fromCalendar: task.from_calendar,
     mcpActivity: task.mcp_activity,
     project: projectName,
     /**
@@ -192,6 +203,12 @@ export function BoardScreen({
   const { updateSettings } = useSession();
   const { pending, submit } = useBoardSync();
   const { moves: pomodoroMoves, received: pomodoroReceipt } = usePomodoroBoardProjection();
+  const {
+    items: calendarItems,
+    now: calendarNow,
+    reload: refreshSuggestions,
+    stage: stageSuggestion,
+  } = useCalendarSuggestions();
   const today = localDateOf(profile.timezone, new Date());
 
   const path = useMemo(() => {
@@ -310,10 +327,16 @@ export function BoardScreen({
   const refresh = useCallback(() => {
     board.reload();
     inbox.reload();
-  }, [board.reload, inbox.reload]);
+    refreshSuggestions();
+  }, [board.reload, inbox.reload, refreshSuggestions]);
   const completion = useTimeCompletion();
   const [optimistic, setOptimistic] = useState<Record<string, TaskStatus>>({});
   const { notify } = useToasts();
+  const [calendarStart, setCalendarStart] = useState<{
+    item: CalendarTaskSuggestion;
+    start: CalendarStart;
+  } | null>(null);
+  const starting = useRef(new Map<string, Promise<void>>());
 
   /**
    * Quins àmbits tenen agent.
@@ -385,6 +408,79 @@ export function BoardScreen({
     [people],
   );
 
+  const projectVisible = useCallback(
+    ({ scope_id, project_id }: { scope_id: string; project_id?: string | null | undefined }) => {
+      const scopeIsFiltered = projects.some(
+        (project) => project.scope_id === scope_id && projectIds.includes(project.id),
+      );
+      return !scopeIsFiltered || (project_id != null && projectIds.includes(project_id));
+    },
+    [projects, projectIds],
+  );
+
+  const calendarSuggestions = aiBoard
+    ? []
+    : calendarItems
+        .filter((item) => activeScopeIds.includes(item.scope_id) && projectVisible(item))
+        .filter((item) => {
+          if (item.task_id === null) return true;
+          const task = allTasks.find(({ id }) => id === item.task_id);
+          const status = optimistic[item.task_id] ?? task?.status;
+          return status !== 'doing' && status !== 'done';
+        })
+        .map((item) => ({ item, active: isCurrentCalendarSuggestion(item, calendarNow) }));
+  const represented = new Set(calendarSuggestions.map(({ item }) => item.task_id));
+
+  const startCalendarTask = (
+    item: CalendarTaskSuggestion,
+    start: CalendarStart,
+    taskTypeId?: string,
+  ) => {
+    const key = calendarSuggestionKey(item);
+    const inProgress = starting.current.get(key);
+    if (inProgress !== undefined) return inProgress;
+    const last =
+      allTasks.filter((task) => task.scope_id === item.scope_id && task.status === 'doing').at(-1)
+        ?.position ?? null;
+    const action = stageSuggestion(
+      {
+        type: 'start',
+        occurrence: calendarOccurrence(item),
+        starts_at: item.starts_at,
+        action_at: new Date().toISOString(),
+        start,
+        task_id: item.task_id ?? uuidv7(),
+        position: generatePosition(last, null),
+        ...(item.requires_share_confirmation ? { confirm_share: true } : {}),
+        ...(taskTypeId === undefined ? {} : { task_type_id: taskTypeId }),
+      },
+      item,
+    ).finally(() => starting.current.delete(key));
+    starting.current.set(key, action);
+    return action;
+  };
+
+  const requestCalendarStart = (item: CalendarTaskSuggestion, start: CalendarStart) => {
+    if (item.requires_share_confirmation || item.requires_task_type)
+      setCalendarStart({ item, start });
+    else
+      void startCalendarTask(item, start).catch((error: unknown) =>
+        notify(failureText(error), { tone: 'error' }),
+      );
+  };
+
+  const declineCalendarSuggestion = (item: CalendarTaskSuggestion) => {
+    void stageSuggestion(
+      {
+        type: 'decline',
+        occurrence: calendarOccurrence(item),
+        starts_at: item.starts_at,
+        action_at: new Date().toISOString(),
+      },
+      item,
+    ).catch((error: unknown) => notify(failureText(error), { tone: 'error' }));
+  };
+
   const tasks = useMemo<BoardTask[]>(() => {
     return (
       allTasks
@@ -409,14 +505,7 @@ export function BoardScreen({
          * ha de ser encara que el seu projecte no estigui marcat —i una tasca **sense
          * projecte** d'un àmbit amb tria, no.
          */
-        .filter((task) => {
-          if (projectIds.length === 0) return true;
-          const triatsDelSeu = projects.some(
-            (project) => project.scope_id === task.scope_id && projectIds.includes(project.id),
-          );
-          if (!triatsDelSeu) return true;
-          return task.project_id != null && projectIds.includes(task.project_id);
-        })
+        .filter(projectVisible)
         .filter((task) => doneDayFilter.isVisible(task.status, task.completed_at))
         .map((task) => {
           const assignees = task.assignee_ids ?? [];
@@ -442,8 +531,7 @@ export function BoardScreen({
     aiBoard,
     profile.id,
     scopes,
-    projectIds,
-    projects,
+    projectVisible,
     doneDayFilter,
   ]);
 
@@ -476,14 +564,7 @@ export function BoardScreen({
             Number(a.due_date == null) - Number(b.due_date == null) ||
             Number(a.due_date !== day) - Number(b.due_date !== day),
         )
-        .filter((task) => {
-          if (projectIds.length === 0) return true;
-          const triatsDelSeu = projects.some(
-            (project) => project.scope_id === task.scope_id && projectIds.includes(project.id),
-          );
-          if (!triatsDelSeu) return true;
-          return task.project_id != null && projectIds.includes(task.project_id);
-        })
+        .filter(projectVisible)
         .map((task) => {
           const assignees = task.assignee_ids ?? [];
           const card = toBoardTask(
@@ -513,8 +594,7 @@ export function BoardScreen({
     initialsOf,
     profile.id,
     scopes,
-    projectIds,
-    projects,
+    projectVisible,
   ]);
 
   const context = useMemo<QuickAddContext>(
@@ -538,7 +618,9 @@ export function BoardScreen({
   const move = (taskId: string, status: TaskStatus, placement?: DropPlacement) => {
     if (
       !navigator.onLine ||
-      [...pending, ...pomodoroMoves].some((row) => row.entity_id === taskId)
+      [...pending, ...pomodoroMoves].some(
+        (row) => row.entity_id === taskId || calendarSuggestionTaskId(row) === taskId,
+      )
     ) {
       return performMove(taskId, status, {}, placement).catch((cause: unknown) =>
         notify(failureText(cause), { tone: 'error' }),
@@ -754,6 +836,9 @@ export function BoardScreen({
 
       <KanbanBoard
         aiBoard={aiBoard}
+        calendarSuggestions={calendarSuggestions}
+        onStartSuggestion={requestCalendarStart}
+        onDeclineSuggestion={declineCalendarSuggestion}
         flip={flip}
         doneEmptyLabel={
           doneDay === today
@@ -765,7 +850,7 @@ export function BoardScreen({
                 }),
               })
         }
-        inbox={inboxCards}
+        inbox={inboxCards.filter((task) => !represented.has(task.id))}
         inboxEvents={inbox.data?.events}
         inboxMail={inbox.data?.mail}
         onEventToTask={(event) => {
@@ -887,7 +972,7 @@ export function BoardScreen({
             />
           )
         }
-        tasks={tasks}
+        tasks={tasks.filter((task) => !represented.has(task.id))}
         timezone={profile.timezone}
         scopes={activeScopes.map((scope) => ({
           id: scope.id,
@@ -917,6 +1002,18 @@ export function BoardScreen({
           />
         }
       />
+      {calendarStart && (
+        <CalendarSuggestionStartDialog
+          item={calendarStart.item}
+          start={calendarStart.start}
+          timezone={profile.timezone}
+          taskTypes={(taskTypes.data?.data ?? []).filter(
+            (type) => type.scope_id === calendarStart.item.scope_id,
+          )}
+          onClose={() => setCalendarStart(null)}
+          onStart={(typeId) => startCalendarTask(calendarStart.item, calendarStart.start, typeId)}
+        />
+      )}
     </div>
   );
 }

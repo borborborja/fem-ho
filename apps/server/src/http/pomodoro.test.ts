@@ -55,6 +55,7 @@ beforeAll(async () => {
   }
 
   await migrateToLatest(db.db, { engine: db.engine });
+  expect(await migrateDown(db.db, db.engine)).toBe('030-calendar-task-suggestions');
   expect(await migrateDown(db.db, db.engine)).toBe('029-pomodoro');
   const password = await hashPassword(pass);
   await sql`INSERT INTO users (id, email, name, password_hash, kind, role, created_at, updated_at)

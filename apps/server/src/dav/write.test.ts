@@ -17,6 +17,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { hashPassword } from '../auth/password.js';
 import { connect, type Connection } from '../db/connection.js';
 import { migrateToLatest } from '../db/migrator.js';
+import { capabilitiesForRole } from '../policy/capabilities.js';
+import { listEventOccurrences } from '../services/events.js';
 import { buildDavServer } from './index.js';
 
 const tmp = mkdtempSync(join(tmpdir(), 'femho-davw-'));
@@ -24,6 +26,7 @@ const NOW = '2026-08-06T09:00:00.000Z';
 const PASSWORD = 'la-contrasenya-de-la-borja';
 const AUTH = `Basic ${Buffer.from(`borja@example.com:${PASSWORD}`).toString('base64')}`;
 const TODOS = '/dav/calendars/borja/personal-todos';
+const EVENTS = '/dav/calendars/borja/personal-events';
 
 let conn: Connection;
 let server: Server;
@@ -87,6 +90,10 @@ beforeAll(async () => {
     INSERT INTO scopes (id, name, kind, color, owner_id, position, created_at, updated_at)
     VALUES (${scopeId}, 'Personal', 'individual', '--plou-blue', ${userId}, 'a1', ${NOW}, ${NOW})
   `.execute(conn.db);
+  await sql`
+    INSERT INTO calendars (id, scope_id, name, kind, origin, created_at, updated_at)
+    VALUES (${uuidv7()}, ${scopeId}, 'Personal', 'events', 'local', ${NOW}, ${NOW})
+  `.execute(conn.db);
 
   server = buildDavServer(conn);
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -100,6 +107,53 @@ afterAll(async () => {
 });
 
 describe('PUT', () => {
+  it('expandeix les excepcions al calendari i conserva un sol recurs DAV', async () => {
+    const body = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//Prova//CA',
+      'BEGIN:VEVENT',
+      'UID:cursa',
+      'SUMMARY:Cursa',
+      'DTSTART:20260810T130000Z',
+      'DTEND:20260810T140000Z',
+      'RDATE:20260817T130000Z,20260819T130000Z',
+      'EXDATE:20260819T130000Z',
+      'END:VEVENT',
+      'BEGIN:VEVENT',
+      'UID:cursa',
+      'SUMMARY:Cursa reprogramada',
+      'RECURRENCE-ID:20260817T130000Z',
+      'DTSTART:20260824T133000Z',
+      'DURATION:PT1H',
+      'END:VEVENT',
+      'END:VCALENDAR',
+    ].join('\r\n');
+    const path = `${EVENTS}/cursa.ics`;
+    expect((await dav('PUT', path, { body })).status).toBe(201);
+    expect((await dav('GET', path)).text).toBe(body);
+
+    const events = await listEventOccurrences(
+      conn.db,
+      {
+        kind: 'user',
+        userId,
+        capabilities: new Set(capabilitiesForRole('admin')),
+        scopeIds: null,
+        source: 'web',
+      },
+      { from: '2026-08-16T00:00:00Z', to: '2026-08-25T00:00:00Z' },
+    );
+    expect(events).toMatchObject([
+      {
+        recurrence_id: '2026-08-17T13:00:00.000Z',
+        starts_at: '2026-08-24T13:30:00.000Z',
+        ends_at: '2026-08-24T14:30:00.000Z',
+        summary: 'Cursa reprogramada',
+      },
+    ]);
+  });
+
   it("crea amb 201 i torna l'ETag", async () => {
     const uid = 'crear-1';
     const response = await dav('PUT', `${TODOS}/${uid}.ics`, {

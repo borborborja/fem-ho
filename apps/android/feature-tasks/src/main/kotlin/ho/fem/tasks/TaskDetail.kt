@@ -185,6 +185,7 @@ fun TaskDetail(
     formatActivityTime: (String) -> String? = { null },
     modifier: Modifier = Modifier,
     aiTaskContent: @Composable () -> Unit = {},
+    calendarOrigin: @Composable () -> Unit = {},
 ) {
     var edits by rememberSaveable(task.id, stateSaver = TaskEditsSaver) {
         mutableStateOf<Map<String, String?>>(emptyMap())
@@ -273,6 +274,7 @@ fun TaskDetail(
             modifier = Modifier.fillMaxWidth().testTag("task-title"),
         )
 
+        if (task.fromCalendar) calendarOrigin()
         task.mcpActivity?.let { McpProvenanceBadge(it, labels.mcp) }
 
         OutlinedTextField(

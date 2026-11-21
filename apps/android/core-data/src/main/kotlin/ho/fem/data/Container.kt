@@ -54,7 +54,7 @@ class Container(context: Context) {
             // L'antic femho.db no té cap marca de propietat. Es conserva sencer i
             // no s'obre en nom de cap compte: una cua antiga no es pot atribuir amb seguretat.
             Workspace(Room.databaseBuilder(app, FemhoDatabase::class.java, "femho-${account.identity.key}.db")
-                .addMigrations(FemhoDatabase.MIGRATION_1_2, FemhoDatabase.MIGRATION_2_3, FemhoDatabase.MIGRATION_3_4, FemhoDatabase.MIGRATION_4_5)
+                .addMigrations(FemhoDatabase.MIGRATION_1_2, FemhoDatabase.MIGRATION_2_3, FemhoDatabase.MIGRATION_3_4, FemhoDatabase.MIGRATION_4_5, FemhoDatabase.MIGRATION_5_6)
                 .build())
         }
 

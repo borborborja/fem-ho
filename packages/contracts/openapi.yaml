@@ -2143,6 +2143,9 @@ paths:
         El Pomodoro personal usa `entity: pomodoro`, `op: update`, l'ID del compte com a `id`
         i un `PomodoroCommand` a `data`. Els resultats confirmats i de conflicte porten
         un `PomodoroSnapshot` a `entity` o `server_entity`, respectivament.
+        Les propostes del calendari usen `entity: calendar_suggestions`, `op: update`,
+        l'ID del compte i un `CalendarSuggestionCommand` a `data`. Un resultat confirmat
+        conté un `CalendarSuggestionResult` a `entity`.
       requestBody:
         required: true
         content:
@@ -2173,6 +2176,21 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/PomodoroSnapshot' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /calendar-task-suggestions:
+    get:
+      tags: [sync]
+      operationId: getCalendarTaskSuggestions
+      summary: Propostes del calendari del dia del perfil
+      description: Lectura privada d'una sessió humana. Els canvis es desen amb `/sync/batch`.
+      responses:
+        '200':
+          description: Preferència i propostes visibles.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CalendarSuggestionSnapshot' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Forbidden' }
 
@@ -5956,6 +5974,7 @@ components:
           description: El botó de netejar la columna Fet. No esborra res (P2).
         inbox_position: { type: string, enum: [left, right, below] }
         inbox_show_overdue: { type: boolean }
+        calendar_task_suggestions: { type: boolean, readOnly: true }
         event_task_deleted:
           type: string
           enum: [return_to_inbox, hide_from_inbox]
@@ -6435,6 +6454,96 @@ components:
         data:
           type: object
           additionalProperties: true
+
+    CalendarSuggestionOccurrence:
+      type: object
+      required: [calendar_id, uid, recurrence_id]
+      properties:
+        calendar_id: { type: string, format: uuid }
+        uid: { type: string }
+        recurrence_id: { type: [string, 'null'] }
+
+    CalendarTaskSuggestion:
+      allOf:
+        - $ref: '#/components/schemas/CalendarSuggestionOccurrence'
+        - type: object
+          required:
+            [
+              scope_id,
+              project_id,
+              title,
+              calendar_name,
+              starts_at,
+              ends_at,
+              all_day,
+              declined,
+              can_start,
+              requires_share_confirmation,
+              requires_task_type,
+              task_id,
+            ]
+          properties:
+            scope_id: { type: string, format: uuid }
+            project_id: { type: [string, 'null'], format: uuid }
+            title: { type: string }
+            calendar_name: { type: string }
+            starts_at: { type: string, format: date-time }
+            ends_at: { type: string, format: date-time }
+            all_day: { type: boolean }
+            declined: { type: boolean }
+            can_start: { type: boolean }
+            requires_share_confirmation: { type: boolean }
+            requires_task_type: { type: boolean }
+            task_id: { type: [string, 'null'], format: uuid }
+
+    CalendarSuggestionSnapshot:
+      type: object
+      required: [enabled, date, timezone, day_ends_at, items]
+      properties:
+        enabled: { type: boolean }
+        date: { type: string, format: date }
+        timezone: { type: string }
+        day_ends_at: { type: string, format: date-time }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/CalendarTaskSuggestion' }
+
+    CalendarSuggestionCommand:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [type, enabled]
+          properties:
+            type: { const: configure }
+            enabled: { type: boolean }
+        - type: object
+          additionalProperties: false
+          required: [type, occurrence, starts_at, action_at]
+          properties:
+            type: { const: decline }
+            occurrence: { $ref: '#/components/schemas/CalendarSuggestionOccurrence' }
+            starts_at: { type: string, format: date-time }
+            action_at: { type: string, format: date-time }
+        - type: object
+          additionalProperties: false
+          required: [type, occurrence, starts_at, action_at, start, task_id, position]
+          properties:
+            type: { const: start }
+            occurrence: { $ref: '#/components/schemas/CalendarSuggestionOccurrence' }
+            starts_at: { type: string, format: date-time }
+            action_at: { type: string, format: date-time }
+            start: { type: string, enum: [now, planned] }
+            task_id: { type: string, format: uuid }
+            position: { type: string }
+            confirm_share: { type: boolean }
+            task_type_id: { type: string, format: uuid }
+
+    CalendarSuggestionResult:
+      type: object
+      required: [snapshot]
+      properties:
+        snapshot: { $ref: '#/components/schemas/CalendarSuggestionSnapshot' }
+        task: { $ref: '#/components/schemas/Task' }
 
     SyncBatch:
       type: object
@@ -7031,6 +7140,10 @@ components:
             afegir una font nova sigui **un valor més i no una columna més**: les
             referències específiques de cada mena (`event_calendar_id`, `event_uid`…)
             diuen *quin* origen concret, i això diu *quina mena*.
+        from_calendar:
+          type: boolean
+          readOnly: true
+          description: La tasca prové d'un esdeveniment de calendari.
         mcp_activity:
           $ref: '#/components/schemas/McpTaskActivity'
           readOnly: true

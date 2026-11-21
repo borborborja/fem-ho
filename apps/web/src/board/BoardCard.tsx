@@ -18,7 +18,7 @@ import { DeleteTaskDialog } from './DeleteTaskDialog.js';
 import { McpSourceBadge } from './McpSourceBadge.js';
 import { TaskTimeBadge } from './TaskTimeBadge.js';
 import { TaskAiAction } from './TaskAiAction.js';
-import { SourceIcon } from './SourceIcon.js';
+import { CalendarOriginBadge, SourceIcon } from './SourceIcon.js';
 import { SubtaskRow } from './SubtaskRow.js';
 import { useInlineTaskTitle } from './useInlineTaskTitle.js';
 import { api, failureText } from '../app/api.js';
@@ -161,13 +161,24 @@ export function BoardCard({
     <>
       <TaskCard
         data-status={task.status}
+        className={task.fromCalendar ? 'calendar-origin-task' : undefined}
         // Les d'algú altre, atenuades: es veuen, però es veu que no són teves.
-        style={task.assignedToOther === true ? { opacity: 0.55 } : undefined}
+        style={{
+          ...(task.fromCalendar
+            ? {
+                background: 'var(--calendar-origin-bg, var(--card-bg))',
+                borderInlineStart: 'var(--calendar-origin-rivet, 1px solid var(--card-border))',
+              }
+            : {}),
+          ...(task.assignedToOther === true ? { opacity: 0.55 } : {}),
+        }}
         title={inlineTitle.title}
         titleEditor={inlineTitle.editor}
         onTitleEdit={dragging ? undefined : inlineTitle.start}
         titleEditHint={t('task.titleEditHint')}
-        sourceIcon={<SourceIcon kind={task.sourceKind} />}
+        sourceIcon={
+          task.fromCalendar ? <CalendarOriginBadge /> : <SourceIcon kind={task.sourceKind} />
+        }
         sourceBadge={
           task.mcpActivity === undefined ? undefined : (
             <McpSourceBadge activity={task.mcpActivity} compact />

@@ -20,7 +20,9 @@ import {
 import { BoardCard } from './BoardCard.js';
 import { BoardDnd, DraggableCard, DroppableColumn, type DropPlacement } from './dnd.js';
 import { InboxRail } from './InboxRail.js';
-import type { InboxEvent, InboxMail, Task } from '../app/types.js';
+import { CalendarSuggestionCard, type CalendarStart } from './CalendarSuggestionCard.js';
+import { calendarSuggestionKey } from './useCalendarSuggestions.js';
+import type { CalendarTaskSuggestion, InboxEvent, InboxMail, Task } from '../app/types.js';
 
 export interface BoardTask {
   timeSummary?: import('@fem-ho/contracts').components['schemas']['TaskTimeSummary'] | undefined;
@@ -28,6 +30,7 @@ export interface BoardTask {
   title: string;
   /** De quina mena de font ve, o `undefined` si l'ha escrita una persona. */
   sourceKind?: SourceKind | null | undefined;
+  fromCalendar?: boolean | undefined;
   mcpActivity?: Task['mcp_activity'];
   status: TaskStatus;
   scope_id: string;
@@ -96,6 +99,9 @@ export interface BoardScope {
 
 export interface KanbanBoardProps {
   tasks: BoardTask[];
+  calendarSuggestions?: { item: CalendarTaskSuggestion; active: boolean }[];
+  onStartSuggestion?: (item: CalendarTaskSuggestion, start: CalendarStart) => void;
+  onDeclineSuggestion?: (item: CalendarTaskSuggestion) => void;
   timezone?: string | undefined;
   scopes: BoardScope[];
   /** Àmbits plegats, per columna. Persisteix a les preferències de l'usuari. */
@@ -205,8 +211,17 @@ const COLUMNS: { status: TaskStatus; labelKey: string; emptyKey: string }[] = [
   { status: 'done', labelKey: 'board.column.done', emptyKey: 'board.empty.done' },
 ];
 
+const CALENDAR_DRAG_PREFIX = 'calendar-suggestion:';
+
+function calendarDragId(item: CalendarTaskSuggestion): string {
+  return `${CALENDAR_DRAG_PREFIX}${calendarSuggestionKey(item)}`;
+}
+
 export function KanbanBoard({
   tasks,
+  calendarSuggestions = [],
+  onStartSuggestion,
+  onDeclineSuggestion,
   scopes,
   inboxHeader,
   inboxHeaderExtra,
@@ -253,8 +268,33 @@ export function KanbanBoard({
    */
   const mobile = useIsMobile();
 
+  const draggedSuggestion = (id: string) =>
+    calendarSuggestions.find(({ item }) => calendarDragId(item) === id);
+
+  const suggestionCard = (
+    { item, active }: (typeof calendarSuggestions)[number],
+    dragging: boolean,
+  ) => {
+    const taskId = item.task_id;
+    return (
+      <CalendarSuggestionCard
+        key={calendarSuggestionKey(item)}
+        item={item}
+        active={active}
+        timezone={timezone}
+        dragging={dragging}
+        onOpen={taskId !== null && onOpen !== undefined ? () => onOpen(taskId) : undefined}
+        onStart={onStartSuggestion && ((start) => onStartSuggestion(item, start))}
+      />
+    );
+  };
+
   const renderColumn = (column: (typeof COLUMNS)[number]) => {
     const ofColumn = tasks.filter((task) => task.status === column.status);
+    const suggestions = calendarSuggestions.filter(
+      ({ active }) => (active ? 'doing' : 'todo') === column.status,
+    );
+    const count = ofColumn.length + suggestions.length;
 
     const cardFor = (task: BoardTask) => (
       <DraggableCard
@@ -283,8 +323,31 @@ export function KanbanBoard({
       </DraggableCard>
     );
 
+    const suggestionFor = (suggestion: (typeof suggestions)[number]) => {
+      const { item, active } = suggestion;
+      const id = calendarDragId(item);
+      const card = suggestionCard(suggestion, draggingId === id);
+      const canDrag = active
+        ? onDeclineSuggestion !== undefined
+        : item.can_start && onStartSuggestion !== undefined;
+      return canDrag ? (
+        <DraggableCard
+          key={id}
+          id={id}
+          testId="calendar-suggestion-drag"
+          scopeId={item.scope_id}
+          status={active ? 'doing' : 'todo'}
+          targetStatus={active ? 'todo' : 'doing'}
+        >
+          {card}
+        </DraggableCard>
+      ) : (
+        card
+      );
+    };
+
     let body: ReactNode;
-    if (ofColumn.length === 0) {
+    if (count === 0) {
       body = (
         <EmptyState>
           {column.status === 'done' && doneEmptyLabel !== undefined
@@ -293,10 +356,14 @@ export function KanbanBoard({
         </EmptyState>
       );
     } else if (!grouped) {
-      body = ofColumn.map(cardFor);
+      body = [...ofColumn.map(cardFor), ...suggestions.map(suggestionFor)];
     } else {
       body = scopes
-        .filter((scope) => ofColumn.some((task) => task.scope_id === scope.id))
+        .filter(
+          (scope) =>
+            ofColumn.some((task) => task.scope_id === scope.id) ||
+            suggestions.some(({ item }) => item.scope_id === scope.id),
+        )
         .map((scope) => {
           const key = `${column.status}:${scope.id}`;
           const open = collapsed[key] !== true;
@@ -346,7 +413,12 @@ export function KanbanBoard({
                   </>
                 }
               />
-              {open ? ofGroup.map(cardFor) : null}
+              {open ? (
+                <>
+                  {ofGroup.map(cardFor)}
+                  {suggestions.filter(({ item }) => item.scope_id === scope.id).map(suggestionFor)}
+                </>
+              ) : null}
             </div>
           );
         });
@@ -360,7 +432,7 @@ export function KanbanBoard({
             data-column-status={column.status}
             data-drop-target={over ? 'true' : 'false'}
             label={t(column.labelKey)}
-            count={ofColumn.length}
+            count={count}
             // Al mòbil cada columna és una targeta pròpia: no hi ha cap contenidor que
             // les agrupi, i sense fons no es veurien.
             variant={mobile ? 'default' : 'grouped'}
@@ -394,7 +466,8 @@ export function KanbanBoard({
       return mailbox === 'own' ? own : !own;
     });
 
-  const titleOf = (taskId: string): string => tasks.find((task) => task.id === taskId)?.title ?? '';
+  const titleOf = (taskId: string): string =>
+    draggedSuggestion(taskId)?.item.title ?? tasks.find((task) => task.id === taskId)?.title ?? '';
   const labelOf = (status: TaskStatus): string =>
     t(COLUMNS.find((column) => column.status === status)?.labelKey ?? '');
 
@@ -412,6 +485,8 @@ export function KanbanBoard({
        * lloc és la que queda atenuada.
        */
       renderOverlay={(taskId) => {
+        const suggestion = draggedSuggestion(taskId);
+        if (suggestion !== undefined) return <div inert>{suggestionCard(suggestion, false)}</div>;
         const task = tasks.find((candidate) => candidate.id === taskId);
         if (task === undefined) return null;
         return (
@@ -432,7 +507,17 @@ export function KanbanBoard({
         setDraggingId(null);
         // `status` nul vol dir que s'ha deixat anar fora de qualsevol columna, o que
         // s'ha cancel·lat amb Escape. En cap dels dos casos es mou res.
-        if (status !== null && taskId !== '') onDrop?.(taskId, status, target);
+        if (status === null || taskId === '') return;
+        if (taskId.startsWith(CALENDAR_DRAG_PREFIX)) {
+          // El gest és una ordre sobre la proposta, amb els mateixos permisos que els seus botons.
+          const suggestion = draggedSuggestion(taskId);
+          if (suggestion === undefined) return;
+          if (suggestion.active && status === 'todo') onDeclineSuggestion?.(suggestion.item);
+          if (!suggestion.active && status === 'doing' && suggestion.item.can_start)
+            onStartSuggestion?.(suggestion.item, 'now');
+          return;
+        }
+        onDrop?.(taskId, status, target);
       }}
     >
       <div
@@ -566,7 +651,6 @@ export function KanbanBoard({
           <div
             data-ai-board={aiBoard ? 'true' : 'false'}
             style={{
-              ...(mobile ? { display: 'contents' } : {}),
               /**
                * En repòs, **cap transformada**: `rotateY(0deg)` és visualment el mateix
                * que no tenir-ne, però és una transformada 3D i promou la capa, i llavors
@@ -575,7 +659,7 @@ export function KanbanBoard({
                */
               transform: flip?.transform ?? 'none',
               transition: flip?.transition,
-              display: 'flex',
+              display: mobile ? 'contents' : 'flex',
               flex: 1,
               minHeight: 0,
             }}

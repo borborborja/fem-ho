@@ -323,16 +323,18 @@ async function writeEvent(
 
   const row = found.rows[0];
   const eventId = row?.id ?? uuidv7();
+  const rdate = mestre.rdate.length === 0 ? null : JSON.stringify(mestre.rdate);
+  const exdate = mestre.exdate.length === 0 ? null : JSON.stringify(mestre.exdate);
 
   if (row === undefined) {
     await sql`
       INSERT INTO events (id, calendar_id, uid, summary, description, location, starts_at,
-                          ends_at, all_day, timezone, status, rrule, sequence, etag, raw_ical,
-                          created_at, updated_at)
+                          ends_at, all_day, timezone, status, transparency, rrule, rdate, exdate,
+                          sequence, etag, raw_ical, created_at, updated_at)
       VALUES (${eventId}, ${collection.calendarId}, ${uid}, ${mestre.summary}, ${mestre.description},
               ${mestre.location}, ${mestre.startsAt}, ${mestre.endsAt}, ${dbBool(mestre.allDay)},
-              ${mestre.timezone}, ${mestre.status ?? 'CONFIRMED'}, ${mestre.rrule},
-              ${mestre.sequence}, ${etag}, ${raw}, ${ctx.now}, ${ctx.now})
+              ${mestre.timezone}, ${mestre.status}, ${mestre.transparency}, ${mestre.rrule},
+              ${rdate}, ${exdate}, ${mestre.sequence}, ${etag}, ${raw}, ${ctx.now}, ${ctx.now})
     `.execute(ctx.tx);
 
     ctx.record({
@@ -349,8 +351,9 @@ async function writeEvent(
     UPDATE events SET summary = ${mestre.summary}, description = ${mestre.description},
                       location = ${mestre.location}, starts_at = ${mestre.startsAt},
                       ends_at = ${mestre.endsAt}, all_day = ${dbBool(mestre.allDay)},
-                      timezone = ${mestre.timezone}, status = ${mestre.status ?? 'CONFIRMED'},
-                      rrule = ${mestre.rrule}, sequence = ${mestre.sequence},
+                      timezone = ${mestre.timezone}, status = ${mestre.status},
+                      transparency = ${mestre.transparency}, rrule = ${mestre.rrule},
+                      rdate = ${rdate}, exdate = ${exdate}, sequence = ${mestre.sequence},
                       etag = ${etag}, raw_ical = ${raw},
                       updated_at = ${ctx.now}, version = version + 1
     WHERE id = ${eventId}

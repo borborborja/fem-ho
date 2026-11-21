@@ -343,6 +343,7 @@ export async function wipeInstance(
     'reminders',
     // Esdeveniments i els seus fills.
     'event_inbox_marks',
+    'calendar_suggestion_declines',
     'event_attendees',
     'event_occurrences',
     'events',

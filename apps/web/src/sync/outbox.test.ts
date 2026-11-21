@@ -5,6 +5,7 @@
 
 import 'fake-indexeddb/auto';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { applyBoardResults, readSnapshot, writeSnapshot } from './cache.js';
 import { FemHoDatabase, type OutboxRow } from './db.js';
 import {
   applyResults,
@@ -57,6 +58,69 @@ it('envia el moviment del Pomodoro entre la creació local i el completat de la 
   ]);
   expect(nextBoardOperations([focus, complete])).toEqual([focus]);
   expect(nextBoardOperations([complete])).toEqual([complete]);
+});
+
+it('espera el rebut de l’inici des del calendari abans d’enviar el completat', () => {
+  const start = row({
+    entity_type: 'calendar_suggestions',
+    entity_id: 'persona-1',
+    payload: { type: 'start', task_id: 'tasca-1' },
+  });
+  const complete = row({ op: 'move', payload: { status: 'done' } });
+  const independent = row({ entity_id: 'tasca-2', op: 'move' });
+  expect(nextBoardOperations([start, complete, independent])).toEqual([start, independent]);
+  expect(nextBoardOperations([complete, independent])).toEqual([complete, independent]);
+
+  const configure = row({
+    entity_type: 'calendar_suggestions',
+    entity_id: 'persona-1',
+    payload: { type: 'configure', enabled: false },
+  });
+  expect(nextBoardOperations([{ ...start, status: 'failed' }, complete, configure])).toEqual([
+    configure,
+  ]);
+});
+
+it('conserva en conflicte les edicions d’una tasca provisional que ha perdut l’inici', async () => {
+  const start = row({
+    entity_type: 'calendar_suggestions',
+    entity_id: 'persona-1',
+    payload: { type: 'start', task_id: 'tasca-1' },
+  });
+  const complete = row({ op: 'move', payload: { status: 'done' } });
+  const subtask = row({
+    entity_type: 'subtask',
+    entity_id: 'subtasca-1',
+    parent_task_id: 'tasca-1',
+  });
+  const pomodoro = row({
+    entity_type: 'pomodoro',
+    entity_id: 'persona-1',
+    payload: { kind: 'queue', task_ids: ['tasca-1'] },
+  });
+  const independent = row({ entity_id: 'tasca-guanyadora', op: 'move' });
+  const winner = { id: 'tasca-guanyadora', status: 'doing', scope_id: 'ambit', version: 2 };
+  const boardPath = '/api/v1/board?';
+  await writeSnapshot(db, boardPath, { columns: [{ status: 'doing', groups: [] }] });
+  await db.outbox.bulkPut([start, complete, subtask, pomodoro, independent]);
+  await applyBoardResults(
+    db,
+    [start],
+    [
+      {
+        op_id: start.id,
+        status: 'ok',
+        entity: { task: winner },
+      },
+    ],
+  );
+  expect(await db.outbox.get(start.id)).toBeUndefined();
+  for (const dependent of [complete, subtask, pomodoro])
+    expect((await db.outbox.get(dependent.id))?.status).toBe('conflict');
+  expect(nextBoardOperations(await db.outbox.toArray())).toEqual([independent]);
+  expect(await readSnapshot(db, boardPath)).toEqual({
+    columns: [{ status: 'doing', groups: [{ scope_id: 'ambit', tasks: [winner] }] }],
+  });
 });
 
 describe('fusió', () => {

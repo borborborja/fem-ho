@@ -7,6 +7,7 @@
  */
 
 import Dexie, { type EntityTable } from 'dexie';
+import type { CalendarTaskSuggestion } from '../app/types.js';
 
 /** Les entitats que se sincronitzen. Han de coincidir amb `TABLES` del servidor. */
 export const SYNCED_ENTITIES = ['task', 'subtask', 'checklist', 'checklist_item'] as const;
@@ -29,7 +30,7 @@ export type OutboxStatus = 'pending' | 'sending' | 'failed' | 'conflict';
 export interface OutboxRow {
   /** És l'`op_id` que veurà el servidor: la clau d'idempotència (docs/06 §4). */
   id: string;
-  entity_type: SyncedEntity | 'pomodoro';
+  entity_type: SyncedEntity | 'pomodoro' | 'calendar_suggestions';
   entity_id: string;
   op: OutboxOp;
   payload: Record<string, unknown>;
@@ -55,6 +56,8 @@ export interface OutboxRow {
   parent_task_id?: string | undefined;
   /** Títol vist abans d'editar, per distingir els canvis propis dels d'un altre client. */
   observed_title?: string | undefined;
+  /** Occurrència tal com es veia abans d'encuar l'inici, per pintar la tasca provisional. */
+  calendar_suggestion?: CalendarTaskSuggestion | undefined;
 }
 
 /** Claus de la taula `meta`. */

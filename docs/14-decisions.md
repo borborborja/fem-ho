@@ -1024,6 +1024,16 @@ i els valors vius són els de `policy/scope-settings.ts`.
 
 ---
 
+### P28 · El calendari proposa el moment d'iniciar una tasca
+
+L'interruptor d'Ajustos és personal. El tauler projecta els esdeveniments visibles del dia del perfil com a propostes a «Per fer» i, mentre dura la cita, a «Fent». Si la proposta continua pendent al final de la cita, torna a «Per fer» amb el control habitual per avançar-la. El gest de tornar-la abans a «Per fer» passa per la cua del compte i hi deixa la proposta fins que la persona l'iniciï. Cada ocurrència té una identitat formada pel calendari, l'UID i l'identificador de recurrència.
+
+Confirmar reutilitza la tasca pendent de l'Inbox si ja existeix, o en crea una al mateix àmbit i projecte del calendari. Per a una cita privada d'un àmbit compartit, la persona confirma que el títol passarà a ser visible als membres. El servei conserva la referència a la cita i la tasca pot seguir el seu propi cicle de vida, d'acord amb P6.
+
+L'hora del gest o l'hora prevista s'escriu a l'historial. L'àmbit decideix si aquest inici obre un tram del Registre. El servidor arbitra les confirmacions concurrents i els clients fan servir la cua de sortida per conservar l'hora del gest fins i tot després d'una reconnexió.
+
+---
+
 ## Part 3 — Fets sospitosos de `research/`
 
 El crític va marcar 7 afirmacions com a probablement inventades, obsoletes o internament incoherents. **Cap `docs/` en depèn.**
