@@ -3,6 +3,7 @@
   flex-shrink: 0;
   align-items: center;
   justify-content: center;
+  gap: 4px;
   min-width: 44px;
   min-height: 44px;
   padding: 0 9px;
@@ -15,6 +16,15 @@
   font-variant-numeric: tabular-nums;
   font-weight: 700;
   cursor: pointer;
+}
+
+.pomodoro-trigger-icon {
+  width: 21px;
+  height: 21px;
+  background: currentColor;
+  mask-position: center;
+  mask-repeat: no-repeat;
+  mask-size: contain;
 }
 
 .pomodoro-dialog {

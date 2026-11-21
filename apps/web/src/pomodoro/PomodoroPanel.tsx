@@ -19,9 +19,15 @@ export function PomodoroTrigger() {
       data-testid="pomodoro-open"
       aria-haspopup="dialog"
       aria-label={t('pomodoro.title')}
+      title={t('pomodoro.title')}
       onClick={() => focus.setOpen(true)}
     >
-      {focus.timer !== null ? countdown(focus.remainingMs) : t('pomodoro.title')}
+      <span
+        className="pomodoro-trigger-icon"
+        aria-hidden="true"
+        style={{ maskImage: `url("${tomato}")` }}
+      />
+      {focus.timer !== null && <span aria-hidden="true">{countdown(focus.remainingMs)}</span>}
     </button>
   );
 }
