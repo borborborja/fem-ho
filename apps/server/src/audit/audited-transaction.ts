@@ -208,8 +208,9 @@ async function writeEntry(
 ): Promise<void> {
   // L'actor surt del principal, no d'un paràmetre: així no hi ha manera d'escriure una
   // entrada amb un actor que no sigui qui de veritat ha fet la petició.
-  const actorType =
-    principal.kind === 'agent' ? 'ai_agent' : principal.kind === 'guest' ? 'guest' : 'user';
+  const system =
+    principal.kind === 'user' && principal.source === 'system' && principal.userId === '';
+  const actorType = system ? 'system' : principal.kind === 'agent' ? 'ai_agent' : principal.kind;
 
   /**
    * Un principal **sense usuari** —un convidat d'un enllaç compartit, o el sistema

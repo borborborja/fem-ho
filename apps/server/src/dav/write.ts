@@ -222,7 +222,10 @@ async function writeTodo(
       entityId: taskId,
       scopeId: collection.scopeId,
       verb: 'created',
-      changes: { title: { from: null, to: mare.summary } },
+      changes: {
+        title: { from: null, to: mare.summary },
+        ...(mare.status === 'doing' ? { status: { from: null, to: mare.status } } : {}),
+      },
     });
   } else {
     await sql`

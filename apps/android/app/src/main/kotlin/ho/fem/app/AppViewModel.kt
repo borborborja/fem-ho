@@ -176,6 +176,8 @@ class AppViewModel(private val container: Container) : ViewModel() {
     val pomodoro = _pomodoro.asStateFlow()
     private val _calendarSuggestions = MutableStateFlow(LocalCalendarSuggestions())
     val calendarSuggestions = _calendarSuggestions.asStateFlow()
+    private val _doingAutoStopMinutes = MutableStateFlow<Int?>(null)
+    val doingAutoStopMinutes = _doingAutoStopMinutes.asStateFlow()
 
     private val _activeScopes = MutableStateFlow<List<String>>(emptyList())
     val activeScopes = _activeScopes.asStateFlow()
@@ -563,6 +565,7 @@ class AppViewModel(private val container: Container) : ViewModel() {
         _doneSettingsSaving.value = false
         _pomodoro.value = LocalPomodoro()
         _calendarSuggestions.value = LocalCalendarSuggestions()
+        _doingAutoStopMinutes.value = null
         _activeScopes.value = emptyList()
         _instanceVersion.value = ""
         _needsScopeModeWizard.value = false
@@ -1005,6 +1008,12 @@ class AppViewModel(private val container: Container) : ViewModel() {
             runCatching { ActivityNotifications.sync(container, sessionAccount) }
         }
         sessionScope.launch { runCatching { container.api(sessionAccount).pinnedChecklists() }.onSuccess { _pinned.value = it } }
+    }
+
+    suspend fun refreshForegroundTaskBoard() {
+        val account = activeAccount ?: return
+        runCatching { container.repository(account).refreshTaskBoard() }
+            .onFailure { if (it is CancellationException) throw it }
     }
 
     /**
@@ -1544,6 +1553,11 @@ class AppViewModel(private val container: Container) : ViewModel() {
     fun setCalendarSuggestionsEnabled(enabled: Boolean) = submitCalendarSuggestion {
         configureCalendarSuggestions(enabled)
         true
+    }
+
+    fun setDoingAutoStop(minutes: Int?) {
+        val account = activeAccount ?: return
+        sessionScope.launch { localChange(account) { this.setDoingAutoStop(minutes) } }
     }
 
     /** A l'arrencada, l'intent del widget pot arribar abans del primer valor del flux. */
@@ -2654,6 +2668,15 @@ class AppViewModel(private val container: Container) : ViewModel() {
         fun refreshWidgets() {
             if (FemhoWidgets.arePlaced(container.appContext)) {
                 sessionScope.launch { FemhoWidgets.updateAll(container.appContext) }
+            }
+        }
+        sessionScope.launch {
+            repository.doingAutoStop.collect { setting ->
+                _doingAutoStopMinutes.value = setting.minutes
+                setting.issueId?.let {
+                    actionFailed()
+                    repository.dismissDoingAutoStopIssue(it)
+                }
             }
         }
         sessionScope.launch {

@@ -798,6 +798,7 @@ export interface UserSettings {
   calendar_task_suggestions: Generated<number>;
   collapsed_groups: string | null;
   daily_digest_at: string | null;
+  doing_auto_stop_minutes: number | null;
   done_cleared_at: string | null;
   event_task_deleted: Generated<string>;
   gravatar: Generated<number>;

@@ -2146,6 +2146,9 @@ paths:
         Les propostes del calendari usen `entity: calendar_suggestions`, `op: update`,
         l'ID del compte i un `CalendarSuggestionCommand` a `data`. Un resultat confirmat
         conté un `CalendarSuggestionResult` a `entity`.
+        El límit a «Fent» usa `entity: user_settings`, `op: update`, l'ID del compte
+        i un `DoingAutoStopSetting` a `data`. La confirmació porta el valor actual
+        a `entity`, també en un reintent.
       requestBody:
         required: true
         content:
@@ -5975,6 +5978,12 @@ components:
         inbox_position: { type: string, enum: [left, right, below] }
         inbox_show_overdue: { type: boolean }
         calendar_task_suggestions: { type: boolean, readOnly: true }
+        doing_auto_stop_minutes:
+          type: [integer, 'null']
+          minimum: 1
+          maximum: 10080
+          readOnly: true
+          description: Límit personal a «Fent». Amb `null` queda desactivat.
         event_task_deleted:
           type: string
           enum: [return_to_inbox, hide_from_inbox]
@@ -6454,6 +6463,17 @@ components:
         data:
           type: object
           additionalProperties: true
+
+    DoingAutoStopSetting:
+      type: object
+      additionalProperties: false
+      required: [doing_auto_stop_minutes]
+      properties:
+        doing_auto_stop_minutes:
+          type: [integer, 'null']
+          minimum: 1
+          maximum: 10080
+          description: Minuts fins al retorn automàtic a «Per fer» o `null` per desactivar-lo.
 
     CalendarSuggestionOccurrence:
       type: object

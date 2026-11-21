@@ -55,6 +55,7 @@ beforeAll(async () => {
   }
 
   await migrateToLatest(db.db, { engine: db.engine });
+  expect(await migrateDown(db.db, db.engine)).toBe('031-doing-auto-stop');
   expect(await migrateDown(db.db, db.engine)).toBe('030-calendar-task-suggestions');
   expect(await migrateDown(db.db, db.engine)).toBe('029-pomodoro');
   const password = await hashPassword(pass);

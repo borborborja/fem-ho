@@ -371,7 +371,10 @@ data class AuthTokens(
 data class UserSettingsView(
     @SerialName("scope_mode") val scopeMode: String? = null,
     @SerialName("done_cleared_at") val doneClearedAt: String? = null,
+    @SerialName("doing_auto_stop_minutes") val doingAutoStopMinutes: Int? = null,
 )
+
+const val MAX_DOING_AUTO_STOP_MINUTES = 10_080
 
 /** La resposta de `GET /auth/settings`: el perfil i les settings juntes. */
 @Serializable

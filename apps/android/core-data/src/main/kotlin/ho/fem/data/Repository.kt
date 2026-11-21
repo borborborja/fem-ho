@@ -3,6 +3,7 @@ package ho.fem.data
 import ho.fem.model.AiMode
 import ho.fem.model.Agent
 import ho.fem.model.AgentDetail
+import ho.fem.model.AuthSettingsEnvelope
 import ho.fem.model.Calendar
 import ho.fem.model.CalendarOrigin
 import ho.fem.model.CalendarTaskStart
@@ -16,6 +17,7 @@ import ho.fem.model.MailAccount
 import ho.fem.model.MailRule
 import ho.fem.model.MailSecurity
 import ho.fem.model.MailTestResult
+import ho.fem.model.MAX_DOING_AUTO_STOP_MINUTES
 import ho.fem.model.Person
 import ho.fem.model.PomodoroSnapshot
 import ho.fem.model.Project
@@ -98,7 +100,11 @@ data class LocalCalendarSuggestions(
     val issueId: String? = null,
 )
 
+data class LocalDoingAutoStop(val minutes: Int? = null, val issueId: String? = null)
+
 private const val CALENDAR_SUGGESTIONS = "calendar_suggestions"
+private const val USER_SETTINGS = "user_settings"
+private const val DOING_AUTO_STOP_MINUTES = "doing_auto_stop_minutes"
 
 /**
  * El repositori. docs/03 §11.
@@ -140,6 +146,10 @@ class Repository(
     val calendarSuggestions: Flow<LocalCalendarSuggestions> = if (ownerId == null) flowOf(LocalCalendarSuggestions()) else
         combine(dao.calendarSuggestionsCache(), dao.outboxFlow()) { _, _ ->
             moveLock.withLock { localCalendarSuggestions() }
+        }.distinctUntilChanged()
+    val doingAutoStop: Flow<LocalDoingAutoStop> = if (ownerId == null) flowOf(LocalDoingAutoStop()) else
+        combine(dao.doingAutoStopCache(), dao.outboxFlow()) { _, _ ->
+            moveLock.withLock { localDoingAutoStop() }
         }.distinctUntilChanged()
     val syncIssues: Flow<List<SyncIssue>> = combine(dao.outboxFlow(), dao.tasks()) { queue, local ->
         val titles = local.associate { it.id to it.title }
@@ -273,6 +283,34 @@ class Repository(
         dao.enqueue(operation(CALENDAR_SUGGESTIONS, "update", checkNotNull(ownerId), 0, data, taskId = null))
     }
 
+    internal suspend fun readUserSettings(): AuthSettingsEnvelope = flushLock.withLock {
+        api.settings().also { envelope ->
+            moveLock.withLock {
+                val cache = dao.doingAutoStopCacheOnce()
+                val minutes = envelope.settings.doingAutoStopMinutes
+                if (cache?.minutes != minutes) {
+                    dao.putDoingAutoStopCache(DoingAutoStopCacheEntity(minutes = minutes, issueId = cache?.issueId))
+                }
+            }
+        }
+    }
+
+    private suspend fun localDoingAutoStop(): LocalDoingAutoStop {
+        val cache = dao.doingAutoStopCacheOnce()
+        return LocalDoingAutoStop(projectDoingAutoStop(cache?.minutes, dao.outbox()), cache?.issueId)
+    }
+
+    suspend fun setDoingAutoStop(minutes: Int?) = moveLock.withLock {
+        require(minutes == null || minutes in 1..MAX_DOING_AUTO_STOP_MINUTES)
+        if (minutes == localDoingAutoStop().minutes) return@withLock
+        val data = buildJsonObject { put(DOING_AUTO_STOP_MINUTES, minutes) }
+        dao.enqueue(operation(USER_SETTINGS, "update", checkNotNull(ownerId), 0, data, taskId = null))
+    }
+
+    suspend fun dismissDoingAutoStopIssue(issueId: String) = moveLock.withLock {
+        dao.clearDoingAutoStopIssue(issueId)
+    }
+
     suspend fun actOnCalendarSuggestion(
         suggestion: CalendarTaskSuggestion,
         actionAt: Instant,
@@ -340,6 +378,11 @@ class Repository(
         readPomodoro()
     }
 
+    suspend fun refreshTaskBoard() = flushLock.withLock {
+        flushPending()
+        refreshBoard(emptyList(), null)
+    }
+
     private suspend fun refreshBoard(scopeIds: List<String>, projectId: String?) {
         val scopes = api.scopes()
         val projects = api.projects()
@@ -405,6 +448,10 @@ class Repository(
                     moveLock.withLock { reconcileCalendarSuggestion(operation, null, rejected = true) }
                     continue
                 }
+                if (operation.entity == USER_SETTINGS) {
+                    moveLock.withLock { reconcileDoingAutoStop(operation, null, rejected = true) }
+                    continue
+                }
                 dao.markIssue(operation.opId, if (error.status == 409) "conflict" else "rejected", error.detail, null)
                 blocked += entity
                 if (operation.op == "create") blockedCreations += operation.entityId
@@ -421,6 +468,7 @@ class Repository(
                     when (operation.entity) {
                         "pomodoro" -> reconcilePomodoro(operation, confirmed, rejected = false)
                         CALENDAR_SUGGESTIONS -> reconcileCalendarSuggestion(operation, confirmed, rejected = false)
+                        USER_SETTINGS -> reconcileDoingAutoStop(operation, confirmed, rejected = false)
                         else -> acknowledge(operation, confirmed)
                     }
                 }
@@ -440,6 +488,10 @@ class Repository(
                         moveLock.withLock { reconcileCalendarSuggestion(operation, server, rejected = true) }
                         continue
                     }
+                    if (operation.entity == USER_SETTINGS) {
+                        moveLock.withLock { reconcileDoingAutoStop(operation, null, rejected = true) }
+                        continue
+                    }
                     if (operation.entity == "task" && server?.get("deleted_at")?.let { it != JsonNull } == true) {
                         moveLock.withLock { dao.markDeletedConflict(operation, server.toString()) }
                     } else {
@@ -455,6 +507,19 @@ class Repository(
                 }
             }
         }
+    }
+
+    private suspend fun reconcileDoingAutoStop(operation: OutboxEntity, entity: JsonObject?, rejected: Boolean) {
+        val cache = dao.doingAutoStopCacheOnce() ?: DoingAutoStopCacheEntity()
+        val updated = if (rejected) cache.copy(issueId = operation.opId) else {
+            val value = entity?.get(DOING_AUTO_STOP_MINUTES)
+            val minutes = (value as? JsonPrimitive)?.takeUnless { it.isString }?.intOrNull
+            if (value != JsonNull && (minutes == null || minutes !in 1..MAX_DOING_AUTO_STOP_MINUTES)) {
+                throw IOException("The sync receipt did not include a valid auto-stop setting")
+            }
+            cache.copy(minutes = minutes)
+        }
+        dao.resolveDoingAutoStop(updated, operation.opId)
     }
 
     private suspend fun reconcilePomodoro(operation: OutboxEntity, entity: JsonObject?, rejected: Boolean) {
@@ -1341,6 +1406,12 @@ private fun PomodoroSnapshot.toCache(offsetMs: Long, issueId: String?): Pomodoro
 private fun CalendarTaskSuggestions.toCache(issueId: String?) = CalendarSuggestionsCacheEntity(
     snapshot = storedJson.encodeToString(this), issueId = issueId,
 )
+
+private fun projectDoingAutoStop(cachedMinutes: Int?, outbox: List<OutboxEntity>): Int? {
+    val latest = outbox.lastOrNull { it.entity == USER_SETTINGS && it.state == "pending" }
+        ?: return cachedMinutes
+    return objectFrom(latest.payload).primitive(DOING_AUTO_STOP_MINUTES)?.intOrNull
+}
 
 internal fun projectCalendarSuggestions(cache: CalendarSuggestionsCacheEntity?, outbox: List<OutboxEntity>): CalendarTaskSuggestions {
     val initial = cache?.let { storedJson.decodeFromString<CalendarTaskSuggestions>(it.snapshot) }

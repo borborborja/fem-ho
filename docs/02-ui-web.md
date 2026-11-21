@@ -336,6 +336,11 @@ Pestanyes: General · Àmbits · Calendaris · MCP i API · Usuari IA · Compart
 
 **General** — tema (Sistema, Clar, Fosc, Alt contrast i Tinta electrònica), accent, elements del dashboard, posició del rail d'Inbox i visibilitat de les endarrerides. L'elecció d'Alt contrast o Tinta electrònica es desa al navegador. Alt contrast segueix l'últim tema habitual. Tinta electrònica fa servir una paleta monocroma clara.
 
+**Aturada a Fent** — a General, cada persona pot fixar un límit en minuts o hores
+per a les tasques que posa a «Fent», també en àmbits compartits. En desar-lo
+s'aplica a les estades en curs. El servidor fa el moviment fins i tot amb
+la PWA tancada. Fora de línia, la preferència s'envia en reconnectar.
+
 **Pomodoro** — es pot activar a General. La tomata de la capçalera obre el
 temporitzador i la cua personal. Es poden afegir i ordenar tasques de «Per fer»
 amb controls de teclat i tàctils. Iniciar un bloc amb una tasca la mou a «Fent».

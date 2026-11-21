@@ -699,6 +699,13 @@
     <string name="settings_day_thu">ju</string>
     <string name="settings_day_tue">ma</string>
     <string name="settings_day_wed">mi</string>
+    <string name="settings_doingautostop">Detener automáticamente las tareas en Haciendo</string>
+    <string name="settings_doingautostopduration">Duración máxima</string>
+    <string name="settings_doingautostophint">Las tareas que muevas a Haciendo volverán a Por hacer cuando alcancen el límite.</string>
+    <string name="settings_doingautostophours">Horas</string>
+    <string name="settings_doingautostopinvalid">Elige una duración de entre 1 minuto y 7 días.</string>
+    <string name="settings_doingautostopminutes">Minutos</string>
+    <string name="settings_doingautostopunit">Unidad</string>
     <string name="settings_empty_admin">Aún no hay contenido para Admin.</string>
     <string name="settings_empty_agents">Todavía no has creado ningún agente.</string>
     <string name="settings_empty_ai">Aún no hay contenido para Usuario IA.</string>

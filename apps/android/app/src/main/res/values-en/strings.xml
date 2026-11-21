@@ -699,6 +699,13 @@
     <string name="settings_day_thu">Th</string>
     <string name="settings_day_tue">Tu</string>
     <string name="settings_day_wed">We</string>
+    <string name="settings_doingautostop">Automatically stop tasks in Doing</string>
+    <string name="settings_doingautostopduration">Maximum duration</string>
+    <string name="settings_doingautostophint">Tasks you move to Doing return to To do when they reach the limit.</string>
+    <string name="settings_doingautostophours">Hours</string>
+    <string name="settings_doingautostopinvalid">Choose a duration between 1 minute and 7 days.</string>
+    <string name="settings_doingautostopminutes">Minutes</string>
+    <string name="settings_doingautostopunit">Unit</string>
     <string name="settings_empty_admin">No content for Admin yet.</string>
     <string name="settings_empty_agents">You have not created any agent yet.</string>
     <string name="settings_empty_ai">No content for AI user yet.</string>

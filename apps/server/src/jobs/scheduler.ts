@@ -28,6 +28,7 @@ import { mailCredentials } from '../services/mail-credentials.js';
 import { pruneMailOAuth } from '../services/mail-oauth.js';
 import { pollMail, pruneMail } from './mail-poll.js';
 import { deliverTaskActivity } from './task-activity-notifications.js';
+import { stopExpiredDoingTasks } from '../services/doing-auto-stop.js';
 import type { Principal } from '../policy/principal.js';
 import {
   ensureVapidKeys,
@@ -97,6 +98,13 @@ export async function tick(options: SchedulerOptions): Promise<TickResult> {
   const log = options.log ?? (() => undefined);
   const principal = systemPrincipal();
   const result: TickResult = { reminders: 0, refreshed: 0, federated: 0, mail: 0, errors: 0 };
+
+  try {
+    await stopExpiredDoingTasks(options.connection, principal, now);
+  } catch (error) {
+    result.errors += 1;
+    log('L’aturada automàtica de tasques ha fallat', error);
+  }
 
   try {
     result.reminders = await runReminders(options, principal, now);

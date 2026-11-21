@@ -10,6 +10,7 @@
  */
 
 import { useEffect, useState } from 'react';
+import { liveQuery } from 'dexie';
 import {
   DEFAULT_MAIL_TEMPLATE,
   dateTime,
@@ -56,6 +57,10 @@ import { TaskAiSettingsPanel } from './TaskAiSettingsPanel.js';
 import { NotificationSettingsPanel } from './NotificationSettingsPanel.js';
 import { PomodoroSettingsFields } from '../pomodoro/PomodoroSettings.js';
 import { useCalendarSuggestions } from '../board/useCalendarSuggestions.js';
+import { useBoardQuery, useBoardSync } from '../sync/board-sync.js';
+import { AUTH_SETTINGS_PATH, readSnapshot, type CachedUserSettings } from '../sync/cache.js';
+import type { OutboxRow } from '../sync/db.js';
+import { compareOperations } from '../sync/outbox.js';
 
 /**
  * **El correu va en pestanya pròpia i no dins de «Calendaris».**
@@ -325,6 +330,147 @@ function UpdateNotice() {
   );
 }
 
+function DoingAutoStopSettings() {
+  const { profile, settings } = useSessionData();
+  const { db, submit } = useBoardSync();
+  const { data } = useBoardQuery<CachedUserSettings>(AUTH_SETTINGS_PATH);
+  const [local, setLocal] = useState<{
+    confirmed: CachedUserSettings | undefined;
+    latest: OutboxRow | undefined;
+  }>();
+
+  useEffect(() => {
+    const observation = liveQuery(() =>
+      db.transaction('r', db.meta, db.outbox, async () => {
+        // Si el rebut acaba d'arribar, l'ajust confirmat i la cua han de canviar alhora.
+        const confirmed = await readSnapshot<CachedUserSettings>(db, AUTH_SETTINGS_PATH);
+        const queued = await db.outbox
+          .where('[entity_type+entity_id]')
+          .equals(['user_settings', profile.id])
+          .toArray();
+        return { confirmed, latest: queued.sort(compareOperations).at(-1) };
+      }),
+    ).subscribe({ next: setLocal, error: () => undefined });
+    return () => observation.unsubscribe();
+  }, [db, profile.id]);
+
+  const confirmed = (local?.confirmed?.settings ?? data?.settings ?? settings)
+    .doing_auto_stop_minutes;
+  if (confirmed === undefined) return null;
+
+  const latest = local?.latest;
+  const failed = latest?.status === 'failed' || latest?.status === 'conflict';
+  const queued = latest?.payload.doing_auto_stop_minutes;
+  const minutes = !failed && (queued === null || typeof queued === 'number') ? queued : confirmed;
+  return (
+    <Group>
+      <DoingAutoStopForm
+        key={minutes ?? 'off'}
+        minutes={minutes}
+        onSave={(value) =>
+          submit({
+            entity_type: 'user_settings',
+            entity_id: profile.id,
+            op: 'update',
+            payload: { doing_auto_stop_minutes: value },
+          })
+        }
+      />
+      {failed && <p role="alert">{t('error.generic')}</p>}
+    </Group>
+  );
+}
+
+function DoingAutoStopForm({
+  minutes,
+  onSave,
+}: {
+  minutes: number | null;
+  onSave: (minutes: number | null) => Promise<void>;
+}) {
+  const initial = minutes ?? 240;
+  const inHours = initial % 60 === 0;
+  const [enabled, setEnabled] = useState(minutes !== null);
+  const [unit, setUnit] = useState<'hours' | 'minutes'>(inHours ? 'hours' : 'minutes');
+  const [amount, setAmount] = useState(() => String(inHours ? initial / 60 : initial));
+  const save = useMutation(onSave);
+  const parsed = Number(amount);
+  const max = unit === 'hours' ? 168 : 10_080;
+  const valid = !enabled || (Number.isInteger(parsed) && parsed >= 1 && parsed <= max);
+  const value = enabled ? parsed * (unit === 'hours' ? 60 : 1) : null;
+  const canSave = valid && value !== minutes && !save.busy;
+
+  return (
+    <form
+      noValidate
+      style={{ display: 'grid', gap: 12 }}
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (canSave) void save.run(value);
+      }}
+    >
+      <Toggle
+        testId="settings-doing-auto-stop"
+        label={t('settings.doingAutoStop')}
+        checked={enabled}
+        disabled={save.busy}
+        onChange={setEnabled}
+      />
+      <p style={HINT}>{t('settings.doingAutoStopHint')}</p>
+      {enabled && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
+          <label htmlFor="doing-auto-stop-duration">{t('settings.doingAutoStopDuration')}</label>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            <input
+              id="doing-auto-stop-duration"
+              data-testid="settings-doing-auto-stop-duration"
+              className="plou-input"
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={max}
+              step={1}
+              value={amount}
+              aria-invalid={!valid}
+              aria-describedby={valid ? undefined : 'doing-auto-stop-invalid'}
+              disabled={save.busy}
+              onChange={(event) => setAmount(event.target.value)}
+              style={{ width: 90 }}
+            />
+            <select
+              className="plou-input"
+              data-testid="settings-doing-auto-stop-unit"
+              aria-label={t('settings.doingAutoStopUnit')}
+              value={unit}
+              disabled={save.busy}
+              onChange={(event) => setUnit(event.target.value === 'hours' ? 'hours' : 'minutes')}
+              style={{ width: 'auto' }}
+            >
+              <option value="minutes">{t('settings.doingAutoStopMinutes')}</option>
+              <option value="hours">{t('settings.doingAutoStopHours')}</option>
+            </select>
+          </div>
+        </div>
+      )}
+      {!valid && (
+        <p id="doing-auto-stop-invalid" role="alert">
+          {t('settings.doingAutoStopInvalid')}
+        </p>
+      )}
+      <button
+        type="submit"
+        className="plou-btn"
+        data-testid="settings-doing-auto-stop-save"
+        disabled={!canSave}
+        style={{ justifySelf: 'start' }}
+      >
+        {t('nav.save')}
+      </button>
+      {save.error && <p role="alert">{failureText(save.error)}</p>}
+    </form>
+  );
+}
+
 function GeneralTab() {
   const { profile, settings, instance } = useSessionData();
   const appearance = useAppearance();
@@ -461,6 +607,7 @@ function GeneralTab() {
         <p>{t('tracking.cardsHint')}</p>
         {timePreference.error && <p role="alert">{failureText(timePreference.error)}</p>}
       </Group>
+      <DoingAutoStopSettings />
       <Group title={t('pomodoro.title')}>
         <PomodoroSettingsFields />
       </Group>

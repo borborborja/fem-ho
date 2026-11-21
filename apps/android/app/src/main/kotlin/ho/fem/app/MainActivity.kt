@@ -53,10 +53,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.compose.LifecycleResumeEffect
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import ho.fem.app.R
 import ho.fem.app.widget.FemhoWidgets
@@ -120,6 +123,7 @@ import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.util.Locale
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
@@ -1138,6 +1142,19 @@ private fun BoardHost(
         perAmbit.filter { task ->
             val teTria = projects.any { it.scopeId == task.scopeId && it.id in activeProjects }
             if (!teTria) true else task.projectId != null && task.projectId in activeProjects
+        }
+    }
+
+    val hasDoingTasks = visible.any { it.status == TaskStatus.DOING }
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(model, lifecycle, hasDoingTasks) {
+        if (!hasDoingTasks) return@LaunchedEffect
+        // El servidor pot moure una targeta mentre l'usuari continua mirant el tauler.
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            while (isActive) {
+                model.refreshForegroundTaskBoard()
+                delay(30_000)
+            }
         }
     }
 
@@ -2314,6 +2331,7 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
     val locale by model.preferenceLocale.collectAsStateWithLifecycle(initialValue = "ca")
     val pomodoro by model.pomodoro.collectAsStateWithLifecycle()
     val calendarSuggestions by model.calendarSuggestions.collectAsStateWithLifecycle()
+    val doingAutoStopMinutes by model.doingAutoStopMinutes.collectAsStateWithLifecycle()
     CalendarSuggestionsSyncEffect(model)
     val appLocale = androidx.compose.ui.platform.LocalConfiguration.current.locales[0]?.language ?: "ca"
     val firstDayLabel = stringResource(
@@ -2352,6 +2370,7 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
     val instanceVersion by model.instanceVersion.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) {
+        model.loadProfile()
         model.loadEntityData()
         model.loadCalendars()
         model.loadMailData()
@@ -2372,6 +2391,8 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
         onPomodoroEnabled = model::setPomodoroEnabled,
         calendarSuggestionsEnabled = calendarSuggestions.snapshot.enabled,
         onCalendarSuggestionsEnabled = model::setCalendarSuggestionsEnabled,
+        doingAutoStopMinutes = doingAutoStopMinutes,
+        onDoingAutoStop = model::setDoingAutoStop,
         labels = SettingsLabels(
             title = stringResource(R.string.settings_title),
             back = stringResource(R.string.nav_backtoboard),
@@ -2420,6 +2441,13 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
             pomodoro = stringResource(R.string.pomodoro_enabled),
             calendarSuggestions = stringResource(R.string.calendarsuggestions_setting),
             calendarSuggestionsHint = stringResource(R.string.calendarsuggestions_settinghint),
+            doingAutoStop = stringResource(R.string.settings_doingautostop),
+            doingAutoStopHint = stringResource(R.string.settings_doingautostophint),
+            doingAutoStopDuration = stringResource(R.string.settings_doingautostopduration),
+            doingAutoStopUnit = stringResource(R.string.settings_doingautostopunit),
+            doingAutoStopMinutes = stringResource(R.string.settings_doingautostopminutes),
+            doingAutoStopHours = stringResource(R.string.settings_doingautostophours),
+            doingAutoStopInvalid = stringResource(R.string.settings_doingautostopinvalid),
             language = stringResource(R.string.settings_language),
             languageOptions = listOf(
                 "ca" to "Català",

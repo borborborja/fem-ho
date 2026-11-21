@@ -23,6 +23,26 @@ física de tinta electrònica.
 
 ---
 
+## Aturada automàtica de tasques a «Fent»
+
+Ajustos → General permet fixar al web i a Android quant de temps poden estar
+a «Fent» les tasques que hi ha posat el compte. El límit és opcional i es
+compta des de l'entrada a «Fent», també quan es canvia amb tasques en curs.
+El servidor torna les tasques a «Per fer» al següent tic que les pot moure.
+Si l'àmbit té el Registre de dedicació actiu, el tram es tanca quan es mou
+la tasca. L'historial atribueix el moviment al sistema.
+
+La migració 031 afegeix la preferència de compte, inicialment desactivada.
+En publicar, actualitza el servidor abans dels clients.
+
+Les proves amb SQLite i PostgreSQL cobreixen el llindar, l'aïllament entre
+comptes, les reserves d'IA i els moviments concurrents. Chromium ha comprovat
+el refresc del tauler i la reconnexió després d'un moviment fora de línia.
+Amb l'APK amb R8 a Android 14 s'ha verificat el moviment amb l'app oberta i
+tancada, la desactivació fora de línia i el desament compartit amb el web.
+
+---
+
 ## Propostes del calendari als ginys d'Android · 0.28.0
 
 «Avui», «Tasques» i «Tauler» permeten demanar una sincronització des del
