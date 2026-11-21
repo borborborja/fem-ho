@@ -5,7 +5,14 @@
 
 import 'fake-indexeddb/auto';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { applyBoardResults, readSnapshot, writeSnapshot } from './cache.js';
+import {
+  AUTH_SETTINGS_PATH,
+  applyBoardResults,
+  boardSnapshotRevision,
+  readSnapshot,
+  saveBoardQuery,
+  writeSnapshot,
+} from './cache.js';
 import { FemHoDatabase, type OutboxRow } from './db.js';
 import {
   applyResults,
@@ -79,6 +86,36 @@ it('espera el rebut de l’inici des del calendari abans d’enviar el completat
   expect(nextBoardOperations([{ ...start, status: 'failed' }, complete, configure])).toEqual([
     configure,
   ]);
+});
+
+it('conserva el valor del rebut de l’aturada automàtica encara que arribi un GET anterior', async () => {
+  const older = row({
+    entity_type: 'user_settings',
+    entity_id: 'persona-1',
+    payload: { doing_auto_stop_minutes: 180 },
+    status: 'failed',
+  });
+  const change = row({
+    entity_type: 'user_settings',
+    entity_id: older.entity_id,
+    payload: { doing_auto_stop_minutes: 240 },
+    status: 'sending',
+  });
+  const stale = { settings: { doing_auto_stop_minutes: 60, week_start: 'monday' } };
+  await writeSnapshot(db, AUTH_SETTINGS_PATH, stale);
+  const revision = await boardSnapshotRevision(db, AUTH_SETTINGS_PATH);
+  await db.outbox.bulkPut([older, change]);
+  expect(nextBoardOperations(await db.outbox.toArray())).toEqual([change]);
+
+  // Si es va perdre el primer rebut, el segon porta el valor confirmat més recent.
+  const receipt = { doing_auto_stop_minutes: null };
+  await applyBoardResults(db, [change], [{ op_id: change.id, status: 'ok', entity: receipt }]);
+
+  expect(await db.outbox.count()).toBe(0);
+  expect(await db.entities.count()).toBe(0);
+  expect(await saveBoardQuery(db, AUTH_SETTINGS_PATH, stale, revision)).toEqual({
+    settings: { ...stale.settings, ...receipt },
+  });
 });
 
 it('conserva en conflicte les edicions d’una tasca provisional que ha perdut l’inici', async () => {

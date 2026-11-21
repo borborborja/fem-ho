@@ -133,7 +133,11 @@ export function DashboardScreen({ onOpenTask, onPickScope, onNewTask }: Dashboar
   return (
     <div
       data-testid="dashboard-screen"
-      style={{ display: 'grid', gap: 22, opacity: dashboard.revalidating ? 0.6 : 1 }}
+      style={{
+        display: 'grid',
+        gap: 22,
+        opacity: dashboard.revalidating ? 'var(--dimmed-opacity, 0.6)' : 1,
+      }}
     >
       {dashboard.error !== undefined ? <ErrorBanner onRetry={dashboard.reload} /> : null}
 

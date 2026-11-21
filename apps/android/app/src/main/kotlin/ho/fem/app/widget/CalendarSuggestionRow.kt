@@ -28,6 +28,7 @@ import ho.fem.widget.Dot
 import ho.fem.widget.FemhoWidget
 import ho.fem.widget.Glyph
 import ho.fem.widget.WidgetSize
+import ho.fem.widget.WidgetShape
 import ho.fem.widget.WidgetText
 import ho.fem.widget.R as WidgetR
 import java.time.ZoneId
@@ -53,6 +54,7 @@ internal fun CalendarSuggestionRow(
     suggestion: CalendarTaskSuggestion,
     status: TaskStatus,
     scopeColor: String,
+    scopeName: String?,
     timezone: String,
     account: String,
 ) {
@@ -64,8 +66,9 @@ internal fun CalendarSuggestionRow(
     } else {
         suggestion.start.atZone(ZoneId.of(timezone)).format(calendarTime)
     }
-    val tile = if (isSuggested) WidgetR.drawable.femho_widget_calendar_suggestion else WidgetR.drawable.femho_widget_tile
-    val cardHeight = 64.dp * context.resources.configuration.fontScale.coerceAtLeast(1f)
+    val tile = palette.drawable(if (isSuggested) WidgetShape.CALENDAR_SUGGESTION else WidgetShape.TILE)
+    val cardHeight = (if (palette.isEink && scopeName != null) 80.dp else 64.dp) *
+        context.resources.configuration.fontScale.coerceAtLeast(1f)
     Box(GlanceModifier.fillMaxWidth().padding(bottom = WidgetSize.rowGap)) {
         Column(
             GlanceModifier.fillMaxWidth().height(cardHeight)
@@ -82,8 +85,10 @@ internal fun CalendarSuggestionRow(
                 style = TextStyle(color = palette.color { ink }, fontSize = WidgetText.row),
             )
             Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Dot(palette.scope(scopeColor), size = 6.dp)
-                Spacer(GlanceModifier.width(4.dp))
+                if (!palette.isEink) {
+                    Dot(palette.scope(scopeColor), size = 6.dp)
+                    Spacer(GlanceModifier.width(4.dp))
+                }
                 Text(
                     time,
                     maxLines = 1,
@@ -91,6 +96,9 @@ internal fun CalendarSuggestionRow(
                     style = TextStyle(color = palette.color { inkSoft }, fontSize = WidgetText.meta),
                 )
                 CalendarOriginGlyph(suggested = isSuggested)
+            }
+            if (palette.isEink && scopeName != null) {
+                Text(scopeName, maxLines = 1, style = TextStyle(color = palette.color { inkSoft }, fontSize = WidgetText.meta))
             }
         }
     }

@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import ho.fem.app.widget.FemhoWidgets
 import ho.fem.data.ActiveAccount
 import ho.fem.data.Container
+import ho.fem.data.DisplaySettings
 import ho.fem.data.LocalCalendarSuggestions
 import ho.fem.data.LocalPomodoro
 import ho.fem.data.Repository
@@ -159,11 +160,8 @@ class AppViewModel(private val container: Container) : ViewModel() {
     val actionError = _actionError.asStateFlow()
     fun consumeActionError() { _actionError.value = null }
 
-    private val _theme = MutableStateFlow("system")
-    val theme: StateFlow<String> = _theme.asStateFlow()
-
-    private val _accent = MutableStateFlow("default")
-    val accent: StateFlow<String> = _accent.asStateFlow()
+    private val _display = MutableStateFlow(DisplaySettings())
+    val display = _display.asStateFlow()
 
     private val _profile = MutableStateFlow<UserProfile?>(null)
     val profile: StateFlow<UserProfile?> = _profile.asStateFlow()
@@ -178,6 +176,8 @@ class AppViewModel(private val container: Container) : ViewModel() {
     val pomodoro = _pomodoro.asStateFlow()
     private val _calendarSuggestions = MutableStateFlow(LocalCalendarSuggestions())
     val calendarSuggestions = _calendarSuggestions.asStateFlow()
+    private val _doingAutoStopMinutes = MutableStateFlow<Int?>(null)
+    val doingAutoStopMinutes = _doingAutoStopMinutes.asStateFlow()
 
     private val _activeScopes = MutableStateFlow<List<String>>(emptyList())
     val activeScopes = _activeScopes.asStateFlow()
@@ -565,6 +565,7 @@ class AppViewModel(private val container: Container) : ViewModel() {
         _doneSettingsSaving.value = false
         _pomodoro.value = LocalPomodoro()
         _calendarSuggestions.value = LocalCalendarSuggestions()
+        _doingAutoStopMinutes.value = null
         _activeScopes.value = emptyList()
         _instanceVersion.value = ""
         _needsScopeModeWizard.value = false
@@ -659,8 +660,7 @@ class AppViewModel(private val container: Container) : ViewModel() {
         _session.value = Session.Checking
         viewModelScope.launch {
             val (account, base, legacy) = try {
-                _theme.value = container.settings.theme.first()
-                _accent.value = container.settings.accent.first()
+                _display.value = container.settings.display.first()
                 val saved = container.settings.serverUrl.first()
                 val account = container.restoreAccount()
                 // La sessió xifrada vincula el servidor al compte. La preferència només
@@ -1008,6 +1008,12 @@ class AppViewModel(private val container: Container) : ViewModel() {
             runCatching { ActivityNotifications.sync(container, sessionAccount) }
         }
         sessionScope.launch { runCatching { container.api(sessionAccount).pinnedChecklists() }.onSuccess { _pinned.value = it } }
+    }
+
+    suspend fun refreshForegroundTaskBoard() {
+        val account = activeAccount ?: return
+        runCatching { container.repository(account).refreshTaskBoard() }
+            .onFailure { if (it is CancellationException) throw it }
     }
 
     /**
@@ -1422,13 +1428,19 @@ class AppViewModel(private val container: Container) : ViewModel() {
     }
 
     fun setTheme(value: String) {
-        _theme.value = value
-        sessionScope.launch { container.settings.setTheme(value) }
+        viewModelScope.launch {
+            container.settings.selectDisplay(value)
+            _display.value = container.settings.display.first()
+            FemhoWidgets.updateAll(container.appContext)
+        }
     }
 
     fun setAccent(value: String) {
-        _accent.value = value
-        sessionScope.launch { container.settings.setAccent(value) }
+        viewModelScope.launch {
+            container.settings.setAccent(value)
+            _display.value = container.settings.display.first()
+            FemhoWidgets.updateAll(container.appContext)
+        }
     }
 
     fun setLocale(value: String) {
@@ -1541,6 +1553,11 @@ class AppViewModel(private val container: Container) : ViewModel() {
     fun setCalendarSuggestionsEnabled(enabled: Boolean) = submitCalendarSuggestion {
         configureCalendarSuggestions(enabled)
         true
+    }
+
+    fun setDoingAutoStop(minutes: Int?) {
+        val account = activeAccount ?: return
+        sessionScope.launch { localChange(account) { this.setDoingAutoStop(minutes) } }
     }
 
     /** A l'arrencada, l'intent del widget pot arribar abans del primer valor del flux. */
@@ -2651,6 +2668,15 @@ class AppViewModel(private val container: Container) : ViewModel() {
         fun refreshWidgets() {
             if (FemhoWidgets.arePlaced(container.appContext)) {
                 sessionScope.launch { FemhoWidgets.updateAll(container.appContext) }
+            }
+        }
+        sessionScope.launch {
+            repository.doingAutoStop.collect { setting ->
+                _doingAutoStopMinutes.value = setting.minutes
+                setting.issueId?.let {
+                    actionFailed()
+                    repository.dismissDoingAutoStopIssue(it)
+                }
             }
         }
         sessionScope.launch {

@@ -113,6 +113,7 @@ export interface TaskCardProps extends React.HTMLAttributes<HTMLDivElement> {
   deleteLabel?: string | undefined;
   /** Punt taronja de 6px: la IA hi ha tocat i l'usuari encara no ho ha mirat. */
   hasUnseenAiChange?: boolean | undefined;
+  unseenAiChangeLabel?: string | undefined;
   /** Mentre s'arrossega, la targeta original queda a opacity 0.4. */
   dragging?: boolean | undefined;
   done?: boolean | undefined;

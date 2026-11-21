@@ -54,6 +54,7 @@ export function BrandMark({
   return (
     <span
       data-testid="brand-name"
+      data-brand-wordmark=""
       style={{
         fontSize: size,
         fontWeight: 900,

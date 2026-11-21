@@ -62,7 +62,8 @@ export function CalendarSuggestionCard({
       className="calendar-suggestion-card"
       data-testid="calendar-suggestion"
       data-calendar-active={active}
-      style={dragging ? { opacity: 0.4 } : undefined}
+      data-card-dragging={dragging ? '' : undefined}
+      style={dragging ? { opacity: 'var(--dimmed-opacity, 0.4)' } : undefined}
     >
       <div className="calendar-suggestion-meta">
         <CalendarOriginBadge />

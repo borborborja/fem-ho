@@ -31,6 +31,7 @@ import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /** Prova la cua real amb un transport controlat, sense base ni servidor personals. */
@@ -49,6 +50,7 @@ class RepositorySyncTest {
         lists: MutableMap<String, TaskListsEntity> = mutableMapOf(),
         calendarCache: MutableList<CalendarSuggestionsCacheEntity>? = null,
         cachedScopeSettings: MutableMap<String, ScopeSettingsEntity> = mutableMapOf(),
+        doingAutoStopCache: MutableList<DoingAutoStopCacheEntity>? = null,
     ): Repository {
         val dao = Proxy.newProxyInstance(
             FemhoDao::class.java.classLoader, arrayOf(FemhoDao::class.java),
@@ -110,6 +112,14 @@ class RepositorySyncTest {
                 "pomodoroCache" -> flowOf(null)
                 "calendarSuggestionsCache" -> flowOf(calendarCache?.firstOrNull())
                 "calendarSuggestionsCacheOnce" -> calendarCache?.firstOrNull()
+                "doingAutoStopCache" -> flowOf(doingAutoStopCache?.firstOrNull())
+                "doingAutoStopCacheOnce" -> doingAutoStopCache?.firstOrNull()
+                "putDoingAutoStopCache", "resolveDoingAutoStop" -> {
+                    checkNotNull(doingAutoStopCache).clear()
+                    doingAutoStopCache.add(args!![0] as DoingAutoStopCacheEntity)
+                    if (method.name == "resolveDoingAutoStop") queue.removeAll { it.opId == args[1] }
+                    Unit
+                }
                 "scopeSettings" -> flowOf(cachedScopeSettings[args!![0]])
                 "putScopeSettings" -> {
                     val row = args!![0] as ScopeSettingsEntity
@@ -140,7 +150,41 @@ class RepositorySyncTest {
                 .code(200).message("OK").body(body.toResponseBody()).build()
         }.build()
         return Repository(dao, FemhoApi("http://localhost", InMemoryTokenStore(), client),
-            ownerId = if (calendarCache == null) null else "account")
+            ownerId = if (calendarCache == null && doingAutoStopCache == null) null else "account")
+    }
+
+    @Test
+    fun `el límit a Fent es conserva a la cua i aplica el valor canònic del rebut`() = runBlocking {
+        val requests = mutableListOf<String>()
+        val bodies = mutableListOf<String>()
+        val queue = mutableListOf<OutboxEntity>()
+        val cache = mutableListOf<DoingAutoStopCacheEntity>()
+        var loseReceipt = true
+        fun open() = repository(queue, {
+            if (queue.isEmpty()) """{"settings":{"doing_auto_stop_minutes":120}}"""
+            else if (loseReceipt) throw IOException("Lost receipt")
+            else """{"results":[{"op_id":"${queue.first().opId}","status":"ok","entity":{"doing_auto_stop_minutes":45}}]}"""
+        }, requests, bodies, doingAutoStopCache = cache)
+
+        open().readUserSettings()
+        assertEquals(120, open().doingAutoStop.first().minutes)
+        open().setDoingAutoStop(null)
+        val operation = queue.single()
+        assertNull(open().doingAutoStop.first().minutes)
+        assertFailsWith<IOException> { open().flush() }
+        assertEquals(operation.opId, queue.single().opId)
+
+        loseReceipt = false
+        open().flush()
+        assertTrue(queue.isEmpty())
+        assertEquals(45, open().doingAutoStop.first().minutes)
+        assertEquals(listOf("/api/v1/auth/settings", "/api/v1/sync/batch"), requests)
+        val message = Json.parseToJsonElement(bodies.last()).jsonObject.getValue("operations").jsonArray.single().jsonObject
+        assertEquals("user_settings", message.getValue("entity").jsonPrimitive.content)
+        assertEquals("update", message.getValue("op").jsonPrimitive.content)
+        assertEquals("account", message.getValue("id").jsonPrimitive.content)
+        assertEquals(operation.opId, message.getValue("op_id").jsonPrimitive.content)
+        assertEquals(JsonNull, message.getValue("data").jsonObject.getValue("doing_auto_stop_minutes"))
     }
 
     @Test

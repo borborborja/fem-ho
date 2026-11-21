@@ -10,6 +10,7 @@
  */
 
 import { useEffect, useState } from 'react';
+import { liveQuery } from 'dexie';
 import {
   DEFAULT_MAIL_TEMPLATE,
   dateTime,
@@ -29,6 +30,7 @@ import { Chips } from '../app/Chips.js';
 import { Brand } from '../app/Brand.js';
 import { useRouter } from '../app/router.js';
 import { useSession, useSessionData } from '../app/session.js';
+import { setAppearance, useAppearance } from '../app/theme.js';
 import { useApi, useMutation } from '../app/useApi.js';
 import type {
   AdminUser,
@@ -45,6 +47,7 @@ import type {
   Project,
   Scope,
   ShareSummary,
+  Theme,
   UpdateStatus,
 } from '../app/types.js';
 import { ErrorBanner } from './BoardScreen.js';
@@ -54,6 +57,10 @@ import { TaskAiSettingsPanel } from './TaskAiSettingsPanel.js';
 import { NotificationSettingsPanel } from './NotificationSettingsPanel.js';
 import { PomodoroSettingsFields } from '../pomodoro/PomodoroSettings.js';
 import { useCalendarSuggestions } from '../board/useCalendarSuggestions.js';
+import { useBoardQuery, useBoardSync } from '../sync/board-sync.js';
+import { AUTH_SETTINGS_PATH, readSnapshot, type CachedUserSettings } from '../sync/cache.js';
+import type { OutboxRow } from '../sync/db.js';
+import { compareOperations } from '../sync/outbox.js';
 
 /**
  * **El correu va en pestanya pròpia i no dins de «Calendaris».**
@@ -115,7 +122,7 @@ export function SettingsScreen() {
           top: 0,
           zIndex: 30,
           background: 'var(--sidebar-bg)',
-          backdropFilter: 'blur(14px)',
+          backdropFilter: 'var(--blur-sidebar)',
           borderBottom: '1px solid var(--card-border)',
         }}
       >
@@ -323,12 +330,158 @@ function UpdateNotice() {
   );
 }
 
+function DoingAutoStopSettings() {
+  const { profile, settings } = useSessionData();
+  const { db, submit } = useBoardSync();
+  const { data } = useBoardQuery<CachedUserSettings>(AUTH_SETTINGS_PATH);
+  const [local, setLocal] = useState<{
+    confirmed: CachedUserSettings | undefined;
+    latest: OutboxRow | undefined;
+  }>();
+
+  useEffect(() => {
+    const observation = liveQuery(() =>
+      db.transaction('r', db.meta, db.outbox, async () => {
+        // Si el rebut acaba d'arribar, l'ajust confirmat i la cua han de canviar alhora.
+        const confirmed = await readSnapshot<CachedUserSettings>(db, AUTH_SETTINGS_PATH);
+        const queued = await db.outbox
+          .where('[entity_type+entity_id]')
+          .equals(['user_settings', profile.id])
+          .toArray();
+        return { confirmed, latest: queued.sort(compareOperations).at(-1) };
+      }),
+    ).subscribe({ next: setLocal, error: () => undefined });
+    return () => observation.unsubscribe();
+  }, [db, profile.id]);
+
+  const confirmed = (local?.confirmed?.settings ?? data?.settings ?? settings)
+    .doing_auto_stop_minutes;
+  if (confirmed === undefined) return null;
+
+  const latest = local?.latest;
+  const failed = latest?.status === 'failed' || latest?.status === 'conflict';
+  const queued = latest?.payload.doing_auto_stop_minutes;
+  const minutes = !failed && (queued === null || typeof queued === 'number') ? queued : confirmed;
+  return (
+    <Group>
+      <DoingAutoStopForm
+        key={minutes ?? 'off'}
+        minutes={minutes}
+        onSave={(value) =>
+          submit({
+            entity_type: 'user_settings',
+            entity_id: profile.id,
+            op: 'update',
+            payload: { doing_auto_stop_minutes: value },
+          })
+        }
+      />
+      {failed && <p role="alert">{t('error.generic')}</p>}
+    </Group>
+  );
+}
+
+function DoingAutoStopForm({
+  minutes,
+  onSave,
+}: {
+  minutes: number | null;
+  onSave: (minutes: number | null) => Promise<void>;
+}) {
+  const initial = minutes ?? 240;
+  const inHours = initial % 60 === 0;
+  const [enabled, setEnabled] = useState(minutes !== null);
+  const [unit, setUnit] = useState<'hours' | 'minutes'>(inHours ? 'hours' : 'minutes');
+  const [amount, setAmount] = useState(() => String(inHours ? initial / 60 : initial));
+  const save = useMutation(onSave);
+  const parsed = Number(amount);
+  const max = unit === 'hours' ? 168 : 10_080;
+  const valid = !enabled || (Number.isInteger(parsed) && parsed >= 1 && parsed <= max);
+  const value = enabled ? parsed * (unit === 'hours' ? 60 : 1) : null;
+  const canSave = valid && value !== minutes && !save.busy;
+
+  return (
+    <form
+      noValidate
+      style={{ display: 'grid', gap: 12 }}
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (canSave) void save.run(value);
+      }}
+    >
+      <Toggle
+        testId="settings-doing-auto-stop"
+        label={t('settings.doingAutoStop')}
+        checked={enabled}
+        disabled={save.busy}
+        onChange={setEnabled}
+      />
+      <p style={HINT}>{t('settings.doingAutoStopHint')}</p>
+      {enabled && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
+          <label htmlFor="doing-auto-stop-duration">{t('settings.doingAutoStopDuration')}</label>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            <input
+              id="doing-auto-stop-duration"
+              data-testid="settings-doing-auto-stop-duration"
+              className="plou-input"
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={max}
+              step={1}
+              value={amount}
+              aria-invalid={!valid}
+              aria-describedby={valid ? undefined : 'doing-auto-stop-invalid'}
+              disabled={save.busy}
+              onChange={(event) => setAmount(event.target.value)}
+              style={{ width: 90 }}
+            />
+            <select
+              className="plou-input"
+              data-testid="settings-doing-auto-stop-unit"
+              aria-label={t('settings.doingAutoStopUnit')}
+              value={unit}
+              disabled={save.busy}
+              onChange={(event) => setUnit(event.target.value === 'hours' ? 'hours' : 'minutes')}
+              style={{ width: 'auto' }}
+            >
+              <option value="minutes">{t('settings.doingAutoStopMinutes')}</option>
+              <option value="hours">{t('settings.doingAutoStopHours')}</option>
+            </select>
+          </div>
+        </div>
+      )}
+      {!valid && (
+        <p id="doing-auto-stop-invalid" role="alert">
+          {t('settings.doingAutoStopInvalid')}
+        </p>
+      )}
+      <button
+        type="submit"
+        className="plou-btn"
+        data-testid="settings-doing-auto-stop-save"
+        disabled={!canSave}
+        style={{ justifySelf: 'start' }}
+      >
+        {t('nav.save')}
+      </button>
+      {save.error && <p role="alert">{failureText(save.error)}</p>}
+    </form>
+  );
+}
+
 function GeneralTab() {
   const { profile, settings, instance } = useSessionData();
+  const appearance = useAppearance();
   const weekStart = resolveWeekStart(settings.week_start, getLocale());
   // `/info` és públic i sense autenticar: el dret al codi el té qualsevol que hi arribi.
   const info = useApi<Info>('/info').data ?? { version: '', license: '', source_url: '' };
   const { updateProfile, updateSettings } = useSession();
+  const saveTheme = useMutation(async (theme: Theme) => {
+    if (theme !== profile.theme) await updateProfile({ theme });
+    setAppearance('standard');
+  });
   const calendarSuggestions = useCalendarSuggestions();
   const [calendarEnabled, setCalendarEnabled] = useState(calendarSuggestions.enabled);
   useEffect(
@@ -454,6 +607,7 @@ function GeneralTab() {
         <p>{t('tracking.cardsHint')}</p>
         {timePreference.error && <p role="alert">{failureText(timePreference.error)}</p>}
       </Group>
+      <DoingAutoStopSettings />
       <Group title={t('pomodoro.title')}>
         <PomodoroSettingsFields />
       </Group>
@@ -562,20 +716,30 @@ function GeneralTab() {
       <Group title={t('settings.theme')}>
         <Chips
           testId="theme-chips"
-          value={profile.theme}
+          groupLabel={t('settings.theme')}
+          value={appearance === 'standard' ? profile.theme : appearance}
+          disabled={saveTheme.busy}
           options={[
             { key: 'system' as const, label: t('settings.theme.system') },
             { key: 'light' as const, label: t('settings.theme.light') },
             { key: 'dark' as const, label: t('settings.theme.dark') },
+            { key: 'high-contrast' as const, label: t('settings.theme.highContrast') },
+            { key: 'eink' as const, label: t('settings.theme.eink') },
           ]}
-          onChange={(theme) => void updateProfile({ theme })}
+          onChange={(theme) => {
+            if (theme === 'high-contrast' || theme === 'eink') setAppearance(theme);
+            else void saveTheme.run(theme);
+          }}
         />
+        {saveTheme.error && <p role="alert">{failureText(saveTheme.error)}</p>}
       </Group>
 
       <Group title={t('settings.accent')}>
         <Chips
           testId="accent-chips"
+          groupLabel={t('settings.accent')}
           value={profile.accent}
+          disabled={appearance === 'eink'}
           options={[
             { key: 'default' as const, label: t('settings.accent.default') },
             { key: 'soft' as const, label: t('settings.accent.soft') },
@@ -584,6 +748,7 @@ function GeneralTab() {
           ]}
           onChange={(accent) => void updateProfile({ accent })}
         />
+        {appearance === 'eink' && <p style={HINT}>{t('settings.theme.einkAccentHint')}</p>}
       </Group>
 
       <Group title={t('settings.dashboardItems')}>
@@ -651,6 +816,7 @@ function ColorPicker({
   onChange: (color: string) => void;
   testId: string;
 }) {
+  const appearance = useAppearance();
   return (
     <div
       role="radiogroup"
@@ -658,27 +824,30 @@ function ColorPicker({
       data-testid={testId}
       style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}
     >
-      {SCOPE_COLORS.map((color) => (
+      {SCOPE_COLORS.map((color, index) => (
         <button
           key={color}
           type="button"
           role="radio"
           aria-checked={value === color}
-          aria-label={color}
+          aria-label={t('settings.scopeColorChoice', { number: index + 1 })}
           data-testid={`${testId}-${color}`}
           onClick={() => onChange(color)}
           style={{
             width: 24,
             height: 24,
             borderRadius: '50%',
-            background: `var(${color})`,
+            background: appearance === 'eink' ? 'var(--panel-bg)' : `var(${color})`,
+            color: 'var(--ink)',
             cursor: 'pointer',
             // La selecció es marca amb un anell separat i no amb una vora, que taparia
             // el color just al color que s'està triant.
-            border: '2px solid var(--panel-bg)',
+            border: `2px solid var(${appearance === 'eink' ? '--essential-border' : '--panel-bg'})`,
             boxShadow: value === color ? '0 0 0 2px var(--ink)' : 'none',
           }}
-        />
+        >
+          {appearance === 'eink' ? index + 1 : null}
+        </button>
       ))}
     </div>
   );

@@ -237,6 +237,7 @@ fun BoardScreen(
         }
     }
 
+    val eink = Femho.isEink
     Column(
         modifier = modifier.fillMaxSize(),
     ) {
@@ -258,7 +259,9 @@ fun BoardScreen(
                         .clip(RoundedCornerShape(FemhoShape.pill))
                         .background(if (selected) Femho.colors.ghostBg else Color.Transparent)
                         .selectable(selected = selected, role = Role.Tab) {
-                            scope.launch { pager.animateScrollToPage(index) }
+                            scope.launch {
+                                if (eink) pager.scrollToPage(index) else pager.animateScrollToPage(index)
+                            }
                         }
                         .padding(horizontal = 2.dp, vertical = 3.dp)
                         .testTag("board-column-${status.name.lowercase()}"),
@@ -484,7 +487,7 @@ private fun TaskActionsMenu(
         modifier = Modifier.testTag("board-task-actions"),
         containerColor = Femho.colors.panelBg,
         tonalElevation = 0.dp,
-        shadowElevation = 8.dp,
+        shadowElevation = if (Femho.isEink) 0.dp else 8.dp,
         shape = RoundedCornerShape(FemhoShape.card),
         border = BorderStroke(1.dp, Femho.colors.cardBorder),
     ) {

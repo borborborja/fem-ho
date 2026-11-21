@@ -25,17 +25,30 @@ fun accentOf(accent: String): FemhoAccent = when (accent) {
     else -> FemhoAccent.DEFAULT
 }
 
+fun appearanceOf(value: String): FemhoAppearance = when (value) {
+    "high-contrast" -> FemhoAppearance.HIGH_CONTRAST
+    "eink" -> FemhoAppearance.EINK
+    else -> FemhoAppearance.STANDARD
+}
+
+fun femhoDarkTheme(theme: String, appearance: FemhoAppearance, systemDark: Boolean): Boolean =
+    appearance != FemhoAppearance.EINK && when (theme) {
+        "dark" -> true
+        "light" -> false
+        else -> systemDark
+    }
+
 /**
  * Els colors vius. `dark` ja ve resolt: qui crida sap si mira el sistema
  * (`isSystemInDarkTheme()` a l'app, la configuració del context al widget) o si l'usuari
  * ha triat clar o fosc explícitament.
  */
-fun femhoColorsOf(dark: Boolean, accent: String): FemhoColors =
-    applyAccent(if (dark) darkColors else lightColors, accentOf(accent))
+fun femhoColorsOf(dark: Boolean, accent: String, appearance: FemhoAppearance = FemhoAppearance.STANDARD): FemhoColors =
+    colorsForAppearance(dark, accentOf(accent), appearance)
 
 /** Les parades dels gradients. Mateix criteri que `femhoColorsOf`. */
-fun femhoGradientsOf(dark: Boolean): FemhoGradientStops =
-    if (dark) darkGradients else lightGradients
+fun femhoGradientsOf(dark: Boolean, appearance: FemhoAppearance = FemhoAppearance.STANDARD): FemhoGradientStops =
+    gradientsForAppearance(dark, appearance)
 
 /**
  * `--plou-blue` → el color viu del tema. El nom del token no es guarda com a valor: el

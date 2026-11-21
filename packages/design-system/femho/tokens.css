@@ -15,6 +15,8 @@
   --on-brand: #14151a;
   --ink-soft: rgba(20, 22, 30, 0.62);
   --danger-text: #a53239;
+  --focus-ring: var(--kicker);
+  --essential-border: var(--input-border);
 
   /**
    * Fons de la pastilla de recompte de l'Inbox.
@@ -112,6 +114,229 @@
   --gradient-brand-alt: linear-gradient(135deg, #8fc0ff, #5a93f0 60%, #4b81e4);
   --gradient-brand-2stop: linear-gradient(135deg, #8fc0ff, #4b81e4);
   --gradient-toggle: linear-gradient(135deg, #8fc0ff, #4b81e4);
+}
+
+/* Les tres cares mantenen totes les superfícies del mateix to, també sobre un fons extern. */
+[data-appearance='high-contrast'][data-theme='light'],
+[data-appearance='high-contrast'][data-theme='dark'],
+[data-appearance='eink'][data-theme='light'],
+[data-appearance='eink'][data-theme='dark'] {
+  --app-bg: var(--page-bg);
+  --outer-bg: var(--page-bg);
+  --sidebar-bg: var(--panel-bg);
+  --switcher-bg: var(--dialog-bg);
+  --card-border: var(--essential-border);
+  --switcher-border: var(--essential-border);
+  --input-border: var(--essential-border);
+  --divider: var(--essential-border);
+  --divider-soft: var(--essential-border);
+  --track-off: var(--essential-border);
+  --range-track: var(--essential-border);
+  --day-hover-ring: var(--focus-ring);
+  --inbox-pill-bg: var(--tag-bg);
+  --fab-bg: var(--ghost-bg);
+  --fab-text: var(--ink);
+  --ghost-text: var(--ink);
+  --tag-text: var(--ink);
+  --seg-bg: var(--ghost-bg);
+  --seg-text: var(--ink-soft);
+  --nav-idle: var(--ink-soft);
+  --code-bg: var(--ghost-bg);
+  --plou-blue-ink: var(--plou-blue);
+  --plou-orange-ink: var(--plou-orange);
+  --plou-pink-ink: var(--plou-pink);
+  --kicker: var(--plou-orange-ink);
+  --dot-1: var(--plou-blue);
+  --dot-2: var(--plou-orange);
+  --dot-3: var(--plou-pink);
+  --gradient-wash-cool: var(--column-bg);
+  --gradient-wash-warm: var(--column-bg);
+  --gradient-wash-tag: var(--tag-bg);
+  --drop-indicator: var(--focus-ring);
+  --dialog-backdrop: var(--scrim);
+  --glass-bg: var(--panel-bg);
+  --glass-bg-strong: var(--panel-bg);
+  --glass-border: var(--essential-border);
+  --glass-fill: var(--ghost-bg);
+  --glass-text: var(--ink);
+  --glass-text-soft: var(--ink-soft);
+  --glass-text-faint: var(--ink-faint);
+  --glass-sheet-bg: var(--dialog-bg);
+  --blur-glass: none;
+  --blur-sidebar: none;
+  --blur-switcher: none;
+  --blur-soft: none;
+}
+
+[data-appearance='high-contrast'][data-theme='light'],
+[data-appearance='high-contrast'][data-theme='dark'] {
+  --gradient-brand: linear-gradient(135deg, var(--plou-blue), var(--plou-orange), var(--plou-pink));
+  --gradient-brand-alt: var(--gradient-brand);
+  --gradient-brand-text: var(--gradient-brand);
+  --gradient-brand-2stop: linear-gradient(135deg, var(--plou-blue), var(--plou-orange));
+  --gradient-toggle: var(--gradient-brand-2stop);
+  --gradient-alert: var(--gradient-brand);
+  --gradient-radar: var(--page-bg);
+  --ring-radar: var(--focus-ring);
+}
+
+[data-appearance='high-contrast'][data-theme='light'] {
+  --ink: #0e121a;
+  --ink-soft: #2b3345;
+  --ink-faint: #424c60;
+  --page-bg: #f7f9fd;
+  --panel-bg: #fff;
+  --card-bg: #fff;
+  --column-bg: #eaf0f9;
+  --dialog-bg: #fff;
+  --input-bg: #fff;
+  --ghost-bg: #e9eff9;
+  --tag-bg: #e5ecf8;
+  --essential-border: #5d6980;
+  --focus-ring: #1c3690;
+  --scrim: rgba(14, 18, 26, 0.48);
+  --danger-bg: #fde9eb;
+  --danger-text: #7c1828;
+  --plou-blue: #23459d;
+  --plou-orange: #753709;
+  --plou-pink: #842459;
+  --on-brand: #fff;
+  --femho-scope-1: #126357;
+  --femho-scope-2: #51429d;
+  --femho-scope-3: #634500;
+  --femho-scope-4: #285682;
+  --femho-scope-5: #853353;
+  --femho-scope-6: #3b5b1a;
+  --femho-scope-7: #70421a;
+  --femho-scope-8: #43576f;
+}
+
+[data-appearance='high-contrast'][data-theme='dark'] {
+  --ink: #f8faff;
+  --ink-soft: #e3e9f4;
+  --ink-faint: #b9c6da;
+  --page-bg: #0e1118;
+  --panel-bg: #141923;
+  --card-bg: #1b2230;
+  --column-bg: #101623;
+  --dialog-bg: #1b2230;
+  --input-bg: #111620;
+  --ghost-bg: #252f42;
+  --tag-bg: #29354a;
+  --essential-border: #8797b0;
+  --focus-ring: #b3ccff;
+  --scrim: rgba(0, 0, 0, 0.72);
+  --danger-bg: #39242d;
+  --danger-text: #ffb2bc;
+  --plou-blue: #adc8ff;
+  --plou-orange: #ffb985;
+  --plou-pink: #ffadd7;
+  --on-brand: #0b101b;
+  --femho-scope-1: #8be0cd;
+  --femho-scope-2: #c3b5ff;
+  --femho-scope-3: #f6cd8c;
+  --femho-scope-4: #a7d0f4;
+  --femho-scope-5: #f1aace;
+  --femho-scope-6: #b9e58c;
+  --femho-scope-7: #f1bc8d;
+  --femho-scope-8: #b9d2e7;
+}
+
+/* El contrast fixa la lluminositat. L’accent encara tria la gamma. */
+[data-appearance='high-contrast'][data-theme='light'][data-accent='soft'] {
+  --plou-blue: #3b5083;
+  --plou-orange: #764529;
+  --plou-pink: #76385f;
+}
+
+[data-appearance='high-contrast'][data-theme='dark'][data-accent='soft'] {
+  --plou-blue: #c5d7ff;
+  --plou-orange: #ffd0ad;
+  --plou-pink: #f8c4de;
+}
+
+[data-appearance='high-contrast'][data-theme='light'][data-accent='mono-warm'] {
+  --plou-blue: #72390e;
+  --plou-orange: #8a341d;
+  --plou-pink: #89283f;
+}
+
+[data-appearance='high-contrast'][data-theme='dark'][data-accent='mono-warm'] {
+  --plou-blue: #ffbd8c;
+  --plou-orange: #ffb09b;
+  --plou-pink: #ffacc3;
+}
+
+[data-appearance='high-contrast'][data-theme='light'][data-accent='mono-cool'] {
+  --plou-blue: #23459d;
+  --plou-orange: #244182;
+  --plou-pink: #292f72;
+}
+
+[data-appearance='high-contrast'][data-theme='dark'][data-accent='mono-cool'] {
+  --plou-blue: #bdd7ff;
+  --plou-orange: #a8c6ff;
+  --plou-pink: #b6b8fa;
+}
+
+/* El paper i la tinta són els mateixos si canvia el mode fosc del sistema. */
+[data-appearance='eink'][data-theme='light'],
+[data-appearance='eink'][data-theme='dark'] {
+  --ink: #080808;
+  --ink-soft: #292929;
+  --ink-faint: #4a4a4a;
+  --page-bg: #fff;
+  --panel-bg: #fff;
+  --card-bg: #fff;
+  --column-bg: #f0f0f0;
+  --dialog-bg: #fff;
+  --input-bg: #fff;
+  --ghost-bg: #ebebeb;
+  --tag-bg: #e6e6e6;
+  --essential-border: #333;
+  --focus-ring: #080808;
+  --scrim: #d9d9d9;
+  --danger-bg: #ededed;
+  --danger-text: var(--ink);
+  --plou-blue: #171717;
+  --plou-orange: var(--plou-blue);
+  --plou-pink: var(--plou-blue);
+  --on-brand: #fff;
+  --femho-scope-1: var(--ink-soft);
+  --femho-scope-2: var(--ink-soft);
+  --femho-scope-3: var(--ink-soft);
+  --femho-scope-4: var(--ink-soft);
+  --femho-scope-5: var(--ink-soft);
+  --femho-scope-6: var(--ink-soft);
+  --femho-scope-7: var(--ink-soft);
+  --femho-scope-8: var(--ink-soft);
+  --gradient-brand: var(--plou-blue);
+  --gradient-brand-alt: var(--plou-blue);
+  --gradient-brand-text: linear-gradient(var(--ink), var(--ink));
+  --gradient-brand-2stop: var(--plou-blue);
+  --gradient-toggle: var(--plou-blue);
+  --gradient-alert: var(--plou-blue);
+  --gradient-radar: var(--page-bg);
+  --ring-radar: var(--focus-ring);
+  --card-shadow: none;
+  --switcher-shadow: none;
+  --shadow-primary: none;
+  --shadow-primary-lg: none;
+  --shadow-tab-active: none;
+  --shadow-nav-active: none;
+  --shadow-dialog: none;
+  --shadow-glass: none;
+  --shadow-map: none;
+  --shadow-knob: none;
+  --shadow-thumb-ring: none;
+  --shadow-bubble-glow: none;
+  --shadow-pin-glow: none;
+  --dur-instant: 0ms;
+  --dur-fast: 0ms;
+  --dur-base: 0ms;
+  --dur-slow: 0ms;
+  --press-scale: 1;
+  --hover-lift: none;
 }
 
 .femho-task-rail {

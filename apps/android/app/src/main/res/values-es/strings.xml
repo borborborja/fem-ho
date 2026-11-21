@@ -230,6 +230,8 @@
     <string name="dashboard_quickadd">+ Añadir… #Ámbito @Persona</string>
     <string name="dashboard_title">Vista general</string>
     <string name="dashboard_today">Hoy</string>
+    <string name="duration_hoursminutes">{hours} h {minutes} min</string>
+    <string name="duration_minutes">{minutes} min</string>
     <string name="error_body_required">Un comentario vacío no dice nada: escribe el motivo.</string>
     <string name="error_calendar_not_empty">«{name}» todavía tiene {count} eventos. Muévelos o bórralos antes.</string>
     <string name="error_calendar_read_only">«{name}» es una fuente de solo lectura y no se puede escribir.</string>
@@ -697,6 +699,13 @@
     <string name="settings_day_thu">ju</string>
     <string name="settings_day_tue">ma</string>
     <string name="settings_day_wed">mi</string>
+    <string name="settings_doingautostop">Detener automáticamente las tareas en Haciendo</string>
+    <string name="settings_doingautostopduration">Duración máxima</string>
+    <string name="settings_doingautostophint">Las tareas que muevas a Haciendo volverán a Por hacer cuando alcancen el límite.</string>
+    <string name="settings_doingautostophours">Horas</string>
+    <string name="settings_doingautostopinvalid">Elige una duración de entre 1 minuto y 7 días.</string>
+    <string name="settings_doingautostopminutes">Minutos</string>
+    <string name="settings_doingautostopunit">Unidad</string>
     <string name="settings_empty_admin">Aún no hay contenido para Admin.</string>
     <string name="settings_empty_agents">Todavía no has creado ningún agente.</string>
     <string name="settings_empty_ai">Aún no hay contenido para Usuario IA.</string>
@@ -844,6 +853,7 @@
     <string name="settings_role_viewer">Solo lectura</string>
     <string name="settings_scopecancel">Cancelar</string>
     <string name="settings_scopecolor">Color</string>
+    <string name="settings_scopecolorchoice">Color {number}</string>
     <string name="settings_scopedelete">Eliminar el ámbito</string>
     <string name="settings_scopedeleteconfirm">Se eliminará «{name}». Solo es posible si está vacío.</string>
     <string name="settings_scopeedit">Editar</string>
@@ -910,6 +920,9 @@
     <string name="settings_tab_shares">Compartidos</string>
     <string name="settings_theme">Tema</string>
     <string name="settings_theme_dark">Oscuro</string>
+    <string name="settings_theme_eink">Tinta electrónica</string>
+    <string name="settings_theme_einkaccenthint">El acento se recupera al volver a un tema con color.</string>
+    <string name="settings_theme_highcontrast">Alto contraste</string>
     <string name="settings_theme_light">Claro</string>
     <string name="settings_theme_system">Sistema</string>
     <string name="settings_timezone">Zona horaria</string>
@@ -1157,6 +1170,7 @@
     <string name="widget_taskboard_name">Fem-ho · Tablero</string>
     <string name="widget_taskboard_open">Abre</string>
     <string name="widget_taskboard_viewall">Ver todas</string>
+    <string name="widget_taskoverdue">Tarea atrasada</string>
     <string name="widget_today_description">Lo que vence hoy, con añadido rápido.</string>
     <string name="widget_today_name">Fem-ho · Hoy</string>
 </resources>

@@ -39,6 +39,7 @@ import ho.fem.app.R
 import ho.fem.app.Route
 import ho.fem.data.Container
 import ho.fem.model.Dates
+import ho.fem.model.Scope
 import ho.fem.model.Task
 import ho.fem.widget.Dot
 import ho.fem.widget.EmptyState
@@ -46,6 +47,7 @@ import ho.fem.widget.FemhoGlance
 import ho.fem.widget.FemhoWidget
 import ho.fem.widget.Glyph
 import ho.fem.widget.WidgetSize
+import ho.fem.widget.WidgetShape
 import ho.fem.widget.WidgetSurface
 import ho.fem.widget.WidgetText
 import ho.fem.widget.R as WidgetR
@@ -88,12 +90,12 @@ class TodayWidget : GlanceAppWidget() {
                         ?: ZoneId.systemDefault()
                     val date = LocalDate.now(zone)
                     val today = date.toString()
-                    val scopes = local.scopes().associate { it.id to it.color }
+                    val scopes = local.scopes().associateBy { it.id }
                     val locale = context.resources.configuration.locales[0]?.language ?: "ca"
                     TodayData(
                         tasks = local.due(today, widget.activeScopes),
                         overdue = local.overdue(today, widget.activeScopes),
-                        scopeColors = scopes,
+                        scopes = scopes,
                         today = today,
                         weekday = Dates.dayName(locale, date),
                     )
@@ -129,7 +131,7 @@ class TodayWidget : GlanceAppWidget() {
 data class TodayData(
     val tasks: List<Task>,
     val overdue: Int,
-    val scopeColors: Map<String, String>,
+    val scopes: Map<String, Scope>,
     val today: String,
     val weekday: String,
 )
@@ -235,7 +237,7 @@ private fun OverdueBadge(count: Int) {
     val palette = FemhoWidget.palette
     Box(
         modifier = GlanceModifier
-            .background(ImageProvider(WidgetR.drawable.femho_widget_danger_pill))
+            .background(ImageProvider(palette.drawable(WidgetShape.DANGER_PILL)))
             .padding(horizontal = 7.dp, vertical = 2.dp),
     ) {
         Text(
@@ -281,7 +283,7 @@ private fun TaskRow(task: Task, data: TodayData) {
     val context = LocalContext.current
     val due = task.dueDate
     val late = due != null && due < data.today
-    val token = data.scopeColors[task.scopeId] ?: ""
+    val scope = data.scopes[task.scopeId]
 
     Row(
         modifier = GlanceModifier
@@ -297,7 +299,7 @@ private fun TaskRow(task: Task, data: TodayData) {
     ) {
         Glyph(
             resId = WidgetR.drawable.femho_bar,
-            color = if (late) palette.color { dangerText } else palette.scope(token),
+            color = if (late) palette.color { dangerText } else palette.scope(scope?.color.orEmpty()),
             size = 18.dp,
             modifier = GlanceModifier.width(WidgetSize.bar),
         )
@@ -306,12 +308,16 @@ private fun TaskRow(task: Task, data: TodayData) {
             CalendarOriginGlyph()
             Spacer(GlanceModifier.width(4.dp))
         }
-        Text(
-            text = task.title,
-            maxLines = 2,
-            style = TextStyle(color = palette.color { ink }, fontSize = WidgetText.row),
-            modifier = GlanceModifier.defaultWeight(),
-        )
+        Column(GlanceModifier.defaultWeight()) {
+            Text(task.title, maxLines = 2, style = TextStyle(color = palette.color { ink }, fontSize = WidgetText.row))
+            if (palette.isEink) {
+                val subtitle = listOfNotNull(scope?.name, context.getString(R.string.widget_taskoverdue).takeIf { late })
+                    .joinToString(" · ")
+                if (subtitle.isNotEmpty()) {
+                    Text(subtitle, maxLines = 2, style = TextStyle(color = palette.color { inkSoft }, fontSize = WidgetText.meta))
+                }
+            }
+        }
         val time = task.dueTime
         if (time != null) {
             Spacer(GlanceModifier.width(6.dp))

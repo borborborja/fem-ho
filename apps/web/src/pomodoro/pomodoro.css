@@ -107,6 +107,13 @@
   background: var(--panel-bg);
 }
 
+[data-appearance='eink'] .pomodoro-ring {
+  width: auto;
+  aspect-ratio: auto;
+  padding: 0;
+  background: none;
+}
+
 .pomodoro-tomato {
   display: block;
   width: 52px;

@@ -2,6 +2,7 @@ package ho.fem.app
 
 import android.content.Intent
 import android.os.Bundle
+import android.view.Window
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -31,6 +32,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -50,10 +52,14 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.view.WindowCompat
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.compose.LifecycleResumeEffect
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import ho.fem.app.R
 import ho.fem.app.widget.FemhoWidgets
@@ -61,6 +67,7 @@ import ho.fem.designsystem.Femho
 import ho.fem.designsystem.FemhoSize
 import ho.fem.designsystem.FemhoText
 import ho.fem.designsystem.FemhoTheme
+import ho.fem.designsystem.appearanceOf
 import ho.fem.designsystem.FemhoShape
 import ho.fem.designsystem.ScopeChip
 import ho.fem.designsystem.TaskCard
@@ -116,6 +123,7 @@ import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.util.Locale
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
@@ -150,10 +158,10 @@ class MainActivity : ComponentActivity() {
                 },
             )
 
-            val theme by model.theme.collectAsStateWithLifecycle()
-            val accent by model.accent.collectAsStateWithLifecycle()
+            val display by model.display.collectAsStateWithLifecycle()
 
-            FemhoTheme(theme = theme, accent = accent) {
+            FemhoTheme(display.theme, display.accent, appearanceOf(display.appearance)) {
+                ApplySystemBarAppearance(window)
                 Box(
                     Modifier
                         .fillMaxSize()
@@ -203,6 +211,18 @@ class MainActivity : ComponentActivity() {
     override fun onStop() {
         super.onStop()
         lifecycleScope.launch { FemhoWidgets.updateAll(applicationContext) }
+    }
+}
+
+@Composable
+internal fun ApplySystemBarAppearance(window: Window) {
+    val lightBars = !Femho.dark
+    SideEffect {
+        // Les barres transparents seuen damunt del color de l'app, que pot diferir del del sistema.
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            isAppearanceLightStatusBars = lightBars
+            isAppearanceLightNavigationBars = lightBars
+        }
     }
 }
 
@@ -1125,6 +1145,19 @@ private fun BoardHost(
         }
     }
 
+    val hasDoingTasks = visible.any { it.status == TaskStatus.DOING }
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(model, lifecycle, hasDoingTasks) {
+        if (!hasDoingTasks) return@LaunchedEffect
+        // El servidor pot moure una targeta mentre l'usuari continua mirant el tauler.
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            while (isActive) {
+                model.refreshForegroundTaskBoard()
+                delay(30_000)
+            }
+        }
+    }
+
     CalendarSuggestionsSyncEffect(model)
     LaunchedEffect(today) { model.refreshCalendarSuggestions() }
     val calendarSuggestions by model.calendarSuggestions.collectAsStateWithLifecycle()
@@ -1832,19 +1865,24 @@ private fun CalendarHost(
 
     val palette = Femho.colors
     val colors = scopes.associate { it.id to palette.scopeColor(it.color) }
+    val scopeNames = if (Femho.isEink) scopes.associate { it.id to it.name } else emptyMap()
     val fallback = palette.inkFaint
     val scopedTasks = if (scopeIds.isEmpty()) tasks else tasks.filter { it.scopeId in scopeIds }
     val agenda = buildList {
         response?.events.orEmpty().forEach { occurrence ->
             val date = CalendarDate.event(occurrence.startsAt, occurrence.allDay, zone) ?: return@forEach
-            add(date.day to AgendaEntry(occurrence.summary, colors[occurrence.scopeId] ?: fallback, date.timeLabel))
+            add(date.day to AgendaEntry(
+                occurrence.summary, colors[occurrence.scopeId] ?: fallback, date.timeLabel, scopeNames[occurrence.scopeId],
+            ))
         }
         scopedTasks.forEach { task ->
             if (task.status == TaskStatus.DONE) return@forEach
             val due = task.dueDate?.let { runCatching { java.time.LocalDate.parse(it) }.getOrNull() }
                 ?: return@forEach
             if (due < first.minusDays(7) || due > first.plusMonths(1).plusDays(7)) return@forEach
-            add(due to AgendaEntry(task.title, colors[task.scopeId] ?: fallback, task.dueTime?.take(5)) { model.open(task) })
+            add(due to AgendaEntry(
+                task.title, colors[task.scopeId] ?: fallback, task.dueTime?.take(5), scopeNames[task.scopeId],
+            ) { model.open(task) })
         }
     }.groupBy({ it.first }, { it.second }).mapValues { (_, entries) -> entries.sortedBy { it.time.orEmpty() } }
     val inboxTasks = scopedTasks.filter { it.status == TaskStatus.INBOX && it.dueDate?.let { date -> date <= request.day } != false }
@@ -2293,6 +2331,7 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
     val locale by model.preferenceLocale.collectAsStateWithLifecycle(initialValue = "ca")
     val pomodoro by model.pomodoro.collectAsStateWithLifecycle()
     val calendarSuggestions by model.calendarSuggestions.collectAsStateWithLifecycle()
+    val doingAutoStopMinutes by model.doingAutoStopMinutes.collectAsStateWithLifecycle()
     CalendarSuggestionsSyncEffect(model)
     val appLocale = androidx.compose.ui.platform.LocalConfiguration.current.locales[0]?.language ?: "ca"
     val firstDayLabel = stringResource(
@@ -2306,8 +2345,7 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
     val inboxPosition by model.preferenceInboxPosition.collectAsStateWithLifecycle(initialValue = "right")
     val inboxShowOverdue by model.preferenceInboxShowOverdue.collectAsStateWithLifecycle(initialValue = true)
 
-    val theme by model.theme.collectAsStateWithLifecycle()
-    val accent by model.accent.collectAsStateWithLifecycle()
+    val display by model.display.collectAsStateWithLifecycle()
     val profile by model.profile.collectAsStateWithLifecycle()
     val gravatarEnabled by model.gravatarEnabled.collectAsStateWithLifecycle()
     val scopes by model.scopes.collectAsStateWithLifecycle()
@@ -2332,6 +2370,7 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
     val instanceVersion by model.instanceVersion.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) {
+        model.loadProfile()
         model.loadEntityData()
         model.loadCalendars()
         model.loadMailData()
@@ -2352,6 +2391,8 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
         onPomodoroEnabled = model::setPomodoroEnabled,
         calendarSuggestionsEnabled = calendarSuggestions.snapshot.enabled,
         onCalendarSuggestionsEnabled = model::setCalendarSuggestionsEnabled,
+        doingAutoStopMinutes = doingAutoStopMinutes,
+        onDoingAutoStop = model::setDoingAutoStop,
         labels = SettingsLabels(
             title = stringResource(R.string.settings_title),
             back = stringResource(R.string.nav_backtoboard),
@@ -2360,8 +2401,11 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
                 "system" to stringResource(R.string.settings_theme_system),
                 "light" to stringResource(R.string.settings_theme_light),
                 "dark" to stringResource(R.string.settings_theme_dark),
+                "high-contrast" to stringResource(R.string.settings_theme_highcontrast),
+                "eink" to stringResource(R.string.settings_theme_eink),
             ),
             accent = stringResource(R.string.settings_accent),
+            einkAccentHint = stringResource(R.string.settings_theme_einkaccenthint),
             accentOptions = listOf(
                 "default" to stringResource(R.string.settings_accent_default),
                 "soft" to stringResource(R.string.settings_accent_soft),
@@ -2397,6 +2441,13 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
             pomodoro = stringResource(R.string.pomodoro_enabled),
             calendarSuggestions = stringResource(R.string.calendarsuggestions_setting),
             calendarSuggestionsHint = stringResource(R.string.calendarsuggestions_settinghint),
+            doingAutoStop = stringResource(R.string.settings_doingautostop),
+            doingAutoStopHint = stringResource(R.string.settings_doingautostophint),
+            doingAutoStopDuration = stringResource(R.string.settings_doingautostopduration),
+            doingAutoStopUnit = stringResource(R.string.settings_doingautostopunit),
+            doingAutoStopMinutes = stringResource(R.string.settings_doingautostopminutes),
+            doingAutoStopHours = stringResource(R.string.settings_doingautostophours),
+            doingAutoStopInvalid = stringResource(R.string.settings_doingautostopinvalid),
             language = stringResource(R.string.settings_language),
             languageOptions = listOf(
                 "ca" to "Català",
@@ -2554,6 +2605,7 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
             scopeTypeIndividual = stringResource(R.string.settings_scopetype_individual),
             scopeTypeCollective = stringResource(R.string.settings_scopetype_collective),
             scopeColor = stringResource(R.string.settings_scopecolor),
+            scopeColorChoice = stringResource(R.string.settings_scopecolorchoice),
             members = stringResource(R.string.settings_members),
             memberRemove = stringResource(R.string.settings_memberremove),
             roleAdmin = stringResource(R.string.settings_role_admin),
@@ -2600,8 +2652,8 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
         googleMailContent = { GoogleMailPanel(model, mailAccounts) },
         mailPollingContent = { MailPollingControl(model, it) },
         mailRules = mailRules,
-        theme = theme,
-        accent = accent,
+        theme = display.selection,
+        accent = display.accent,
         serverUrl = serverUrl,
         mcpContent = { McpSettingsHost(model, scopes, "$serverUrl/mcp") },
         aiTasksContent = { AiTaskSettingsHost(model, scopes) },

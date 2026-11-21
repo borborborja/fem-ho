@@ -218,6 +218,8 @@ export function BoardSyncProvider({ userId, children }: { userId: string; childr
   }, [confirmedAt]);
 
   const submit = async (mutation: BoardMutation, send?: () => Promise<Task>): Promise<void> => {
+    // Si la xarxa torna mentre esperem el pany, el lot conserva l'hora del gest fora de línia.
+    const canSendDirectly = send !== undefined && navigator.onLine;
     const row: OutboxRow = {
       ...mutation,
       id: uuidv7(),
@@ -226,6 +228,22 @@ export function BoardSyncProvider({ userId, children }: { userId: string; childr
       status: 'pending',
       attempts: 0,
     };
+    if (row.entity_type === 'user_settings') {
+      await withQueueLock(db, async () => {
+        if (!current()) throw new Error('The account changed.');
+        await db.transaction('rw', db.outbox, async () => {
+          // Un rebuig definitiu no ha d'impedir desar un altre valor de l'ajust.
+          await db.outbox
+            .where('[entity_type+entity_id]')
+            .equals([row.entity_type, row.entity_id])
+            .and((previous) => previous.status === 'failed' || previous.status === 'conflict')
+            .delete();
+          await db.outbox.add(row);
+        });
+      });
+      void flush();
+      return;
+    }
     if (row.entity_type === 'subtask' && row.parent_task_id !== undefined) {
       const path = taskListPath(row.parent_task_id, 'subtasks');
       // La projecció local no ha d'esperar una petició en curs. IndexedDB només
@@ -246,7 +264,7 @@ export function BoardSyncProvider({ userId, children }: { userId: string; childr
     }
     await withQueueLock(db, async () => {
       if (!current()) throw new Error('The account changed.');
-      let direct = send !== undefined && navigator.onLine;
+      let direct = canSendDirectly && navigator.onLine;
       try {
         const preceding = await db.outbox
           .where('[entity_type+entity_id]')
@@ -339,7 +357,9 @@ export function BoardSyncProvider({ userId, children }: { userId: string; childr
                       : (row.task_title ??
                         (row.entity_type === 'calendar_suggestions'
                           ? t('calendarSuggestions.setting')
-                          : undefined))}
+                          : row.entity_type === 'user_settings'
+                            ? t('settings.doingAutoStop')
+                            : undefined))}
                   </p>
                   <p>
                     {row.status === 'conflict'
@@ -355,7 +375,7 @@ export function BoardSyncProvider({ userId, children }: { userId: string; childr
                   >
                     {t(row.status === 'conflict' ? 'sync.keepTheirs' : 'nav.delete')}
                   </button>
-                  {row.status === 'failed' && (
+                  {row.status === 'failed' && row.entity_type !== 'user_settings' && (
                     <button
                       type="button"
                       className="plou-btn"

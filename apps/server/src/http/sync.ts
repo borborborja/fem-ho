@@ -27,6 +27,7 @@ import { addComment } from '../services/comments.js';
 import { createProject, deleteProject } from '../services/scopes.js';
 import { createEvent } from '../services/events.js';
 import { getPomodoro, syncPomodoro } from '../services/pomodoro.js';
+import { syncDoingAutoStop } from '../services/doing-auto-stop.js';
 import {
   getCalendarTaskSuggestions,
   syncCalendarTaskSuggestions,
@@ -353,11 +354,17 @@ async function applyOne(
   }
 
   // Les ordres personals tenen els seus rebuts fora del lot d'entitats d'àmbit.
-  if (operation.entity === 'pomodoro' || operation.entity === 'calendar_suggestions') {
+  if (
+    operation.entity === 'pomodoro' ||
+    operation.entity === 'calendar_suggestions' ||
+    operation.entity === 'user_settings'
+  ) {
     try {
-      return operation.entity === 'pomodoro'
-        ? await syncPomodoro(app.connection!, principal, operation)
-        : await syncCalendarTaskSuggestions(app.connection!, principal, operation);
+      if (operation.entity === 'pomodoro')
+        return await syncPomodoro(app.connection!, principal, operation);
+      if (operation.entity === 'calendar_suggestions')
+        return await syncCalendarTaskSuggestions(app.connection!, principal, operation);
+      return await syncDoingAutoStop(app.connection!, principal, operation);
     } catch (error) {
       return rejectedOperation(operation.op_id, error);
     }

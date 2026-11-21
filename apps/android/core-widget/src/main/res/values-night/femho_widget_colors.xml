@@ -20,4 +20,16 @@
     <color name="femho_divider">#17FFFFFF</color>
     <color name="femho_preview_plou_blue">#FF6EA8FF</color>
     <color name="femho_preview_plou_orange">#FFFF9D4D</color>
+    <color name="femho_widget_contrast_ink">#FFF8FAFF</color>
+    <color name="femho_widget_contrast_ink_soft">#FFE3E9F4</color>
+    <color name="femho_widget_contrast_dialog_bg">#FF1B2230</color>
+    <color name="femho_widget_contrast_panel_bg">#FF141923</color>
+    <color name="femho_widget_contrast_card_bg">#FF1B2230</color>
+    <color name="femho_widget_contrast_card_border">#FF8797B0</color>
+    <color name="femho_widget_contrast_column_bg">#FF101623</color>
+    <color name="femho_widget_contrast_input_bg">#FF111620</color>
+    <color name="femho_widget_contrast_input_border">#FF8797B0</color>
+    <color name="femho_widget_contrast_danger_bg">#FF39242D</color>
+    <color name="femho_widget_contrast_divider">#FF8797B0</color>
+    <color name="femho_widget_contrast_danger_text">#FFFFB2BC</color>
 </resources>

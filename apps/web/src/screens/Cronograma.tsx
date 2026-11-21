@@ -392,7 +392,7 @@ export function Cronograma({
                           borderColor: entry.task_type_color
                             ? `var(${entry.task_type_color})`
                             : undefined,
-                          opacity: busy === entry.id ? 0.6 : 1,
+                          opacity: busy === entry.id ? 'var(--dimmed-opacity, 0.6)' : 1,
                         }}
                         onPointerDown={(e) => gesture(e, lane, entry)}
                       >

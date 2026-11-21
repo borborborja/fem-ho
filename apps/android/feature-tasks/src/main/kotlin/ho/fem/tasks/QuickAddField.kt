@@ -219,7 +219,7 @@ fun QuickAddField(
                         .semantics { contentDescription = addLabel }
                         .testTag("quick-add-submit"),
                 ) {
-                    if (persisting) {
+                    if (persisting && !Femho.isEink) {
                         CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
                     } else {
                         Text("+", color = Femho.colors.ink, fontSize = FemhoText.body)

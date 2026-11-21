@@ -999,6 +999,11 @@ tasca que s'està fent ara, que no és cap forat.
 el bloc es marca per revisar i s'ajusta arrossegant-lo. Escurçar-lo automàticament diria una
 cosa que no va passar sense dir quina part.
 
+L'aturada configurable a Ajustos → General sí que fa un moviment. Quan el
+servidor detecta que s'ha superat el límit del compte que va iniciar l'estada,
+passa la tasca a «Per fer» i deixa l'hora efectiva de sortida a l'historial
+i al tram de dedicació.
+
 **El projecte és l'eix, i pot dir-se «client».** L'eina d'origen ho organitza tot per
 client, que és un `string` copiat a cada tasca. Aquí això ja existeix i es diu projecte: les
 tasques sense projecte —l'espai general de l'àmbit— són l'«Intern» de sempre. El que

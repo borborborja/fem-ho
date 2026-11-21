@@ -159,7 +159,7 @@ internal fun PomodoroHost(model: AppViewModel, onBack: () -> Unit) {
     val tasks by model.tasks.collectAsStateWithLifecycle()
     val snapshot = local.snapshot
     val settings = snapshot.settings
-    val now = rememberPomodoroNow(local.clockOffsetMs, snapshot.timer?.status == PomodoroStatus.RUNNING)
+    val now = rememberPomodoroNow(local.clockOffsetMs, snapshot.timer, Femho.isEink)
     val timer = projectPomodoroTimer(snapshot.timer, now)
     val phase = timer?.phase ?: PomodoroPhase.FOCUS
     val running = timer?.status == PomodoroStatus.RUNNING
@@ -273,19 +273,30 @@ internal fun PomodoroHost(model: AppViewModel, onBack: () -> Unit) {
 }
 
 @Composable
-private fun rememberPomodoroNow(offsetMs: Long, running: Boolean): Long {
+private fun rememberPomodoroNow(offsetMs: Long, timer: PomodoroTimer?, eink: Boolean): Long {
     val lifecycle = LocalLifecycleOwner.current.lifecycle
-    val now by produceState(System.currentTimeMillis() + offsetMs, offsetMs, running, lifecycle) {
+    val now by produceState(System.currentTimeMillis() + offsetMs, offsetMs, timer, eink, lifecycle) {
         val epoch = System.currentTimeMillis() + offsetMs
         val measured = SystemClock.elapsedRealtime()
         lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
-            do {
-                value = epoch + (SystemClock.elapsedRealtime() - measured)
-                if (running) delay(250)
-            } while (running && isActive)
+            while (isActive) {
+                val currentTime = epoch + (SystemClock.elapsedRealtime() - measured)
+                value = currentTime
+                val projected = projectPomodoroTimer(timer, currentTime)
+                    ?.takeIf { it.status == PomodoroStatus.RUNNING } ?: break
+                val end = projected.endAtMs ?: break
+                // El canvi de fase continua arribant al límit exacte. Entre límits, la
+                // tinta només repinta quan canvia el text del rellotge.
+                delay(if (eink) einkPomodoroDelay(end - currentTime) else 250)
+            }
         }
     }
     return now
+}
+
+internal fun einkPomodoroDelay(remainingMs: Long): Long {
+    val unit = if (remainingMs > 60_000) 60_000L else 1_000L
+    return (remainingMs.coerceAtLeast(1) - 1) % unit + 1
 }
 
 @Composable
@@ -301,6 +312,10 @@ private fun PomodoroClock(settings: PomodoroSettings, phase: PomodoroPhase, time
     val progress = (1f - remainingMs.toFloat() / durationMs).coerceIn(0f, 1f)
     val track = Femho.colors.cardBorder
     val accent = Femho.colors.plouBlue
+    val eink = Femho.isEink
+    val clockLabel = if (eink && remainingMs > 60_000) {
+        stringResource(R.string.duration_minutes).replace("{minutes}", ((remainingMs + 59_999) / 60_000).toString())
+    } else "%02d:%02d".format(Locale.ROOT, seconds / 60, seconds % 60)
     Column(
         Modifier.fillMaxWidth().background(Femho.colors.cardBg, shape).border(1.dp, Femho.colors.cardBorder, shape)
             .padding(20.dp).testTag("pomodoro-clock"),
@@ -309,8 +324,8 @@ private fun PomodoroClock(settings: PomodoroSettings, phase: PomodoroPhase, time
     ) {
         Text(stringResource(pomodoroPhaseName(phase)), color = Femho.colors.ink, fontWeight = FontWeight.Bold,
             modifier = Modifier.testTag("pomodoro-phase"))
-        Box(Modifier.size(216.dp), contentAlignment = Alignment.Center) {
-            Canvas(Modifier.matchParentSize()) {
+        Box(if (eink) Modifier.padding(vertical = 16.dp) else Modifier.size(216.dp), contentAlignment = Alignment.Center) {
+            if (!eink) Canvas(Modifier.matchParentSize()) {
                 val stroke = 5.dp.toPx()
                 drawCircle(track, radius = (size.minDimension - stroke) / 2, style = Stroke(stroke))
                 drawArc(accent, startAngle = -90f, sweepAngle = 360f * progress, useCenter = false,
@@ -318,11 +333,11 @@ private fun PomodoroClock(settings: PomodoroSettings, phase: PomodoroPhase, time
                     style = Stroke(stroke, cap = StrokeCap.Round))
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (settings.mode == PomodoroMode.PLAYFUL) {
+                if (!eink && settings.mode == PomodoroMode.PLAYFUL) {
                     Image(painterResource(R.drawable.pomodoro), null, Modifier.size(40.dp).testTag("pomodoro-tomato"),
                         colorFilter = ColorFilter.tint(Femho.colors.ink))
                 }
-                Text("%02d:%02d".format(Locale.ROOT, seconds / 60, seconds % 60), color = Femho.colors.ink,
+                Text(clockLabel, color = Femho.colors.ink,
                     fontSize = 42.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.testTag("pomodoro-countdown"))
             }

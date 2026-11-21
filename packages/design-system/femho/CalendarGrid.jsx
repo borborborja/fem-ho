@@ -105,6 +105,10 @@ function isoDate(date) {
   return `${year}-${month}-${day}`;
 }
 
+function CalendarScope({ name }) {
+  return name === undefined ? null : <span className="calendar-item-scope">{name}</span>;
+}
+
 export function MonthView({
   year,
   month,
@@ -113,6 +117,7 @@ export function MonthView({
   selectedDate,
   today,
   dotsByDate = {},
+  scopeNamesByDate,
   itemsByDate,
   weekStart = 1,
   onSelect,
@@ -205,6 +210,7 @@ export function MonthView({
           const selected = iso !== null && iso === selectedDate;
           const isToday = iso !== null && iso === today;
           const dots = iso === null ? [] : (dotsByDate[iso] ?? []);
+          const scopeNames = iso === null ? undefined : scopeNamesByDate?.[iso]?.join(' · ');
           const items = iso === null || itemsByDate === undefined ? [] : (itemsByDate[iso] ?? []);
           /**
            * **Un dia més enllà del límit no es pot triar.**
@@ -219,10 +225,14 @@ export function MonthView({
             <button
               key={index}
               type="button"
+              className="calendar-day"
               data-testid={iso === null ? undefined : `day-${iso}`}
               data-selected={selected ? 'true' : 'false'}
+              data-compact={itemsByDate === undefined ? 'true' : undefined}
               data-hovered={hovered !== null && hovered === iso ? 'true' : undefined}
               aria-current={isToday ? 'date' : undefined}
+              aria-pressed={selected}
+              title={itemsByDate === undefined ? scopeNames : undefined}
               onClick={() => (iso === null ? undefined : onSelect?.(iso))}
               onMouseEnter={() => setHovered(iso)}
               onMouseLeave={() => setHovered(null)}
@@ -293,6 +303,7 @@ export function MonthView({
               }}
             >
               <span
+                className="calendar-day-number"
                 style={{
                   fontSize: 13,
                   fontWeight: selected ? 800 : 500,
@@ -308,10 +319,14 @@ export function MonthView({
 
               {itemsByDate === undefined ? (
                 <span style={{ display: 'flex', gap: 3, height: 5 }}>
+                  {scopeNames ? (
+                    <span className="calendar-scope-description">{scopeNames}</span>
+                  ) : null}
                   {/* Fins a 3 punts de 5px amb els colors dels àmbits que hi tenen res. */}
                   {dots.slice(0, 3).map((color, dotIndex) => (
                     <span
                       key={dotIndex}
+                      className="calendar-compact-dot"
                       aria-hidden="true"
                       style={{ width: 5, height: 5, borderRadius: '50%', background: color }}
                     />
@@ -333,7 +348,9 @@ export function MonthView({
                   {items.slice(0, 3).map((item) => (
                     <span
                       key={item.id}
-                      title={item.title}
+                      title={item.scopeName ? `${item.scopeName} · ${item.title}` : item.title}
+                      className="calendar-month-item"
+                      data-muted={item.muted === true ? 'true' : undefined}
                       style={{
                         display: 'flex',
                         alignItems: 'center',
@@ -343,7 +360,7 @@ export function MonthView({
                         lineHeight: 1.25,
                         // La cita que no és a la teva bústia va difuminada aquí igual que a
                         // la llista: un sol significat per a un sol senyal.
-                        opacity: item.muted === true ? 0.55 : 1,
+                        opacity: item.muted === true ? 'var(--dimmed-opacity, 0.55)' : 1,
                         color: 'var(--ink)',
                       }}
                     >
@@ -357,6 +374,7 @@ export function MonthView({
                           flexShrink: 0,
                         }}
                       />
+                      <CalendarScope name={item.scopeName} />
                       <span
                         style={{
                           overflow: 'hidden',
@@ -397,6 +415,7 @@ export function MonthView({
 export function WeekView({
   days,
   selectedDate,
+  today,
   onSelect,
   emptyLabel,
   onAddOnDay,
@@ -423,8 +442,13 @@ export function WeekView({
         <button
           key={day.iso}
           type="button"
+          className="calendar-day"
           data-testid={`week-day-${day.iso}`}
+          data-selected={day.iso === selectedDate ? 'true' : 'false'}
           data-hovered={hovered === day.iso ? 'true' : undefined}
+          aria-current={day.iso === today ? 'date' : undefined}
+          aria-pressed={day.iso === selectedDate}
+          title={compact ? day.scopeNames?.join(' · ') : undefined}
           onClick={() => onSelect?.(day.iso)}
           onMouseEnter={() => setHovered(day.iso)}
           onMouseLeave={() => setHovered(null)}
@@ -465,7 +489,10 @@ export function WeekView({
             >
               {day.weekday}
             </span>
-            <span style={{ display: 'block', fontSize: 15, fontWeight: 700, color: 'var(--ink)' }}>
+            <span
+              className="calendar-day-number"
+              style={{ display: 'block', fontSize: 15, fontWeight: 700, color: 'var(--ink)' }}
+            >
               {day.number}
             </span>
           </span>
@@ -475,6 +502,9 @@ export function WeekView({
               data-testid={`week-dots-${day.iso}`}
               style={{ display: 'flex', gap: 3, height: 5, justifyContent: 'center' }}
             >
+              {day.scopeNames?.length ? (
+                <span className="calendar-scope-description">{day.scopeNames.join(' · ')}</span>
+              ) : null}
               {day.items.slice(0, 3).map((item) => (
                 <span
                   key={item.id}
@@ -498,7 +528,7 @@ export function WeekView({
                 day.items.slice(0, 4).map((item) => (
                   <span
                     key={item.id}
-                    title={item.title}
+                    title={item.scopeName ? `${item.scopeName} · ${item.title}` : item.title}
                     style={{
                       fontSize: 10.5,
                       fontWeight: 600,
@@ -512,7 +542,7 @@ export function WeekView({
                       whiteSpace: 'nowrap',
                     }}
                   >
-                    {item.title}
+                    <CalendarScope name={item.scopeName} /> {item.title}
                   </span>
                 ))
               )}
@@ -617,6 +647,7 @@ export function DayView({ label, items, emptyLabel, onSelectItem, onAdd, addLabe
             />
             {/* D'on ve, ja feta: el design system no sap de menes de font ni de catàlegs. */}
             {item.icon}
+            <CalendarScope name={item.scopeName} />
             <span style={{ flex: 1, fontSize: 14, fontWeight: 600 }}>{item.title}</span>
             {item.time ? (
               <span style={{ fontSize: 12, color: 'var(--ink-soft)' }}>{item.time}</span>

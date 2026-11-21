@@ -279,6 +279,13 @@ data class CalendarSuggestionsCacheEntity(
     @ColumnInfo(name = "issue_id") val issueId: String? = null,
 )
 
+@Entity(tableName = "doing_auto_stop_cache")
+data class DoingAutoStopCacheEntity(
+    @PrimaryKey val id: Int = 0,
+    val minutes: Int? = null,
+    @ColumnInfo(name = "issue_id") val issueId: String? = null,
+)
+
 /** El resultat de `countByStatus`. No és una taula: és la projecció d'un `GROUP BY`. */
 data class StatusCount(val status: String, val total: Int)
 
@@ -485,6 +492,24 @@ interface FemhoDao {
     @Query("UPDATE calendar_suggestions_cache SET issue_id = NULL WHERE id = 0 AND issue_id = :issueId")
     suspend fun clearCalendarSuggestionsIssue(issueId: String)
 
+    @Query("SELECT * FROM doing_auto_stop_cache WHERE id = 0")
+    fun doingAutoStopCache(): Flow<DoingAutoStopCacheEntity?>
+
+    @Query("SELECT * FROM doing_auto_stop_cache WHERE id = 0")
+    suspend fun doingAutoStopCacheOnce(): DoingAutoStopCacheEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun putDoingAutoStopCache(cache: DoingAutoStopCacheEntity)
+
+    @Query("UPDATE doing_auto_stop_cache SET issue_id = NULL WHERE id = 0 AND issue_id = :issueId")
+    suspend fun clearDoingAutoStopIssue(issueId: String)
+
+    @Transaction
+    suspend fun resolveDoingAutoStop(cache: DoingAutoStopCacheEntity, opId: String) {
+        putDoingAutoStopCache(cache)
+        dequeue(opId)
+    }
+
     @Query("DELETE FROM tasks WHERE id = :id")
     suspend fun removeUnconfirmedCalendarTask(id: String)
 
@@ -547,6 +572,7 @@ interface FemhoDao {
                 (counts[key] ?: 0) - (replacedCounts[key] ?: 0) + suggestions[status].orEmpty().size
             },
             scopeColors = scopes.associate { it.id to it.color },
+            scopeNames = scopes.associate { it.id to it.name },
             suggestions = suggestions.mapValues { (_, items) -> items.take(WIDGET_COLUMN_LIMIT) },
             suggestionTimezone = calendar.timezone,
             nextSuggestionAt = calendar.nextBoundary(now, scheduled),
@@ -833,8 +859,9 @@ interface FemhoDao {
         AgentEntity::class,
         PomodoroCacheEntity::class,
         CalendarSuggestionsCacheEntity::class,
+        DoingAutoStopCacheEntity::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = false,
 )
 abstract class FemhoDatabase : RoomDatabase() {
@@ -851,6 +878,12 @@ abstract class FemhoDatabase : RoomDatabase() {
      * directament a v2 sense passar per la migració.
      */
     companion object {
+        val MIGRATION_6_7 = object : androidx.room.migration.Migration(6, 7) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS doing_auto_stop_cache (id INTEGER NOT NULL PRIMARY KEY, minutes INTEGER, issue_id TEXT)")
+            }
+        }
+
         val MIGRATION_5_6 = object : androidx.room.migration.Migration(5, 6) {
             override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
                 db.execSQL("CREATE TABLE IF NOT EXISTS calendar_suggestions_cache (id INTEGER NOT NULL PRIMARY KEY, snapshot TEXT NOT NULL, issue_id TEXT)")

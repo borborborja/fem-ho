@@ -19,6 +19,7 @@ import type { MigrationDb } from '../db/migration-db.js';
 import { PolicyError, missingCapability, notFound } from '../policy/errors.js';
 import { hasCapability, type Principal } from '../policy/principal.js';
 import { assertScopeAccess } from './scopes.js';
+import { closeSession, openSession } from './sessions.js';
 
 export type ActorFilter = 'all' | 'ai' | 'human';
 
@@ -248,14 +249,17 @@ export async function undo(
     );
   }
 
-  const task = await sql<{ scope_id: string }>`
-    SELECT scope_id FROM tasks WHERE id = ${entry.entity_id}
+  const task = await sql<{ scope_id: string; status: string; version: number }>`
+    SELECT scope_id, status, version FROM tasks
+    WHERE id = ${entry.entity_id} AND deleted_at IS NULL
   `.execute(ctx.tx);
-  const scopeId = task.rows[0]?.scope_id;
-  if (scopeId === undefined) throw notFound('task', entry.entity_id);
+  const current = task.rows[0];
+  if (current === undefined) throw notFound('task', entry.entity_id);
+  const scopeId = current.scope_id;
   await assertScopeAccess(ctx.tx, principal, scopeId);
 
-  const camps = Object.entries(entry.changes ?? {});
+  // L’hora del gest pertany a l’historial. Desfer’l és una transició nova, amb una hora nova.
+  const camps = Object.entries(entry.changes ?? {}).filter(([field]) => field !== 'occurred_at');
   const assignments = camps.map(([field, change]) => sql`${sql.raw(field)} = ${change.from}`);
   if (assignments.length === 0) {
     throw new PolicyError(
@@ -266,10 +270,19 @@ export async function undo(
     );
   }
 
-  await sql`
+  const updated = await sql`
     UPDATE tasks SET ${sql.join(assignments)}, updated_at = ${ctx.now}, version = version + 1
-    WHERE id = ${entry.entity_id}
+    WHERE id = ${entry.entity_id} AND version = ${current.version} AND deleted_at IS NULL
   `.execute(ctx.tx);
+  if (Number(updated.numAffectedRows ?? 0) === 0)
+    throw new PolicyError('undo-conflict', 'Undo conflict', 409, 'The task changed before undo.');
+
+  const restoredStatus = entry.changes?.status?.from;
+  if (typeof restoredStatus === 'string' && restoredStatus !== current.status) {
+    if (restoredStatus === 'doing')
+      await openSession(ctx, principal.userId, { id: entry.entity_id, scope_id: scopeId });
+    else if (current.status === 'doing') await closeSession(ctx, entry.entity_id);
+  }
 
   ctx.record({
     entityType: 'task',
@@ -279,7 +292,10 @@ export async function undo(
     // El canvi invers: el que era `to` ara és `from`. Llegit a l'historial, es veu que
     // algú ha tornat enrere el que havia fet la IA.
     changes: Object.fromEntries(
-      camps.map(([field, change]) => [field, { from: change.to, to: change.from }]),
+      camps.map(([field, change]) => [
+        field,
+        { from: field === 'status' ? current.status : change.to, to: change.from },
+      ]),
     ),
   });
 }

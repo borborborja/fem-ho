@@ -15,7 +15,13 @@
  */
 
 import { v7 as uuidv7 } from 'uuid';
-import type { FemHoDatabase, OutboxOp, OutboxRow, SyncedEntity } from './db.js';
+import {
+  SYNCED_ENTITIES,
+  type FemHoDatabase,
+  type OutboxOp,
+  type OutboxRow,
+  type SyncedEntity,
+} from './db.js';
 
 export interface EnqueueInput {
   op_id: string;
@@ -162,7 +168,7 @@ export function nextBoardOperations(rows: OutboxRow[]): OutboxRow[] {
       const calendarTaskId = calendarSuggestionTaskId(row);
       if (calendarTaskId !== undefined) earlierCalendarTasks.add(calendarTaskId);
       if (
-        row.entity_type === 'calendar_suggestions' &&
+        (row.entity_type === 'calendar_suggestions' || row.entity_type === 'user_settings') &&
         (row.status === 'failed' || row.status === 'conflict')
       )
         return false;
@@ -303,7 +309,7 @@ export async function applyResults(
 
       if (result.status === 'ok') {
         await db.outbox.delete(row.id);
-        if (row.entity_type === 'pomodoro' || row.entity_type === 'calendar_suggestions') continue;
+        if (!isSyncedEntity(row.entity_type)) continue;
         if (row.op === 'delete') {
           await db.entities.delete(row.entity_id);
         } else if (result.entity !== undefined) {
@@ -317,11 +323,7 @@ export async function applyResults(
 
       if (result.status === 'conflict') {
         await db.outbox.put({ ...row, status: 'conflict', server_entity: result.server_entity });
-        if (
-          row.entity_type !== 'pomodoro' &&
-          row.entity_type !== 'calendar_suggestions' &&
-          result.server_entity !== undefined
-        ) {
+        if (isSyncedEntity(row.entity_type) && result.server_entity !== undefined) {
           await db.entities.put({
             ...(result.server_entity as { id: string }),
             entity_type: row.entity_type,
@@ -338,6 +340,10 @@ export async function applyResults(
       });
     }
   });
+}
+
+function isSyncedEntity(entity: OutboxRow['entity_type']): entity is SyncedEntity {
+  return SYNCED_ENTITIES.some((type) => type === entity);
 }
 
 /**

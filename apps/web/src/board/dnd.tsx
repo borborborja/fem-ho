@@ -31,6 +31,7 @@ import {
 } from '@dnd-kit/core';
 import { t } from '@fem-ho/contracts';
 import type { TaskStatus } from '@fem-ho/contracts';
+import { useAppearance } from '../app/theme.js';
 
 export interface DropPlacement {
   targetId: string;
@@ -192,11 +193,15 @@ export function BoardDnd({
   renderOverlay,
 }: BoardDndProps) {
   const [active, setActive] = useState<{ id: string; pointer: boolean } | null>(null);
+  const appearance = useAppearance();
   const sensors = useSensors(
     // Amb 6px de marge, clicar una targeta no compta com a arrossegar-la: sense això,
     // obrir el modal amb el ratolí es converteix en una loteria.
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: jumpBetweenColumns }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: jumpBetweenColumns,
+      ...(appearance === 'eink' ? { scrollBehavior: 'auto' as const } : {}),
+    }),
   );
 
   return (

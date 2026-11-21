@@ -23,6 +23,13 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { ROOT } from '../checks/lib/scan.mjs';
+import {
+  ACCENTS,
+  APPEARANCES,
+  THEMES,
+  loadTokenBlocks,
+  resolveTokens,
+} from '../checks/lib/tokens.mjs';
 
 const PLOU = join(ROOT, 'packages', 'design-system', 'plou', 'tokens');
 const FEMHO = join(ROOT, 'packages', 'design-system', 'femho', 'tokens.css');
@@ -221,11 +228,16 @@ export function gradientStops(value) {
   return stops.length >= 2 ? stops : null;
 }
 
-function gradientsOf(values) {
+function gradientsOf(values, gradientNames = []) {
   const out = {};
   for (const [name, value] of Object.entries(values)) {
     const stops = gradientStops(value);
     if (stops !== null) out[name] = stops;
+    else if (gradientNames.includes(name)) {
+      const solid = toArgb(value);
+      // El Brush de Compose espera dues parades també quan el CSS pinta un sol color.
+      if (solid !== null) out[name] = [solid, solid];
+    }
   }
   return out;
 }
@@ -261,9 +273,9 @@ function readBlockRequired(css, selector, label) {
 
 export function buildTokens() {
   const theme = readFileSync(join(PLOU, 'theme.css'), 'utf8');
-  const accents = readFileSync(join(PLOU, 'accents.css'), 'utf8');
   const colors = readFileSync(join(PLOU, 'colors.css'), 'utf8');
   const femho = readFileSync(FEMHO, 'utf8');
+  const blocks = loadTokenBlocks(PLOU, FEMHO);
 
   /**
    * `colors.css` hi entra primer.
@@ -273,38 +285,23 @@ export function buildTokens() {
    * pastel no aguanta text blanc— no tindrien res a sobreescriure i la seva
    * sobreescriptura desapareixeria en silenci.
    */
-  const light = colorsOf({
-    ...readBlock(colors, ':root'),
-    ...readBlock(theme, ':root'),
-    ...readBlock(theme, "[data-theme='light']"),
-    ...readBlock(femho, ':root'),
-  });
+  const light = colorsOf(resolveTokens(blocks, 'light', 'default'));
   // Els dos blocs foscos són OBLIGATORIS. Que un no es trobés és exactament el que va
   // fer que el tema fosc d'Android fos una còpia del clar durant tot el projecte.
-  const dark = colorsOf({
-    ...readBlockRequired(theme, "[data-theme='dark']", 'plou/theme.css'),
-    ...readBlockRequired(femho, "[data-theme='dark']", 'femho/tokens.css'),
-  });
+  readBlockRequired(theme, "[data-theme='dark']", 'plou/theme.css');
+  readBlockRequired(femho, "[data-theme='dark']", 'femho/tokens.css');
+  const dark = colorsOf(resolveTokens(blocks, 'dark', 'default'));
 
-  /**
-   * Els accents.
-   *
-   * Els fitxers de Plou fan servir cometes DOBLES als selectors (`[data-accent="soft"]`)
-   * i els de Fem-ho, simples. Buscar-ne només una mena donava zero accents i un fitxer
-   * generat que semblava correcte: quatre accents col·lapsats en un. `readBlock` ja no
-   * en distingeix, però el nom del bloc es continua escrivint amb simples per costum.
-   *
-   * **`default` no porta atribut**: és la tríada original i no té bloc propi. Es
-   * representa com un accent sense cap sobreescriptura, que és exactament el que és.
-   */
-  const accentNames = [...accents.matchAll(/\[data-accent=["']([a-z-]+)["']\]/gu)].map((m) => m[1]);
-  const accentBlocks = { default: {} };
-  for (const name of [...new Set(accentNames)]) {
-    accentBlocks[name] = colorsOf({
-      ...readBlock(accents, `[data-accent="${name}"]`),
-      ...readBlock(femho, `[data-accent="${name}"]`),
-    });
-  }
+  // Una regla d’alt contrast també conté l’accent. Només la cascada resol si hi aplica.
+  const accentBlocks = Object.fromEntries(
+    ACCENTS.map((accent) => {
+      const colors = colorsOf(resolveTokens(blocks, 'light', accent));
+      return [
+        accent,
+        Object.fromEntries(Object.entries(colors).filter(([name, color]) => light[name] !== color)),
+      ];
+    }),
+  );
 
   const lightRaw = {
     ...readBlock(colors, ':root'),
@@ -313,15 +310,42 @@ export function buildTokens() {
   };
   const darkRaw = readBlock(theme, "[data-theme='dark']");
 
+  const gradients = { light: gradientsOf(lightRaw), dark: gradientsOf(darkRaw) };
+  const gradientNames = Object.keys(gradients.light);
+  const special = Object.fromEntries(
+    APPEARANCES.filter((appearance) => appearance !== 'standard').map((appearance) => [
+      appearance,
+      Object.fromEntries(
+        THEMES.map((themeName) => {
+          const raw = resolveTokens(blocks, themeName, 'default', appearance);
+          return [
+            themeName,
+            {
+              colors: colorsOf(raw),
+              accents: Object.fromEntries(
+                ACCENTS.map((accent) => [
+                  accent,
+                  colorsOf(resolveTokens(blocks, themeName, accent, appearance)),
+                ]),
+              ),
+              gradients: gradientsOf(raw, gradientNames),
+            },
+          ];
+        }),
+      ),
+    ]),
+  );
+
   return {
     light,
     dark,
     accents: accentBlocks,
-    gradients: { light: gradientsOf(lightRaw), dark: gradientsOf(darkRaw) },
+    gradients,
+    special,
   };
 }
 
-function render({ light, dark, accents, gradients }) {
+function render({ light, dark, accents, gradients, special }) {
   // Un token només entra a l'esquema si el tema clar el té: així l'esquema és tancat i
   // el dia que Plou n'afegeixi un, el fitxer canvia i el `--check` ho diu.
   const names = Object.keys(light).sort();
@@ -333,6 +357,15 @@ function render({ light, dark, accents, gradients }) {
   // `default` hi entra encara que no sobreescrigui res: sense ell, l'enum no tindria
   // l'accent per defecte i no es podria representar l'estat inicial.
   const accentEntries = Object.entries(accents).sort(([a], [b]) => a.localeCompare(b));
+  const contrast = special['high-contrast'];
+  const variants = [
+    ['highContrastLight', contrast.light, light, 'lightColors'],
+    ['highContrastDark', contrast.dark, dark, 'darkColors'],
+    ['eink', special.eink.light, light, 'lightColors'],
+  ];
+  const gradientNames = Object.keys(gradients.light).sort();
+  const gradientValue = (name, stops) =>
+    `        ${kotlinName(name)} = listOf(${stops.map((s) => `Color(${s})`).join(', ')}),`;
 
   return `/*
  * GENERAT · no l'editis a mà.
@@ -357,6 +390,8 @@ ${names.map(field).join('\n')}
 
 /** Els accents de Plou. Canvien els colors de marca, no la resta de l'esquema. */
 enum class FemhoAccent { ${accentEntries.map(([name]) => kotlinName(name).toUpperCase()).join(', ')} }
+
+enum class FemhoAppearance { STANDARD, HIGH_CONTRAST, EINK }
 
 internal val lightColors = FemhoColors(
 ${names.map((name) => value(name, light, light)).join('\n')}
@@ -408,6 +443,61 @@ ${overrides.map((key) => `        ${kotlinName(key)} = Color(${block[key]}),`).j
   })
   .join('\n')}
 }
+
+${variants
+  .map(
+    ([label, variant, base, baseName]) => `private val ${label}Colors = ${baseName}.copy(
+${names
+  .filter((name) => variant.colors[name] !== base[name])
+  .map((name) => value(name, variant.colors, base))
+  .join('\n')}
+)
+
+private val ${label}Gradients = FemhoGradientStops(
+${gradientNames.map((name) => gradientValue(name, variant.gradients[name])).join('\n')}
+)`,
+  )
+  .join('\n\n')}
+
+private fun applyContrastAccent(base: FemhoColors, dark: Boolean, accent: FemhoAccent): FemhoColors = when (accent) {
+${accentEntries
+  .map(([name]) => {
+    const id = `FemhoAccent.${kotlinName(name).toUpperCase()}`;
+    const changed = names.filter(
+      (token) =>
+        contrast.light.accents[name][token] !== contrast.light.colors[token] ||
+        contrast.dark.accents[name][token] !== contrast.dark.colors[token],
+    );
+    if (changed.length === 0) return `    ${id} -> base`;
+    return `    ${id} -> base.copy(
+${changed
+  .map(
+    (token) =>
+      `        ${kotlinName(token)} = if (dark) Color(${contrast.dark.accents[name][token]}) else Color(${contrast.light.accents[name][token]}),`,
+  )
+  .join('\n')}
+    )`;
+  })
+  .join('\n')}
+}
+
+internal fun colorsForAppearance(dark: Boolean, accent: FemhoAccent, appearance: FemhoAppearance): FemhoColors =
+    when (appearance) {
+        FemhoAppearance.STANDARD -> applyAccent(if (dark) darkColors else lightColors, accent)
+        FemhoAppearance.HIGH_CONTRAST -> applyContrastAccent(
+            if (dark) highContrastDarkColors else highContrastLightColors,
+            dark,
+            accent,
+        )
+        FemhoAppearance.EINK -> einkColors
+    }
+
+internal fun gradientsForAppearance(dark: Boolean, appearance: FemhoAppearance): FemhoGradientStops =
+    when (appearance) {
+        FemhoAppearance.STANDARD -> if (dark) darkGradients else lightGradients
+        FemhoAppearance.HIGH_CONTRAST -> if (dark) highContrastDarkGradients else highContrastLightGradients
+        FemhoAppearance.EINK -> einkGradients
+    }
 `;
 }
 
@@ -449,16 +539,42 @@ function assertNeutral(accents) {
 // Aquests recursos són exclusius de la previsualització; el widget real tenyeix vectors.
 const PREVIEW_TOKENS = ['--plou-blue', '--plou-orange'];
 
-function renderRes({ light, dark }, variant) {
-  const block = variant === 'night' ? dark : light;
-  const rows = [...SHAPE_TOKENS, ...PREVIEW_TOKENS].map((token) => {
-    const argb = block[token] ?? light[token];
+function renderRes({ light, dark, special }, variant) {
+  const isNight = variant === 'night';
+  const block = isNight ? dark : light;
+  const contrast = special['high-contrast'];
+  const specialShapes = [...SHAPE_TOKENS, '--danger-text'];
+  const row = (name, argb) => {
     if (argb === undefined) {
-      console.error(`tokens-compose · falta el token ${token} al CSS de Plou.`);
+      console.error(`tokens-compose · falta el token per al recurs ${name} al CSS.`);
       process.exit(1);
     }
-    return `    <color name="${PREVIEW_TOKENS.includes(token) ? resName(token).replace('femho_', 'femho_preview_') : resName(token)}">${toResColor(argb)}</color>`;
-  });
+    return `    <color name="${name}">${toResColor(argb)}</color>`;
+  };
+  const rows = [
+    ...SHAPE_TOKENS.map((token) => row(resName(token), block[token])),
+    ...PREVIEW_TOKENS.map((token) =>
+      row(resName(token).replace('femho_', 'femho_preview_'), block[token]),
+    ),
+  ];
+  const modes = [['contrast', contrast[isNight ? 'dark' : 'light']]];
+  if (!isNight)
+    modes.push(
+      ['contrast_light', contrast.light],
+      ['contrast_dark', contrast.dark],
+      ['eink', special.eink.light],
+    );
+  for (const [label, mode] of modes) {
+    for (const token of specialShapes) {
+      if (Object.values(mode.accents).some((colors) => colors[token] !== mode.colors[token]))
+        throw new Error(
+          `tokens-compose · ${label}: el recurs de forma ${token} depèn de l’accent.`,
+        );
+      rows.push(
+        row(resName(token).replace('femho_', `femho_widget_${label}_`), mode.colors[token]),
+      );
+    }
+  }
 
   return `<?xml version="1.0" encoding="utf-8"?>
 <!--

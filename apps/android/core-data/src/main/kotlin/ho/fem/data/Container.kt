@@ -54,7 +54,10 @@ class Container(context: Context) {
             // L'antic femho.db no té cap marca de propietat. Es conserva sencer i
             // no s'obre en nom de cap compte: una cua antiga no es pot atribuir amb seguretat.
             Workspace(Room.databaseBuilder(app, FemhoDatabase::class.java, "femho-${account.identity.key}.db")
-                .addMigrations(FemhoDatabase.MIGRATION_1_2, FemhoDatabase.MIGRATION_2_3, FemhoDatabase.MIGRATION_3_4, FemhoDatabase.MIGRATION_4_5, FemhoDatabase.MIGRATION_5_6)
+                .addMigrations(
+                    FemhoDatabase.MIGRATION_1_2, FemhoDatabase.MIGRATION_2_3, FemhoDatabase.MIGRATION_3_4,
+                    FemhoDatabase.MIGRATION_4_5, FemhoDatabase.MIGRATION_5_6, FemhoDatabase.MIGRATION_6_7,
+                )
                 .build())
         }
 
@@ -96,7 +99,7 @@ class Container(context: Context) {
 
     suspend fun refreshUserSettings(account: ActiveAccount): AuthSettingsEnvelope =
         workspace(account).doneSettingsLock.withLock {
-            api(account).settings().also { settings.cacheDoneClearedAt(account, it.settings.doneClearedAt) }
+            repository(account).readUserSettings().also { settings.cacheDoneClearedAt(account, it.settings.doneClearedAt) }
         }
 
     suspend fun setDoneClearedAt(account: ActiveAccount, value: String?) {
@@ -169,6 +172,14 @@ class Container(context: Context) {
 
 private val Context.dataStore by preferencesDataStore(name = "femho")
 
+data class DisplaySettings(
+    val theme: String = "system",
+    val accent: String = "default",
+    val appearance: String = "standard",
+) {
+    val selection: String get() = if (appearance == "standard") theme else appearance
+}
+
 /**
  * Les preferències que **no** són secretes: la URL del servidor, els àmbits actius, el
  * tema. Els testimonis van a un altre lloc, xifrats.
@@ -189,6 +200,7 @@ class Settings internal constructor(private val dataStore: DataStore<Preferences
     private val projectsKey = "active_projects"
     private val themeKey = stringPreferencesKey("theme")
     private val accentKey = stringPreferencesKey("accent")
+    private val appearanceKey = stringPreferencesKey("appearance")
     // Preferències de la pestanya General (paritat amb la web)
     private val scopeModeKey = stringPreferencesKey("scope_mode")
     private val localeKey = stringPreferencesKey("locale")
@@ -263,8 +275,14 @@ class Settings internal constructor(private val dataStore: DataStore<Preferences
     }
 
     fun activeProjects(account: ActiveAccount): Flow<List<String>> = readAccountList(projectsKey, account)
-    val theme: Flow<String> = read(themeKey).map { it ?: "system" }
-    val accent: Flow<String> = read(accentKey).map { it ?: "default" }
+    val display: Flow<DisplaySettings> = dataStore.data.map { preferences ->
+        val defaults = DisplaySettings()
+        DisplaySettings(
+            theme = preferences[themeKey] ?: defaults.theme,
+            accent = preferences[accentKey] ?: defaults.accent,
+            appearance = preferences[appearanceKey] ?: defaults.appearance,
+        )
+    }
     val scopeMode: Flow<String> = read(scopeModeKey).map { it ?: "multi" }
     suspend fun setScopeMode(value: String) = write(scopeModeKey, value)
     val locale: Flow<String> = read(localeKey).map { it ?: "ca" }
@@ -302,7 +320,17 @@ class Settings internal constructor(private val dataStore: DataStore<Preferences
         }
     }
 
-    suspend fun setTheme(value: String) = write(themeKey, value)
+    suspend fun selectDisplay(value: String) {
+        dataStore.edit { preferences ->
+            when (value) {
+                "high-contrast", "eink" -> preferences[appearanceKey] = value
+                "system", "light", "dark" -> {
+                    preferences[themeKey] = value
+                    preferences.remove(appearanceKey)
+                }
+            }
+        }
+    }
     suspend fun setAccent(value: String) = write(accentKey, value)
     // Preferències de la pestanya General
     suspend fun setLocale(value: String) = write(localeKey, value)

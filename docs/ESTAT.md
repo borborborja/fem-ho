@@ -7,6 +7,42 @@ Data de l'última verificació completa: **2026-11-19**.
 
 ---
 
+## Temes d'alt contrast i de tinta electrònica · 0.29.0
+
+Ajustos → General → Tema ofereix Alt contrast i Tinta electrònica al web i a
+Android. La tria es desa al dispositiu. Alt contrast parteix de l'últim tema
+habitual. Tinta electrònica fa servir superfícies monocromes planes i
+comptadors per minuts, amb segons durant el darrer minut del Pomodoro.
+
+La comprovació de contrast cobreix 24 combinacions de tema i accent. Chromium
+ha comprovat la persistència local, el focus, els noms dels àmbits al calendari
+i el darrer minut del Pomodoro. Amb l'APK amb R8 s'han verificat els ginys als
+llançadors d'Android 11 i 14, el canvi clar/fosc i la represa sense connexió.
+Queda pendent comprovar el refresc i les imatges residuals en una pantalla
+física de tinta electrònica.
+
+---
+
+## Aturada automàtica de tasques a «Fent» · 0.29.0
+
+Ajustos → General permet fixar al web i a Android quant de temps poden estar
+a «Fent» les tasques que hi ha posat el compte. El límit és opcional i es
+compta des de l'entrada a «Fent», també quan es canvia amb tasques en curs.
+El servidor torna les tasques a «Per fer» al següent tic que les pot moure.
+Si l'àmbit té el Registre de dedicació actiu, el tram es tanca quan es mou
+la tasca. L'historial atribueix el moviment al sistema.
+
+La migració 031 afegeix la preferència de compte, inicialment desactivada.
+En publicar, actualitza el servidor abans dels clients.
+
+Les proves amb SQLite i PostgreSQL cobreixen el llindar, l'aïllament entre
+comptes, les reserves d'IA i els moviments concurrents. Chromium ha comprovat
+el refresc del tauler i la reconnexió després d'un moviment fora de línia.
+Amb l'APK amb R8 a Android 14 s'ha verificat el moviment amb l'app oberta i
+tancada, la desactivació fora de línia i el desament compartit amb el web.
+
+---
+
 ## Propostes del calendari als ginys d'Android · 0.28.0
 
 «Avui», «Tasques» i «Tauler» permeten demanar una sincronització des del
