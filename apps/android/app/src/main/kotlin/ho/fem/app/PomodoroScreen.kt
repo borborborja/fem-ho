@@ -116,6 +116,44 @@ internal fun PomodoroToolbarAction(onClick: () -> Unit) {
 }
 
 @Composable
+internal fun PomodoroHeader(
+    title: String,
+    backLabel: String,
+    settingsLabel: String?,
+    onBack: () -> Unit,
+    onSettings: () -> Unit,
+) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        IconButton(
+            onClick = onBack,
+            modifier = Modifier.size(FemhoSize.touch).semantics { contentDescription = backLabel },
+        ) {
+            Text("‹", color = Femho.colors.ink, fontSize = FemhoText.wordmark)
+        }
+        Text(
+            title,
+            modifier = Modifier.weight(1f),
+            fontSize = FemhoText.columnTitle,
+            fontWeight = FontWeight.Bold,
+            color = Femho.colors.ink,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        if (settingsLabel != null) {
+            Box(
+                modifier = Modifier.heightIn(min = FemhoSize.touch)
+                    .testTag("pomodoro-settings")
+                    .clickable(role = Role.Button, onClick = onSettings)
+                    .padding(horizontal = 8.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(settingsLabel, color = Femho.colors.ink, fontSize = FemhoText.body)
+            }
+        }
+    }
+}
+
+@Composable
 internal fun PomodoroHost(model: AppViewModel, onBack: () -> Unit) {
     val local by model.pomodoro.collectAsStateWithLifecycle()
     val tasks by model.tasks.collectAsStateWithLifecycle()
@@ -139,24 +177,17 @@ internal fun PomodoroHost(model: AppViewModel, onBack: () -> Unit) {
     var chosenTaskId by rememberSaveable(timer?.id) { mutableStateOf<String?>(null) }
     var taskChosen by rememberSaveable(timer?.id) { mutableStateOf(false) }
     val selected = if (taskChosen) chosenTaskId?.let(available::get) else activeTask
-    val title = stringResource(R.string.pomodoro_title)
-
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp).testTag("pomodoro-screen"),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            val back = stringResource(R.string.nav_back)
-            TextButton(onBack, colors = pomodoroTextButtons(), modifier = Modifier.semantics { contentDescription = back }) {
-                Text("‹")
-            }
-            Text(title, Modifier.weight(1f), fontSize = FemhoText.wordmark, fontWeight = FontWeight.Bold, color = Femho.colors.ink)
-            if (settings.enabled) {
-                TextButton({ showSettings = true }, Modifier.testTag("pomodoro-settings"), colors = pomodoroTextButtons()) {
-                    Text(stringResource(R.string.nav_settings))
-                }
-            }
-        }
+        PomodoroHeader(
+            title = stringResource(R.string.pomodoro_title),
+            backLabel = stringResource(R.string.nav_back),
+            settingsLabel = if (settings.enabled) stringResource(R.string.nav_settings) else null,
+            onBack = onBack,
+            onSettings = { showSettings = true },
+        )
         if (settings.enabled) {
             PomodoroClock(settings, phase, timer, remaining)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.Center) {
