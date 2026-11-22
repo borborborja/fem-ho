@@ -5,7 +5,9 @@ import ho.fem.model.CalendarTaskStart
 import ho.fem.model.CalendarTaskSuggestion
 import ho.fem.model.CalendarTaskSuggestions
 import ho.fem.model.Checklist
+import ho.fem.model.GoogleCalendarDraft
 import ho.fem.model.RecurrenceMode
+import ho.fem.model.Scope
 import ho.fem.model.Subtask
 import ho.fem.model.Task
 import ho.fem.model.TaskProgress
@@ -13,6 +15,7 @@ import ho.fem.model.TaskStatus
 import ho.fem.network.FemhoApi
 import ho.fem.network.InMemoryTokenStore
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
@@ -37,6 +40,42 @@ import kotlin.test.assertTrue
 /** Prova la cua real amb un transport controlat, sense base ni servidor personals. */
 class RepositorySyncTest {
     private val operation = OutboxEntity("a", "task", "create", "task-a", 0, "{}", 1L)
+
+    @Test
+    fun `la memòria local conserva el propietari que pot vincular el calendari`() {
+        val scope = Scope(id = "scope-a", name = "Feina", color = "blue", position = "a1", ownerId = "owner-a")
+        assertEquals(scope, scope.toEntity().toDomain())
+    }
+
+    @Test
+    fun `desar una cita amb convidats conserva la versió i la intenció fins al rebut`() = runBlocking {
+        val queue = mutableListOf<OutboxEntity>()
+        val requests = mutableListOf<String>()
+        val requestBodies = mutableListOf<String>()
+        val draft = GoogleCalendarDraft(
+            "Reunió", "Ordre del dia", "Girona", "2026-11-22T09:00:00Z", "2026-11-22T10:00:00Z", false, "Europe/Madrid",
+        )
+        val repository = repository(queue, {
+            """{"results":[{"op_id":"${queue.single().opId}","status":"ok"}]}"""
+        }, requests, requestBodies)
+        assertTrue(repository.enqueueGoogleCalendarChange("scope-calendar", "remote-event", 12, "update", draft, true))
+        assertEquals(false, repository.enqueueGoogleCalendarChange("scope-calendar", "remote-event", 12, "delete", null, true))
+        assertEquals(emptyList(), requests)
+        val operation = queue.single()
+        assertEquals(draft, repository.deviceGoogleCalendarChanges.first().single().draft)
+
+        repository.flush()
+
+        assertEquals(emptyList(), queue)
+        val sent = Json.parseToJsonElement(requestBodies.single()).jsonObject.getValue("operations").jsonArray.single().jsonObject
+        assertEquals(operation.opId, sent.getValue("op_id").jsonPrimitive.content)
+        assertEquals("google_calendar_event", sent.getValue("entity").jsonPrimitive.content)
+        assertEquals("12", sent.getValue("base_version").jsonPrimitive.content)
+        val body = sent.getValue("data").jsonObject
+        assertEquals("scope-calendar", body.getValue("calendar_id").jsonPrimitive.content)
+        assertEquals("true", body.getValue("notify_guests").jsonPrimitive.content)
+        assertEquals("Ordre del dia", body.getValue("description").jsonPrimitive.content)
+    }
 
     private fun repository(queue: MutableList<OutboxEntity>, body: String, requests: MutableList<String>): Repository =
         repository(queue, { body }, requests)
@@ -108,7 +147,7 @@ class RepositorySyncTest {
                     (args[5] as TaskListsEntity?)?.let { lists[it.taskId] = it }
                     Unit
                 }
-                "outboxFlow" -> flowOf(queue.toList())
+                "outboxFlow" -> flow { emit(queue.toList()) }
                 "pomodoroCache" -> flowOf(null)
                 "calendarSuggestionsCache" -> flowOf(calendarCache?.firstOrNull())
                 "calendarSuggestionsCacheOnce" -> calendarCache?.firstOrNull()

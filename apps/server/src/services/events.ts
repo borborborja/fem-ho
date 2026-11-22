@@ -19,8 +19,9 @@ import type { MigrationDb } from '../db/migration-db.js';
 import { expandOccurrences, overlapsWindow, splitSeries } from '../events/recurrence.js';
 import { PolicyError, missingCapability, notFound } from '../policy/errors.js';
 import { hasCapability, type Principal } from '../policy/principal.js';
-import { visibleCalendarIds } from '../policy/calendar-visibility.js';
+import { canReadGoogleEventDetails, visibleCalendarIds } from '../policy/calendar-visibility.js';
 import { defaultInInbox, isInInbox } from '../policy/inbox-visibility.js';
+import { requireHumanSession } from './external-access.js';
 import { assertScopeAccess, assertScopeRole, listScopes } from './scopes.js';
 
 export interface CalendarRow {
@@ -31,13 +32,13 @@ export interface CalendarRow {
   color: string | null;
   kind: 'events' | 'todos';
   origin: 'local' | 'subscription';
-  /** De quina mena és la font externa: `caldav`, `ical` o `rss`. `null` si és local. */
+  /** Protocol de les fonts per URL. Les connexions gestionades tenen un proveïdor. */
   source_kind: 'caldav' | 'ical' | 'rss' | null;
+  source_provider: 'google' | null;
   source_url: string | null;
   source_username: string | null;
   /**
-   * **Bidireccional.** Només un CalDAV pot ser-ho: un `.ics` publicat i un RSS són
-   * documents, no col·leccions on es pugui escriure.
+   * Capacitat d'escriptura de la font. Google ha de passar pel seu servei de sortida.
    */
   writable: boolean;
   refresh_interval: number | null;
@@ -112,12 +113,12 @@ export function assertWritable(
 }
 
 const CALENDAR_COLUMNS = sql`
-  id, scope_id, project_id, name, color, kind, origin, source_kind, source_url,
+  id, scope_id, project_id, name, color, kind, origin, source_kind, source_provider, source_url,
   source_username, writable, refresh_interval, last_refreshed_at, last_error, last_error_at,
   shared_with_scope, inbox_visible,
   -- Que n'hi ha, no quin és. **El secret no surt mai del servei**, i la interfície
   -- necessita saber-ho per avisar abans de compartir el calendari.
-  (source_secret_enc IS NOT NULL) AS has_credentials
+  (source_secret_enc IS NOT NULL OR COALESCE(source_provider = 'google', FALSE)) AS has_credentials
 `;
 
 export interface EventRow {
@@ -181,6 +182,29 @@ export interface EventOccurrenceView {
   calendar_id: string;
   status: 'TENTATIVE' | 'CONFIRMED' | 'CANCELLED';
   is_override: boolean;
+  description?: string | null;
+  timezone?: string | null;
+  version?: number;
+  google_can_edit?: boolean;
+  google_has_guests?: boolean;
+}
+
+interface CalendarEventRow extends EventRow {
+  scope_id: string;
+  raw_ical: string | null;
+  calendar_origin: CalendarRow['origin'];
+  source_provider: CalendarRow['source_provider'];
+  classification: string | null;
+  scope_owner_id: string;
+  google_account_owner_id: string | null;
+  google_account_status: string | null;
+  google_calendar_writable: boolean | number;
+  google_event_writable: boolean | number | null;
+  google_has_guests: boolean | number | null;
+}
+
+export function isGooglePrivateClassification(classification: unknown): boolean {
+  return classification === 'PRIVATE' || classification === 'CONFIDENTIAL';
 }
 
 /**
@@ -224,15 +248,20 @@ export async function listEventOccurrences(
     .filter((id) => options.scopeIds === undefined || options.scopeIds.includes(id));
   if (allowed.length === 0) return [];
 
-  const rows = await sql<
-    EventRow & { scope_id: string; raw_ical: string | null; calendar_origin: CalendarRow['origin'] }
-  >`
+  const rows = await sql<CalendarEventRow>`
     SELECT e.id, e.calendar_id, e.uid, e.recurrence_id, e.summary, e.description,
            e.location, e.starts_at, e.ends_at, e.all_day, e.timezone, e.status,
            e.transparency, e.rrule, e.rdate, e.exdate, e.version, c.scope_id,
-           e.raw_ical, c.origin AS calendar_origin
+           e.raw_ical, c.origin AS calendar_origin, c.source_provider, e.classification,
+           s.owner_id AS scope_owner_id, a.user_id AS google_account_owner_id,
+           a.oauth_status AS google_account_status, c.writable AS google_calendar_writable,
+           g.writable AS google_event_writable, g.has_guests AS google_has_guests
     FROM events e
     JOIN calendars c ON c.id = e.calendar_id
+    JOIN scopes s ON s.id = c.scope_id
+    LEFT JOIN google_calendar_events g ON g.event_id = e.id
+    LEFT JOIN google_calendar_links l ON l.calendar_id = c.id AND l.deleted_at IS NULL
+    LEFT JOIN google_calendar_accounts a ON a.id = l.account_id
     WHERE e.deleted_at IS NULL
       AND c.deleted_at IS NULL
       AND c.kind = 'events'
@@ -243,12 +272,36 @@ export async function listEventOccurrences(
   // El mateix tall que a `listCalendars`: l'àmbit no basta, cal que el calendari s'hagi
   // compartit. Els esdeveniments no tenen `scope_id` propi i el treuen del calendari.
   const visible = await visibleCalendarIds(db, principal.userId);
-  const rowsVisibles = rows.rows.filter((row) => visible.has(row.calendar_id));
+  const googleOwner = (row: CalendarEventRow): boolean =>
+    row.google_account_owner_id === principal.userId && row.scope_owner_id === principal.userId;
+  const rowsVisibles = rows.rows.filter(
+    (row) =>
+      visible.has(row.calendar_id) &&
+      (row.source_provider !== 'google' ||
+        !isGooglePrivateClassification(row.classification) ||
+        googleOwner(row)),
+  );
+  const googleFields = (row: CalendarEventRow): Partial<EventOccurrenceView> =>
+    row.source_provider === 'google'
+      ? {
+          description: row.description,
+          timezone: row.timezone,
+          version: row.version,
+          google_can_edit:
+            googleOwner(row) &&
+            (principal.credentialType === undefined || principal.credentialType === 'session') &&
+            hasCapability(principal, 'events:write') &&
+            row.google_account_status === 'connected' &&
+            isTrue(row.google_calendar_writable) &&
+            isTrue(row.google_event_writable),
+          google_has_guests: isTrue(row.google_has_guests),
+        }
+      : {};
 
   const overrides = new Map<string, EventOccurrenceView>();
   for (const row of rowsVisibles) {
     if (row.recurrence_id === null) continue;
-    const view = toView(row, row.scope_id, true);
+    const view = { ...toView(row, row.scope_id, true), ...googleFields(row) };
     overrides.set(markKey(view.calendar_id, view.uid, view.recurrence_id), view);
   }
   const out: EventOccurrenceView[] = [];
@@ -312,6 +365,7 @@ export async function listEventOccurrences(
         calendar_id: master.calendar_id,
         status: subscribed?.status ?? master.status,
         is_override: false,
+        ...googleFields(master),
       });
     }
   }
@@ -616,9 +670,14 @@ export async function setEventInboxVisibility(
   const calendar = await loadCalendar(ctx.tx, input.calendarId);
 
   const recurrenceId = input.recurrenceId ?? null;
+  const canReadPrivate =
+    calendar.source_provider !== 'google' ||
+    (await isGoogleCalendarAccountOwner(ctx.tx, calendar.id, userId));
   const found = await sql<{ n: number }>`
     SELECT COUNT(*) AS n FROM events
     WHERE deleted_at IS NULL AND calendar_id = ${input.calendarId} AND uid = ${input.uid}
+      ${calendar.source_provider === 'google' && recurrenceId !== null ? sql`AND recurrence_id = ${recurrenceId}` : sql``}
+      ${canReadPrivate ? sql`` : sql`AND COALESCE(classification, 'PUBLIC') NOT IN ('PRIVATE','CONFIDENTIAL')`}
   `.execute(ctx.tx);
   if (Number(found.rows[0]?.n ?? 0) === 0) throw notFound('event', input.uid);
 
@@ -806,6 +865,7 @@ export async function createEvent(
 
   const calendar = await loadCalendar(ctx.tx, input.calendar_id);
   await assertScopeAccess(ctx.tx, principal, calendar.scope_id);
+  await assertVisibleGoogleCalendar(ctx.tx, principal, calendar);
 
   assertWritable(calendar);
   if (calendar.kind !== 'events') {
@@ -823,6 +883,7 @@ export async function createEvent(
   const existing = await sql<EventRow>`SELECT * FROM events WHERE id = ${id}`.execute(ctx.tx);
   const already = existing.rows[0];
   if (already !== undefined) {
+    if (already.calendar_id !== input.calendar_id) throw notFound('event', id);
     ctx.noChange();
     return { event: already, created: false };
   }
@@ -885,6 +946,8 @@ export async function updateEvent(
     type: "L'esdeveniment",
     id,
   });
+  await assertVisibleGoogleCalendar(ctx.tx, principal, calendar);
+  assertWritable(calendar);
 
   if ((mode === 'single' || mode === 'future') && occurrence === undefined) {
     throw new PolicyError(
@@ -1017,7 +1080,7 @@ async function bumpSyncSeq(tx: MigrationDb, calendarId: string): Promise<void> {
   await sql`UPDATE calendars SET sync_seq = sync_seq + 1 WHERE id = ${calendarId}`.execute(tx);
 }
 
-async function loadCalendar(tx: MigrationDb, id: string): Promise<CalendarRow & { name: string }> {
+export async function loadCalendar(tx: MigrationDb, id: string): Promise<CalendarRow> {
   const found = await sql<CalendarRow>`
     SELECT ${CALENDAR_COLUMNS}
     FROM calendars WHERE id = ${id} AND deleted_at IS NULL
@@ -1041,14 +1104,26 @@ export async function getEvent(
 ): Promise<EventRow> {
   if (!hasCapability(principal, 'events:read')) throw missingCapability('events:read');
 
-  const found = await sql<EventRow>`
+  const found = await sql<EventRow & { classification: string | null }>`
     SELECT * FROM events WHERE id = ${id} AND deleted_at IS NULL
   `.execute(db);
   const row = found.rows[0];
   if (row === undefined) throw notFound('event', id);
 
   const calendar = await loadCalendar(db, row.calendar_id);
-  await assertScopeAccess(db, principal, calendar.scope_id, { type: "L'esdeveniment", id });
+  await assertScopeAccess(db, principal, calendar.scope_id, {
+    type: "L'esdeveniment",
+    id,
+  });
+  if (calendar.source_provider === 'google') {
+    if (!(await visibleCalendarIds(db, principal.userId)).has(calendar.id))
+      throw notFound('event', id);
+    if (
+      isGooglePrivateClassification(row.classification) &&
+      !(await canReadGoogleEventDetails(db, principal.userId, id))
+    )
+      throw notFound('event', id);
+  }
   return row;
 }
 
@@ -1078,6 +1153,7 @@ export async function deleteEvent(
 
   const calendar = await loadCalendar(ctx.tx, event.calendar_id);
   await assertScopeAccess(ctx.tx, principal, calendar.scope_id, { type: "L'esdeveniment", id });
+  await assertVisibleGoogleCalendar(ctx.tx, principal, calendar);
 
   assertWritable(calendar);
 
@@ -1200,6 +1276,7 @@ export async function createCalendar(
     SELECT ${CALENDAR_COLUMNS} FROM calendars WHERE id = ${id}
   `.execute(ctx.tx);
   if (existing.rows[0] !== undefined) {
+    if (existing.rows[0].source_provider === 'google') throw notFound('calendar', id);
     ctx.noChange();
     return { calendar: existing.rows[0], created: false };
   }
@@ -1260,6 +1337,22 @@ export async function updateCalendar(
 
   const calendar = await loadCalendar(ctx.tx, id);
   await assertScopeAccess(ctx.tx, principal, calendar.scope_id);
+  if (calendar.source_provider === 'google') {
+    await assertGoogleCalendarOwner(ctx.tx, principal, calendar);
+    if (
+      input.source_url !== undefined ||
+      input.source_username !== undefined ||
+      input.source_secret_enc !== undefined ||
+      input.writable !== undefined
+    ) {
+      throw new PolicyError(
+        'google-calendar-source',
+        'Google Calendar source',
+        422,
+        'Manage the Google connection from the calendar settings.',
+      );
+    }
+  }
 
   /**
    * Compartir un calendari és una decisió de l'àmbit, no del contingut.
@@ -1349,6 +1442,11 @@ export async function deleteCalendar(
 
   const calendar = await loadCalendar(ctx.tx, id);
   await assertScopeAccess(ctx.tx, principal, calendar.scope_id);
+  if (calendar.source_provider === 'google') {
+    await assertGoogleCalendarOwner(ctx.tx, principal, calendar);
+    await sql`UPDATE google_calendar_links SET deleted_at = ${ctx.now}, pull_lock = NULL,
+      pull_lock_until = NULL WHERE calendar_id = ${id} AND deleted_at IS NULL`.execute(ctx.tx);
+  }
 
   if (calendar.origin === 'subscription') {
     await sql`
@@ -1381,4 +1479,39 @@ export async function deleteCalendar(
     scopeId: calendar.scope_id,
     verb: 'deleted',
   });
+}
+
+async function assertGoogleCalendarOwner(
+  db: MigrationDb,
+  principal: Principal,
+  calendar: CalendarRow,
+): Promise<void> {
+  requireHumanSession(principal);
+  const scope = await assertScopeRole(db, principal, calendar.scope_id, 'settings');
+  if (scope.owner_id !== principal.userId) throw notFound('calendar', calendar.id);
+}
+
+async function assertVisibleGoogleCalendar(
+  db: MigrationDb,
+  principal: Principal,
+  calendar: CalendarRow,
+): Promise<void> {
+  if (
+    calendar.source_provider === 'google' &&
+    !(await visibleCalendarIds(db, principal.userId)).has(calendar.id)
+  )
+    throw notFound('calendar', calendar.id);
+}
+
+async function isGoogleCalendarAccountOwner(
+  db: MigrationDb,
+  calendarId: string,
+  userId: string,
+): Promise<boolean> {
+  const { rows } = await sql`SELECT a.id FROM google_calendar_links l
+    JOIN google_calendar_accounts a ON a.id = l.account_id
+    JOIN scopes s ON s.id = l.scope_id
+    WHERE l.calendar_id = ${calendarId} AND l.deleted_at IS NULL
+      AND a.user_id = ${userId} AND s.owner_id = ${userId}`.execute(db);
+  return rows.length > 0;
 }

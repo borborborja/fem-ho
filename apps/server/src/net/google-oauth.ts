@@ -2,22 +2,41 @@ import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from 'jose';
 import type { Config } from '../config.js';
 
 export const GOOGLE_MAIL_SCOPE = 'https://mail.google.com/';
+export const GMAIL_READ_SCOPE = 'https://www.googleapis.com/auth/gmail.readonly';
+export type MailTransport = 'imap' | 'gmail_api';
 export interface GoogleTokens {
   access_token: string;
   refresh_token?: string | undefined;
   expires_at: number;
   subject?: string | undefined;
   email?: string | undefined;
+  client_id?: string | undefined;
 }
 export class GoogleOAuthError extends Error {
   constructor(readonly code: string) {
     super(code);
   }
 }
-export interface GoogleMailProvider {
+export interface GoogleOAuthProvider {
   authorizationUrl(state: string, challenge: string, nonce: string): string;
   exchange(code: string, verifier: string, nonce: string): Promise<GoogleTokens>;
   refresh(refreshToken: string): Promise<GoogleTokens>;
+}
+
+export interface GoogleMailProvider extends GoogleOAuthProvider {
+  authorizationUrl(
+    state: string,
+    challenge: string,
+    nonce: string,
+    transport?: MailTransport,
+  ): string;
+  exchange(
+    code: string,
+    verifier: string,
+    nonce: string,
+    transport?: MailTransport,
+  ): Promise<GoogleTokens>;
+  refresh(refreshToken: string, transport?: MailTransport): Promise<GoogleTokens>;
 }
 type GoogleConfig = Pick<Config, 'googleClientId' | 'googleClientSecret' | 'baseUrl'>;
 
@@ -68,9 +87,12 @@ export async function verifyGoogleIdentity(
 }
 
 /** Endpoints fixos: un compte de correu no pot decidir on s'envien les credencials. */
-export function createGoogleMailProvider(config: GoogleConfig): GoogleMailProvider {
+export function createGoogleOAuthProvider(
+  config: GoogleConfig,
+  options: { redirectPath: string; requiredScopes: readonly string[] },
+): GoogleOAuthProvider {
   if (!googleMailConfigured(config)) throw new GoogleOAuthError('not_configured');
-  const redirect = new URL('/api/v1/mail/oauth/google/callback', config.baseUrl).href;
+  const redirect = new URL(options.redirectPath, config.baseUrl).href;
   const clientId = config.googleClientId!;
   const clientSecret = config.googleClientSecret!;
 
@@ -112,7 +134,10 @@ export function createGoogleMailProvider(config: GoogleConfig): GoogleMailProvid
     }
     if (
       (requireScope || value.scope !== undefined) &&
-      (typeof value.scope !== 'string' || !value.scope.split(' ').includes(GOOGLE_MAIL_SCOPE))
+      (typeof value.scope !== 'string' ||
+        !options.requiredScopes.every((scope) =>
+          (value.scope as string).split(' ').includes(scope),
+        ))
     ) {
       throw new GoogleOAuthError('missing_scope');
     }
@@ -132,7 +157,7 @@ export function createGoogleMailProvider(config: GoogleConfig): GoogleMailProvid
         client_id: clientId,
         redirect_uri: redirect,
         response_type: 'code',
-        scope: `openid email ${GOOGLE_MAIL_SCOPE}`,
+        scope: ['openid', 'email', ...options.requiredScopes].join(' '),
         access_type: 'offline',
         prompt: 'consent select_account',
         state,
@@ -159,5 +184,20 @@ export function createGoogleMailProvider(config: GoogleConfig): GoogleMailProvid
         false,
       );
     },
+  };
+}
+
+export function createGoogleMailProvider(config: GoogleConfig): GoogleMailProvider {
+  const provider = (transport: MailTransport = 'imap') =>
+    createGoogleOAuthProvider(config, {
+      redirectPath: '/api/v1/mail/oauth/google/callback',
+      requiredScopes: [transport === 'gmail_api' ? GMAIL_READ_SCOPE : GOOGLE_MAIL_SCOPE],
+    });
+  return {
+    authorizationUrl: (state, challenge, nonce, transport) =>
+      provider(transport).authorizationUrl(state, challenge, nonce),
+    exchange: (code, verifier, nonce, transport) =>
+      provider(transport).exchange(code, verifier, nonce),
+    refresh: (refreshToken, transport) => provider(transport).refresh(refreshToken),
   };
 }

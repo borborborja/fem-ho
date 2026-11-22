@@ -16,6 +16,7 @@
 import { sql } from 'kysely';
 import type { MigrationDb } from '../db/migration-db.js';
 import type { Principal } from '../policy/principal.js';
+import { visibleCalendarIds } from '../policy/calendar-visibility.js';
 import { listScopes } from './scopes.js';
 
 export interface ExportBundle {
@@ -81,7 +82,8 @@ export async function exportAll(
   const labels = await sql`
     SELECT * FROM labels WHERE deleted_at IS NULL AND scope_id IN (${sql.join(scopeIds)})
   `.execute(db);
-  const calendars = await sql<{ id: string }>`
+  const calendarVisibility = await visibleCalendarIds(db, principal.userId);
+  const calendars = await sql<{ id: string; source_secret_enc: string | null }>`
     SELECT * FROM calendars WHERE deleted_at IS NULL AND scope_id IN (${sql.join(scopeIds)})
   `.execute(db);
   const activity = await sql`
@@ -92,7 +94,8 @@ export async function exportAll(
   bundle.projects = projects.rows;
   bundle.tasks = tasks.rows;
   bundle.labels = labels.rows;
-  bundle.calendars = calendars.rows;
+  const visible = calendars.rows.filter((calendar) => calendarVisibility.has(calendar.id));
+  bundle.calendars = visible.map(({ source_secret_enc: _secret, ...calendar }) => calendar);
   bundle.activity = activity.rows;
 
   const taskIds = tasks.rows.map((r) => r.id);
@@ -129,10 +132,16 @@ export async function exportAll(
     }
   }
 
-  const calendarIds = calendars.rows.map((r) => r.id);
+  const calendarIds = visible.map((r) => r.id);
   if (calendarIds.length > 0) {
     const events = await sql`
-      SELECT * FROM events WHERE deleted_at IS NULL AND calendar_id IN (${sql.join(calendarIds)})
+      SELECT e.* FROM events e JOIN calendars c ON c.id = e.calendar_id
+      JOIN scopes s ON s.id = c.scope_id
+      LEFT JOIN google_calendar_links l ON l.calendar_id = c.id AND l.deleted_at IS NULL
+      LEFT JOIN google_calendar_accounts a ON a.id = l.account_id
+      WHERE e.deleted_at IS NULL AND e.calendar_id IN (${sql.join(calendarIds)})
+        AND (c.source_provider IS NULL OR (s.owner_id = ${principal.userId} AND a.user_id = ${principal.userId})
+          OR COALESCE(e.classification, '') NOT IN ('PRIVATE', 'CONFIDENTIAL'))
     `.execute(db);
     bundle.events = events.rows;
   }

@@ -25,6 +25,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextReplacement
 import androidx.lifecycle.Lifecycle
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -113,8 +114,16 @@ class AndroidDailyFlowTest {
             compose.waitUntil(15_000) {
                 capture.fetchSemanticsNode().config[SemanticsProperties.EditableText].text.isEmpty()
             }
-            tag("board-list-inbox").performScrollToIndex(1)
-            waitForText("Independent offline task")
+            val inboxList = tag("board-list-inbox")
+            // Room pot haver desat la tasca abans que el tauler rebi la llista nova.
+            compose.waitUntil(25_000) {
+                try {
+                    inboxList.performScrollToNode(hasText("Independent offline task"))
+                    true
+                } catch (_: AssertionError) {
+                    false
+                }
+            }
 
             // El canal de prova per adb segueix disponible en mode avió. La segona sessió
             // canvia el camp amb la versió antiga ja desada a la cua del dispositiu.

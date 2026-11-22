@@ -20,6 +20,8 @@ import { auditedTransaction } from '../audit/audited-transaction.js';
 import { open, seal } from '../crypto/secret-box.js';
 import { SsrfError } from '../dav/fetch-safe.js';
 import { probeImap } from '../net/imap-connect.js';
+import { openGmailClient } from '../net/gmail-client.js';
+import { GoogleOAuthError, type GoogleMailProvider } from '../net/google-oauth.js';
 import { mailCredentials } from '../services/mail-credentials.js';
 import { mailOAuthProblem } from './mail-oauth.js';
 import { PolicyError } from '../policy/errors.js';
@@ -101,8 +103,47 @@ function password(input: Record<string, unknown>): string | undefined {
   return raw === undefined ? undefined : raw.trim();
 }
 
-export function registerMailRoutes(app: FastifyInstance, secret: () => string): void {
+export function registerMailRoutes(
+  app: FastifyInstance,
+  secret: () => string,
+  provider?: GoogleMailProvider,
+): void {
   const db = (): NonNullable<FastifyInstance['connection']> => app.connection!;
+  const gmail = async (principal: Principal, accountId: string) => {
+    const credentials = await mailCredentials(
+      db().db,
+      secret(),
+      app.config,
+      accountId,
+      principal.userId,
+      provider,
+    );
+    if (!credentials.accessToken) throw new GoogleOAuthError('reconnect_required');
+    return openGmailClient(credentials.accessToken);
+  };
+  const gmailRule = async (
+    principal: Principal,
+    accountId: string,
+    input: Record<string, unknown>,
+  ): Promise<{ folder: string | undefined; gmail_label_id?: string }> => {
+    const folder = str(input.folder);
+    const labelId = str(input.gmail_label_id);
+    if (folder === undefined && labelId === undefined) return { folder };
+    const account = (await listMailAccounts(db().db, principal)).find(
+      (row) => row.id === accountId,
+    );
+    if (account?.transport !== 'gmail_api') return { folder };
+    try {
+      const labels = await (await gmail(principal, accountId)).labels();
+      const label = labels.find((row) =>
+        labelId ? row.id === labelId : row.name === folder?.trim(),
+      );
+      if (!label) throw new GoogleOAuthError('gmail-label-required');
+      return { folder: label.name, gmail_label_id: label.id };
+    } catch (error) {
+      return mailOAuthProblem(error);
+    }
+  };
 
   app.get('/api/v1/mail/accounts', async (request, reply) =>
     handle(app, request, reply, async (principal) => listMailAccounts(db().db, principal)),
@@ -214,6 +255,10 @@ export function registerMailRoutes(app: FastifyInstance, secret: () => string): 
       }
 
       try {
+        if (account.transport === 'gmail_api') {
+          const labels = await (await gmail(principal, account.id)).labels();
+          return { ok: true, error: null, folders: labels.map(({ name }) => name), delimiter: '/' };
+        }
         return await probeImap(
           {
             host: account.host,
@@ -221,7 +266,14 @@ export function registerMailRoutes(app: FastifyInstance, secret: () => string): 
             security: account.security,
             username: account.username,
             ...(account.auth_method === 'google'
-              ? await mailCredentials(db().db, secret(), app.config, account.id, principal.userId)
+              ? await mailCredentials(
+                  db().db,
+                  secret(),
+                  app.config,
+                  account.id,
+                  principal.userId,
+                  provider,
+                )
               : { password: clau }),
           },
           { allowHosts: app.config.mailAllowHosts },
@@ -329,13 +381,24 @@ export function registerMailRoutes(app: FastifyInstance, secret: () => string): 
       }
 
       try {
+        if (account.transport === 'gmail_api') {
+          const labels = await (await gmail(principal, account.id)).labels();
+          return { labels, folders: labels.map(({ name }) => name), delimiter: '/', error: null };
+        }
         const probe = await probeImap(
           {
             host: account.host,
             port: account.port,
             security: account.security,
             username: account.username,
-            ...(await mailCredentials(db().db, secret(), app.config, account.id, principal.userId)),
+            ...(await mailCredentials(
+              db().db,
+              secret(),
+              app.config,
+              account.id,
+              principal.userId,
+              provider,
+            )),
           },
           { allowHosts: app.config.mailAllowHosts },
         );
@@ -356,11 +419,13 @@ export function registerMailRoutes(app: FastifyInstance, secret: () => string): 
   app.post('/api/v1/mail/rules', async (request, reply) =>
     handle(app, request, reply, async (principal) => {
       const input = body(request);
+      const accountId = str(input.account_id);
+      const folder = await gmailRule(principal, accountId ?? '', input);
       const result = await auditedTransaction(db().db, principal, (ctx) =>
         createMailRule(ctx, principal, {
           id: str(input.id),
-          account_id: str(input.account_id),
-          folder: str(input.folder),
+          account_id: accountId,
+          ...folder,
           scope_id: str(input.scope_id),
           project_id: 'project_id' in input ? (str(input.project_id) ?? null) : undefined,
           inbox_visible: inboxVisible(input),
@@ -379,9 +444,14 @@ export function registerMailRoutes(app: FastifyInstance, secret: () => string): 
   app.patch<{ Params: { id: string } }>('/api/v1/mail/rules/:id', async (request, reply) =>
     handle(app, request, reply, async (principal) => {
       const input = body(request);
+      const rule =
+        'folder' in input || 'gmail_label_id' in input
+          ? (await listMailRules(db().db, principal)).find((row) => row.id === request.params.id)
+          : undefined;
+      const folder = rule ? await gmailRule(principal, rule.account_id, input) : {};
       return auditedTransaction(db().db, principal, (ctx) =>
         updateMailRule(ctx, principal, request.params.id, {
-          folder: str(input.folder),
+          ...folder,
           scope_id: str(input.scope_id),
           project_id: 'project_id' in input ? (str(input.project_id) ?? null) : undefined,
           inbox_visible: inboxVisible(input),

@@ -1070,6 +1070,181 @@ paths:
             { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
         '404': { $ref: '#/components/responses/NotFound' }
 
+  /calendars/google/oauth:
+    get:
+      tags: [events]
+      operationId: googleCalendarAvailability
+      summary: Consultar si es poden connectar calendaris de Google
+      responses:
+        '200':
+          description: Indica si la instància permet connectar comptes Google.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [enabled]
+                properties:
+                  enabled: { type: boolean }
+    post:
+      tags: [events]
+      operationId: startGoogleCalendar
+      summary: Iniciar la connexió amb Google Calendar
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                account_id: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Intent OAuth que el client original haurà de confirmar.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: '#/components/schemas/GoogleCalendarAttempt' }
+                  - type: object
+                    required: [authorization_url]
+                    properties:
+                      authorization_url: { type: string, format: uri }
+  /calendars/google/oauth/callback:
+    get:
+      tags: [events]
+      security: []
+      operationId: googleCalendarCallback
+      summary: Retorn OAuth de Google Calendar
+      parameters:
+        - { name: state, in: query, required: true, schema: { type: string } }
+        - { name: code, in: query, schema: { type: string } }
+        - { name: error, in: query, schema: { type: string } }
+      responses:
+        '303': { description: Retorn a Ajustos de Calendaris. }
+  /calendars/google/oauth/attempts/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [events]
+      operationId: getGoogleCalendarAttempt
+      summary: Consultar l’intent de connexió amb Google Calendar
+      responses:
+        '200':
+          description: Estat de l'intent propi.
+          content:
+            { application/json: { schema: { $ref: '#/components/schemas/GoogleCalendarAttempt' } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [events]
+      operationId: cancelGoogleCalendarAttempt
+      summary: Cancel·lar l’intent de connexió amb Google Calendar
+      responses:
+        '204': { description: Intent cancel·lat. }
+  /calendars/google/oauth/attempts/{id}/confirm:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    post:
+      tags: [events]
+      operationId: confirmGoogleCalendar
+      summary: Confirmar el compte de Google Calendar
+      responses:
+        '200':
+          description: Compte autoritzat.
+          content:
+            { application/json: { schema: { $ref: '#/components/schemas/GoogleCalendarAccount' } } }
+  /calendars/google/accounts:
+    get:
+      tags: [events]
+      operationId: listGoogleCalendarAccounts
+      summary: Llistar els comptes connectats a Google Calendar
+      responses:
+        '200':
+          description: Comptes de l'usuari.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/GoogleCalendarAccount' } }
+  /calendars/google/accounts/{id}/disconnect:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    post:
+      tags: [events]
+      operationId: disconnectGoogleCalendar
+      summary: Desconnectar un compte de Google Calendar
+      responses:
+        '204': { description: Credencials eliminades. }
+  /calendars/google/accounts/{id}/calendars:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [events]
+      operationId: listGoogleCalendarChoices
+      summary: Llistar els calendaris disponibles en un compte Google
+      responses:
+        '200':
+          description: Calendaris accessibles amb aquest compte.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/GoogleCalendarChoice' } }
+  /calendars/google/links:
+    post:
+      tags: [events]
+      operationId: linkGoogleCalendar
+      summary: Vincular un calendari de Google a un àmbit
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id, account_id, remote_calendar_id, scope_id]
+              properties:
+                id: { type: string, format: uuid }
+                account_id: { type: string, format: uuid }
+                remote_calendar_id: { type: string }
+                scope_id: { type: string, format: uuid }
+                writable: { type: boolean }
+      responses:
+        '200':
+          description: Vinculació existent.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Calendar' } } }
+        '201':
+          description: Vinculació creada.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Calendar' } } }
+  /calendars/google/changes:
+    get:
+      tags: [events]
+      operationId: listGoogleCalendarChanges
+      summary: Consultar els canvis de Google Calendar
+      responses:
+        '200':
+          description: Canvis pendents o que requereixen intervenció.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/GoogleCalendarChange' } }
+  /calendars/google/changes/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    delete:
+      tags: [events]
+      operationId: discardGoogleCalendarChange
+      summary: Descartar un canvi de Google Calendar
+      responses:
+        '204': { description: Canvi descartat. }
+  /calendars/google/changes/{id}/retry:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    post:
+      tags: [events]
+      operationId: retryGoogleCalendarChange
+      summary: Tornar a aplicar un canvi de Google Calendar
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                notify_guests: { type: boolean }
+      responses:
+        '204': { description: Reintent encuat. }
   /calendars:
     get:
       tags: [events]
@@ -4252,6 +4427,46 @@ paths:
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
 
+  /admin/oauth/google:
+    get:
+      tags: [admin]
+      operationId: getAdminGoogleConfig
+      summary: Consultar la configuració efectiva de Google
+      responses:
+        '200':
+          description: Configuració efectiva de Google, sense el secret.
+          content:
+            { application/json: { schema: { $ref: '#/components/schemas/AdminGoogleConfig' } } }
+    put:
+      tags: [admin]
+      operationId: putAdminGoogleConfig
+      summary: Desar la configuració de Google
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [client_id]
+              properties:
+                client_id: { type: string }
+                client_secret: { type: string, writeOnly: true }
+      responses:
+        '200':
+          description: Configuració desada.
+          content:
+            { application/json: { schema: { $ref: '#/components/schemas/AdminGoogleConfig' } } }
+        '409': { description: Configuració fixada per variables d'entorn. }
+    delete:
+      tags: [admin]
+      operationId: deleteAdminGoogleConfig
+      summary: Retirar la configuració desada de Google
+      responses:
+        '200':
+          description: Configuració retirada.
+          content:
+            { application/json: { schema: { $ref: '#/components/schemas/AdminGoogleConfig' } } }
+        '409': { description: Configuració fixada per variables d'entorn. }
   /admin/users:
     get:
       tags: [instance]
@@ -4690,6 +4905,7 @@ paths:
               properties:
                 account_id: { type: string, format: uuid }
                 reconnect: { type: boolean, default: false }
+                transport: { type: string, enum: [imap, gmail_api] }
       responses:
         '200':
           description: Intent temporal. El client original ha de confirmar el resultat.
@@ -5085,6 +5301,14 @@ paths:
                 required: [folders]
                 properties:
                   folders: { type: array, items: { type: string } }
+                  labels:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, name]
+                      properties:
+                        id: { type: string }
+                        name: { type: string }
                   delimiter: { type: [string, 'null'] }
                   error: { type: [string, 'null'] }
         '401': { $ref: '#/components/responses/Unauthenticated' }
@@ -5092,6 +5316,78 @@ paths:
 
 components:
   schemas:
+    AdminGoogleConfig:
+      type: object
+      required:
+        [source, enabled, client_id, has_secret, reason, gmail_callback_url, calendar_callback_url]
+      properties:
+        source: { type: string, enum: [environment, settings, none] }
+        enabled: { type: boolean }
+        client_id: { type: [string, 'null'] }
+        has_secret: { type: boolean }
+        reason:
+          {
+            type: [string, 'null'],
+            enum: [missing_credentials, invalid_base_url, unreadable_credentials, null],
+          }
+        gmail_callback_url: { type: [string, 'null'], format: uri }
+        calendar_callback_url: { type: [string, 'null'], format: uri }
+    GoogleCalendarAttempt:
+      type: object
+      required: [id, account_id, status, expires_at, email, error_code]
+      properties:
+        id: { type: string }
+        account_id: { type: [string, 'null'] }
+        status:
+          {
+            type: string,
+            enum: [pending, exchanging, ready, completed, cancelled, failed, expired],
+          }
+        expires_at: { type: string, format: date-time }
+        email: { type: [string, 'null'] }
+        error_code: { type: [string, 'null'] }
+    GoogleCalendarAccount:
+      type: object
+      required: [id, email, oauth_status]
+      properties:
+        id: { type: string }
+        email: { type: string }
+        oauth_status: { type: string, enum: [connected, reconnect_required, disconnected] }
+    GoogleCalendarChoice:
+      type: object
+      required: [id, name, primary, access_role, writable]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        primary: { type: boolean }
+        access_role: { type: string, enum: [reader, writerWithoutPrivateAccess, writer, owner] }
+        writable: { type: boolean }
+    GoogleCalendarDraft:
+      type: object
+      required: [summary, description, location, starts_at, ends_at, all_day, timezone]
+      properties:
+        summary: { type: string }
+        description: { type: string }
+        location: { type: string }
+        starts_at: { type: string, format: date-time }
+        ends_at: { type: string, format: date-time }
+        all_day: { type: boolean }
+        timezone: { type: string }
+    GoogleCalendarChange:
+      type: object
+      required: [id, calendar_id, event_id, operation, status, error_code, created_at, draft]
+      properties:
+        id: { type: string }
+        calendar_id: { type: string }
+        event_id: { type: string }
+        operation: { type: string, enum: [create, update, delete] }
+        status: { type: string, enum: [pending, sending, sent, conflict, failed] }
+        error_code: { type: [string, 'null'] }
+        created_at: { type: string, format: date-time }
+        draft:
+          oneOf:
+            - { $ref: '#/components/schemas/GoogleCalendarDraft' }
+            - { type: 'null' }
     PushSubscriptionInput:
       type: object
       required: [endpoint, p256dh, auth, platform]
@@ -5214,6 +5510,7 @@ components:
         expires_at: { type: string, format: date-time }
         email: { type: [string, 'null'] }
         error_code: { type: [string, 'null'] }
+        transport: { type: string, enum: [imap, gmail_api] }
 
     MailAccount:
       type: object
@@ -5224,6 +5521,7 @@ components:
       required: [id, name, host, port, security, username, enabled, has_secret]
       properties:
         auth_method: { type: string, enum: [password, google], default: password }
+        transport: { type: string, enum: [imap, gmail_api], default: imap }
         oauth_status:
           { type: [string, 'null'], enum: [connected, reconnect_required, disconnected, null] }
         id: { type: string }
@@ -5353,6 +5651,7 @@ components:
         id: { type: string }
         account_id: { type: string }
         folder: { type: string }
+        gmail_label_id: { type: [string, 'null'] }
         scope_id: { type: string }
         project_id:
           type: [string, 'null']
@@ -5396,6 +5695,7 @@ components:
         id: { type: string }
         account_id: { type: string }
         folder: { type: string }
+        gmail_label_id: { type: string }
         scope_id: { type: string }
         project_id: { type: [string, 'null'] }
         inbox_visible: { type: [boolean, 'null'] }
@@ -5409,6 +5709,7 @@ components:
       type: object
       properties:
         folder: { type: string }
+        gmail_label_id: { type: string }
         scope_id: { type: string }
         project_id: { type: [string, 'null'] }
         inbox_visible: { type: [boolean, 'null'] }
@@ -6448,7 +6749,9 @@ components:
         op_id:
           type: string
           description: Clau d'idempotència. Reenviar el lot no duplica res.
-        entity: { type: string }
+        entity:
+          type: string
+          description: Per a Google Calendar, google_calendar_event amb create, update o delete.
         op:
           type: string
           enum: [create, update, delete, move]
@@ -6463,6 +6766,7 @@ components:
         data:
           type: object
           additionalProperties: true
+          description: Per a Google Calendar, calendar_id, els camps de GoogleCalendarDraft, notify_guests i opcionalment fields amb els camps editats. La baixa només necessita calendar_id i la confirmació dels avisos, si escau.
 
     DoingAutoStopSetting:
       type: object
@@ -6849,6 +7153,7 @@ components:
             document publicat; `rss`, un canal on **cada element és un instant** —no una
             durada— i es converteix en un VEVENT sense hora de final.
         source_url: { type: [string, 'null'] }
+        source_provider: { type: [string, 'null'], enum: [google, null] }
         source_username: { type: [string, 'null'] }
         writable:
           type: boolean
@@ -6969,6 +7274,11 @@ components:
           description: L'inici que li tocaria segons la regla, encara que s'hagi mogut.
         summary: { type: string }
         location: { type: [string, 'null'] }
+        description: { type: [string, 'null'] }
+        version: { type: integer }
+        google_can_edit: { type: boolean }
+        google_has_guests: { type: boolean }
+        timezone: { type: [string, 'null'] }
         starts_at: { type: string, format: date-time }
         ends_at: { type: string, format: date-time }
         all_day: { type: boolean }

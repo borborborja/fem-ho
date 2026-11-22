@@ -13,7 +13,7 @@ import { generateApiToken } from '../auth/tokens.js';
 import { loadConfig } from '../config.js';
 import { dbBool } from '../db/bool.js';
 import { connect, type Connection } from '../db/connection.js';
-import { migrateDown, migrateToLatest } from '../db/migrator.js';
+import { MIGRATIONS, migrateDown, migrateToLatest } from '../db/migrator.js';
 import { connectTestSchema, postgresUrl } from '../db/test-postgres.js';
 
 const owner = uuidv7();
@@ -55,9 +55,11 @@ beforeAll(async () => {
   }
 
   await migrateToLatest(db.db, { engine: db.engine });
-  expect(await migrateDown(db.db, db.engine)).toBe('031-doing-auto-stop');
-  expect(await migrateDown(db.db, db.engine)).toBe('030-calendar-task-suggestions');
-  expect(await migrateDown(db.db, db.engine)).toBe('029-pomodoro');
+  const pomodoro = MIGRATIONS.findIndex((migration) => migration.name === '029-pomodoro');
+  expect(pomodoro).toBeGreaterThanOrEqual(0);
+  for (const migration of MIGRATIONS.slice(pomodoro).reverse()) {
+    expect(await migrateDown(db.db, db.engine)).toBe(migration.name);
+  }
   const password = await hashPassword(pass);
   await sql`INSERT INTO users (id, email, name, password_hash, kind, role, created_at, updated_at)
     VALUES (${owner}, 'pomodoro-owner@example.com', 'Owner', ${password}, 'human', 'admin', ${now}, ${now}),

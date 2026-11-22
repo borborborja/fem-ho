@@ -81,6 +81,20 @@ export function GoogleMailPanel({ accounts, onDone }: { accounts: Account[]; onD
       setBusy(false);
     }
   };
+  const start = (transport?: 'gmail_api') =>
+    run(async () => {
+      const result = await api.post<Attempt & { authorization_url: string }>(
+        '/api/v1/mail/oauth/google',
+        {
+          account_id: target || uuidv7(),
+          reconnect: target !== '',
+          transport,
+        },
+      );
+      localStorage.setItem(storageKey, result.id);
+      setAttemptId(result.id);
+      window.location.assign(result.authorization_url);
+    });
   if (
     !availability.data?.enabled &&
     !attemptId &&
@@ -162,20 +176,7 @@ export function GoogleMailPanel({ accounts, onDone }: { accounts: Account[]; onD
           <button
             className="plou-btn plou-btn-primary"
             disabled={busy || !availability.data?.enabled}
-            onClick={() =>
-              void run(async () => {
-                const result = await api.post<Attempt & { authorization_url: string }>(
-                  '/api/v1/mail/oauth/google',
-                  {
-                    account_id: target || uuidv7(),
-                    reconnect: target !== '',
-                  },
-                );
-                localStorage.setItem(storageKey, result.id);
-                setAttemptId(result.id);
-                window.location.assign(result.authorization_url);
-              })
-            }
+            onClick={() => void start(target === '' ? 'gmail_api' : undefined)}
           >
             {t(
               selected?.auth_method === 'google'
@@ -183,6 +184,16 @@ export function GoogleMailPanel({ accounts, onDone }: { accounts: Account[]; onD
                 : 'settings.mail.oauth.connect',
             )}
           </button>
+          {selected && selected.transport !== 'gmail_api' && availability.data?.enabled ? (
+            <button
+              type="button"
+              className="plou-btn"
+              disabled={busy}
+              onClick={() => void start('gmail_api')}
+            >
+              {t('settings.mail.oauth.switchApi')}
+            </button>
+          ) : null}
           {selected?.auth_method === 'google' && selected.oauth_status !== 'disconnected' ? (
             <button
               className="plou-btn"

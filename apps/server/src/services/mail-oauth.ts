@@ -10,7 +10,9 @@ import {
   GoogleOAuthError,
   type GoogleMailProvider,
   type GoogleTokens,
+  type MailTransport,
 } from '../net/google-oauth.js';
+import { openGmailClient } from '../net/gmail-client.js';
 import { missingCapability, PolicyError } from '../policy/errors.js';
 import { hasCapability, type Principal } from '../policy/principal.js';
 import { createMailAccount, listMailAccounts } from './mail.js';
@@ -21,6 +23,8 @@ interface Attempt {
   user_id: string;
   account_id: string;
   reconnect: number;
+  transport: MailTransport;
+  google_client_id: string | null;
   source: Source;
   state_hash: string;
   verifier_enc: string | null;
@@ -39,6 +43,7 @@ export interface OAuthAccount {
   port: number;
   security: 'tls' | 'starttls';
   auth_method: string;
+  transport: MailTransport;
   google_subject: string | null;
   secret_enc: string | null;
   oauth_status: string | null;
@@ -53,11 +58,12 @@ function requireOwner(principal: Principal): void {
   if (principal.kind !== 'user' || !hasCapability(principal, 'mail:write'))
     throw missingCapability('mail:write');
 }
-function view(attempt: Attempt): AttemptResult {
+function view(attempt: Attempt): AttemptResult & { transport: MailTransport } {
   const expired = Date.parse(attempt.expires_at) <= Date.now() && attempt.status !== 'completed';
   return {
     id: attempt.id,
     account_id: attempt.account_id,
+    transport: attempt.transport,
     status: expired ? 'expired' : attempt.status,
     expires_at: attempt.expires_at,
     email: attempt.email,
@@ -73,7 +79,7 @@ export async function ownOAuthAccount(
   requireOwner(principal);
   const row = (
     await sql<OAuthAccount>`SELECT id, user_id, username, host, port, security,
-    auth_method, google_subject, secret_enc, oauth_status FROM mail_accounts
+    auth_method, transport, google_subject, secret_enc, oauth_status FROM mail_accounts
     WHERE id = ${id} AND user_id = ${principal.userId} AND deleted_at IS NULL`.execute(db)
   ).rows[0];
   if (!row) throw failure('not_found', 404);
@@ -85,16 +91,26 @@ export class MailOAuthService {
     private db: MigrationDb,
     private secret: string,
     private provider?: GoogleMailProvider,
+    private clientId?: string,
   ) {}
 
-  async start(principal: Principal, accountId: string, reconnect: boolean) {
+  async start(
+    principal: Principal,
+    accountId: string,
+    reconnect: boolean,
+    requested?: MailTransport,
+  ) {
     requireOwner(principal);
     if (!this.provider) throw failure('not_configured', 503);
     if (!isUuid(accountId)) throw failure('invalid_account', 422);
+    let transport = requested ?? 'gmail_api';
     if (reconnect) {
       const account = await ownOAuthAccount(this.db, principal, accountId);
       if (!['imap.gmail.com', 'imap.googlemail.com'].includes(account.host))
         throw failure('not_google', 422);
+      transport = requested ?? account.transport;
+      if (account.transport === 'gmail_api' && transport !== account.transport)
+        throw failure('invalid_transport', 422);
     } else if (
       (await sql`SELECT id FROM mail_accounts WHERE id = ${accountId}`.execute(this.db)).rows
         .length > 0
@@ -119,8 +135,8 @@ export class MailOAuthService {
       ).rows[0];
       if (Number(count?.n) >= 5) throw failure('too_many_attempts', 429);
       await sql`INSERT INTO mail_oauth_attempts
-        (id,user_id,account_id,reconnect,source,state_hash,verifier_enc,nonce,status,expires_at)
-        VALUES (${id},${principal.userId},${accountId},${reconnect ? 1 : 0},${principal.source},
+        (id,user_id,account_id,reconnect,transport,google_client_id,source,state_hash,verifier_enc,nonce,status,expires_at)
+        VALUES (${id},${principal.userId},${accountId},${reconnect ? 1 : 0},${transport},${this.clientId ?? null},${principal.source},
           ${digest(state)},${seal(this.secret, purpose(id), verifier)},${nonce},'pending',${expires})`.execute(
         ctx.tx,
       );
@@ -129,11 +145,12 @@ export class MailOAuthService {
     return {
       id,
       account_id: accountId,
+      transport,
       status: 'pending' as const,
       expires_at: expires,
       email: null,
       error_code: null,
-      authorization_url: this.provider.authorizationUrl(state, digest(verifier), nonce),
+      authorization_url: this.provider.authorizationUrl(state, digest(verifier), nonce, transport),
     };
   }
 
@@ -181,13 +198,19 @@ export class MailOAuthService {
     let result: GoogleTokens | undefined;
     let error: string | null = null;
     try {
-      if (!this.provider) throw new GoogleOAuthError('not_configured');
+      if (
+        !this.provider ||
+        (attempt.google_client_id && attempt.google_client_id !== this.clientId)
+      )
+        throw new GoogleOAuthError('not_configured');
       if (denied || !code || !attempt.verifier_enc) throw new GoogleOAuthError('cancelled');
       result = await this.provider.exchange(
         code,
         open(this.secret, purpose(attempt.id), attempt.verifier_enc),
         attempt.nonce,
+        attempt.transport,
       );
+      result.client_id = this.clientId;
       if (!result.email || !result.subject) throw new GoogleOAuthError('invalid_identity');
       if (attempt.reconnect) {
         const account = await ownOAuthAccount(this.db, principal, attempt.account_id);
@@ -204,12 +227,15 @@ export class MailOAuthService {
           : null;
         if (
           account?.auth_method === 'google' &&
+          account.transport === attempt.transport &&
           account.google_subject === result.subject &&
           account.secret_enc
         ) {
-          result.refresh_token = (
-            JSON.parse(open(this.secret, purpose(account.id), account.secret_enc)) as GoogleTokens
-          ).refresh_token;
+          const previous = JSON.parse(
+            open(this.secret, purpose(account.id), account.secret_enc),
+          ) as GoogleTokens;
+          if (!previous.client_id || previous.client_id === this.clientId)
+            result.refresh_token = previous.refresh_token;
         }
         if (!result.refresh_token) throw new GoogleOAuthError('missing_refresh_token');
       }
@@ -241,7 +267,14 @@ export class MailOAuthService {
       return account;
     }
     if (view(attempt).status !== 'ready' || !attempt.result_enc) throw failure('not_ready');
+    if (!this.provider || (attempt.google_client_id && attempt.google_client_id !== this.clientId))
+      throw failure('not_configured', 503);
     const tokens = JSON.parse(open(this.secret, purpose(id), attempt.result_enc)) as GoogleTokens;
+    const original = attempt.reconnect
+      ? await ownOAuthAccount(this.db, principal, attempt.account_id)
+      : null;
+    const converting = original?.transport === 'imap' && attempt.transport === 'gmail_api';
+    const labels = converting ? await openGmailClient(tokens.access_token).labels() : [];
     await auditedTransaction(this.db, principal, async (ctx) => {
       const consumed =
         await sql`UPDATE mail_oauth_attempts SET status = 'completed', result_enc = NULL
@@ -249,18 +282,46 @@ export class MailOAuthService {
           ctx.tx,
         );
       if (!consumed.rows.length) throw failure('not_ready');
+      // Cada compte Google només s'ha de confirmar un cop encara que hi hagi dos intents.
+      await sql`UPDATE users SET updated_at = updated_at WHERE id = ${principal.userId}`.execute(
+        ctx.tx,
+      );
       let previousMethod: string | null = null;
       if (attempt.reconnect) {
         const account = await ownOAuthAccount(ctx.tx, principal, attempt.account_id);
         previousMethod = account.auth_method;
+        if (account.transport !== original?.transport) throw failure('not_ready');
         if (
           account.username.toLowerCase() !== tokens.email ||
           (account.google_subject && account.google_subject !== tokens.subject)
         )
           throw failure('identity_mismatch');
+        if (converting) {
+          const rules = await sql<{ id: string; folder: string; scope_id: string }>`
+            SELECT id, folder, scope_id FROM mail_rules
+            WHERE account_id = ${attempt.account_id} AND deleted_at IS NULL
+          `.execute(ctx.tx);
+          for (const rule of rules.rows) {
+            const matches = labels.filter((label) => label.name === rule.folder);
+            const label = matches.length === 1 ? matches[0] : undefined;
+            await sql`UPDATE mail_rules SET
+              gmail_label_id = ${label?.id ?? null}, gmail_history_cursor = NULL,
+              enabled = ${label ? sql`enabled` : dbBool(false)},
+              last_error = ${label ? null : 'gmail-label-required'},
+              last_error_at = ${label ? null : ctx.now}, updated_at = ${ctx.now}
+              WHERE id = ${rule.id}`.execute(ctx.tx);
+            ctx.record({
+              entityType: 'mail_rule',
+              entityId: rule.id,
+              scopeId: rule.scope_id,
+              verb: 'updated',
+            });
+          }
+        }
       } else {
         const duplicate = await sql`SELECT id FROM mail_accounts WHERE user_id = ${principal.userId}
-          AND deleted_at IS NULL AND host IN ('imap.gmail.com','imap.googlemail.com') AND LOWER(username) = ${tokens.email}`.execute(
+          AND deleted_at IS NULL AND (google_subject = ${tokens.subject ?? null}
+            OR (host IN ('imap.gmail.com','imap.googlemail.com') AND LOWER(username) = ${tokens.email}))`.execute(
           ctx.tx,
         );
         if (duplicate.rows.length) throw failure('account_exists');
@@ -272,6 +333,7 @@ export class MailOAuthService {
         });
       }
       await sql`UPDATE mail_accounts SET auth_method = 'google', google_subject = ${tokens.subject},
+        transport = ${attempt.transport},
         secret_enc = ${seal(this.secret, purpose(attempt.account_id), JSON.stringify(tokens))},
         host = 'imap.gmail.com', port = 993, security = 'tls', oauth_status = 'connected',
         oauth_lock = NULL, oauth_lock_until = NULL, enabled = ${dbBool(true)},

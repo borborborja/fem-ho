@@ -271,6 +271,11 @@ export async function deleteUser(
     UPDATE users SET deleted_at = ${ctx.now}, updated_at = ${ctx.now}, version = version + 1
     WHERE id = ${id}
   `.execute(ctx.tx);
+  await sql`
+    UPDATE google_calendar_accounts SET oauth_status = 'disconnected', secret_enc = NULL,
+      oauth_lock = NULL, oauth_lock_until = NULL, updated_at = ${ctx.now}
+    WHERE user_id = ${id}
+  `.execute(ctx.tx);
 
   ctx.record({ entityType: 'user', entityId: id, verb: 'deleted' });
 }
@@ -346,6 +351,12 @@ export async function wipeInstance(
     'calendar_suggestion_declines',
     'event_attendees',
     'event_occurrences',
+    'google_calendar_changes',
+    'google_calendar_write_leases',
+    'google_calendar_events',
+    'google_calendar_oauth_attempts',
+    'google_calendar_links',
+    'google_calendar_accounts',
     'events',
     // Correu (fills de mail_accounts, que depèn de users — que es queda).
     'mail_messages',

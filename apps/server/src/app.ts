@@ -31,6 +31,10 @@ import { registerShareRoutes } from './http/shares.js';
 import { registerAiStatusRoutes } from './http/ai-status.js';
 import { registerMailRoutes } from './http/mail.js';
 import { registerMailOAuthRoutes } from './http/mail-oauth.js';
+import { registerGoogleCalendarRoutes } from './http/google-calendar.js';
+import { registerGoogleCalendarChangeRoutes } from './http/google-calendar-changes.js';
+import type { GoogleCalendarProvider } from './net/google-calendar.js';
+import { resolveGoogleConfig } from './services/google-config.js';
 import type { GoogleMailProvider } from './net/google-oauth.js';
 import { registerReportRoutes } from './http/reports.js';
 import { registerSessionRoutes } from './http/sessions.js';
@@ -52,6 +56,7 @@ export interface BuildOptions {
    */
   secret?: string;
   googleMailProvider?: GoogleMailProvider;
+  googleCalendarProvider?: GoogleCalendarProvider;
 }
 
 export function buildApp(config: Config, options: BuildOptions = {}): FastifyInstance {
@@ -147,8 +152,15 @@ export function buildApp(config: Config, options: BuildOptions = {}): FastifyIns
   registerSessionRoutes(app);
   registerReportRoutes(app);
   registerTokenRoutes(app);
-  registerMailRoutes(app, instanceSecret);
+  registerMailRoutes(app, instanceSecret, options.googleMailProvider);
   registerMailOAuthRoutes(app, instanceSecret, options.googleMailProvider);
+  registerGoogleCalendarRoutes(
+    app,
+    instanceSecret,
+    () => resolveGoogleConfig(app.connection!.db, instanceSecret(), config),
+    options.googleCalendarProvider,
+  );
+  registerGoogleCalendarChangeRoutes(app);
   registerAiStatusRoutes(app);
   registerPushRoutes(app);
   registerSetupRoutes(app);

@@ -3,9 +3,12 @@ package ho.fem.app
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
@@ -17,6 +20,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ho.fem.designsystem.Femho
 import ho.fem.model.MailAccount
 import ho.fem.model.MailOAuthAttempt
+import ho.fem.model.MailRule
+import ho.fem.model.GmailLabel
 import ho.fem.network.FemhoApi.ApiException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -51,12 +56,16 @@ fun GoogleMailPanel(model: AppViewModel, accounts: List<MailAccount>) {
     if (!enabled && pending == null && accounts.none { it.authMethod == "google" }) return
 
     fun clear() { model.savePendingGoogleMail(null); pending = null; attempt = null; model.loadMailData() }
-    fun start(account: MailAccount?) {
+    fun start(account: MailAccount?, transport: String? = null) {
         if (busy) return
         busy = true; error = null
         scope.launch {
             runCatching {
-                val result = model.googleMailApi().startGoogleMail(account?.id ?: UUID.randomUUID().toString(), account != null)
+                val result = model.googleMailApi().startGoogleMail(
+                    account?.id ?: UUID.randomUUID().toString(),
+                    account != null,
+                    transport,
+                )
                 model.savePendingGoogleMail(result.id)
                 pending = result.id
                 val uri = Uri.parse(checkNotNull(result.authorizationUrl))
@@ -96,7 +105,7 @@ fun GoogleMailPanel(model: AppViewModel, accounts: List<MailAccount>) {
                 }
             }) { Text(stringResource(R.string.settings_mail_oauth_cancel)) }
         } else {
-            Button(enabled = !busy && enabled, onClick = { start(null) }) {
+            Button(enabled = !busy && enabled, onClick = { start(null, "gmail_api") }) {
                 Text(stringResource(R.string.settings_mail_oauth_connect))
             }
             accounts.filter { it.host in listOf("imap.gmail.com", "imap.googlemail.com") }.forEach { account ->
@@ -110,6 +119,11 @@ fun GoogleMailPanel(model: AppViewModel, accounts: List<MailAccount>) {
                 }
                 TextButton(enabled = !busy && enabled, onClick = { start(account) }) {
                     Text(stringResource(R.string.settings_mail_oauth_reconnect))
+                }
+                if (account.transport != "gmail_api" && enabled) {
+                    TextButton(enabled = !busy, onClick = { start(account, "gmail_api") }) {
+                        Text(stringResource(R.string.settings_mail_oauth_switchapi))
+                    }
                 }
                 if (account.authMethod == "google" && account.oauthStatus != "disconnected") {
                     TextButton(enabled = !busy, onClick = {
@@ -125,6 +139,67 @@ fun GoogleMailPanel(model: AppViewModel, accounts: List<MailAccount>) {
         }
         error?.let { Text(oauthError(it), color = Femho.colors.dangerText) }
     }
+}
+
+@Composable
+fun GmailRuleRepair(model: AppViewModel, rule: MailRule) {
+    val scope = rememberCoroutineScope()
+    var labels by remember(rule.id) { mutableStateOf<List<GmailLabel>>(emptyList()) }
+    var expanded by remember(rule.id) { mutableStateOf(false) }
+    var selected by remember(rule.id) { mutableStateOf<GmailLabel?>(null) }
+    var busy by remember(rule.id) { mutableStateOf(false) }
+    var failed by remember(rule.id) { mutableStateOf(false) }
+
+    fun save(labelId: String? = null, enabled: Boolean? = null) {
+        busy = true
+        failed = false
+        scope.launch {
+            runCatching {
+                model.googleMailApi().updateMailRule(rule.id, gmailLabelId = labelId, enabled = enabled)
+            }.onSuccess { model.loadMailData() }.onFailure { failed = true }
+            busy = false
+        }
+    }
+
+    if (rule.gmailLabelId == null) {
+        Text(stringResource(R.string.settings_mail_oauth_ruleneedslabel), color = Femho.colors.inkFaint)
+        Box {
+            TextButton(enabled = !busy, onClick = {
+                busy = true
+                failed = false
+                scope.launch {
+                    runCatching { model.googleMailApi().gmailLabels(checkNotNull(rule.accountId)) }
+                        .onSuccess {
+                            labels = it
+                            expanded = it.isNotEmpty()
+                            failed = it.isEmpty()
+                        }
+                        .onFailure { failed = true }
+                    busy = false
+                }
+            }) {
+                Text(selected?.name ?: stringResource(R.string.settings_mail_oauth_picklabel))
+            }
+            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                labels.forEach { label ->
+                    DropdownMenuItem(
+                        text = { Text(label.name) },
+                        onClick = { selected = label; expanded = false },
+                    )
+                }
+            }
+        }
+        if (selected != null) {
+            TextButton(enabled = !busy, onClick = { save(labelId = selected?.id) }) {
+                Text(stringResource(R.string.settings_mail_oauth_savelabel))
+            }
+        }
+    } else {
+        TextButton(enabled = !busy, onClick = { save(enabled = true) }) {
+            Text(stringResource(R.string.settings_mail_oauth_enablerule))
+        }
+    }
+    if (failed) Text(stringResource(R.string.error_generic), color = Femho.colors.dangerText)
 }
 
 @Composable

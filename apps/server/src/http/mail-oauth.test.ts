@@ -12,7 +12,12 @@ import { connect, type Connection } from '../db/connection.js';
 import { migrateToLatest } from '../db/migrator.js';
 import { connectTestSchema, type TestSchema } from '../db/test-postgres.js';
 import { open, seal } from '../crypto/secret-box.js';
-import { GoogleOAuthError, type GoogleTokens } from '../net/google-oauth.js';
+import {
+  GoogleOAuthError,
+  type GoogleMailProvider,
+  type GoogleTokens,
+  type MailTransport,
+} from '../net/google-oauth.js';
 import { mailCredentials } from '../services/mail-credentials.js';
 import { pruneMailOAuth } from '../services/mail-oauth.js';
 
@@ -27,7 +32,7 @@ let auth: { authorization: string };
 let otherAuth: { authorization: string };
 let userId: string;
 let emailIndex = 0;
-const exchange = vi.fn<(...args: string[]) => Promise<GoogleTokens>>();
+const exchange = vi.fn<GoogleMailProvider['exchange']>();
 const refresh = vi.fn<(token: string) => Promise<GoogleTokens>>();
 const provider = {
   authorizationUrl: (state: string, challenge: string, nonce: string) =>
@@ -48,6 +53,7 @@ type Attempt = {
   authorization_url: string;
   status: string;
   error_code: string | null;
+  transport: MailTransport;
 };
 
 beforeAll(async () => {
@@ -82,8 +88,16 @@ afterAll(async () => {
   rmSync(tmp, { recursive: true, force: true });
 });
 
-async function start(accountId = uuidv7(), reconnect = false): Promise<Attempt> {
-  const result = await api('POST', '/mail/oauth/google', { account_id: accountId, reconnect });
+async function start(
+  accountId = uuidv7(),
+  reconnect = false,
+  transport?: MailTransport,
+): Promise<Attempt> {
+  const result = await api('POST', '/mail/oauth/google', {
+    account_id: accountId,
+    reconnect,
+    transport,
+  });
   expect(result.statusCode, result.body).toBe(200);
   return result.json<Attempt>();
 }
@@ -166,6 +180,7 @@ it('uses single-use state and requires explicit confirmation before creating an 
   expect(confirmed.json()).toMatchObject({
     id: attempt.account_id,
     auth_method: 'google',
+    transport: 'gmail_api',
     oauth_status: 'connected',
     has_secret: true,
   });
@@ -192,7 +207,9 @@ it('uses single-use state and requires explicit confirmation before creating an 
     )
   ).rows[0];
   expect(temp).toEqual({ result_enc: null, verifier_enc: null });
-  expect(await mailCredentials(conn.db, secret, config(), attempt.account_id, userId)).toEqual({
+  expect(
+    await mailCredentials(conn.db, secret, config(), attempt.account_id, userId, provider),
+  ).toEqual({
     accessToken: 'access-token-private',
   });
 });
@@ -226,6 +243,7 @@ it('converts password Gmail in place and preserves rule cursors', async () => {
     id: account.id,
     name: 'Legacy',
     auth_method: 'google',
+    transport: 'imap',
   });
   expect(
     (await sql`SELECT uid_validity,last_uid FROM mail_rules WHERE id = ${ruleId}`.execute(conn.db))
@@ -350,6 +368,157 @@ it('keeps ordinary password IMAP available', async () => {
   expect(await mailCredentials(conn.db, secret, config(), account.id, userId)).toEqual({
     password: 'imap-password',
   });
+});
+
+it('requires reconnection after a Google client changes even before a cached token expires', async () => {
+  const id = await connected();
+  const saved = { ...tokens(), client_id: 'old-client.apps.googleusercontent.com' };
+  await sql`UPDATE mail_accounts SET secret_enc = ${seal(secret, `mail_oauth:${id}`, JSON.stringify(saved))}
+    WHERE id = ${id}`.execute(conn.db);
+  const configured = {
+    ...config(),
+    baseUrl: 'https://femho.example.test',
+    googleClientId: 'new-client.apps.googleusercontent.com',
+    googleClientSecret: 'new-secret',
+  };
+  await expect(mailCredentials(conn.db, secret, configured, id, userId)).rejects.toThrow(
+    'reconnect_required',
+  );
+  expect((await api('GET', '/mail/accounts')).json()).toEqual(
+    expect.arrayContaining([expect.objectContaining({ id, oauth_status: 'reconnect_required' })]),
+  );
+});
+
+it('switches legacy Gmail atomically and preserves the rule destinations', async () => {
+  const email = 'switch-gmail@example.test';
+  const account = (
+    await api('POST', '/mail/accounts', {
+      host: 'imap.gmail.com',
+      username: email,
+      name: 'Switch',
+      password: 'app-password',
+    })
+  ).json<{ id: string }>();
+  const scope = (
+    await api('POST', '/scopes', { name: 'Switch', kind: 'individual', color: '--plou-blue' })
+  ).json<{ id: string }>();
+  const rule = (
+    await api('POST', '/mail/rules', {
+      account_id: account.id,
+      scope_id: scope.id,
+      folder: 'Feina',
+    })
+  ).json<{ id: string }>();
+  const unmapped = (
+    await api('POST', '/mail/rules', {
+      account_id: account.id,
+      scope_id: scope.id,
+      folder: 'Carpeta antiga',
+      title_template: '{{from_name}} - {{subject}}',
+    })
+  ).json<{ id: string }>();
+  const attempt = await start(account.id, true, 'gmail_api');
+  await callback(attempt, tokens(email));
+
+  const fetchMock = vi.fn().mockImplementation(async () =>
+    Response.json({
+      labels: [
+        { id: 'Label_11', name: 'Feina' },
+        { id: 'Label_12', name: 'Feina nova' },
+      ],
+    }),
+  );
+  vi.stubGlobal('fetch', fetchMock);
+  try {
+    const confirmed = await confirm(attempt);
+    expect(confirmed.statusCode, confirmed.body).toBe(200);
+    expect(confirmed.json()).toMatchObject({ id: account.id, transport: 'gmail_api' });
+    expect((await api('GET', '/mail/rules')).json()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: rule.id,
+          scope_id: scope.id,
+          gmail_label_id: 'Label_11',
+          enabled: true,
+        }),
+        expect.objectContaining({
+          id: unmapped.id,
+          scope_id: scope.id,
+          folder: 'Carpeta antiga',
+          title_template: '{{from_name}} - {{subject}}',
+          gmail_label_id: null,
+          enabled: false,
+          last_error: 'gmail-label-required',
+        }),
+      ]),
+    );
+    const rulePath = `/mail/rules/${unmapped.id}`;
+    expect((await api('PATCH', rulePath, { enabled: true })).statusCode).toBe(422);
+    const repairs = await api('PATCH', rulePath, { gmail_label_id: 'Label_12' });
+    expect(repairs.statusCode, repairs.body).toBe(200);
+    expect(repairs.json()).toMatchObject({
+      id: unmapped.id,
+      gmail_label_id: 'Label_12',
+      enabled: false,
+      last_error: null,
+    });
+    expect((await api('PATCH', rulePath, { enabled: true })).json()).toMatchObject({
+      id: unmapped.id,
+      gmail_label_id: 'Label_12',
+      enabled: true,
+    });
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+
+it('connects two Gmail API mailboxes and routes their INBOX labels independently', async () => {
+  const fetchMock = vi.fn<(url: URL, init: RequestInit) => Promise<Response>>();
+  fetchMock.mockImplementation(async (url, init) => {
+    expect(url.origin).toBe('https://gmail.googleapis.com');
+    expect(url.pathname).toBe('/gmail/v1/users/me/labels');
+    expect(init.method).toBe('GET');
+    expect(init.headers).toMatchObject({ Authorization: 'Bearer access-token-private' });
+    return Response.json({ labels: [{ id: 'INBOX', name: 'INBOX' }] });
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  try {
+    const rules = [];
+    for (const name of ['Feina Gmail', 'Personal Gmail']) {
+      const attempt = await start();
+      await callback(attempt);
+      expect(attempt.transport).toBe('gmail_api');
+      expect((await confirm(attempt)).statusCode).toBe(200);
+      const scope = await api('POST', '/scopes', {
+        name,
+        kind: 'individual',
+        color: '--plou-blue',
+      });
+      expect(scope.statusCode).toBe(201);
+      const accountId = attempt.account_id;
+      const scopeId = scope.json<{ id: string }>().id;
+      const folders = await api('GET', `/mail/accounts/${accountId}/folders`);
+      expect(folders.json()).toMatchObject({
+        folders: ['INBOX'],
+        labels: [{ id: 'INBOX', name: 'INBOX' }],
+      });
+      const rule = await api('POST', '/mail/rules', {
+        account_id: accountId,
+        scope_id: scopeId,
+        gmail_label_id: 'INBOX',
+      });
+      expect(rule.statusCode, rule.body).toBe(201);
+      expect(rule.json()).toMatchObject({
+        account_id: accountId,
+        scope_id: scopeId,
+        gmail_label_id: 'INBOX',
+      });
+      rules.push(rule.json<{ id: string }>().id);
+    }
+    expect(rules[0]).not.toBe(rules[1]);
+  } finally {
+    vi.unstubAllGlobals();
+  }
 });
 
 it('hides unavailable Google setup but still lets owners cancel saved attempts', async () => {

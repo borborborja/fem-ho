@@ -31,7 +31,7 @@ import type { Connection } from '../db/connection.js';
 import type { MigrationDb } from '../db/migration-db.js';
 import { PolicyError, missingCapability, notFound, unauthenticated } from '../policy/errors.js';
 import { hasCapability, type Principal } from '../policy/principal.js';
-import { visibleCalendarIds } from '../policy/calendar-visibility.js';
+import { canReadGoogleEventDetails, visibleCalendarIds } from '../policy/calendar-visibility.js';
 import { assertScopeAccess, assertScopeRole } from './scopes.js';
 import { assertWritable } from './tasks.js';
 
@@ -433,7 +433,7 @@ export async function uploadAttachment(
 
   const { scopeId, calendarId } = await scopeOfParent(ctx.tx, input.taskId, input.eventId);
   await assertScopeAccess(ctx.tx, principal, scopeId);
-  await assertCalendarVisible(ctx.tx, principal, calendarId, input.eventId ?? '');
+  await assertCalendarVisible(ctx.tx, principal, calendarId, input.eventId ?? '', input.eventId);
 
   const id = uuidv7();
   const { path: relative } = await storeAttachment(id, input.data, ctx.now, dataDir);
@@ -487,10 +487,15 @@ async function assertCalendarVisible(
   principal: Principal,
   calendarId: string | null,
   id: string,
+  eventId: string | undefined,
 ): Promise<void> {
   if (calendarId === null) return;
   const visible = await visibleCalendarIds(db, principal.userId);
-  if (!visible.has(calendarId)) throw notFound('attachment', id);
+  if (
+    !visible.has(calendarId) ||
+    (eventId !== undefined && !(await canReadGoogleEventDetails(db, principal.userId, eventId)))
+  )
+    throw notFound('attachment', id);
 }
 
 export async function listAttachments(
@@ -502,7 +507,7 @@ export async function listAttachments(
 
   const { scopeId, calendarId } = await scopeOfParent(db, parent.taskId, parent.eventId);
   await assertScopeAccess(db, principal, scopeId);
-  await assertCalendarVisible(db, principal, calendarId, parent.eventId ?? '');
+  await assertCalendarVisible(db, principal, calendarId, parent.eventId ?? '', parent.eventId);
 
   const rows = await sql<AttachmentRow>`
     SELECT ${COLUMNS} FROM attachments
@@ -544,7 +549,7 @@ export async function readAttachment(
 
   if (row.event_id !== null) {
     const { calendarId } = await scopeOfParent(db, undefined, row.event_id);
-    await assertCalendarVisible(db, principal, calendarId, id);
+    await assertCalendarVisible(db, principal, calendarId, id, row.event_id);
   }
 
   if (row.storage_path === null) throw notFound('attachment', id);
@@ -566,6 +571,11 @@ export async function deleteAttachment(
   if (row === undefined || row.scope_id === null) throw notFound('attachment', id);
 
   await assertScopeAccess(ctx.tx, principal, row.scope_id);
+  if (
+    row.event_id !== null &&
+    !(await canReadGoogleEventDetails(ctx.tx, principal.userId, row.event_id))
+  )
+    throw notFound('attachment', id);
 
   /**
    * Esborrat suau, com tota entitat sincronitzable (`docs/01` §12). **El fitxer del disc

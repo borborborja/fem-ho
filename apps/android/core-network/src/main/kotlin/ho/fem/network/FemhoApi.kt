@@ -771,8 +771,12 @@ class FemhoApi(
     suspend fun googleMailAvailability(): ho.fem.model.MailOAuthAvailability = get("/api/v1/mail/oauth/google")
     suspend fun setMailPollInterval(id: String, seconds: Int?): MailAccount =
         json.decodeFromString(raw("PATCH", "/api/v1/mail/accounts/$id", """{"poll_interval":${seconds ?: "null"}}""", authenticated = true))
-    suspend fun startGoogleMail(accountId: String, reconnect: Boolean): ho.fem.model.MailOAuthAttempt =
-        post("/api/v1/mail/oauth/google", mapOf("account_id" to accountId, "reconnect" to reconnect))
+    suspend fun startGoogleMail(accountId: String, reconnect: Boolean, transport: String? = null): ho.fem.model.MailOAuthAttempt =
+        post("/api/v1/mail/oauth/google", buildMap {
+            put("account_id", accountId)
+            put("reconnect", reconnect)
+            if (transport != null) put("transport", transport)
+        })
     suspend fun mailOAuthAttempt(id: String): ho.fem.model.MailOAuthAttempt = get("/api/v1/mail/oauth/attempts/$id")
     suspend fun confirmGoogleMail(id: String): MailAccount = post("/api/v1/mail/oauth/attempts/$id/confirm")
     suspend fun cancelGoogleMail(id: String) { raw("DELETE", "/api/v1/mail/oauth/attempts/$id", null, authenticated = true) }
@@ -797,9 +801,12 @@ class FemhoApi(
     suspend fun testMailAccount(id: String, password: String? = null): MailTestResult =
         post("/api/v1/mail/accounts/$id/test", if (password != null) mapOf("password" to password) else emptyMap())
 
-    suspend fun mailFolders(id: String): List<Map<String, Any>> =
+    suspend fun mailFolders(id: String): List<String> =
         get<JsonObject>("/api/v1/mail/accounts/$id/folders")["folders"]?.jsonArray.orEmpty()
-            .map { it.jsonObject.legacyValues() }
+            .map { it.jsonPrimitive.content }
+
+    suspend fun gmailLabels(id: String): List<ho.fem.model.GmailLabel> =
+        get<ho.fem.model.GmailLabels>("/api/v1/mail/accounts/$id/folders").labels
 
     suspend fun mailRules(): List<MailRule> = get("/api/v1/mail/rules")
 
@@ -813,13 +820,15 @@ class FemhoApi(
             if (inboxVisible != null) put("inbox_visible", inboxVisible)
         })
 
-    suspend fun updateMailRule(id: String, folder: String? = null, scopeId: String? = null, projectId: String? = null, titleTemplate: String? = null, inboxVisible: Boolean? = null): MailRule =
+    suspend fun updateMailRule(id: String, folder: String? = null, scopeId: String? = null, projectId: String? = null, titleTemplate: String? = null, inboxVisible: Boolean? = null, gmailLabelId: String? = null, enabled: Boolean? = null): MailRule =
         patch("/api/v1/mail/rules/$id", buildMap {
             if (folder != null) put("folder", folder)
             if (scopeId != null) put("scope_id", scopeId)
             if (projectId != null) put("project_id", projectId)
             if (titleTemplate != null) put("title_template", titleTemplate)
             if (inboxVisible != null) put("inbox_visible", inboxVisible)
+            if (gmailLabelId != null) put("gmail_label_id", gmailLabelId)
+            if (enabled != null) put("enabled", enabled)
         })
 
     suspend fun deleteMailRule(id: String) {
@@ -847,6 +856,52 @@ class FemhoApi(
     // ------------------------------------------------------------------ Calendaris
 
     suspend fun calendars(): List<Calendar> = get("/api/v1/calendars")
+
+    suspend fun googleCalendarAvailability(): ho.fem.model.GoogleCalendarAvailability = get("/api/v1/calendars/google/oauth")
+
+    suspend fun startGoogleCalendar(accountId: String?): ho.fem.model.GoogleCalendarAttempt =
+        post("/api/v1/calendars/google/oauth", if (accountId == null) emptyMap() else mapOf("account_id" to accountId))
+
+    suspend fun googleCalendarAttempt(id: String): ho.fem.model.GoogleCalendarAttempt =
+        get("/api/v1/calendars/google/oauth/attempts/$id")
+
+    suspend fun confirmGoogleCalendar(id: String): ho.fem.model.GoogleCalendarAccount =
+        post("/api/v1/calendars/google/oauth/attempts/$id/confirm")
+
+    suspend fun cancelGoogleCalendar(id: String) {
+        raw("DELETE", "/api/v1/calendars/google/oauth/attempts/$id", null, authenticated = true)
+    }
+
+    suspend fun googleCalendarAccounts(): List<ho.fem.model.GoogleCalendarAccount> =
+        get("/api/v1/calendars/google/accounts")
+
+    suspend fun disconnectGoogleCalendar(id: String) {
+        raw("POST", "/api/v1/calendars/google/accounts/$id/disconnect", "{}", authenticated = true)
+    }
+
+    suspend fun googleCalendarChoices(accountId: String): List<ho.fem.model.GoogleCalendarChoice> =
+        get("/api/v1/calendars/google/accounts/$accountId/calendars")
+
+    suspend fun linkGoogleCalendar(id: String, accountId: String, calendarId: String, scopeId: String, writable: Boolean): Calendar =
+        post("/api/v1/calendars/google/links", mapOf(
+            "id" to id, "account_id" to accountId, "remote_calendar_id" to calendarId,
+            "scope_id" to scopeId, "writable" to writable,
+        ))
+
+    suspend fun shareGoogleCalendar(id: String, shared: Boolean): Calendar =
+        patch("/api/v1/calendars/$id", mapOf("shared_with_scope" to shared))
+
+    suspend fun googleCalendarChanges(): List<ho.fem.model.GoogleCalendarChange> =
+        get("/api/v1/calendars/google/changes")
+
+    suspend fun retryGoogleCalendarChange(id: String, notifyGuests: Boolean = false) {
+        val data = if (notifyGuests) encode(mapOf("notify_guests" to true)) else "{}"
+        raw("POST", "/api/v1/calendars/google/changes/$id/retry", data, authenticated = true)
+    }
+
+    suspend fun discardGoogleCalendarChange(id: String) {
+        raw("DELETE", "/api/v1/calendars/google/changes/$id", null, authenticated = true)
+    }
 
     suspend fun createCalendar(
         scopeId: String? = null,
@@ -1139,6 +1194,14 @@ class FemhoApi(
 
     /** La llista d'usuaris, amb el rol i si el convit encara és pendent. */
     suspend fun adminUsers(): List<AdminUser> = get("/api/v1/admin/users")
+
+    suspend fun adminGoogleConfig(): ho.fem.model.AdminGoogleConfig = get("/api/v1/admin/oauth/google")
+
+    suspend fun saveAdminGoogleConfig(clientId: String, clientSecret: String): ho.fem.model.AdminGoogleConfig =
+        put("/api/v1/admin/oauth/google", mapOf("client_id" to clientId, "client_secret" to clientSecret))
+
+    suspend fun deleteAdminGoogleConfig(): ho.fem.model.AdminGoogleConfig =
+        json.decodeFromString(raw("DELETE", "/api/v1/admin/oauth/google", null, authenticated = true))
 
     /** Convida un membre i torna l'enllaç d'un sol ús (AdminUser + invite_url). */
     suspend fun adminInvite(email: String, name: String, role: String): InviteResult =

@@ -57,6 +57,7 @@ class Container(context: Context) {
                 .addMigrations(
                     FemhoDatabase.MIGRATION_1_2, FemhoDatabase.MIGRATION_2_3, FemhoDatabase.MIGRATION_3_4,
                     FemhoDatabase.MIGRATION_4_5, FemhoDatabase.MIGRATION_5_6, FemhoDatabase.MIGRATION_6_7,
+                    FemhoDatabase.MIGRATION_7_8,
                 )
                 .build())
         }

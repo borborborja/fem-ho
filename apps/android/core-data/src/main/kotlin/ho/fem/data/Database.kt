@@ -72,6 +72,7 @@ data class ScopeEntity(
     val kind: String,
     val color: String,
     val position: String,
+    @ColumnInfo(name = "owner_id", defaultValue = "''") val ownerId: String = "",
 )
 
 @Entity(tableName = "projects")
@@ -163,6 +164,8 @@ data class CalendarEntity(
     val color: String?,
     val origin: String = "local",
     @ColumnInfo(name = "source_kind") val sourceKind: String?,
+    @ColumnInfo(name = "source_provider") val sourceProvider: String? = null,
+    @ColumnInfo(defaultValue = "0") val writable: Boolean = false,
     @ColumnInfo(name = "source_url") val sourceUrl: String?,
     @ColumnInfo(name = "refresh_interval") val refreshInterval: Int?,
     @ColumnInfo(name = "inbox_visible") val inboxVisible: Boolean? = null,
@@ -187,6 +190,7 @@ data class MailAccountEntity(
     @ColumnInfo(name = "oauth_status") val oauthStatus: String? = null,
     val security: String = "tls",
     @ColumnInfo(name = "created_at") val createdAt: String?,
+    @ColumnInfo(defaultValue = "'imap'") val transport: String = "imap",
 )
 
 /**
@@ -203,6 +207,8 @@ data class MailRuleEntity(
     @ColumnInfo(name = "project_id") val projectId: String?,
     @ColumnInfo(name = "title_template") val titleTemplate: String?,
     @ColumnInfo(name = "inbox_visible") val inboxVisible: Boolean? = null,
+    @ColumnInfo(name = "gmail_label_id") val gmailLabelId: String? = null,
+    @ColumnInfo(defaultValue = "1") val enabled: Boolean = true,
 )
 
 /**
@@ -775,6 +781,12 @@ interface FemhoDao {
     @Query("DELETE FROM calendars")
     suspend fun clearCalendars()
 
+    @Transaction
+    suspend fun replaceCalendars(rows: List<CalendarEntity>) {
+        clearCalendars()
+        putCalendars(rows)
+    }
+
     // -------------------------------------------------------- comptes correu
 
     @Query("SELECT * FROM mail_accounts ORDER BY name, id")
@@ -861,7 +873,7 @@ interface FemhoDao {
         CalendarSuggestionsCacheEntity::class,
         DoingAutoStopCacheEntity::class,
     ],
-    version = 7,
+    version = 8,
     exportSchema = false,
 )
 abstract class FemhoDatabase : RoomDatabase() {
@@ -878,6 +890,18 @@ abstract class FemhoDatabase : RoomDatabase() {
      * directament a v2 sense passar per la migració.
      */
     companion object {
+        val MIGRATION_7_8 = object : androidx.room.migration.Migration(7, 8) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                // Un àmbit antic no porta el propietari. Fins al refresc, no hi oferim una vinculació personal.
+                db.execSQL("ALTER TABLE scopes ADD COLUMN owner_id TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE calendars ADD COLUMN source_provider TEXT")
+                db.execSQL("ALTER TABLE calendars ADD COLUMN writable INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE mail_accounts ADD COLUMN transport TEXT NOT NULL DEFAULT 'imap'")
+                db.execSQL("ALTER TABLE mail_rules ADD COLUMN gmail_label_id TEXT")
+                db.execSQL("ALTER TABLE mail_rules ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1")
+            }
+        }
+
         val MIGRATION_6_7 = object : androidx.room.migration.Migration(6, 7) {
             override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
                 db.execSQL("CREATE TABLE IF NOT EXISTS doing_auto_stop_cache (id INTEGER NOT NULL PRIMARY KEY, minutes INTEGER, issue_id TEXT)")

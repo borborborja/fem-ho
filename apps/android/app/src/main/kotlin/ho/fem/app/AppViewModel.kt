@@ -381,6 +381,9 @@ class AppViewModel(private val container: Container) : ViewModel() {
     private val _calendar = MutableStateFlow(CalendarState())
     val calendar: StateFlow<CalendarState> = _calendar.asStateFlow()
     private var calendarLoad: Job? = null
+    private var calendarSettingsLoad: Job? = null
+    private val _deviceGoogleCalendarChanges = MutableStateFlow<List<ho.fem.model.GoogleCalendarChange>>(emptyList())
+    val deviceGoogleCalendarChanges = _deviceGoogleCalendarChanges.asStateFlow()
 
     private val _openTask = MutableStateFlow<Task?>(null)
     val openTask: StateFlow<Task?> = _openTask.asStateFlow()
@@ -424,6 +427,8 @@ class AppViewModel(private val container: Container) : ViewModel() {
 
     private val _adminError = MutableStateFlow<String?>(null)
     val adminError: StateFlow<String?> = _adminError.asStateFlow()
+
+    fun googleAdminApi(): FemhoApi = container.api(checkNotNull(activeAccount))
 
     /** Carrega la llista d'usuaris de la pestanya Admin. */
     fun loadAdminUsers() {
@@ -591,7 +596,9 @@ class AppViewModel(private val container: Container) : ViewModel() {
         _dashboard.value = ho.fem.model.DashboardView()
         _createdToken.value = null
         calendarLoad?.cancel()
+        calendarSettingsLoad?.cancel()
         _calendar.value = CalendarState()
+        _deviceGoogleCalendarChanges.value = emptyList()
         _openTask.value = null
         _taskSaveError.value = false
         _taskSaving.value = false
@@ -1785,10 +1792,58 @@ class AppViewModel(private val container: Container) : ViewModel() {
     /** Carrega els calendaris per a Ajustos ▸ Calendaris. GET /api/v1/calendars. */
     fun loadCalendars() {
         val sessionAccount = activeAccount ?: return
-        sessionScope.launch {
-            runCatching { container.api(sessionAccount).calendars() }
-                .onSuccess { _calendars.value = it }
+        calendarSettingsLoad?.cancel()
+        calendarSettingsLoad = sessionScope.launch {
+            val repository = container.repository(sessionAccount)
+            if (_calendars.value.isEmpty()) _calendars.value = repository.calendars.first()
+            runCatching { repository.refreshCalendars() }
+                .onSuccess { ensureActive(); _calendars.value = it }
+                .onFailure { if (it is CancellationException) throw it }
         }
+    }
+
+    fun googleCalendarApi(): FemhoApi = container.api(checkNotNull(activeAccount))
+
+    fun activeUserId(): String? = activeAccount?.identity?.userId
+
+    fun pendingGoogleCalendar(): String? = activeAccount?.let { account ->
+        container.appContext.getSharedPreferences("google_calendar_oauth", android.content.Context.MODE_PRIVATE)
+            .getString(account.identity.key, null)
+    }
+
+    fun savePendingGoogleCalendar(id: String?) {
+        val account = activeAccount ?: return
+        container.appContext.getSharedPreferences("google_calendar_oauth", android.content.Context.MODE_PRIVATE)
+            .edit().putString(account.identity.key, id).apply()
+    }
+
+    fun queueGoogleCalendarChange(
+        calendarId: String,
+        eventId: String,
+        baseVersion: Int,
+        action: String,
+        draft: ho.fem.model.GoogleCalendarDraft?,
+        notifyGuests: Boolean,
+        fields: List<String>? = null,
+        onQueued: () -> Unit,
+        onFailed: () -> Unit,
+    ) {
+        val account = activeAccount ?: return onFailed()
+        sessionScope.launch {
+            val repository = container.repository(account)
+            val saved = runCatching {
+                repository.enqueueGoogleCalendarChange(calendarId, eventId, baseVersion, action, draft, notifyGuests, fields)
+            }.onFailure { if (it is CancellationException) throw it }.getOrDefault(false)
+            if (!saved) return@launch onFailed()
+            Notifications.requestSync(container.appContext, account)
+            onQueued()
+            runCatching { repository.flush() }.onFailure { if (it is CancellationException) throw it }
+        }
+    }
+
+    suspend fun discardDeviceGoogleCalendarChange(id: String) {
+        val account = activeAccount ?: return
+        container.repository(account).discardDeviceGoogleCalendarChange(id)
     }
 
     /** Crea una font de calendari (CalDAV, iCal o RSS). POST /api/v1/calendars. */
@@ -2732,6 +2787,7 @@ class AppViewModel(private val container: Container) : ViewModel() {
         sessionScope.launch { repository.people.collect { _people.value = it } }
         sessionScope.launch { repository.taskTypes.collect { _taskTypes.value = it } }
         sessionScope.launch { repository.pending.collect { _pending.value = it } }
+        sessionScope.launch { repository.deviceGoogleCalendarChanges.collect { _deviceGoogleCalendarChanges.value = it } }
         sessionScope.launch { repository.syncIssues.collect { _syncIssues.value = it } }
     }
 }

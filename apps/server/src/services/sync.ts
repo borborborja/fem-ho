@@ -18,7 +18,8 @@ import type { Engine } from '../db/dialect.js';
 import type { MigrationDb } from '../db/migration-db.js';
 import { PolicyError, missingCapability } from '../policy/errors.js';
 import { hasCapability, type Principal } from '../policy/principal.js';
-import { visibleCalendarIds } from '../policy/calendar-visibility.js';
+import { canReadGoogleEventDetails, visibleCalendarIds } from '../policy/calendar-visibility.js';
+import { isGooglePrivateClassification } from './events.js';
 import { listScopes } from './scopes.js';
 import { canReadSyncEntity } from './sync-access.js';
 import { clampInt } from '../util/clamp.js';
@@ -187,7 +188,19 @@ export async function pull(
       changes.push({ entity: row.entity_type, id: row.entity_id, op: 'delete', seq: row.seq });
       continue;
     }
-    const data = await loadEntity(db, row.entity_type, row.entity_id);
+    let data = await loadEntity(db, row.entity_type, row.entity_id);
+    const googleEvent =
+      row.entity_type === 'event' && isGooglePrivateClassification(data?.classification)
+        ? row.entity_id
+        : row.entity_type === 'attachment' && typeof data?.event_id === 'string'
+          ? data.event_id
+          : undefined;
+    if (
+      googleEvent !== undefined &&
+      !(await canReadGoogleEventDetails(db, principal.userId, googleEvent))
+    ) {
+      data = null;
+    }
     // Una fila del log que ja no té entitat és una tombstone implícita.
     changes.push({
       entity: row.entity_type,

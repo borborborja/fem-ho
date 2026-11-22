@@ -586,6 +586,207 @@ export interface paths {
         patch: operations["updateEvent"];
         trace?: never;
     };
+    "/calendars/google/oauth": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Consultar si es poden connectar calendaris de Google */
+        get: operations["googleCalendarAvailability"];
+        put?: never;
+        /** Iniciar la connexió amb Google Calendar */
+        post: operations["startGoogleCalendar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/calendars/google/oauth/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Retorn OAuth de Google Calendar */
+        get: operations["googleCalendarCallback"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/calendars/google/oauth/attempts/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** Consultar l’intent de connexió amb Google Calendar */
+        get: operations["getGoogleCalendarAttempt"];
+        put?: never;
+        post?: never;
+        /** Cancel·lar l’intent de connexió amb Google Calendar */
+        delete: operations["cancelGoogleCalendarAttempt"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/calendars/google/oauth/attempts/{id}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Confirmar el compte de Google Calendar */
+        post: operations["confirmGoogleCalendar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/calendars/google/accounts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Llistar els comptes connectats a Google Calendar */
+        get: operations["listGoogleCalendarAccounts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/calendars/google/accounts/{id}/disconnect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Desconnectar un compte de Google Calendar */
+        post: operations["disconnectGoogleCalendar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/calendars/google/accounts/{id}/calendars": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** Llistar els calendaris disponibles en un compte Google */
+        get: operations["listGoogleCalendarChoices"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/calendars/google/links": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Vincular un calendari de Google a un àmbit */
+        post: operations["linkGoogleCalendar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/calendars/google/changes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Consultar els canvis de Google Calendar */
+        get: operations["listGoogleCalendarChanges"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/calendars/google/changes/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Descartar un canvi de Google Calendar */
+        delete: operations["discardGoogleCalendarChange"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/calendars/google/changes/{id}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Tornar a aplicar un canvi de Google Calendar */
+        post: operations["retryGoogleCalendarChange"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/calendars": {
         parameters: {
             query?: never;
@@ -2476,6 +2677,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/oauth/google": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Consultar la configuració efectiva de Google */
+        get: operations["getAdminGoogleConfig"];
+        /** Desar la configuració de Google */
+        put: operations["putAdminGoogleConfig"];
+        post?: never;
+        /** Retirar la configuració desada de Google */
+        delete: operations["deleteAdminGoogleConfig"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/users": {
         parameters: {
             query?: never;
@@ -3108,6 +3328,67 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AdminGoogleConfig: {
+            /** @enum {string} */
+            source: "environment" | "settings" | "none";
+            enabled: boolean;
+            client_id: string | null;
+            has_secret: boolean;
+            /** @enum {string|null} */
+            reason: "missing_credentials" | "invalid_base_url" | "unreadable_credentials" | null;
+            /** Format: uri */
+            gmail_callback_url: string | null;
+            /** Format: uri */
+            calendar_callback_url: string | null;
+        };
+        GoogleCalendarAttempt: {
+            id: string;
+            account_id: string | null;
+            /** @enum {string} */
+            status: "pending" | "exchanging" | "ready" | "completed" | "cancelled" | "failed" | "expired";
+            /** Format: date-time */
+            expires_at: string;
+            email: string | null;
+            error_code: string | null;
+        };
+        GoogleCalendarAccount: {
+            id: string;
+            email: string;
+            /** @enum {string} */
+            oauth_status: "connected" | "reconnect_required" | "disconnected";
+        };
+        GoogleCalendarChoice: {
+            id: string;
+            name: string;
+            primary: boolean;
+            /** @enum {string} */
+            access_role: "reader" | "writerWithoutPrivateAccess" | "writer" | "owner";
+            writable: boolean;
+        };
+        GoogleCalendarDraft: {
+            summary: string;
+            description: string;
+            location: string;
+            /** Format: date-time */
+            starts_at: string;
+            /** Format: date-time */
+            ends_at: string;
+            all_day: boolean;
+            timezone: string;
+        };
+        GoogleCalendarChange: {
+            id: string;
+            calendar_id: string;
+            event_id: string;
+            /** @enum {string} */
+            operation: "create" | "update" | "delete";
+            /** @enum {string} */
+            status: "pending" | "sending" | "sent" | "conflict" | "failed";
+            error_code: string | null;
+            /** Format: date-time */
+            created_at: string;
+            draft: components["schemas"]["GoogleCalendarDraft"] | null;
+        };
         PushSubscriptionInput: {
             endpoint: string;
             p256dh: string;
@@ -3205,6 +3486,8 @@ export interface components {
             expires_at: string;
             email: string | null;
             error_code: string | null;
+            /** @enum {string} */
+            transport?: "imap" | "gmail_api";
         };
         /** @description Un compte IMAP. **`secret_enc` no hi és i `password` tampoc**: la contrasenya es xifra en repòs i no torna a sortir del servidor en cap forma, ni emmascarada —una màscara filtra la longitud i el prefix—. */
         MailAccount: {
@@ -3213,6 +3496,11 @@ export interface components {
              * @enum {string}
              */
             auth_method: "password" | "google";
+            /**
+             * @default imap
+             * @enum {string}
+             */
+            transport: "imap" | "gmail_api";
             /** @enum {string|null} */
             oauth_status?: "connected" | "reconnect_required" | "disconnected" | null;
             id: string;
@@ -3284,6 +3572,7 @@ export interface components {
             id: string;
             account_id: string;
             folder: string;
+            gmail_label_id?: string | null;
             scope_id: string;
             /** @description `null` vol dir l'espai general de l'àmbit. */
             project_id?: string | null;
@@ -3314,6 +3603,7 @@ export interface components {
             id?: string;
             account_id: string;
             folder: string;
+            gmail_label_id?: string;
             scope_id: string;
             project_id?: string | null;
             inbox_visible?: boolean | null;
@@ -3325,6 +3615,7 @@ export interface components {
         };
         MailRulePatch: {
             folder?: string;
+            gmail_label_id?: string;
             scope_id?: string;
             project_id?: string | null;
             inbox_visible?: boolean | null;
@@ -4142,6 +4433,7 @@ export interface components {
         SyncOperation: {
             /** @description Clau d'idempotència. Reenviar el lot no duplica res. */
             op_id: string;
+            /** @description Per a Google Calendar, google_calendar_event amb create, update o delete. */
             entity: string;
             /** @enum {string} */
             op: "create" | "update" | "delete" | "move";
@@ -4153,6 +4445,7 @@ export interface components {
             occurred_at?: string;
             /** @description La versió sobre la qual s'edita. */
             base_version?: number;
+            /** @description Per a Google Calendar, calendar_id, els camps de GoogleCalendarDraft, notify_guests i opcionalment fields amb els camps editats. La baixa només necessita calendar_id i la confirmació dels avisos, si escau. */
             data?: {
                 [key: string]: unknown;
             };
@@ -4419,6 +4712,8 @@ export interface components {
              */
             source_kind?: "caldav" | "ical" | "rss" | null;
             source_url?: string | null;
+            /** @enum {string|null} */
+            source_provider?: "google" | null;
             source_username?: string | null;
             /**
              * @description La font és **bidireccional**. Només un CalDAV pot ser-ho: un `.ics` publicat
@@ -4533,6 +4828,11 @@ export interface components {
             recurrence_id?: string | null;
             summary: string;
             location?: string | null;
+            description?: string | null;
+            version?: number;
+            google_can_edit?: boolean;
+            google_has_guests?: boolean;
+            timezone?: string | null;
             /** Format: date-time */
             starts_at: string;
             /** Format: date-time */
@@ -6373,6 +6673,315 @@ export interface operations {
                 content: {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
+            };
+        };
+    };
+    googleCalendarAvailability: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Indica si la instància permet connectar comptes Google. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        enabled: boolean;
+                    };
+                };
+            };
+        };
+    };
+    startGoogleCalendar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** Format: uuid */
+                    account_id?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Intent OAuth que el client original haurà de confirmar. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoogleCalendarAttempt"] & {
+                        /** Format: uri */
+                        authorization_url: string;
+                    };
+                };
+            };
+        };
+    };
+    googleCalendarCallback: {
+        parameters: {
+            query: {
+                state: string;
+                code?: string;
+                error?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Retorn a Ajustos de Calendaris. */
+            303: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getGoogleCalendarAttempt: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Estat de l'intent propi. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoogleCalendarAttempt"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    cancelGoogleCalendarAttempt: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Intent cancel·lat. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    confirmGoogleCalendar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Compte autoritzat. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoogleCalendarAccount"];
+                };
+            };
+        };
+    };
+    listGoogleCalendarAccounts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Comptes de l'usuari. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoogleCalendarAccount"][];
+                };
+            };
+        };
+    };
+    disconnectGoogleCalendar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Credencials eliminades. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listGoogleCalendarChoices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Calendaris accessibles amb aquest compte. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoogleCalendarChoice"][];
+                };
+            };
+        };
+    };
+    linkGoogleCalendar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: uuid */
+                    id: string;
+                    /** Format: uuid */
+                    account_id: string;
+                    remote_calendar_id: string;
+                    /** Format: uuid */
+                    scope_id: string;
+                    writable?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Vinculació existent. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Calendar"];
+                };
+            };
+            /** @description Vinculació creada. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Calendar"];
+                };
+            };
+        };
+    };
+    listGoogleCalendarChanges: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Canvis pendents o que requereixen intervenció. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoogleCalendarChange"][];
+                };
+            };
+        };
+    };
+    discardGoogleCalendarChange: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Canvi descartat. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    retryGoogleCalendarChange: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    notify_guests?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Reintent encuat. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -10169,6 +10778,87 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
+    getAdminGoogleConfig: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Configuració efectiva de Google, sense el secret. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminGoogleConfig"];
+                };
+            };
+        };
+    };
+    putAdminGoogleConfig: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    client_id: string;
+                    client_secret?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Configuració desada. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminGoogleConfig"];
+                };
+            };
+            /** @description Configuració fixada per variables d'entorn. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    deleteAdminGoogleConfig: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Configuració retirada. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminGoogleConfig"];
+                };
+            };
+            /** @description Configuració fixada per variables d'entorn. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     listUsers: {
         parameters: {
             query?: never;
@@ -10786,6 +11476,8 @@ export interface operations {
                     account_id: string;
                     /** @default false */
                     reconnect?: boolean;
+                    /** @enum {string} */
+                    transport?: "imap" | "gmail_api";
                 };
             };
         };
@@ -11330,6 +12022,10 @@ export interface operations {
                 content: {
                     "application/json": {
                         folders: string[];
+                        labels?: {
+                            id: string;
+                            name: string;
+                        }[];
                         delimiter?: string | null;
                         error?: string | null;
                     };

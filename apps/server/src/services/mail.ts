@@ -30,6 +30,7 @@ import { DEFAULT_MAIL_TEMPLATE, MAIL_TEMPLATE_VARS, unknownMailVars } from '@fem
 import type { AuditContext } from '../audit/audited-transaction.js';
 import { dbBool } from '../db/bool.js';
 import type { MigrationDb } from '../db/migration-db.js';
+import type { MailTransport } from '../net/google-oauth.js';
 import { PolicyError, missingCapability } from '../policy/errors.js';
 import { hasCapability, type Principal } from '../policy/principal.js';
 import { normalizeFolder } from '../policy/mail-routing.js';
@@ -46,6 +47,7 @@ export interface MailAccountSummary {
   username: string;
   has_secret: boolean;
   auth_method: 'password' | 'google';
+  transport: MailTransport;
   oauth_status: 'connected' | 'reconnect_required' | 'disconnected' | null;
   enabled: boolean;
   poll_interval: number | null;
@@ -65,6 +67,7 @@ interface AccountRow {
   username: string;
   secret_enc: string | null;
   auth_method: 'password' | 'google';
+  transport: MailTransport;
   oauth_status: 'connected' | 'reconnect_required' | 'disconnected' | null;
   enabled: number;
   poll_interval: number | null;
@@ -75,7 +78,7 @@ interface AccountRow {
 }
 
 const ACCOUNT_COLUMNS = sql`id, user_id, name, host, port, security, username, secret_enc,
-  enabled, poll_interval, last_polled_at, last_error, last_error_at, consecutive_errors, auth_method, oauth_status`;
+  enabled, poll_interval, last_polled_at, last_error, last_error_at, consecutive_errors, auth_method, oauth_status, transport`;
 
 function toAccount(row: AccountRow): MailAccountSummary {
   return {
@@ -88,6 +91,7 @@ function toAccount(row: AccountRow): MailAccountSummary {
     // El booleà, i no el valor. És l'única cosa que se'n pot dir.
     has_secret: row.secret_enc !== null && row.secret_enc !== '',
     auth_method: row.auth_method,
+    transport: row.transport,
     oauth_status: row.oauth_status,
     enabled: Boolean(row.enabled),
     poll_interval: row.poll_interval === null ? null : Number(row.poll_interval),
@@ -102,6 +106,7 @@ export interface MailRuleSummary {
   id: string;
   account_id: string;
   folder: string;
+  gmail_label_id: string | null;
   scope_id: string;
   project_id: string | null;
   /**
@@ -128,6 +133,7 @@ interface RuleRow {
   id: string;
   account_id: string;
   folder: string;
+  gmail_label_id: string | null;
   scope_id: string;
   project_id: string | null;
   inbox_visible: number | null;
@@ -141,7 +147,7 @@ interface RuleRow {
   last_error_at: string | null;
 }
 
-const RULE_COLUMNS = sql`id, account_id, folder, scope_id, project_id, inbox_visible,
+const RULE_COLUMNS = sql`id, account_id, folder, gmail_label_id, scope_id, project_id, inbox_visible,
   title_template, body_to_description, attachments_to_task, position, enabled, last_seen_at,
   last_error, last_error_at`;
 
@@ -150,6 +156,7 @@ function toRule(row: RuleRow): MailRuleSummary {
     id: row.id,
     account_id: row.account_id,
     folder: row.folder,
+    gmail_label_id: row.gmail_label_id,
     scope_id: row.scope_id,
     project_id: row.project_id,
     inbox_visible: row.inbox_visible === null ? null : Boolean(row.inbox_visible),
@@ -454,6 +461,7 @@ export interface CreateMailRuleInput {
   id?: string | undefined;
   account_id?: string | undefined;
   folder?: string | undefined;
+  gmail_label_id?: string | undefined;
   scope_id?: string | undefined;
   project_id?: string | null | undefined;
   /** `null` treu l'excepció; absent, no la toca. */
@@ -480,7 +488,10 @@ export async function createMailRule(
   if (scopeId === '') throw requerit('scope_id', 'La regla necessita un àmbit de destinació.');
 
   // Les dues comprovacions, i totes dues calen: el compte és teu **i** hi pots escriure.
-  await assertOwnAccount(ctx.tx, principal, accountId);
+  const account = await assertOwnAccount(ctx.tx, principal, accountId);
+  const gmailLabelId = account.transport === 'gmail_api' ? input.gmail_label_id : undefined;
+  if (account.transport === 'gmail_api' && !gmailLabelId)
+    throw requerit('gmail_label_id', 'gmail-label-required');
   await assertScopeAccess(ctx.tx, principal, scopeId);
 
   const id = input.id ?? uuidv7();
@@ -499,7 +510,8 @@ export async function createMailRule(
    */
   const ocupada = await sql<{ n: number }>`
     SELECT COUNT(*) AS n FROM mail_rules
-    WHERE account_id = ${accountId} AND folder = ${folder} AND deleted_at IS NULL
+    WHERE account_id = ${accountId} AND (folder = ${folder} OR gmail_label_id = ${gmailLabelId ?? null})
+      AND deleted_at IS NULL
   `.execute(ctx.tx);
   if (Number(ocupada.rows[0]?.n ?? 0) > 0) {
     throw new PolicyError(
@@ -511,10 +523,10 @@ export async function createMailRule(
   }
 
   await sql`
-    INSERT INTO mail_rules (id, account_id, folder, scope_id, project_id,
+    INSERT INTO mail_rules (id, account_id, folder, gmail_label_id, scope_id, project_id,
                             inbox_visible, title_template, body_to_description,
                             attachments_to_task, position, enabled, created_at, updated_at)
-    VALUES (${id}, ${accountId}, ${folder}, ${scopeId}, ${input.project_id ?? null},
+    VALUES (${id}, ${accountId}, ${folder}, ${gmailLabelId ?? null}, ${scopeId}, ${input.project_id ?? null},
             ${
               input.inbox_visible === undefined || input.inbox_visible === null
                 ? null
@@ -561,17 +573,25 @@ export async function updateMailRule(
 ): Promise<MailRuleSummary> {
   if (!hasCapability(principal, 'mail:write')) throw missingCapability('mail:write');
   const before = await assertOwnRule(ctx.tx, principal, id);
+  const account = await assertOwnAccount(ctx.tx, principal, before.account_id);
 
   const scopeId = input.scope_id ?? before.scope_id;
   // Es comprova el destí NOU: moure una regla cap a un àmbit on no hi ets seria escriure-hi.
   if (scopeId !== before.scope_id) await assertScopeAccess(ctx.tx, principal, scopeId);
 
   const folder = input.folder === undefined ? before.folder : normalizeFolder(input.folder.trim());
+  const gmailLabelId = input.gmail_label_id ?? before.gmail_label_id;
   if (folder === '') throw requerit('folder', 'La regla necessita una carpeta.');
-  if (folder !== before.folder) {
+  if (account.transport === 'gmail_api' && folder !== before.folder && !input.gmail_label_id)
+    throw requerit('gmail_label_id', 'gmail-label-required');
+  if (account.transport === 'gmail_api' && input.enabled === true && !gmailLabelId)
+    throw requerit('gmail_label_id', 'gmail-label-required');
+  const labelChanged = gmailLabelId !== before.gmail_label_id;
+  if (folder !== before.folder || labelChanged) {
     const ocupada = await sql<{ n: number }>`
       SELECT COUNT(*) AS n FROM mail_rules
-      WHERE account_id = ${before.account_id} AND folder = ${folder} AND deleted_at IS NULL
+      WHERE account_id = ${before.account_id} AND id <> ${id}
+        AND (folder = ${folder} OR gmail_label_id = ${gmailLabelId}) AND deleted_at IS NULL
     `.execute(ctx.tx);
     if (Number(ocupada.rows[0]?.n ?? 0) > 0) {
       throw new PolicyError(
@@ -595,7 +615,7 @@ export async function updateMailRule(
 
   await sql`
     UPDATE mail_rules SET
-      folder = ${folder}, scope_id = ${scopeId},
+      folder = ${folder}, gmail_label_id = ${account.transport === 'gmail_api' ? gmailLabelId : null}, scope_id = ${scopeId},
       project_id = ${input.project_id === undefined ? before.project_id : input.project_id},
       inbox_visible = ${
         input.inbox_visible === undefined
@@ -613,6 +633,9 @@ export async function updateMailRule(
       enabled = ${dbBool(input.enabled ?? Boolean(before.enabled))},
       uid_validity = ${canviaCarpeta ? null : sql`uid_validity`},
       last_uid = ${canviaCarpeta ? null : sql`last_uid`},
+      gmail_history_cursor = ${labelChanged ? null : sql`gmail_history_cursor`},
+      last_error = ${labelChanged ? null : sql`last_error`},
+      last_error_at = ${labelChanged ? null : sql`last_error_at`},
       updated_at = ${ctx.now}
     WHERE id = ${id}
   `.execute(ctx.tx);

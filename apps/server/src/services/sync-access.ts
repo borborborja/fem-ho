@@ -111,13 +111,24 @@ export async function assertSyncContentAccess(
     const calendars = await visibleCalendarIds(db, principal.userId);
     if (!calendars.has(calendarId)) throw notFound('calendar', calendarId);
     const found = await sql<
-      Pick<CalendarRow, 'scope_id' | 'origin' | 'source_kind' | 'writable' | 'name'>
+      Pick<
+        CalendarRow,
+        'scope_id' | 'origin' | 'source_kind' | 'source_provider' | 'writable' | 'name'
+      >
     >`
-      SELECT scope_id, origin, source_kind, writable, name
+      SELECT scope_id, origin, source_kind, source_provider, writable, name
       FROM calendars WHERE id = ${calendarId} AND deleted_at IS NULL
     `.execute(db);
     const calendar = found.rows[0];
     if (calendar === undefined) throw notFound('calendar', calendarId);
+    if (calendar.source_provider === 'google') {
+      throw new PolicyError(
+        'google-calendar-queued-write',
+        'Google Calendar',
+        422,
+        'Use the Google Calendar outbox.',
+      );
+    }
     await assertScopeRole(db, principal, calendar.scope_id, 'content');
     assertWritable(calendar);
     return calendar.scope_id;

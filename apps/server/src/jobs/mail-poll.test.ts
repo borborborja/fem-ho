@@ -19,6 +19,7 @@ import { afterAll, beforeEach, beforeAll, describe, expect, it } from 'vitest';
 import { connect, type Connection } from '../db/connection.js';
 import { migrateToLatest } from '../db/migrator.js';
 import type { MailBody, MailClient, MailHeader, MailboxStatus } from '../net/mail-client.js';
+import { GmailError, type GmailClient } from '../net/gmail-client.js';
 import { backoffSeconds, pollMail, pruneMail } from './mail-poll.js';
 
 const tmp = mkdtempSync(join(tmpdir(), 'femho-mailpoll-'));
@@ -117,6 +118,56 @@ async function regla(folder = 'INBOX'): Promise<string> {
   `.execute(conn.db);
   return id;
 }
+
+it('starts Gmail at the current history and resumes a paginated batch by immutable IDs', async () => {
+  const ruleId = await regla('Feina');
+  await sql`UPDATE mail_accounts SET transport = 'gmail_api' WHERE id = ${accountId}`.execute(
+    conn.db,
+  );
+  await sql`UPDATE mail_rules SET gmail_label_id = 'Label_123' WHERE id = ${ruleId}`.execute(
+    conn.db,
+  );
+
+  const fetched: string[] = [];
+  const gmail: GmailClient = {
+    transport: 'gmail_api',
+    profile: async () => ({ historyId: '101', emailAddress: 'poll@example.com' }),
+    labels: async () => [{ id: 'Label_123', name: 'Nom nou' }],
+    changes: async (labelId, cursor, next) => {
+      expect(labelId).toBe('Label_123');
+      if (cursor === '200') throw new GmailError(404, 'gmail-provider-unavailable');
+      expect(cursor).toBe('101');
+      return next === 'next'
+        ? { historyId: '200', ids: ['other-id', 'removed-label-id'] }
+        : { historyId: '200', ids: ['one-id', 'two-id'], nextPageToken: 'next' };
+    },
+    messages: async (labelId, after) => {
+      expect(labelId).toBe('Label_123');
+      expect(after).toBe('2026-08-11T10:20:00.000Z');
+      return { ids: ['one-id', 'missing-id'] };
+    },
+    header: async (uid) => ({
+      ...sobre(uid),
+      labelIds: uid === 'removed-label-id' ? [] : ['Label_123'],
+    }),
+    fetchBody: async (_folder, id) => {
+      fetched.push(id);
+      return { text: 'text de Gmail', html: null, attachments: [] };
+    },
+    fetchAttachment: async () => null,
+  };
+  const run = (time: string) =>
+    pollMail({ db: conn.db, openClient: async () => gmail, now: () => time, batch: 1 });
+  expect((await run(NOW)).ingested).toBe(0);
+  expect((await run('2026-08-11T10:05:00.000Z')).ingested).toBe(1);
+  expect((await run('2026-08-11T10:10:00.000Z')).ingested).toBe(1);
+  expect((await run('2026-08-11T10:15:00.000Z')).ingested).toBe(1);
+  expect((await run('2026-08-11T10:20:00.000Z')).ingested).toBe(0);
+  expect((await run('2026-10-11T10:25:00.000Z')).ingested).toBe(0);
+  expect((await run('2026-10-11T10:30:00.000Z')).ingested).toBe(0);
+  expect((await run('2026-10-11T10:35:00.000Z')).ingested).toBe(1);
+  expect(fetched).toEqual(['one-id', 'two-id', 'other-id', 'missing-id']);
+});
 
 beforeAll(async () => {
   conn = connect(`sqlite://${join(tmp, 'test.db')}`);

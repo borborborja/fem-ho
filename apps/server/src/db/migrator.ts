@@ -52,6 +52,9 @@ import * as taskActivityNotifications from './migrations/028-task-activity-notif
 import * as pomodoro from './migrations/029-pomodoro.js';
 import * as calendarTaskSuggestions from './migrations/030-calendar-task-suggestions.js';
 import * as doingAutoStop from './migrations/031-doing-auto-stop.js';
+import * as gmailApi from './migrations/033-gmail-api.js';
+import * as googleCalendar from './migrations/034-google-calendar.js';
+import * as googleCalendarChanges from './migrations/035-google-calendar-changes.js';
 
 export interface Migration {
   name: string;
@@ -148,6 +151,13 @@ export const MIGRATIONS: Migration[] = [
     down: calendarTaskSuggestions.down,
   },
   { name: '031-doing-auto-stop', up: doingAutoStop.up, down: doingAutoStop.down },
+  { name: '033-gmail-api', up: gmailApi.up, down: gmailApi.down },
+  { name: '034-google-calendar', up: googleCalendar.up, down: googleCalendar.down },
+  {
+    name: '035-google-calendar-changes',
+    up: googleCalendarChanges.up,
+    down: googleCalendarChanges.down,
+  },
 ];
 
 const MIGRATIONS_TABLE = 'schema_migrations';

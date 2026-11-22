@@ -89,6 +89,7 @@ export async function listCollections(
   const calendars = await sql<CalendarRow>`
     SELECT id, scope_id, project_id, sync_seq FROM calendars
     WHERE scope_id IN (${scopeIds}) AND kind = 'events' AND deleted_at IS NULL
+      AND source_provider IS NULL
   `.execute(db);
 
   const taskSeqs = await taskSeqByContainer(db, scopeIds);

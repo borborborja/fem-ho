@@ -187,6 +187,7 @@ data class SettingsLabels(
     val sourcesKindCaldav: String,
     val sourcesKindIcal: String,
     val sourcesKindRss: String,
+    val sourcesKindGoogle: String,
     val sourcesName: String,
     val sourcesNever: String,
     val sourcesPassword: String,
@@ -202,6 +203,8 @@ data class SettingsLabels(
     val calendarCredWarning: String,
     // Correu: comptes IMAP i regles
     val mailIntro: String,
+    val mailGmailApi: String,
+    val mailGmailPickLabel: String,
     val mailAccounts: String,
     val mailAdd: String,
     val mailName: String,
@@ -330,6 +333,7 @@ fun SettingsScreen(
     mailAccounts: List<ho.fem.model.MailAccount> = emptyList(),
     mailRules: List<ho.fem.model.MailRule> = emptyList(),
     googleMailContent: @Composable () -> Unit = {},
+    gmailRuleRepair: @Composable (ho.fem.model.MailRule) -> Unit = {},
     mailPollingContent: @Composable (ho.fem.model.MailAccount) -> Unit = {},
     mcpContent: @Composable () -> Unit = {},
     onTheme: (String) -> Unit,
@@ -361,10 +365,14 @@ fun SettingsScreen(
     onCreateCalendar: (String, String, String, String?, String?, String?, String?, Boolean?) -> Unit = { _, _, _, _, _, _, _, _ -> },
     onUpdateCalendar: (String, String?, String?, String?, String?, Int?, Boolean?) -> Unit = { _, _, _, _, _, _, _ -> },
     onDeleteCalendar: (String) -> Unit = {},
+    googleCalendarContent: @Composable () -> Unit = {},
+    googleCalendarSharing: @Composable (ho.fem.model.Calendar, ho.fem.model.Scope) -> Unit = { _, _ -> },
+    googleCalendarCanManage: (ho.fem.model.Scope) -> Boolean = { false },
     onCreateMailAccount: (String, String, String, String, String) -> Unit = { _, _, _, _, _ -> },
     onUpdateMailAccount: (String, String?, String?, String?, String?, String?) -> Unit = { _, _, _, _, _, _ -> },
     onDeleteMailAccount: (String) -> Unit = {},
     onTestMailAccount: (String, (ho.fem.model.MailTestResult) -> Unit) -> Unit = { _, _ -> },
+    onListGmailLabels: suspend (String) -> List<String> = { emptyList() },
     onCreateMailRule: (String, String, String?, String?) -> Unit = { _, _, _, _ -> },
     onDeleteMailRule: (String) -> Unit = {},
     onCopyToClipboard: (String) -> Unit = {},
@@ -388,6 +396,7 @@ fun SettingsScreen(
     onRevokeShare: (String) -> Unit = {},
     // Admin (només rol admin)
     isAdmin: Boolean = false,
+    googleAdminContent: @Composable () -> Unit = {},
     adminUsers: List<ho.fem.model.AdminUser> = emptyList(),
     adminInviteUrl: String? = null,
     adminError: String? = null,
@@ -402,7 +411,7 @@ fun SettingsScreen(
     aiTasksContent: @Composable () -> Unit = {},
     notificationsContent: @Composable () -> Unit = {},
 ) {
-    var selectedTab by remember { mutableStateOf("general") }
+    var selectedTab by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("general") }
 
     Column(
         modifier = modifier
@@ -530,6 +539,9 @@ fun SettingsScreen(
                     scopes = scopes,
                     calendars = calendars,
                     serverUrl = serverUrl,
+                    googleCalendarContent = googleCalendarContent,
+                    googleCalendarSharing = googleCalendarSharing,
+                    googleCalendarCanManage = googleCalendarCanManage,
                     onCreateCalendar = onCreateCalendar,
                     onUpdateCalendar = onUpdateCalendar,
                     onDeleteCalendar = onDeleteCalendar,
@@ -537,6 +549,7 @@ fun SettingsScreen(
                 )
                 "mail" -> MailTab(
                     googleMailContent = googleMailContent,
+                    gmailRuleRepair = gmailRuleRepair,
                     mailPollingContent = mailPollingContent,
                     labels = labels,
                     mailAccounts = mailAccounts,
@@ -546,6 +559,7 @@ fun SettingsScreen(
                     onUpdateMailAccount = onUpdateMailAccount,
                     onDeleteMailAccount = onDeleteMailAccount,
                     onTestMailAccount = onTestMailAccount,
+                    onListGmailLabels = onListGmailLabels,
                     onCreateMailRule = onCreateMailRule,
                     onDeleteMailRule = onDeleteMailRule,
                 )
@@ -589,6 +603,7 @@ fun SettingsScreen(
                 "admin" -> AdminTab(
                     labels = labels,
                     isAdmin = isAdmin,
+                    googleAdminContent = googleAdminContent,
                     users = adminUsers,
                     inviteUrl = adminInviteUrl,
                     error = adminError,
@@ -1204,16 +1219,20 @@ private fun CalendarsTab(
     scopes: List<ho.fem.model.Scope>,
     calendars: List<ho.fem.model.Calendar>,
     serverUrl: String,
+    googleCalendarContent: @Composable () -> Unit,
+    googleCalendarSharing: @Composable (ho.fem.model.Calendar, ho.fem.model.Scope) -> Unit,
+    googleCalendarCanManage: (ho.fem.model.Scope) -> Boolean,
     onCreateCalendar: (String, String, String, String?, String?, String?, String?, Boolean?) -> Unit,
     onUpdateCalendar: (String, String?, String?, String?, String?, Int?, Boolean?) -> Unit,
     onDeleteCalendar: (String) -> Unit,
     onCopyToClipboard: (String) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        googleCalendarContent()
         scopes.forEach { scope ->
             Group(scope.name) {
                 val sources = calendars.filter { it.scopeId == scope.id && it.origin == ho.fem.model.CalendarOrigin.SUBSCRIPTION }
-                val shared = calendars.filter { it.sharedWithScope }
+                val shared = calendars.filter { it.scopeId == scope.id && it.sharedWithScope }
 
                 if (sources.isEmpty()) {
                     Text(
@@ -1233,6 +1252,9 @@ private fun CalendarsTab(
                                     color = Femho.colors.ink,
                                     fontSize = FemhoText.body,
                                 )
+                                if (source.sourceProvider == "google") {
+                                    Text(labels.sourcesKindGoogle, color = Femho.colors.inkSoft, fontSize = FemhoText.meta)
+                                }
                                 val lastError = source.lastError
                                 val lastRefreshedAt = source.lastRefreshedAt
                                 val status = when {
@@ -1246,22 +1268,25 @@ private fun CalendarsTab(
                                     fontSize = FemhoText.meta,
                                 )
                             }
-                            androidx.compose.material3.Switch(
-                                checked = source.inboxVisible ?: true,
-                                onCheckedChange = { on ->
-                                    onUpdateCalendar(source.id, null, null, null, null, null, on)
-                                },
-                            )
-                            Text(
-                                text = labels.sourcesRemove,
-                                color = Femho.colors.dangerText,
-                                fontSize = FemhoText.meta,
-                                modifier = Modifier
-                                    .clickable { onDeleteCalendar(source.id) }
-                                    .heightIn(min = FemhoSize.touch)
-                                    .padding(horizontal = 8.dp, vertical = 6.dp),
-                            )
+                            if (source.sourceProvider != "google" || googleCalendarCanManage(scope)) {
+                                androidx.compose.material3.Switch(
+                                    checked = source.inboxVisible ?: source.inboxVisibleDefault,
+                                    onCheckedChange = { on ->
+                                        onUpdateCalendar(source.id, null, null, null, null, null, on)
+                                    },
+                                )
+                                Text(
+                                    text = labels.sourcesRemove,
+                                    color = Femho.colors.dangerText,
+                                    fontSize = FemhoText.meta,
+                                    modifier = Modifier
+                                        .clickable { onDeleteCalendar(source.id) }
+                                        .heightIn(min = FemhoSize.touch)
+                                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                                )
+                            }
                         }
+                        if (source.sourceProvider == "google") googleCalendarSharing(source, scope)
                     }
                 }
 
@@ -1460,6 +1485,7 @@ private fun CalendarsTab(
 @Composable
 private fun MailTab(
     googleMailContent: @Composable () -> Unit,
+    gmailRuleRepair: @Composable (ho.fem.model.MailRule) -> Unit,
     mailPollingContent: @Composable (ho.fem.model.MailAccount) -> Unit,
     labels: SettingsLabels,
     mailAccounts: List<ho.fem.model.MailAccount>,
@@ -1469,6 +1495,7 @@ private fun MailTab(
     onUpdateMailAccount: (String, String?, String?, String?, String?, String?) -> Unit,
     onDeleteMailAccount: (String) -> Unit,
     onTestMailAccount: (String, (ho.fem.model.MailTestResult) -> Unit) -> Unit,
+    onListGmailLabels: suspend (String) -> List<String>,
     onCreateMailRule: (String, String, String?, String?) -> Unit,
     onDeleteMailRule: (String) -> Unit,
 ) {
@@ -1515,7 +1542,7 @@ private fun MailTab(
                                 )
                                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                     Text(
-                                        text = account.host,
+                                        text = if (account.transport == "gmail_api") labels.mailGmailApi else account.host,
                                         color = Femho.colors.inkFaint,
                                         fontSize = FemhoText.meta,
                                     )
@@ -1676,8 +1703,20 @@ private fun MailTab(
         Group(labels.mailRules) {
             var ruleAccount by remember { mutableStateOf<String?>(null) }
             var ruleFolder by remember { mutableStateOf("") }
-            var ruleScope by remember { mutableStateOf<String?>(null) }
+            var ruleScope by remember(scopes.firstOrNull()?.id) {
+                mutableStateOf(scopes.firstOrNull()?.id)
+            }
             var ruleTemplate by remember { mutableStateOf("") }
+            val gmailAccount = mailAccounts.find { it.id == ruleAccount && it.transport == "gmail_api" }
+            var gmailLabels by remember(gmailAccount?.id) { mutableStateOf<List<String>?>(null) }
+            var gmailLabelsFailed by remember(gmailAccount?.id) { mutableStateOf(false) }
+            var gmailLabelsExpanded by remember(gmailAccount?.id) { mutableStateOf(false) }
+            androidx.compose.runtime.LaunchedEffect(gmailAccount?.id) {
+                val account = gmailAccount ?: return@LaunchedEffect
+                runCatching { onListGmailLabels(account.id) }
+                    .onSuccess { gmailLabels = it }
+                    .onFailure { gmailLabelsFailed = true }
+            }
 
             if (mailRules.isEmpty()) {
                 Text(
@@ -1717,6 +1756,9 @@ private fun MailTab(
                                 .padding(horizontal = 8.dp, vertical = 6.dp),
                         )
                     }
+                    if (!rule.enabled && mailAccounts.any { it.id == rule.accountId && it.transport == "gmail_api" }) {
+                        gmailRuleRepair(rule)
+                    }
                 }
             }
 
@@ -1724,28 +1766,63 @@ private fun MailTab(
                 Chips(
                     options = mailAccounts.map { it.id to it.name },
                     value = ruleAccount.orEmpty(),
-                    onChange = { ruleAccount = it },
+                    onChange = {
+                        ruleAccount = it
+                        ruleFolder = ""
+                    },
                     tag = "rule-account",
                 )
-                androidx.compose.foundation.text.BasicTextField(
-                    value = ruleFolder,
-                    onValueChange = { ruleFolder = it },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(FemhoShape.pill))
-                        .background(Femho.colors.ghostBg)
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                    decorationBox = { innerTextField ->
-                        Box(modifier = Modifier.padding(vertical = 2.dp)) {
-                            if (ruleFolder.isEmpty()) {
-                                Text(text = labels.mailFolderPlaceholder, color = Femho.colors.inkFaint, fontSize = FemhoText.body)
-                            }
-                            innerTextField()
+                if (gmailAccount != null) {
+                    Box {
+                        androidx.compose.material3.TextButton(
+                            enabled = !gmailLabels.isNullOrEmpty(),
+                            onClick = { gmailLabelsExpanded = true },
+                        ) {
+                            Text(
+                                text = when {
+                                    gmailLabelsFailed || gmailLabels?.isEmpty() == true -> labels.mailFoldersFailed
+                                    gmailLabels == null -> labels.mailLoadingFolders
+                                    ruleFolder.isEmpty() -> labels.mailGmailPickLabel
+                                    else -> ruleFolder
+                                },
+                            )
                         }
-                    },
-                )
+                        androidx.compose.material3.DropdownMenu(
+                            expanded = gmailLabelsExpanded,
+                            onDismissRequest = { gmailLabelsExpanded = false },
+                        ) {
+                            gmailLabels.orEmpty().forEach { name ->
+                                androidx.compose.material3.DropdownMenuItem(
+                                    text = { Text(name) },
+                                    onClick = {
+                                        ruleFolder = name
+                                        gmailLabelsExpanded = false
+                                    },
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    androidx.compose.foundation.text.BasicTextField(
+                        value = ruleFolder,
+                        onValueChange = { ruleFolder = it },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(FemhoShape.pill))
+                            .background(Femho.colors.ghostBg)
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        decorationBox = { innerTextField ->
+                            Box(modifier = Modifier.padding(vertical = 2.dp)) {
+                                if (ruleFolder.isEmpty()) {
+                                    Text(text = labels.mailFolderPlaceholder, color = Femho.colors.inkFaint, fontSize = FemhoText.body)
+                                }
+                                innerTextField()
+                            }
+                        },
+                    )
+                }
                 Chips(
-                    options = listOf("" to labels.mailProjectNone) + scopes.map { it.id to it.name },
+                    options = scopes.map { it.id to it.name },
                     value = ruleScope ?: "",
                     onChange = { ruleScope = it.ifEmpty { null } },
                     tag = "rule-scope",
@@ -1782,7 +1859,7 @@ private fun MailTab(
                     modifier = Modifier
                         .clickable {
                             val accountId = ruleAccount
-                            if (accountId != null && ruleFolder.isNotBlank()) {
+                            if (accountId != null && ruleScope != null && ruleFolder.isNotBlank()) {
                                 onCreateMailRule(accountId, ruleFolder.trim(), ruleScope, ruleTemplate.trim().ifEmpty { null })
                                 ruleFolder = ""
                                 ruleTemplate = ""
@@ -2889,6 +2966,7 @@ private fun EmptyState(text: String) {
 private fun AdminTab(
     labels: SettingsLabels,
     isAdmin: Boolean,
+    googleAdminContent: @Composable () -> Unit,
     users: List<ho.fem.model.AdminUser>,
     inviteUrl: String?,
     error: String?,
@@ -3017,6 +3095,8 @@ private fun AdminTab(
                 }
             }
         }
+
+        googleAdminContent()
 
         // La neteja exigeix el nom exacte de la instància (també el servidor).
         var confirm by remember { mutableStateOf("") }

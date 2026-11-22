@@ -28,6 +28,7 @@ import { createProject, deleteProject } from '../services/scopes.js';
 import { createEvent } from '../services/events.js';
 import { getPomodoro, syncPomodoro } from '../services/pomodoro.js';
 import { syncDoingAutoStop } from '../services/doing-auto-stop.js';
+import { submitGoogleCalendarChange } from '../services/google-calendar-changes.js';
 import {
   getCalendarTaskSuggestions,
   syncCalendarTaskSuggestions,
@@ -351,6 +352,33 @@ async function applyOne(
       status: 'rejected',
       error: { detail: 'Cada operació del lot necessita un `op_id` que sigui una cadena.' },
     };
+  }
+
+  if (operation.entity === 'google_calendar_event') {
+    try {
+      if (
+        typeof operation.id !== 'string' ||
+        (operation.op !== 'create' && operation.op !== 'update' && operation.op !== 'delete')
+      )
+        throw new PolicyError(
+          'google-calendar-invalid-event',
+          'Google Calendar',
+          422,
+          'invalid_event',
+        );
+      const change = await submitGoogleCalendarChange(
+        app.connection!,
+        principal,
+        operation.op_id,
+        operation.id,
+        operation.op,
+        operation.base_version,
+        operation.data ?? {},
+      );
+      return { op_id: operation.op_id, status: 'ok', entity: change };
+    } catch (error) {
+      return rejectedOperation(operation.op_id, error);
+    }
   }
 
   // Les ordres personals tenen els seus rebuts fora del lot d'entitats d'àmbit.
