@@ -7,7 +7,7 @@ Data de l'última verificació completa: **2026-11-19**.
 
 ---
 
-## Gmail API i Google Calendar
+## Gmail API i Google Calendar · 0.30.0
 
 **Ajustos → Admin → Integració amb Google** permet desar el client OAuth. Una
 parella configurada per entorn té prioritat i el formulari queda bloquejat.
