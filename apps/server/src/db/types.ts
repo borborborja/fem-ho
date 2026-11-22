@@ -99,6 +99,7 @@ export interface Calendars {
   scope_id: string;
   shared_with_scope: Generated<number>;
   source_kind: string | null;
+  source_provider: string | null;
   source_secret_enc: string | null;
   source_url: string | null;
   source_username: string | null;
@@ -107,6 +108,13 @@ export interface Calendars {
   updated_at: string;
   version: Generated<number>;
   writable: Generated<number>;
+}
+
+export interface CalendarSuggestionDeclines {
+  calendar_id: string;
+  recurrence_key: string;
+  uid: string;
+  user_id: string;
 }
 
 export interface ChangeLog {
@@ -228,6 +236,86 @@ export interface ExternalAccess {
   user_id: string | null;
 }
 
+export interface GoogleCalendarAccounts {
+  client_id: string;
+  created_at: string;
+  email: string;
+  google_subject: string;
+  id: string;
+  oauth_lock: string | null;
+  oauth_lock_until: string | null;
+  oauth_status: string;
+  secret_enc: string | null;
+  updated_at: string;
+  user_id: string;
+}
+
+export interface GoogleCalendarChanges {
+  attempts: Generated<number>;
+  base_etag: string | null;
+  calendar_id: string;
+  created_at: string;
+  draft: string;
+  error_code: string | null;
+  event_id: string;
+  id: string | null;
+  lock_token: string | null;
+  next_attempt_at: string;
+  operation: string;
+  remote_calendar_id: string;
+  remote_event_id: string;
+  status: string;
+  updated_at: string;
+  user_id: string;
+}
+
+export interface GoogleCalendarEvents {
+  calendar_id: string;
+  event_id: string;
+  has_guests: Generated<number>;
+  remote_etag: string;
+  remote_event_id: string;
+  writable: Generated<number>;
+}
+
+export interface GoogleCalendarLinks {
+  access_role: string;
+  account_id: string;
+  calendar_id: string;
+  deleted_at: string | null;
+  projected_at: string | null;
+  pull_lock: string | null;
+  pull_lock_until: string | null;
+  remote_calendar_id: string;
+  scope_id: string;
+  sync_token: string | null;
+  sync_window_day: string | null;
+  write_enabled: Generated<number>;
+}
+
+export interface GoogleCalendarOauthAttempts {
+  account_id: string;
+  client_id: string;
+  email: string | null;
+  error_code: string | null;
+  expires_at: string;
+  id: string;
+  nonce: string;
+  reconnect: Generated<number>;
+  result_enc: string | null;
+  source: string;
+  state_hash: string;
+  status: string;
+  user_id: string;
+  verifier_enc: string | null;
+}
+
+export interface GoogleCalendarWriteLeases {
+  expires_at: string;
+  remote_calendar_id: string | null;
+  token: string;
+}
+
 export interface Grants {
   capabilities: string | null;
   created_at: string;
@@ -302,6 +390,7 @@ export interface MailAccounts {
   port: Generated<number>;
   secret_enc: string | null;
   security: Generated<string>;
+  transport: Generated<string>;
   updated_at: string;
   user_id: string;
   username: string;
@@ -346,6 +435,7 @@ export interface MailOauthAttempts {
   email: string | null;
   error_code: string | null;
   expires_at: string;
+  google_client_id: string | null;
   id: string;
   nonce: string;
   reconnect: number;
@@ -353,6 +443,7 @@ export interface MailOauthAttempts {
   source: string;
   state_hash: string;
   status: string;
+  transport: Generated<string>;
   user_id: string;
   verifier_enc: string | null;
 }
@@ -365,6 +456,8 @@ export interface MailRules {
   deleted_at: string | null;
   enabled: Generated<number>;
   folder: string;
+  gmail_history_cursor: string | null;
+  gmail_label_id: string | null;
   id: string;
   inbox_visible: number | null;
   last_error: string | null;
@@ -841,6 +934,7 @@ export interface DB {
   ai_agents: AiAgents;
   api_tokens: ApiTokens;
   attachments: Attachments;
+  calendar_suggestion_declines: CalendarSuggestionDeclines;
   calendars: Calendars;
   change_log: ChangeLog;
   checklist_items: ChecklistItems;
@@ -851,6 +945,12 @@ export interface DB {
   event_occurrences: EventOccurrences;
   events: Events;
   external_access: ExternalAccess;
+  google_calendar_accounts: GoogleCalendarAccounts;
+  google_calendar_changes: GoogleCalendarChanges;
+  google_calendar_events: GoogleCalendarEvents;
+  google_calendar_links: GoogleCalendarLinks;
+  google_calendar_oauth_attempts: GoogleCalendarOauthAttempts;
+  google_calendar_write_leases: GoogleCalendarWriteLeases;
   grants: Grants;
   instance_links: InstanceLinks;
   instance_settings: InstanceSettings;
@@ -893,12 +993,6 @@ export interface DB {
   task_types: TaskTypes;
   tasks: Tasks;
   user_invites: UserInvites;
-  calendar_suggestion_declines: {
-    user_id: string;
-    calendar_id: string;
-    uid: string;
-    recurrence_key: string;
-  };
   user_settings: UserSettings;
   users: Users;
   webhooks: Webhooks;

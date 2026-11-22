@@ -1829,6 +1829,9 @@ private fun CalendarHost(
     val pending by model.pending.collectAsStateWithLifecycle()
     val tasks by model.tasks.collectAsStateWithLifecycle()
     val calendar by model.calendar.collectAsStateWithLifecycle()
+    val calendars by model.calendars.collectAsStateWithLifecycle()
+    val profile by model.profile.collectAsStateWithLifecycle()
+    val googleChanges by model.deviceGoogleCalendarChanges.collectAsStateWithLifecycle()
     val timezone by model.profileTimezone.collectAsStateWithLifecycle()
     val zone = remember(timezone) {
         runCatching { java.time.ZoneId.of(timezone) }.getOrElse { java.time.ZoneId.systemDefault() }
@@ -1851,7 +1854,35 @@ private fun CalendarHost(
         timezone = timezone,
     )
     LaunchedEffect(request) { model.loadCalendar(request) }
+    LaunchedEffect(Unit) { model.loadCalendars() }
     val response = calendar.takeIf { it.request == request }
+    val ownerId = profile?.id ?: model.activeUserId()
+    val ownedScopes = scopes.filter { it.ownerId == ownerId }.mapTo(mutableSetOf()) { it.id }
+    val googleCalendars = calendars.filter { it.sourceProvider == "google" && it.scopeId in ownedScopes }
+    val writableCalendars = googleCalendars.filter { it.writable && (scopeIds.isEmpty() || it.scopeId in scopeIds) }
+    var openGoogleEvent by remember { mutableStateOf<ho.fem.model.EventOccurrence?>(null) }
+    var editGoogleEvent by remember { mutableStateOf(false) }
+    var createGoogleEvent by remember { mutableStateOf(false) }
+    var deleteGoogleEvent by remember { mutableStateOf(false) }
+    var googleSaving by remember { mutableStateOf(false) }
+    var googleFailed by remember { mutableStateOf(false) }
+    var queuedGoogleChanges by remember { mutableStateOf(0) }
+    var showGoogleQueued by remember { mutableStateOf(false) }
+    LaunchedEffect(queuedGoogleChanges) {
+        if (queuedGoogleChanges == 0) return@LaunchedEffect
+        showGoogleQueued = true
+        kotlinx.coroutines.delay(3500)
+        showGoogleQueued = false
+    }
+
+    fun googleChangeQueued() {
+        queuedGoogleChanges += 1
+        openGoogleEvent = null
+        createGoogleEvent = false
+        editGoogleEvent = false
+        googleSaving = false
+        googleFailed = false
+    }
 
     val labels = CalendarLabels(
         // Els noms surten del CLDR i no del catàleg: `java.time` i `Intl` porten la
@@ -1873,6 +1904,9 @@ private fun CalendarHost(
             val date = CalendarDate.event(occurrence.startsAt, occurrence.allDay, zone) ?: return@forEach
             add(date.day to AgendaEntry(
                 occurrence.summary, colors[occurrence.scopeId] ?: fallback, date.timeLabel, scopeNames[occurrence.scopeId],
+                onOpen = if (occurrence.googleCanEdit) {
+                    { openGoogleEvent = occurrence; googleFailed = false }
+                } else null,
             ))
         }
         scopedTasks.forEach { task ->
@@ -1956,6 +1990,16 @@ private fun CalendarHost(
         }
 
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+            Column(Modifier.padding(horizontal = 12.dp)) {
+                if (writableCalendars.isNotEmpty()) {
+                    androidx.compose.material3.TextButton(
+                        onClick = { createGoogleEvent = true },
+                        modifier = Modifier.testTag("google-calendar-add-event"),
+                    ) { Text(stringResource(R.string.calendar_google_create)) }
+                }
+                if (showGoogleQueued) Text(stringResource(R.string.calendar_google_queued), color = Femho.colors.inkSoft)
+                GoogleCalendarChangesPanel(model, googleCalendars.isNotEmpty()) { model.loadCalendar(request) }
+            }
             if (response?.failed == true) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(stringResource(R.string.calendar_loaderror), modifier = Modifier.weight(1f), color = Femho.colors.ink)
@@ -2020,6 +2064,54 @@ private fun CalendarHost(
                 onEventToggle = { model.setEventInInbox(it, visible = !it.inInbox, request = request) },
                 eventTime = { CalendarDate.event(it.startsAt, it.allDay, zone)?.timeLabel.orEmpty() },
                 taskMetadata = { taskOriginMetadata(it)?.invoke() },
+            )
+        }
+    }
+
+    val editing = openGoogleEvent
+    if (createGoogleEvent || (editGoogleEvent && editing != null)) {
+        GoogleCalendarEventEditor(
+            model, selected, zone, writableCalendars, scopes.associate { it.id to it.name },
+            if (createGoogleEvent) null else editing,
+            onClose = { createGoogleEvent = false; editGoogleEvent = false },
+            onQueued = ::googleChangeQueued,
+        )
+    } else if (editing != null && !deleteGoogleEvent) {
+        val duplicate = googleChanges.any { it.eventId == editing.eventId }
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { if (!googleSaving) openGoogleEvent = null },
+            title = { Text(editing.summary) },
+            text = {
+                Column {
+                    editing.location?.takeIf { it.isNotEmpty() }?.let { Text(it) }
+                    if (googleFailed) Text(stringResource(R.string.calendar_google_failed), color = Femho.colors.dangerText)
+                    androidx.compose.material3.TextButton(
+                        enabled = !duplicate && !googleSaving,
+                        onClick = { editGoogleEvent = true },
+                    ) { Text(stringResource(R.string.calendar_google_edit)) }
+                    androidx.compose.material3.TextButton(
+                        enabled = !duplicate && !googleSaving,
+                        onClick = { deleteGoogleEvent = true },
+                    ) { Text(stringResource(R.string.nav_delete)) }
+                }
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(enabled = !googleSaving, onClick = { openGoogleEvent = null }) {
+                    Text(stringResource(R.string.nav_cancel))
+                }
+            },
+        )
+    }
+    if (deleteGoogleEvent && editing != null) {
+        val message = if (editing.googleHasGuests) R.string.calendar_google_guestnotice else R.string.calendar_google_deleteconfirm
+        GoogleCalendarConfirm(message, R.string.nav_delete, { deleteGoogleEvent = false }) {
+            deleteGoogleEvent = false
+            googleSaving = true
+            model.queueGoogleCalendarChange(
+                calendarId = editing.calendarId, eventId = editing.eventId, baseVersion = editing.version ?: 0,
+                action = "delete", draft = null, notifyGuests = editing.googleHasGuests,
+                onQueued = ::googleChangeQueued,
+                onFailed = { googleSaving = false; googleFailed = true },
             )
         }
     }
@@ -2553,6 +2645,7 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
             sourcesKindCaldav = stringResource(R.string.settings_sources_kind_caldav),
             sourcesKindIcal = stringResource(R.string.settings_sources_kind_ical),
             sourcesKindRss = stringResource(R.string.settings_sources_kind_rss),
+            sourcesKindGoogle = stringResource(R.string.settings_googlecalendar_title),
             sourcesName = stringResource(R.string.settings_sources_name),
             sourcesNever = stringResource(R.string.settings_sources_never),
             sourcesPassword = stringResource(R.string.settings_sources_password),
@@ -2567,6 +2660,8 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
             calendarPrivate = stringResource(R.string.settings_calendarprivate),
             calendarCredWarning = stringResource(R.string.settings_calendarcredwarning),
             mailIntro = stringResource(R.string.settings_mail_intro),
+            mailGmailApi = stringResource(R.string.settings_mail_oauth_api),
+            mailGmailPickLabel = stringResource(R.string.settings_mail_oauth_picklabel),
             mailAccounts = stringResource(R.string.settings_mail_accounts),
             mailAdd = stringResource(R.string.settings_mail_add),
             mailName = stringResource(R.string.settings_mail_name),
@@ -2650,6 +2745,8 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
         calendars = calendars,
         mailAccounts = mailAccounts,
         googleMailContent = { GoogleMailPanel(model, mailAccounts) },
+        gmailRuleRepair = { GmailRuleRepair(model, it) },
+        onListGmailLabels = { id -> model.googleMailApi().mailFolders(id) },
         mailPollingContent = { MailPollingControl(model, it) },
         mailRules = mailRules,
         theme = display.selection,
@@ -2703,6 +2800,9 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
         onCreateCalendar = model::createCalendar,
         onUpdateCalendar = model::updateCalendar,
         onDeleteCalendar = model::deleteCalendar,
+        googleCalendarContent = { GoogleCalendarSettings(model, scopes) },
+        googleCalendarSharing = { calendar, scope -> GoogleCalendarSharing(model, calendar, scope) },
+        googleCalendarCanManage = { scope -> scope.ownerId == (profile?.id ?: model.activeUserId()) },
         onCreateMailAccount = model::createMailAccount,
         onUpdateMailAccount = model::updateMailAccount,
         onDeleteMailAccount = model::deleteMailAccount,
@@ -2710,6 +2810,7 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
          onCreateMailRule = model::createMailRule,
          onDeleteMailRule = model::deleteMailRule,
         isAdmin = profile?.role == "admin",
+        googleAdminContent = { GoogleAdminSettings(model) },
         adminUsers = adminUsers,
         adminInviteUrl = adminInviteUrl,
         adminError = adminError,

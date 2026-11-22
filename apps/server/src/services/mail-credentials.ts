@@ -14,8 +14,32 @@ import {
   type GoogleTokens,
 } from '../net/google-oauth.js';
 import type { OAuthAccount } from './mail-oauth.js';
+import { resolveGoogleConfig } from './google-config.js';
 
 type CredentialConfig = Pick<Config, 'googleClientId' | 'googleClientSecret' | 'baseUrl'>;
+
+async function markReconnect(
+  db: MigrationDb,
+  principal: Principal,
+  accountId: string,
+  secretEnc: string,
+  lock?: string,
+): Promise<void> {
+  await auditedTransaction(db, principal, async (ctx) => {
+    const changed = await sql`UPDATE mail_accounts SET oauth_status = 'reconnect_required',
+      last_error = 'mail-oauth-reconnect_required', last_error_at = ${ctx.now}
+      WHERE id = ${accountId} AND secret_enc = ${secretEnc} AND oauth_status = 'connected'
+        AND deleted_at IS NULL ${lock === undefined ? sql`` : sql`AND oauth_lock = ${lock}`}
+      RETURNING id`.execute(ctx.tx);
+    if (!changed.rows.length) return ctx.noChange();
+    ctx.record({
+      entityType: 'mail_account',
+      entityId: accountId,
+      verb: 'updated',
+      changes: { oauth_status: { from: 'connected', to: 'reconnect_required' } },
+    });
+  });
+}
 
 /** Un sol camí de credencials per als tests, carpetes i planificador. */
 export async function mailCredentials(
@@ -27,9 +51,16 @@ export async function mailCredentials(
   providerOverride?: GoogleMailProvider,
 ): Promise<{ password?: string; accessToken?: string }> {
   const deadline = Date.now() + 15_000;
+  const principal: Principal = {
+    kind: 'user',
+    userId,
+    capabilities: new Set(),
+    scopeIds: null,
+    source: 'system',
+  };
   while (true) {
     const account = (
-      await sql<OAuthAccount>`SELECT id,user_id,auth_method,secret_enc,oauth_status
+      await sql<OAuthAccount>`SELECT id,user_id,auth_method,secret_enc,oauth_status,transport
       FROM mail_accounts WHERE id = ${accountId} AND user_id = ${userId} AND deleted_at IS NULL`.execute(
         db,
       )
@@ -62,9 +93,15 @@ export async function mailCredentials(
     } catch {
       throw new GoogleOAuthError('reconnect_required');
     }
+    const effective = providerOverride ? undefined : await resolveGoogleConfig(db, secret, config);
+    if (effective && !effective.enabled) throw new GoogleOAuthError('not_configured');
+    if (effective && tokens.client_id && tokens.client_id !== effective.googleClientId) {
+      await markReconnect(db, principal, accountId, account.secret_enc);
+      throw new GoogleOAuthError('reconnect_required');
+    }
     if (tokens.expires_at > Date.now() + 60_000) return { accessToken: tokens.access_token };
     if (!tokens.refresh_token) throw new GoogleOAuthError('reconnect_required');
-    const provider = providerOverride ?? createGoogleMailProvider(config);
+    const provider = providerOverride ?? createGoogleMailProvider(effective ?? config);
     const lock = randomUUID();
     // Lease SQL: dos processos no poden renovar simultàniament el mateix refresh token.
     const claimed = await sql`UPDATE mail_accounts SET oauth_lock = ${lock},
@@ -78,18 +115,12 @@ export async function mailCredentials(
       await delay(100);
       continue;
     }
-    const principal: Principal = {
-      kind: 'user',
-      userId,
-      capabilities: new Set(),
-      scopeIds: null,
-      source: 'system',
-    };
     try {
-      const updated = await provider.refresh(tokens.refresh_token);
+      const updated = await provider.refresh(tokens.refresh_token, account.transport);
       const next = {
         ...tokens,
         ...updated,
+        client_id: effective?.googleClientId ?? tokens.client_id,
         refresh_token: updated.refresh_token ?? tokens.refresh_token,
       };
       const saved = await auditedTransaction(db, principal, async (ctx) => {
@@ -112,23 +143,7 @@ export async function mailCredentials(
         error instanceof GoogleOAuthError &&
         ['reconnect_required', 'missing_scope'].includes(error.code)
       ) {
-        await auditedTransaction(db, principal, async (ctx) => {
-          const changed = await sql`UPDATE mail_accounts SET oauth_status = 'reconnect_required',
-            last_error = 'mail-oauth-reconnect_required', last_error_at = ${ctx.now}
-            WHERE id = ${accountId} AND oauth_lock = ${lock} AND secret_enc = ${account.secret_enc} RETURNING id`.execute(
-            ctx.tx,
-          );
-          if (!changed.rows.length) {
-            ctx.noChange();
-            return;
-          }
-          ctx.record({
-            entityType: 'mail_account',
-            entityId: accountId,
-            verb: 'updated',
-            changes: { oauth_status: { from: 'connected', to: 'reconnect_required' } },
-          });
-        });
+        await markReconnect(db, principal, accountId, account.secret_enc, lock);
       }
       throw new GoogleOAuthError(
         error instanceof GoogleOAuthError ? error.code : 'provider_unavailable',

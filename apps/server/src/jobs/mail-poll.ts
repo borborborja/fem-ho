@@ -39,6 +39,8 @@ import { htmlToText } from '../text/html-to-text.js';
 import { routeMail, type MailRule as RoutingRule } from '../policy/mail-routing.js';
 import { messageKey, threadKey } from '../services/mail-identity.js';
 import type { MailAttachmentMeta, MailClient, MailHeader } from '../net/mail-client.js';
+import { GmailError, type GmailClient, type GmailPage } from '../net/gmail-client.js';
+import type { MailTransport } from '../net/google-oauth.js';
 import { safeFilename, sniffMime, storeAttachment } from '../services/attachments.js';
 import { auditedTransaction } from '../audit/audited-transaction.js';
 import { capabilitiesForRole } from '../policy/capabilities.js';
@@ -75,6 +77,7 @@ interface AccountRow {
   port: number;
   security: string;
   username: string;
+  transport: MailTransport;
   secret_enc: string | null;
   poll_interval: number | null;
   last_polled_at: string | null;
@@ -85,6 +88,8 @@ interface RuleRow {
   id: string;
   account_id: string;
   folder: string;
+  gmail_label_id: string | null;
+  gmail_history_cursor: string | null;
   scope_id: string;
   project_id: string | null;
   inbox_visible: number | null;
@@ -102,7 +107,7 @@ export interface MailPollOptions {
    * Com s'obre un client per a un compte. **Injectable, i és el que fa que tot això es
    * pugui provar sense xarxa** —i el que fa que `imapflow` només toqui un fitxer.
    */
-  openClient: (account: AccountRow) => Promise<MailClient>;
+  openClient: (account: AccountRow) => Promise<MailClient | GmailClient>;
   now?: (() => string) | undefined;
   log?: ((message: string, error?: unknown) => void) | undefined;
   batch?: number | undefined;
@@ -135,7 +140,7 @@ export async function pollMail(options: MailPollOptions): Promise<MailPollResult
   const result: MailPollResult = { polled: 0, ingested: 0, skipped: 0, errors: 0 };
 
   const accounts = await sql<AccountRow>`
-    SELECT id, user_id, name, host, port, security, username, secret_enc, poll_interval,
+    SELECT id, user_id, name, host, port, security, username, transport, secret_enc, poll_interval,
            last_polled_at, consecutive_errors
     FROM mail_accounts
     WHERE deleted_at IS NULL AND enabled = ${dbBool(true)} AND secret_enc IS NOT NULL
@@ -172,7 +177,7 @@ async function pollAccount(
   result: MailPollResult,
 ): Promise<void> {
   const rules = await sql<RuleRow>`
-    SELECT id, account_id, folder, scope_id, project_id, inbox_visible,
+    SELECT id, account_id, folder, gmail_label_id, gmail_history_cursor, scope_id, project_id, inbox_visible,
            title_template, body_to_description, attachments_to_task, position,
            uid_validity, last_uid
     FROM mail_rules
@@ -185,12 +190,134 @@ async function pollAccount(
   if (rules.rows.length === 0) return;
 
   const client = await options.openClient(account);
+  if ('transport' in client) {
+    await pollGmail(client, account, rules.rows, options, now, result);
+    return;
+  }
   try {
     for (const rule of rules.rows) {
       await pollFolder(client, account, rule, rules.rows, options, now, result);
     }
   } finally {
     await client.close();
+  }
+}
+
+interface GmailCursor {
+  historyId: string;
+  synchronizedAt: string;
+  pageToken?: string | undefined;
+  offset?: number | undefined;
+  recoverAfter?: string | undefined;
+}
+
+async function pollGmail(
+  client: GmailClient,
+  account: AccountRow,
+  rules: RuleRow[],
+  options: MailPollOptions,
+  now: string,
+  result: MailPollResult,
+): Promise<void> {
+  let failure: unknown;
+  for (const rule of rules) {
+    try {
+      await pollGmailLabel(client, account, rule, rules, options, now, result);
+    } catch (error) {
+      failure ??= error;
+      await sql`UPDATE mail_rules SET last_error = ${error instanceof GmailError ? error.code : 'gmail-provider-unavailable'},
+        last_error_at = ${now} WHERE id = ${rule.id} AND deleted_at IS NULL`.execute(options.db);
+    }
+  }
+  if (failure) throw failure;
+}
+
+async function pollGmailLabel(
+  client: GmailClient,
+  account: AccountRow,
+  rule: RuleRow,
+  rules: RuleRow[],
+  options: MailPollOptions,
+  now: string,
+  result: MailPollResult,
+): Promise<void> {
+  const labelId = rule.gmail_label_id;
+  if (!labelId) throw new GmailError(422, 'gmail-label-required');
+  const save = async (cursor: GmailCursor, warning: string | null = null): Promise<void> => {
+    await sql`UPDATE mail_rules SET gmail_history_cursor = ${JSON.stringify(cursor)},
+      last_seen_at = ${now}, last_error = ${warning}, last_error_at = ${warning ? now : null}, updated_at = ${now}
+      WHERE id = ${rule.id} AND gmail_label_id = ${labelId} AND deleted_at IS NULL`.execute(
+      options.db,
+    );
+  };
+
+  if (rule.gmail_history_cursor === null) {
+    const profile = await client.profile();
+    await save({ historyId: profile.historyId, synchronizedAt: now });
+    return;
+  }
+  let cursor = JSON.parse(rule.gmail_history_cursor) as GmailCursor;
+  let page: GmailPage;
+  let latestHistoryId = cursor.historyId;
+  if (cursor.recoverAfter) {
+    page = await client.messages(labelId, cursor.recoverAfter, cursor.pageToken);
+  } else {
+    try {
+      const delta = await client.changes(labelId, cursor.historyId, cursor.pageToken);
+      latestHistoryId = delta.historyId;
+      page = delta;
+    } catch (error) {
+      if (!(error instanceof GmailError) || error.status !== 404) throw error;
+      // La finestra de recuperació no ha d'importar correu anterior a l'activació de la regla.
+      const profile = await client.profile();
+      cursor = {
+        historyId: profile.historyId,
+        synchronizedAt: cursor.synchronizedAt,
+        recoverAfter: cursor.synchronizedAt,
+      };
+      await save(cursor, 'gmail-history-recovering');
+      return;
+    }
+  }
+
+  const offset = cursor.offset ?? 0;
+  const maxBytes = options.maxBytes ?? MAIL_MAX_BYTES;
+  const batch = options.batch ?? MAIL_BATCH;
+  const candidates = rules.filter((item) => item.gmail_history_cursor !== null);
+  const ids = page.ids.slice(offset, offset + batch);
+  for (const id of ids) {
+    const header = await client.header(id, maxBytes);
+    if (!header?.labelIds.includes(labelId)) continue;
+    const folders = candidates.flatMap((item) =>
+      item.gmail_label_id && header.labelIds.includes(item.gmail_label_id) ? [item.folder] : [],
+    );
+    const disposition = await ingestOne(
+      client,
+      account,
+      rule,
+      candidates,
+      header,
+      options,
+      now,
+      maxBytes,
+      folders,
+    );
+    if (disposition === 'ingested') result.ingested += 1;
+    else result.skipped += 1;
+  }
+
+  if (offset + ids.length < page.ids.length) {
+    await save(
+      { ...cursor, offset: offset + ids.length },
+      cursor.recoverAfter ? 'gmail-history-recovering' : null,
+    );
+  } else if (page.nextPageToken) {
+    await save(
+      { ...cursor, pageToken: page.nextPageToken, offset: undefined },
+      cursor.recoverAfter ? 'gmail-history-recovering' : null,
+    );
+  } else {
+    await save({ historyId: latestHistoryId, synchronizedAt: now });
   }
 }
 
@@ -256,7 +383,7 @@ const toRouting = (rules: RuleRow[]): RoutingRule[] =>
   }));
 
 async function ingestOne(
-  client: MailClient,
+  client: Pick<MailClient, 'fetchBody' | 'fetchAttachment'>,
   account: AccountRow,
   rule: RuleRow,
   allRules: RuleRow[],
@@ -264,6 +391,7 @@ async function ingestOne(
   options: MailPollOptions,
   now: string,
   maxBytes: number,
+  folders = [rule.folder],
 ): Promise<'ingested' | 'skipped'> {
   const key = messageKey({
     messageId: header.messageId,
@@ -292,7 +420,7 @@ async function ingestOne(
   });
 
   const routing = routeMail({
-    folders: [rule.folder],
+    folders,
     delimiter: '/',
     rules: toRouting(allRules),
     alreadyIngested: false,
@@ -301,6 +429,8 @@ async function ingestOne(
     threadTaskId: await taskOfThread(options.db, account.id, fil),
   });
   if (routing.kind === 'skip') return 'skipped';
+  if (routing.kind === 'inbox' && routing.rule.id !== rule.id)
+    rule = allRules.find((candidate) => candidate.id === routing.rule.id) ?? rule;
 
   /**
    * **La porta de mida, abans de baixar.** El que tothom escriu primer és
@@ -357,7 +487,7 @@ async function ingestOne(
             ${rule.folder}, ${rule.uid_validity ?? '0'}, ${header.uid},
             ${header.internalDate}, ${header.sentAt}, ${header.fromName},
             ${header.fromAddress}, ${JSON.stringify(header.toAddresses)}, ${header.subject},
-            ${text}, ${dbBool(header.hasHtml)}, ${header.size}, ${header.inReplyTo},
+            ${text}, ${dbBool(header.hasHtml || body?.html != null)}, ${header.size}, ${header.inReplyTo},
             ${JSON.stringify(header.references)}, ${disposition}, ${rule.id},
             ${adjunts.length === 0 ? null : JSON.stringify(adjunts)},
             ${massaGros ? 'massa gros' : null}, ${now}, ${now})

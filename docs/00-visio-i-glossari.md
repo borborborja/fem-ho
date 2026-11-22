@@ -71,7 +71,7 @@ La columna **Codi** és el nom canònic. **Un concepte, un nom, arreu.** Si un d
 
 | Terme | Codi | Notes |
 | --- | --- | --- |
-| Calendari d'origen | `calendar_source` | CalDAV o `.ics` extern que Fem-ho llegeix. |
+| Calendari d'origen | `calendar_source` | Font externa de cites, com un CalDAV, un `.ics` o un calendari vinculat de Google. |
 | Col·lecció | `collection` | Una col·lecció CalDAV que Fem-ho publica. |
 | Token | `api_token` | Credencial d'abast limitat. |
 | Enllaç compartit | `share` | Accés públic a una tasca o llista senzilla. |

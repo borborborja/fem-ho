@@ -37,6 +37,8 @@ import { InboxRail } from '../board/InboxRail.js';
 import { ColumnQuickAdd } from '../board/ColumnQuickAdd.js';
 import type { QuickAddProps } from '../board/QuickAdd.js';
 import { EventSheet } from './EventSheet.js';
+import { GoogleCalendarChanges, GoogleCalendarEventEditor } from './GoogleCalendarEventEditor.js';
+import { useBoardQuery, useBoardSync } from '../sync/board-sync.js';
 import { SourceIcon } from '../board/SourceIcon.js';
 import { ErrorBanner } from './BoardScreen.js';
 
@@ -104,6 +106,7 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
   const appearance = useAppearance();
   const timezone = profile.timezone;
   const { updateSettings } = useSession();
+  const sync = useBoardSync();
   const mobile = useIsMobile();
   const [mode, setMode] = useState<Mode>('month');
   /**
@@ -149,6 +152,8 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
    * com el que bloquejava els adjunts d'esdeveniments; això n'obre la porta.
    */
   const [obert, setObert] = useState<string | null>(null);
+  const [googleEditor, setGoogleEditor] = useState<'create' | EventOccurrence | null>(null);
+  const [googleWriteError, setGoogleWriteError] = useState(false);
 
   /**
    * Amb quin dia comença la setmana.
@@ -182,7 +187,7 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
   // La consulta ha d'incloure també les dates de tot el dia, desades a mitjanit UTC.
   const firstCivil = `${from}T00:00:00.000Z`;
   const lastCivil = `${to}T00:00:00.000Z`;
-  const events = useApi<EventOccurrence[]>(
+  const events = useBoardQuery<EventOccurrence[]>(
     `/api/v1/events?from=${fromInstant < firstCivil ? fromInstant : firstCivil}&to=${toInstant > lastCivil ? toInstant : lastCivil}${scopeQuery}`,
   );
   /**
@@ -254,7 +259,22 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
    * I es guarda el que s'amaga, no el que es veu: així una font nova surt sola, que és
    * el que ha de passar quan algú de la casa n'afegeix una.
    */
-  const calendars = useApi<Calendar[]>('/api/v1/calendars');
+  const calendars = useBoardQuery<Calendar[]>('/api/v1/calendars');
+  const googleCalendars = (calendars.data ?? []).filter(
+    (calendar) => calendar.source_provider === 'google',
+  );
+  const googleWritable = googleCalendars.filter(
+    (calendar) =>
+      calendar.writable === true &&
+      (activeScopeIds.length === 0 || activeScopeIds.includes(calendar.scope_id)) &&
+      scopes.some((scope) => scope.id === calendar.scope_id && scope.owner_id === profile.id),
+  );
+  const reloadEvents = events.reload;
+  const reloadInbox = inbox.reload;
+  const googleSynced = useCallback(() => {
+    reloadEvents();
+    reloadInbox();
+  }, [reloadEvents, reloadInbox]);
   const hidden = settings.hidden_calendar_ids ?? [];
   const sources = (calendars.data ?? []).filter(
     (calendar) =>
@@ -702,6 +722,20 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
         ))}
       </div>
 
+      {googleWritable.length > 0 ? (
+        <button
+          type="button"
+          className="plou-btn plou-btn-primary"
+          data-testid="google-event-create"
+          style={{ justifySelf: 'start' }}
+          onClick={() => setGoogleEditor('create')}
+        >
+          {t('calendar.google.create')}
+        </button>
+      ) : null}
+      <GoogleCalendarChanges revision={sync.revision} onSynced={googleSynced} />
+      {googleWriteError ? <p role="alert">{t('settings.googleCalendar.error')}</p> : null}
+
       {/*
         Les fonts de l'àmbit actiu, per encendre i apagar.
         Amb una sola no hi ha res a triar, i una fila de commutadors d'un element és
@@ -717,6 +751,14 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
           </span>
           {sources.map((source) => {
             const on = !hidden.includes(source.id);
+            const scope = scopes.find((candidate) => candidate.id === source.scope_id);
+            const duplicate = sources.some(
+              (other) => other.id !== source.id && other.name === source.name,
+            );
+            const label =
+              source.source_provider === 'google' && duplicate && scope
+                ? `${source.name} · ${scope.name}`
+                : source.name;
             return (
               <button
                 key={source.id}
@@ -724,7 +766,7 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
                 data-testid={`calendar-source-${source.id}`}
                 aria-pressed={on}
                 aria-label={t(on ? 'calendar.sources.hide' : 'calendar.sources.show', {
-                  name: source.name,
+                  name: label,
                 })}
                 onClick={() => toggleSource(source.id)}
                 style={{
@@ -754,7 +796,7 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
                     opacity: on ? 1 : 0.4,
                   }}
                 />
-                {source.name}
+                {label}
               </button>
             );
           })}
@@ -853,6 +895,38 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
           occurrence={openItem}
           timezone={timezone}
           onClose={() => setObert(null)}
+          onEdit={openItem.google_can_edit ? () => setGoogleEditor(openItem) : undefined}
+          onDelete={
+            openItem.google_can_edit
+              ? () => {
+                  if (
+                    !window.confirm(
+                      t(
+                        openItem.google_has_guests
+                          ? 'calendar.google.guestNotice'
+                          : 'calendar.google.deleteConfirm',
+                      ),
+                    )
+                  )
+                    return;
+                  setGoogleWriteError(false);
+                  void sync
+                    .submit({
+                      entity_type: 'google_calendar_event',
+                      entity_id: openItem.event_id,
+                      op: 'delete',
+                      base_version: openItem.version,
+                      task_title: openItem.summary,
+                      payload: {
+                        calendar_id: openItem.calendar_id,
+                        notify_guests: openItem.google_has_guests === true,
+                      },
+                    })
+                    .then(() => setObert(null))
+                    .catch(() => setGoogleWriteError(true));
+                }
+              : undefined
+          }
           onToggleInbox={() => {
             void api
               .post('/api/v1/inbox/events', {
@@ -872,6 +946,19 @@ export function CalendarScreen({ activeScopeIds, onOpenTask, onNewTask }: Calend
                 events.reload();
                 inbox.reload();
               });
+          }}
+        />
+      )}
+      {googleEditor === null ? null : (
+        <GoogleCalendarEventEditor
+          timezone={timezone}
+          date={selected}
+          calendars={googleWritable}
+          event={googleEditor === 'create' ? undefined : googleEditor}
+          onClose={() => setGoogleEditor(null)}
+          onQueued={() => {
+            setGoogleEditor(null);
+            setObert(null);
           }}
         />
       )}

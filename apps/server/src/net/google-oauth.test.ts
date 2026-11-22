@@ -53,6 +53,16 @@ it('uses a fixed callback, offline access, PKCE, nonce and the IMAP scope', () =
   expect(googleMailConfigured({ ...config, baseUrl: 'http://public.example.test' })).toBe(false);
   expect(googleMailConfigured({ ...config, googleClientSecret: '' })).toBe(false);
 });
+it('authorizes Gmail API with read-only permission', () => {
+  const url = new URL(
+    createGoogleMailProvider(config).authorizationUrl('state', 'challenge', 'nonce', 'gmail_api'),
+  );
+  expect(url.searchParams.get('scope')?.split(' ')).toEqual([
+    'openid',
+    'email',
+    'https://www.googleapis.com/auth/gmail.readonly',
+  ]);
+});
 it('verifies Google identity signatures and normalizes verified email', async () => {
   expect(await verifyGoogleIdentity(await signed(), 'client', 'nonce', keySet)).toEqual({
     subject: 'google-user',

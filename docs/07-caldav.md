@@ -210,7 +210,7 @@ Objectius de compatibilitat, i què trenca a cadascun:
 
 ## 9 · Fem-ho com a client
 
-L'usuari pot posar un CalDAV o un `.ics` com a origen d'un àmbit o d'un projecte, i pot no posar-ne cap i fer servir Fem-ho com a font principal.
+L'usuari pot posar un CalDAV o un `.ics` com a origen d'un àmbit o d'un projecte, i pot fer servir Fem-ho com a font principal. Les connexions a Google Calendar fan servir [l'API de Google i una autorització pròpia](google-calendar.md).
 
 ### Refresc
 

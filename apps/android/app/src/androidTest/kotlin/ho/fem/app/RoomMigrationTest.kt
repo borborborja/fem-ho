@@ -35,7 +35,6 @@ class RoomMigrationTest {
                 fresh.close()
             }
             SQLiteDatabase.openDatabase(context.getDatabasePath(name).path, null, SQLiteDatabase.OPEN_READWRITE).use { legacy ->
-                // Les altres taules tenen el mateix esquema a les dues versions.
                 legacy.execSQL("DROP TABLE task_lists")
                 legacy.execSQL("DROP TABLE pomodoro_cache")
                 legacy.execSQL("DROP TABLE calendar_suggestions_cache")
@@ -63,6 +62,40 @@ class RoomMigrationTest {
                         "attempts FROM fixture_outbox",
                 )
                 legacy.execSQL("DROP TABLE fixture_outbox")
+                legacy.execSQL("DROP TABLE scopes")
+                legacy.execSQL(
+                    "CREATE TABLE scopes (id TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL, kind TEXT NOT NULL, " +
+                        "color TEXT NOT NULL, position TEXT NOT NULL)",
+                )
+                legacy.execSQL("INSERT INTO scopes VALUES ('scope-a', 'Feina', 'individual', 'blue', 'a1')")
+                legacy.execSQL("DROP TABLE calendars")
+                legacy.execSQL(
+                    "CREATE TABLE calendars (id TEXT NOT NULL PRIMARY KEY, scope_id TEXT, project_id TEXT, name TEXT NOT NULL, " +
+                        "color TEXT, origin TEXT NOT NULL, source_kind TEXT, source_url TEXT, refresh_interval INTEGER, " +
+                        "inbox_visible INTEGER, last_refreshed_at TEXT, last_error TEXT, shared_with_scope INTEGER NOT NULL)",
+                )
+                legacy.execSQL(
+                    "INSERT INTO calendars (id, scope_id, name, origin, source_kind, source_url, shared_with_scope) " +
+                        "VALUES ('calendar-a', 'scope-a', 'Calendari', 'subscription', 'ical', 'https://example.test/a.ics', 0)",
+                )
+                legacy.execSQL("DROP TABLE mail_accounts")
+                legacy.execSQL(
+                    "CREATE TABLE mail_accounts (id TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL, host TEXT NOT NULL, " +
+                        "username TEXT NOT NULL, has_secret INTEGER NOT NULL, auth_method TEXT NOT NULL DEFAULT 'password', " +
+                        "oauth_status TEXT, security TEXT NOT NULL, created_at TEXT)",
+                )
+                legacy.execSQL(
+                    "INSERT INTO mail_accounts (id,name,host,username,has_secret,security) " +
+                        "VALUES ('legacy-mail','Office','imap.example.test','office',0,'tls')",
+                )
+                legacy.execSQL("DROP TABLE mail_rules")
+                legacy.execSQL(
+                    "CREATE TABLE mail_rules (id TEXT NOT NULL PRIMARY KEY, account_id TEXT, folder TEXT NOT NULL, " +
+                        "scope_id TEXT, project_id TEXT, title_template TEXT, inbox_visible INTEGER)",
+                )
+                legacy.execSQL(
+                    "INSERT INTO mail_rules (id,account_id,folder,scope_id) VALUES ('old-rule','legacy-mail','INBOX','scope-a')",
+                )
                 // Room ha de validar l'esquema migrat i escriure'n la identitat nova.
                 legacy.execSQL("DROP TABLE room_master_table")
                 legacy.version = 3
@@ -70,7 +103,7 @@ class RoomMigrationTest {
             val migrated = Room.databaseBuilder(context, FemhoDatabase::class.java, name)
                 .addMigrations(
                     FemhoDatabase.MIGRATION_3_4, FemhoDatabase.MIGRATION_4_5,
-                    FemhoDatabase.MIGRATION_5_6, FemhoDatabase.MIGRATION_6_7,
+                    FemhoDatabase.MIGRATION_5_6, FemhoDatabase.MIGRATION_6_7, FemhoDatabase.MIGRATION_7_8,
                 ).build()
             try {
                 val dao = migrated.dao()
@@ -80,6 +113,16 @@ class RoomMigrationTest {
                 assertNull(dao.pomodoroCache().first())
                 assertNull(dao.calendarSuggestionsCache().first())
                 assertNull(dao.doingAutoStopCache().first())
+                assertEquals("", dao.scopes().first().single().ownerId)
+                val calendar = dao.calendars().first().single()
+                assertEquals("https://example.test/a.ics", calendar.sourceUrl)
+                assertNull(calendar.sourceProvider)
+                assertEquals(false, calendar.writable)
+                assertEquals("imap", dao.mailAccounts().first().single().transport)
+                val mailRule = dao.mailRules().first().single()
+                assertEquals("scope-a", mailRule.scopeId)
+                assertEquals(true, mailRule.enabled)
+                assertNull(mailRule.gmailLabelId)
             } finally {
                 migrated.close()
             }

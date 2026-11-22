@@ -9,7 +9,7 @@
  * wordmark i "‹ Tornar al tauler". Per això aquesta pantalla no munta `TopBar`.
  */
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { liveQuery } from 'dexie';
 import {
   DEFAULT_MAIL_TEMPLATE,
@@ -20,6 +20,7 @@ import {
   t,
   unknownMailVars,
   weekdayNames,
+  type components,
 } from '@fem-ho/contracts';
 import { v7 as uuidv7 } from 'uuid';
 import { EmptyState, useIsMobile } from '@fem-ho/design-system/femho';
@@ -52,6 +53,7 @@ import type {
 } from '../app/types.js';
 import { ErrorBanner } from './BoardScreen.js';
 import { GoogleMailPanel } from './GoogleMailPanel.js';
+import { GoogleCalendarPanel } from './GoogleCalendarPanel.js';
 import { ExternalAccessPanel, AgentTokenEditor } from './ExternalAccessPanel.js';
 import { TaskAiSettingsPanel } from './TaskAiSettingsPanel.js';
 import { NotificationSettingsPanel } from './NotificationSettingsPanel.js';
@@ -1614,17 +1616,28 @@ function MembersList({ scopeId, canManage }: { scopeId: string; canManage: boole
 function SharedCalendarRow({
   calendar,
   collective,
+  owned,
   onDone,
 }: {
   calendar: Calendar;
   collective: boolean;
+  owned: boolean;
   onDone: () => void;
 }) {
   const shared = calendar.shared_with_scope === true;
 
   const toggle = (): void => {
     if (!shared && calendar.has_credentials === true) {
-      if (!window.confirm(t('settings.calendarCredWarning'))) return;
+      if (
+        !window.confirm(
+          t(
+            calendar.source_provider === 'google'
+              ? 'settings.googleCalendar.share'
+              : 'settings.calendarCredWarning',
+          ),
+        )
+      )
+        return;
     }
     void api.patch(`/api/v1/calendars/${calendar.id}`, { shared_with_scope: !shared }).then(onDone);
   };
@@ -1639,7 +1652,7 @@ function SharedCalendarRow({
         Només té sentit a un àmbit col·lectiu: a un d'individual no hi ha ningú amb qui
         compartir, i un commutador que no fa res convida a pensar que sí que en fa.
       */}
-      {collective ? (
+      {collective && (calendar.source_provider !== 'google' || owned) ? (
         <button
           type="button"
           data-testid={`calendar-share-${calendar.id}`}
@@ -1654,12 +1667,13 @@ function SharedCalendarRow({
 }
 
 function CalendarsTab() {
-  const { scopes } = useSessionData();
+  const { profile, scopes } = useSessionData();
   const calendars = useApi<Calendar[]>('/api/v1/calendars');
   const base = window.location.origin;
 
   return (
     <>
+      <GoogleCalendarPanel onLinked={calendars.reload} />
       {scopes.map((scope) => {
         const own = (calendars.data ?? []).filter((calendar) => calendar.scope_id === scope.id);
         return (
@@ -1672,12 +1686,17 @@ function CalendarsTab() {
                   key={calendar.id}
                   calendar={calendar}
                   collective={scope.kind === 'collective'}
+                  owned={scope.owner_id === profile.id}
                   onDone={() => calendars.reload()}
                 />
               ))
             )}
 
-            <SourcesForScope scope={scope} calendars={calendars} />
+            <SourcesForScope
+              scope={scope}
+              calendars={calendars}
+              owned={scope.owner_id === profile.id}
+            />
 
             {/*
               Cada àmbit en publica DUES (D9): esdeveniments i tasques. Han d'estar
@@ -1731,9 +1750,11 @@ function CalendarsTab() {
 function SourcesForScope({
   scope,
   calendars,
+  owned,
 }: {
   scope: Scope;
   calendars: ReturnType<typeof useApi<Calendar[]>>;
+  owned: boolean;
 }) {
   const [kind, setKind] = useState<'caldav' | 'ical' | 'rss'>('ical');
   const [name, setName] = useState('');
@@ -1793,7 +1814,9 @@ function SourcesForScope({
             }}
           >
             <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--ink-soft)' }}>
-              {t(`settings.sources.kind.${source.source_kind ?? 'ical'}`)}
+              {source.source_provider === 'google'
+                ? t('settings.googleCalendar.title')
+                : t(`settings.sources.kind.${source.source_kind ?? 'ical'}`)}
             </span>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink)' }}>
@@ -1826,29 +1849,33 @@ function SourcesForScope({
               que el defecte canviï, qui no hagi tocat res el segueix. La casella, en
               canvi, és un interruptor normal: ensenya `inbox_visible ?? el defecte`.
             */}
-            <Toggle
-              checked={source.inbox_visible ?? source.inbox_visible_default}
-              label={t('settings.sources.inbox')}
-              testId={`source-inbox-${source.id}`}
-              onChange={(next) => {
-                void api
-                  .patch(`/api/v1/calendars/${source.id}`, {
-                    inbox_visible: next === source.inbox_visible_default ? null : next,
-                  })
-                  .then(() => calendars.reload());
-              }}
-            />
-            <button
-              type="button"
-              className="plou-btn plou-btn-ghost"
-              data-testid={`source-remove-${source.id}`}
-              onClick={() => {
-                void api.delete(`/api/v1/calendars/${source.id}`).then(() => calendars.reload());
-              }}
-              style={{ fontSize: 11.5, padding: '4px 10px' }}
-            >
-              {t('settings.sources.remove')}
-            </button>
+            {source.source_provider !== 'google' || owned ? (
+              <Toggle
+                checked={source.inbox_visible ?? source.inbox_visible_default}
+                label={t('settings.sources.inbox')}
+                testId={`source-inbox-${source.id}`}
+                onChange={(next) => {
+                  void api
+                    .patch(`/api/v1/calendars/${source.id}`, {
+                      inbox_visible: next === source.inbox_visible_default ? null : next,
+                    })
+                    .then(() => calendars.reload());
+                }}
+              />
+            ) : null}
+            {source.source_provider !== 'google' || owned ? (
+              <button
+                type="button"
+                className="plou-btn plou-btn-ghost"
+                data-testid={`source-remove-${source.id}`}
+                onClick={() => {
+                  void api.delete(`/api/v1/calendars/${source.id}`).then(() => calendars.reload());
+                }}
+                style={{ fontSize: 11.5, padding: '4px 10px' }}
+              >
+                {t('settings.sources.remove')}
+              </button>
+            ) : null}
           </div>
         ))
       )}
@@ -2641,6 +2668,8 @@ function AdminTab() {
         )}
       </Group>
 
+      <GoogleAdminSettings />
+
       <Group title={t('settings.wipe')}>
         <p style={{ margin: 0, fontSize: 12.5, color: 'var(--danger-text)', lineHeight: 1.5 }}>
           {t('settings.wipeWarning')}
@@ -2679,6 +2708,154 @@ function AdminTab() {
         </button>
       </Group>
     </>
+  );
+}
+
+function GoogleAdminSettings() {
+  type GoogleConfig = components['schemas']['AdminGoogleConfig'];
+  const path = '/api/v1/admin/oauth/google';
+  const config = useApi<GoogleConfig>(path);
+  const [draftId, setDraftId] = useState<string | null>(null);
+  const [clientSecret, setClientSecret] = useState('');
+  const current = config.data;
+  const clientId = draftId ?? current?.client_id ?? '';
+  const keepSecret =
+    current?.has_secret === true &&
+    current.reason !== 'unreadable_credentials' &&
+    current.client_id === clientId.trim();
+
+  const change = useMutation(async (action: 'save' | 'remove') => {
+    if (action === 'save') {
+      await api.put<GoogleConfig>(path, {
+        client_id: clientId.trim(),
+        ...(clientSecret.trim() === '' ? {} : { client_secret: clientSecret.trim() }),
+      });
+    } else {
+      await api.delete<GoogleConfig>(path);
+    }
+    setDraftId(null);
+    setClientSecret('');
+    config.reload();
+  });
+  const unavailable = config.loading || config.revalidating || change.busy;
+
+  return (
+    <Group title={t('settings.googleAdmin.title')}>
+      <p style={{ margin: 0, fontSize: 12, color: 'var(--ink-soft)' }}>
+        {t('settings.googleAdmin.help')}
+      </p>
+      {config.error === undefined ? null : <ErrorBanner onRetry={config.reload} />}
+      {current === undefined ? null : (
+        <>
+          <p role="status" style={{ margin: 0, fontSize: 12 }}>
+            {t(current.enabled ? 'settings.googleAdmin.enabled' : 'settings.googleAdmin.disabled')}
+          </p>
+          {current.source === 'environment' ? (
+            <p style={{ margin: 0, fontSize: 12 }}>{t('settings.googleAdmin.fixed')}</p>
+          ) : null}
+          {current.reason === 'missing_credentials' ? (
+            <p style={{ margin: 0, fontSize: 12 }}>
+              {t('settings.googleAdmin.missingCredentials')}
+            </p>
+          ) : null}
+          {current.reason === 'unreadable_credentials' ? (
+            <p style={{ margin: 0, fontSize: 12 }}>
+              {t('settings.googleAdmin.unreadableCredentials')}
+            </p>
+          ) : null}
+          {current.gmail_callback_url === null || current.calendar_callback_url === null ? (
+            <p style={{ margin: 0, fontSize: 12 }}>{t('settings.googleAdmin.invalidBaseUrl')}</p>
+          ) : (
+            <>
+              <GoogleRedirectUri
+                label={t('settings.googleAdmin.gmailCallback')}
+                value={current.gmail_callback_url}
+              />
+              <GoogleRedirectUri
+                label={t('settings.googleAdmin.calendarCallback')}
+                value={current.calendar_callback_url}
+              />
+            </>
+          )}
+          <Camp label={t('settings.googleAdmin.clientId')}>
+            <input
+              className="plou-input"
+              data-testid="google-admin-client-id"
+              value={clientId}
+              onChange={(event) => setDraftId(event.target.value)}
+              readOnly={current.source === 'environment'}
+              autoComplete="off"
+            />
+          </Camp>
+          {current.source === 'environment' ? null : (
+            <>
+              <Camp label={t('settings.googleAdmin.clientSecret')}>
+                <input
+                  className="plou-input"
+                  type="password"
+                  data-testid="google-admin-client-secret"
+                  value={clientSecret}
+                  onChange={(event) => setClientSecret(event.target.value)}
+                  autoComplete="new-password"
+                />
+                {keepSecret ? <span>{t('settings.googleAdmin.secretSaved')}</span> : null}
+              </Camp>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className="plou-btn plou-btn-primary"
+                  disabled={unavailable || clientId.trim() === '' || clientSecret.trim() === ''}
+                  data-testid="google-admin-save"
+                  onClick={() => {
+                    if (
+                      current.client_id !== null &&
+                      current.client_id !== clientId.trim() &&
+                      !window.confirm(t('settings.googleAdmin.confirmReplace'))
+                    )
+                      return;
+                    void change.run('save');
+                  }}
+                >
+                  {t('nav.save')}
+                </button>
+                {current.source === 'settings' ? (
+                  <button
+                    type="button"
+                    className="plou-btn plou-btn-ghost"
+                    disabled={unavailable}
+                    data-testid="google-admin-remove"
+                    onClick={() => {
+                      if (window.confirm(t('settings.googleAdmin.confirmRemove')))
+                        void change.run('remove');
+                    }}
+                  >
+                    {t('settings.googleAdmin.remove')}
+                  </button>
+                ) : null}
+              </div>
+            </>
+          )}
+          {change.error === undefined ? null : (
+            <p role="alert" style={{ margin: 0, fontSize: 12, color: 'var(--danger-text)' }}>
+              {failureText(change.error)}
+            </p>
+          )}
+        </>
+      )}
+    </Group>
+  );
+}
+
+function GoogleRedirectUri({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={{ display: 'flex', gap: 8, alignItems: 'end' }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <Camp label={label}>
+          <input className="plou-input" readOnly value={value} />
+        </Camp>
+      </div>
+      <CopyButton value={value} />
+    </div>
   );
 }
 
@@ -2726,7 +2903,13 @@ function MailTab() {
           ))
         )}
 
-        <GoogleMailPanel accounts={accounts.data ?? []} onDone={() => accounts.reload()} />
+        <GoogleMailPanel
+          accounts={accounts.data ?? []}
+          onDone={() => {
+            accounts.reload();
+            rules.reload();
+          }}
+        />
         <MailAccountForm onDone={() => accounts.reload()} />
       </Group>
 
@@ -2739,7 +2922,12 @@ function MailTab() {
           <EmptyState>{t('settings.mail.rules.empty')}</EmptyState>
         ) : (
           (rules.data ?? []).map((rule) => (
-            <MailRuleRow key={rule.id} rule={rule} onDone={() => rules.reload()} />
+            <MailRuleRow
+              key={rule.id}
+              rule={rule}
+              account={accounts.data?.find((account) => account.id === rule.account_id)}
+              onDone={() => rules.reload()}
+            />
           ))
         )}
 
@@ -2862,7 +3050,10 @@ function MailAccountRow({ account, onDone }: { account: MailAccount; onDone: () 
           comptes de com «aquest usuari, en aquest servidor».
         */}
         <span style={{ fontSize: 11.5, color: 'var(--ink-soft)' }}>
-          {account.username} · {account.host}:{account.port}
+          {account.username} ·{' '}
+          {account.transport === 'gmail_api'
+            ? t('settings.mail.oauth.api')
+            : `${account.host}:${String(account.port)}`}
         </span>
       </div>
 
@@ -3102,7 +3293,15 @@ const MOSTRA = {
   account: 'Personal',
 };
 
-function MailRuleRow({ rule, onDone }: { rule: MailRule; onDone: () => void }) {
+function MailRuleRow({
+  rule,
+  account,
+  onDone,
+}: {
+  rule: MailRule;
+  account?: MailAccount | undefined;
+  onDone: () => void;
+}) {
   const { scopes } = useSessionData();
   const scope = scopes.find((s) => s.id === rule.scope_id);
 
@@ -3153,8 +3352,95 @@ function MailRuleRow({ rule, onDone }: { rule: MailRule; onDone: () => void }) {
       >
         {t('settings.mail.remove')}
       </button>
+      {account?.transport === 'gmail_api' && !rule.enabled ? (
+        <GmailRuleRepair rule={rule} onDone={onDone} />
+      ) : null}
     </div>
   );
+}
+
+function GmailRuleRepair({ rule, onDone }: { rule: MailRule; onDone: () => void }) {
+  const [choosing, setChoosing] = useState(false);
+  const [labelId, setLabelId] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const labels = useApi<{ labels?: { id: string; name: string }[] }>(
+    choosing && !rule.gmail_label_id ? `/api/v1/mail/accounts/${rule.account_id}/folders` : null,
+  );
+  const patch = useMutation(async (changes: { gmail_label_id?: string; enabled?: boolean }) => {
+    setError(null);
+    try {
+      await api.patch(`/api/v1/mail/rules/${rule.id}`, changes);
+      setChoosing(false);
+      onDone();
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause.message : t('error.generic'));
+    }
+  });
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: 8 }}>
+      {!rule.gmail_label_id ? (
+        <>
+          <span style={{ color: 'var(--warning-text)' }}>
+            {t('settings.mail.oauth.ruleNeedsLabel')}
+          </span>
+          {choosing ? (
+            <>
+              <Camp label={t('settings.mail.oauth.label')}>
+                <select
+                  className="plou-input"
+                  value={labelId}
+                  onChange={(event) => setLabelId(event.target.value)}
+                >
+                  <option value="">
+                    {t(
+                      labels.loading
+                        ? 'settings.mail.loadingFolders'
+                        : labels.data?.labels?.length
+                          ? 'settings.mail.oauth.pickLabel'
+                          : 'settings.mail.foldersFailed',
+                    )}
+                  </option>
+                  {(labels.data?.labels ?? []).map(({ id, name }) => (
+                    <option key={id} value={id}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
+              </Camp>
+              <button
+                type="button"
+                className="plou-btn"
+                disabled={patch.busy || !labelId}
+                onClick={() => void patch.run({ gmail_label_id: labelId })}
+              >
+                {t('settings.mail.oauth.saveLabel')}
+              </button>
+            </>
+          ) : (
+            <button type="button" className="plou-btn" onClick={() => setChoosing(true)}>
+              {t('settings.mail.oauth.pickLabel')}
+            </button>
+          )}
+        </>
+      ) : (
+        <button
+          type="button"
+          className="plou-btn"
+          disabled={patch.busy}
+          onClick={() => void patch.run({ enabled: true })}
+        >
+          {t('settings.mail.oauth.enableRule')}
+        </button>
+      )}
+      {error ? <span role="alert">{error}</span> : null}
+    </div>
+  );
+}
+
+interface MailFolderOptions {
+  folders: string[];
+  labels?: { id: string; name: string }[];
+  error: string | null;
 }
 
 function MailRuleForm({ accounts, onDone }: { accounts: MailAccount[]; onDone: () => void }) {
@@ -3164,6 +3450,7 @@ function MailRuleForm({ accounts, onDone }: { accounts: MailAccount[]; onDone: (
   const [scopeId, setScopeId] = useState(scopes[0]?.id ?? '');
   const [template, setTemplate] = useState(DEFAULT_MAIL_TEMPLATE);
   const [error, setError] = useState<string | null>(null);
+  const gmail = accounts.find((account) => account.id === accountId)?.transport === 'gmail_api';
 
   /**
    * Les carpetes del servidor, per **triar-les**.
@@ -3172,10 +3459,22 @@ function MailRuleForm({ accounts, onDone }: { accounts: MailAccount[]; onDone: (
    * fer-la per si de cas voldria dir piconar el servidor de correu cada vegada que algú
    * mira els seus ajustos.
    */
-  const folders = useApi<{ folders: string[]; delimiter: string | null; error: string | null }>(
-    accountId === '' ? null : `/api/v1/mail/accounts/${accountId}/folders`,
+  // Dos comptes de Gmail poden tenir el mateix identificador d'etiqueta.
+  const loadFolders = useCallback(
+    async (path: string, signal: AbortSignal) => ({
+      accountId,
+      ...(await api.get<MailFolderOptions>(path, signal)),
+    }),
+    [accountId],
   );
-  const llista = folders.data?.folders ?? [];
+  const folders = useApi(
+    accountId === '' ? null : `/api/v1/mail/accounts/${accountId}/folders`,
+    [],
+    loadFolders,
+  );
+  const folderData = folders.data?.accountId === accountId ? folders.data : undefined;
+  const loading = folders.loading || folders.revalidating;
+  const llista = folderData?.folders ?? [];
 
   const desconegudes = unknownMailVars(template);
 
@@ -3186,6 +3485,7 @@ function MailRuleForm({ accounts, onDone }: { accounts: MailAccount[]; onDone: (
         id: uuidv7(),
         account_id: accountId,
         folder: folder.trim(),
+        gmail_label_id: folderData?.labels?.find(({ name }) => name === folder)?.id,
         scope_id: scopeId,
         title_template: template,
       });
@@ -3204,7 +3504,10 @@ function MailRuleForm({ accounts, onDone }: { accounts: MailAccount[]; onDone: (
             className="plou-input"
             data-testid="mail-rule-account"
             value={accountId}
-            onChange={(event) => setAccountId(event.target.value)}
+            onChange={(event) => {
+              setAccountId(event.target.value);
+              setFolder('');
+            }}
           >
             {accounts.map((account) => (
               <option key={account.id} value={account.id}>
@@ -3213,7 +3516,7 @@ function MailRuleForm({ accounts, onDone }: { accounts: MailAccount[]; onDone: (
             ))}
           </select>
         </Camp>
-        <Camp label={t('settings.mail.folder')}>
+        <Camp label={t(gmail ? 'settings.mail.oauth.label' : 'settings.mail.folder')}>
           {/*
             **Es tria de la llista que diu el servidor**, i es pot escriure a mà.
 
@@ -3225,7 +3528,7 @@ function MailRuleForm({ accounts, onDone }: { accounts: MailAccount[]; onDone: (
             La llista **arriba sola** en triar el compte; si el servidor no contesta, queda
             el camp de sempre i no s'ha perdut res.
           */}
-          {llista.length === 0 ? (
+          {llista.length === 0 && !gmail ? (
             <input
               className="plou-input"
               data-testid="mail-rule-folder"
@@ -3237,9 +3540,9 @@ function MailRuleForm({ accounts, onDone }: { accounts: MailAccount[]; onDone: (
                 que no hagi passat res quan el que passa és que no s'han pogut llegir.
               */
               placeholder={
-                folders.loading
+                loading
                   ? t('settings.mail.loadingFolders')
-                  : folders.data?.error != null
+                  : folderData?.error != null
                     ? t('settings.mail.foldersFailed')
                     : t('settings.mail.folderPlaceholder')
               }
@@ -3250,8 +3553,19 @@ function MailRuleForm({ accounts, onDone }: { accounts: MailAccount[]; onDone: (
               data-testid="mail-rule-folder"
               value={folder}
               onChange={(event) => setFolder(event.target.value)}
+              disabled={gmail && llista.length === 0}
             >
-              <option value="">{t('settings.mail.pickFolder')}</option>
+              <option value="">
+                {t(
+                  gmail
+                    ? loading
+                      ? 'settings.mail.loadingFolders'
+                      : llista.length === 0
+                        ? 'settings.mail.foldersFailed'
+                        : 'settings.mail.oauth.pickLabel'
+                    : 'settings.mail.pickFolder',
+                )}
+              </option>
               {llista.map((path) => (
                 <option key={path} value={path}>
                   {path}
@@ -3297,6 +3611,7 @@ function MailRuleForm({ accounts, onDone }: { accounts: MailAccount[]; onDone: (
           type="button"
           className="plou-btn plou-btn-primary"
           data-testid="mail-add-rule"
+          disabled={gmail && !folder}
           onClick={() => void add.run()}
         >
           {t('settings.mail.addRule')}

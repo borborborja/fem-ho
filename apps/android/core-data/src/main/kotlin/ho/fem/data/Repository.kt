@@ -9,6 +9,8 @@ import ho.fem.model.CalendarOrigin
 import ho.fem.model.CalendarTaskStart
 import ho.fem.model.CalendarTaskSuggestion
 import ho.fem.model.CalendarTaskSuggestions
+import ho.fem.model.GoogleCalendarChange
+import ho.fem.model.GoogleCalendarDraft
 import ho.fem.model.Comment
 import ho.fem.model.Checklist
 import ho.fem.model.ChecklistItem
@@ -103,6 +105,7 @@ data class LocalCalendarSuggestions(
 data class LocalDoingAutoStop(val minutes: Int? = null, val issueId: String? = null)
 
 private const val CALENDAR_SUGGESTIONS = "calendar_suggestions"
+private const val GOOGLE_CALENDAR_EVENT = "google_calendar_event"
 private const val USER_SETTINGS = "user_settings"
 private const val DOING_AUTO_STOP_MINUTES = "doing_auto_stop_minutes"
 
@@ -153,7 +156,7 @@ class Repository(
         }.distinctUntilChanged()
     val syncIssues: Flow<List<SyncIssue>> = combine(dao.outboxFlow(), dao.tasks()) { queue, local ->
         val titles = local.associate { it.id to it.title }
-        queue.filter { it.state != "pending" }.map {
+        queue.filter { it.state != "pending" && it.entity != GOOGLE_CALENDAR_EVENT }.map {
             SyncIssue(
                 opId = it.opId, entity = it.entity, entityId = it.entityId, title = titles[it.rootTaskId()],
                 kind = if (it.state == "conflict") "conflict" else "rejected",
@@ -995,6 +998,50 @@ class Repository(
 
     val calendars: Flow<List<Calendar>> = dao.calendars().map { rows -> rows.map { it.toDomain() } }
 
+    suspend fun refreshCalendars(): List<Calendar> = api.calendars().also { calendars ->
+        dao.replaceCalendars(calendars.map { it.toEntity() })
+    }
+
+    val deviceGoogleCalendarChanges: Flow<List<GoogleCalendarChange>> = dao.outboxFlow().map { queued ->
+        queued.filter { it.entity == GOOGLE_CALENDAR_EVENT }.mapNotNull { pending ->
+            val data = objectFrom(pending.payload)
+            GoogleCalendarChange(
+                id = pending.opId,
+                calendarId = data.string("calendar_id") ?: return@mapNotNull null,
+                eventId = pending.entityId,
+                operation = pending.op,
+                status = if (pending.state == "pending") "device_pending" else "device_failed",
+                errorCode = pending.detail,
+                draft = if (pending.op == "delete") null else runCatching { storedJson.decodeFromJsonElement<GoogleCalendarDraft>(data) }.getOrNull(),
+            )
+        }
+    }.distinctUntilChanged()
+
+    suspend fun enqueueGoogleCalendarChange(
+        calendarId: String,
+        eventId: String,
+        baseVersion: Int,
+        action: String,
+        draft: GoogleCalendarDraft?,
+        notifyGuests: Boolean,
+        fields: List<String>? = null,
+    ): Boolean = moveLock.withLock {
+        if (dao.outbox().any { it.entity == GOOGLE_CALENDAR_EVENT && it.entityId == eventId }) return@withLock false
+        val data = buildJsonObject {
+            draft?.let { storedJson.encodeToJsonElement(it).jsonObject.forEach { (key, value) -> put(key, value) } }
+            put("calendar_id", calendarId)
+            put("notify_guests", notifyGuests)
+            fields?.let { put("fields", storedJson.encodeToJsonElement(it)) }
+        }
+        dao.enqueue(operation(GOOGLE_CALENDAR_EVENT, action, eventId, baseVersion, data, taskId = null))
+        true
+    }
+
+    suspend fun discardDeviceGoogleCalendarChange(id: String) = flushLock.withLock {
+        val pending = dao.operation(id)
+        if (pending?.entity == GOOGLE_CALENDAR_EVENT && pending.state != "pending") dao.dequeue(pending.opId)
+    }
+
     suspend fun createCalendar(
         scopeId: String? = null,
         projectId: String? = null,
@@ -1057,7 +1104,7 @@ class Repository(
     suspend fun testMailAccount(id: String, password: String? = null): MailTestResult =
         api.testMailAccount(id, password)
 
-    val mailFolders: suspend (String) -> List<Map<String, Any>> = api::mailFolders
+    val mailFolders: suspend (String) -> List<String> = api::mailFolders
 
     // -------------------------------------------------------- regles correu
 
@@ -1566,11 +1613,11 @@ internal fun ScopeEntity.toDomain(): Scope = Scope(
     kind = ScopeKind.entries.firstOrNull { it.name.equals(kind, true) } ?: ScopeKind.INDIVIDUAL,
     color = color,
     position = position,
-    ownerId = "",
+    ownerId = ownerId,
 )
 
 internal fun Scope.toEntity(): ScopeEntity =
-    ScopeEntity(id = id, name = name, kind = kind.name.lowercase(), color = color, position = position)
+    ScopeEntity(id = id, name = name, kind = kind.name.lowercase(), color = color, position = position, ownerId = ownerId)
 
 internal fun ProjectEntity.toDomain(): Project =
     Project(id = id, scopeId = scopeId, name = name, position = position)
@@ -1645,6 +1692,8 @@ internal fun CalendarEntity.toDomain(): Calendar =
         color = color,
         origin = CalendarOrigin.entries.firstOrNull { it.name.equals(origin, true) } ?: CalendarOrigin.LOCAL,
         sourceKind = sourceKind?.let { ho.fem.model.SourceKind.entries.firstOrNull { k -> k.name.equals(it, true) } },
+        sourceProvider = sourceProvider,
+        writable = writable,
         sourceUrl = sourceUrl,
         refreshInterval = refreshInterval,
         inboxVisible = inboxVisible,
@@ -1662,6 +1711,8 @@ internal fun Calendar.toEntity(): CalendarEntity =
         color = color,
         origin = origin.name.lowercase(),
         sourceKind = sourceKind?.name?.lowercase(),
+        sourceProvider = sourceProvider,
+        writable = writable,
         sourceUrl = sourceUrl,
         refreshInterval = refreshInterval,
         inboxVisible = inboxVisible,
@@ -1681,6 +1732,7 @@ internal fun MailAccountEntity.toDomain(): MailAccount =
         oauthStatus = oauthStatus,
         security = MailSecurity.entries.firstOrNull { it.name.equals(security, true) } ?: MailSecurity.TLS,
         createdAt = createdAt,
+        transport = transport,
     )
 
 internal fun MailAccount.toEntity(): MailAccountEntity =
@@ -1694,6 +1746,7 @@ internal fun MailAccount.toEntity(): MailAccountEntity =
         oauthStatus = oauthStatus,
         security = security.name.lowercase(),
         createdAt = createdAt,
+        transport = transport,
     )
 
 internal fun MailRuleEntity.toDomain(): MailRule =
@@ -1705,6 +1758,8 @@ internal fun MailRuleEntity.toDomain(): MailRule =
         projectId = projectId,
         titleTemplate = titleTemplate,
         inboxVisible = inboxVisible,
+        gmailLabelId = gmailLabelId,
+        enabled = enabled,
     )
 
 internal fun MailRule.toEntity(): MailRuleEntity =
@@ -1716,6 +1771,8 @@ internal fun MailRule.toEntity(): MailRuleEntity =
         projectId = projectId,
         titleTemplate = titleTemplate,
         inboxVisible = inboxVisible,
+        gmailLabelId = gmailLabelId,
+        enabled = enabled,
     )
 
 internal fun ScopeSettingsEntity.toDomain(): ScopeSettings =

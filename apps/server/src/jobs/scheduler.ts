@@ -24,11 +24,19 @@ import { isDue, refreshSubscription, type SubscriptionRow } from '../dav/client.
 import { pullFromLink, type InstanceLinkRow } from '../services/federation.js';
 import { pruneOps } from '../services/sync.js';
 import { openImapClient } from '../net/imap-mail-client.js';
+import { openGmailClient } from '../net/gmail-client.js';
+import {
+  createGoogleCalendarProvider,
+  type GoogleCalendarProvider,
+} from '../net/google-calendar.js';
 import { mailCredentials } from '../services/mail-credentials.js';
 import { pruneMailOAuth } from '../services/mail-oauth.js';
 import { pollMail, pruneMail } from './mail-poll.js';
 import { deliverTaskActivity } from './task-activity-notifications.js';
 import { stopExpiredDoingTasks } from '../services/doing-auto-stop.js';
+import { resolveGoogleConfig } from '../services/google-config.js';
+import { runGoogleCalendarPulls } from './google-calendar.js';
+import { runGoogleCalendarChanges } from './google-calendar-changes.js';
 import type { Principal } from '../policy/principal.js';
 import {
   ensureVapidKeys,
@@ -56,6 +64,7 @@ export interface SchedulerOptions {
   /** Injectables per a les proves: així no cal esperar mig minut ni piconar cap servei. */
   now?: () => string;
   send?: PushSender;
+  googleCalendarProvider?: GoogleCalendarProvider;
   log?: (message: string, error?: unknown) => void;
   tickMs?: number;
 }
@@ -142,6 +151,29 @@ export async function tick(options: SchedulerOptions): Promise<TickResult> {
     log("El refresc d'orígens externs ha fallat", error);
   }
 
+  try {
+    const config = await resolveGoogleConfig(options.connection.db, options.secret, options);
+    const calendar = {
+      connection: options.connection,
+      secret: options.secret,
+      principal,
+      now,
+      config,
+    };
+    if (config.enabled) {
+      const provider = options.googleCalendarProvider ?? createGoogleCalendarProvider(config);
+      await runGoogleCalendarChanges({ ...calendar, provider });
+    }
+    result.refreshed += await runGoogleCalendarPulls({
+      ...calendar,
+      provider: options.googleCalendarProvider,
+      log,
+    });
+  } catch (error) {
+    result.errors += 1;
+    log('La sincronització amb Google Calendar ha fallat', error);
+  }
+
   /**
    * El correu, **en un bloc propi**.
    *
@@ -156,8 +188,19 @@ export async function tick(options: SchedulerOptions): Promise<TickResult> {
     await pruneMailOAuth(options.connection.db, now);
     const mail = await pollMail({
       db: options.connection.db,
-      openClient: async (account) =>
-        openImapClient(
+      openClient: async (account) => {
+        const credentials = await mailCredentials(
+          options.connection.db,
+          options.secret,
+          options,
+          account.id,
+          account.user_id,
+        );
+        if (account.transport === 'gmail_api') {
+          if (!credentials.accessToken) throw new Error('gmail-reconnect-required');
+          return openGmailClient(credentials.accessToken);
+        }
+        return openImapClient(
           {
             host: account.host,
             port: Number(account.port),
@@ -165,16 +208,11 @@ export async function tick(options: SchedulerOptions): Promise<TickResult> {
             username: account.username,
             // El secret s'obre aquí, al planificador, que és qui el té. El client rep
             // text pla i el text pla mor amb la connexió.
-            ...(await mailCredentials(
-              options.connection.db,
-              options.secret,
-              options,
-              account.id,
-              account.user_id,
-            )),
+            ...credentials,
           },
           { allowHosts: options.mailAllowHosts },
-        ),
+        );
+      },
       now: () => now,
       log,
       // Sense `dataDir` no es baixa cap adjunt: no hi hauria on posar-lo.

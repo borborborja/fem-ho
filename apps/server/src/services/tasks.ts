@@ -24,7 +24,7 @@ import { PolicyError, missingCapability, notFound } from '../policy/errors.js';
 import { canSeeScope, hasCapability, type Principal } from '../policy/principal.js';
 import type { Mailbox } from '../policy/mailbox.js';
 import { visibleScopeIds, visibleScopesPredicate } from '../policy/scope-visibility.js';
-import { visibleCalendarIds } from '../policy/calendar-visibility.js';
+import { canReadGoogleEventDetails, visibleCalendarIds } from '../policy/calendar-visibility.js';
 import { normalizeForSearch, normalizeQuery } from '../text/search-text.js';
 import { clampInt } from '../util/clamp.js';
 import { localDayBounds } from '../time/local-day.js';
@@ -654,8 +654,12 @@ export async function createTask(
     if (!hasCapability(principal, 'events:read')) throw missingCapability('events:read');
     if (!(await visibleCalendarIds(ctx.tx, principal.userId)).has(input.source_event.calendar_id))
       throw notFound('calendar', input.source_event.calendar_id);
-    const cal = await sql<{ scope_id: string; source_kind: SourceKind | null }>`
-      SELECT scope_id, source_kind FROM calendars
+    const cal = await sql<{
+      scope_id: string;
+      source_kind: SourceKind | null;
+      source_provider: string | null;
+    }>`
+      SELECT scope_id, source_kind, source_provider FROM calendars
       WHERE id = ${input.source_event.calendar_id} AND deleted_at IS NULL
     `.execute(ctx.tx);
     const calScope = cal.rows[0]?.scope_id;
@@ -677,6 +681,17 @@ export async function createTask(
 
     await lockEventTaskSeries(ctx.tx, engine, input.source_event);
     const recurrence = input.source_event.recurrence_id ?? null;
+    if (cal.rows[0]?.source_provider === 'google') {
+      const event = await sql<{ id: string }>`SELECT id FROM events
+        WHERE calendar_id = ${input.source_event.calendar_id} AND uid = ${input.source_event.uid}
+          AND deleted_at IS NULL
+          AND ${recurrence === null ? sql`recurrence_id IS NULL` : sql`recurrence_id = ${recurrence}`}`.execute(
+        ctx.tx,
+      );
+      const id = event.rows[0]?.id;
+      if (id === undefined || !(await canReadGoogleEventDetails(ctx.tx, principal.userId, id)))
+        throw notFound('event', input.source_event.uid);
+    }
     const ja = await sql<{ id: string }>`
       SELECT id FROM tasks
       WHERE deleted_at IS NULL AND event_calendar_id = ${input.source_event.calendar_id}

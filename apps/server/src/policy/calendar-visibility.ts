@@ -46,3 +46,19 @@ export async function visibleCalendarIds(db: MigrationDb, userId: string): Promi
   `.execute(db);
   return new Set(rows.rows.map((r) => r.id));
 }
+
+/** El calendari es pot compartir, però Google permet marcar una sola cita com a privada. */
+export async function canReadGoogleEventDetails(
+  db: MigrationDb,
+  userId: string,
+  eventId: string,
+): Promise<boolean> {
+  const { rows } = await sql`SELECT 1 FROM events e JOIN calendars c ON c.id = e.calendar_id
+    JOIN scopes s ON s.id = c.scope_id
+    LEFT JOIN google_calendar_links l ON l.calendar_id = c.id AND l.deleted_at IS NULL
+    LEFT JOIN google_calendar_accounts a ON a.id = l.account_id
+    WHERE e.id = ${eventId} AND c.source_provider = 'google'
+      AND e.classification IN ('PRIVATE','CONFIDENTIAL')
+      AND (a.user_id IS NULL OR a.user_id <> ${userId} OR s.owner_id <> ${userId})`.execute(db);
+  return rows.length === 0;
+}

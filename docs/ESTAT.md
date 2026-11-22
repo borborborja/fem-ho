@@ -7,6 +7,39 @@ Data de l'última verificació completa: **2026-11-19**.
 
 ---
 
+## Gmail API i Google Calendar
+
+**Ajustos → Admin → Integració amb Google** permet desar el client OAuth. Una
+parella configurada per entorn té prioritat i el formulari queda bloquejat.
+L'administrador registra els dos retorns OAuth i activa les API al projecte de
+Google Cloud. [Guia de configuració](google-calendar.md)
+
+Al web i a Android, es poden connectar diversos comptes de Gmail i assignar
+etiquetes a àmbits. La conversió d'un compte existent conserva les regles i el
+correu importat. Si una carpeta no té una etiqueta equivalent, la regla queda
+pendent de selecció i activació.
+
+Es pot vincular un calendari de Google a diversos àmbits propis. Les cites
+recurrents s'importen amb la identitat de l'ocurrència original. Qui ha autoritzat
+el compte pot crear, editar i esborrar cites en calendaris amb permís d'escriptura.
+La cua conserva els canvis fets fora de línia i els que entren en conflicte amb
+una edició feta a Google.
+
+Amb SQLite i PostgreSQL s'han comprovat l'aïllament dels comptes, la caducitat
+dels cursors, la visibilitat dels calendaris compartits i el reintent d'una alta
+amb resposta perduda. Chromium ha comprovat la vinculació a dos àmbits, les
+regles de dos comptes Gmail i la represa d'una alta fora de línia. Els proveïdors
+de Google eren simulats. Amb l'APK de publicació amb R8 a Android 14 s'han comprovat
+la migració de Room, la vinculació a dos àmbits i la represa d'una cita pendent
+després de tancar l'app en mode avió. També s'ha editat i esborrat la cita
+des d'Android, amb el canvi visible a totes dues vinculacions. Queda pendent el
+consentiment i la sincronització amb un compte real de Google.
+
+Les migracions 033–035 són additives. Actualitza primer el servidor i després
+els clients per accedir als nous controls.
+
+---
+
 ## Temes d'alt contrast i de tinta electrònica · 0.29.0
 
 Ajustos → General → Tema ofereix Alt contrast i Tinta electrònica al web i a
@@ -781,7 +814,7 @@ No es pot verificar en aquesta màquina i **no s'ha verificat**:
 
 ## Fonts de dades del calendari
 
-Un àmbit pot tenir fonts externes de tres menes, que s'afegeixen a **Ajustos ▸
+Un àmbit pot tenir les fonts externes següents, que s'afegeixen a **Ajustos ▸
 Calendaris** i es veuen al calendari:
 
 | Mena | Què és | Escriptura |
@@ -789,6 +822,7 @@ Calendaris** i es veuen al calendari:
 | `caldav` | Una col·lecció CalDAV | Pendent, veure sota |
 | `ical` | Un `.ics` publicat | Només lectura |
 | `rss` | Un canal RSS o Atom | Només lectura |
+| Google Calendar | Un calendari d'un compte vinculat per OAuth | Lectura i edició segons els permisos del compte |
 
 De l'RSS, **cada element és un instant i no una durada**: un titular publicat a les 14:32
 no dura res, i donar-li mitja hora perquè es vegi millor seria inventar-se una dada. Els
@@ -801,7 +835,7 @@ es veu, perquè una font nova ha de sortir sola.
 L'estat de l'últim refresc surt a Ajustos amb el motiu si va fallar: una font caiguda es
 veu exactament igual que una que no té esdeveniments, i sense dir-ho ningú se n'assabenta.
 
-### El que falta: l'escriptura cap a l'origen
+### L'escriptura cap a CalDAV
 
 `calendars.writable` existeix i el servei ja hi confia —una font marcada com a
 bidireccional deixa d'estar bloquejada a la capa de repositori— **però l'empenta cap a

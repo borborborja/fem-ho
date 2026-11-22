@@ -203,6 +203,11 @@ data class EventOccurrence(
     @SerialName("scope_id") val scopeId: String,
     @SerialName("calendar_id") val calendarId: String = "",
     @SerialName("recurrence_id") val recurrenceId: String? = null,
+    val description: String? = null,
+    val version: Int? = null,
+    val timezone: String? = null,
+    @SerialName("google_can_edit") val googleCanEdit: Boolean = false,
+    @SerialName("google_has_guests") val googleHasGuests: Boolean = false,
     /**
      * Si aquesta cita és a la bústia de qui pregunta.
      *
@@ -615,6 +620,7 @@ data class MailAccount(
     /** El servidor mai retorna la contrasenya; només diu si n'hi ha una de desada. */
     @SerialName("has_secret") val hasSecret: Boolean = false,
     @SerialName("auth_method") val authMethod: String = "password",
+    val transport: String = "imap",
     @SerialName("oauth_status") val oauthStatus: String? = null,
     @SerialName("poll_interval") val pollInterval: Int? = null,
     val security: MailSecurity = MailSecurity.TLS,
@@ -631,10 +637,17 @@ data class MailOAuthAttempt(
     val email: String? = null,
     @SerialName("error_code") val errorCode: String? = null,
     @SerialName("authorization_url") val authorizationUrl: String? = null,
+    val transport: String = "imap",
 )
 
 @Serializable
 data class MailOAuthAvailability(val enabled: Boolean = false)
+
+@Serializable
+data class GmailLabel(val id: String, val name: String)
+
+@Serializable
+data class GmailLabels(val labels: List<GmailLabel> = emptyList())
 
 @Serializable
 data class MailRule(
@@ -642,10 +655,12 @@ data class MailRule(
     @SerialName("account_id") val accountId: String? = null,
     @SerialName("account_name") val accountName: String? = null,
     val folder: String,
+    @SerialName("gmail_label_id") val gmailLabelId: String? = null,
     @SerialName("scope_id") val scopeId: String? = null,
     @SerialName("project_id") val projectId: String? = null,
     @SerialName("title_template") val titleTemplate: String? = null,
     @SerialName("inbox_visible") val inboxVisible: Boolean? = null,
+    val enabled: Boolean = true,
 )
 
 @Serializable
@@ -663,6 +678,7 @@ data class Calendar(
     val color: String? = null,
     val origin: CalendarOrigin = CalendarOrigin.LOCAL,
     @SerialName("source_kind") val sourceKind: SourceKind? = null,
+    @SerialName("source_provider") val sourceProvider: String? = null,
     @SerialName("source_url") val sourceUrl: String? = null,
     @SerialName("source_username") val sourceUsername: String? = null,
     @Serializable(with = BooleanCoerce::class) val writable: Boolean = false,
@@ -740,6 +756,17 @@ data class AdminUser(
     val role: String = "member",
     @SerialName("created_at") val createdAt: String? = null,
     @SerialName("invite_pending") val invitePending: Boolean = false,
+)
+
+@Serializable
+data class AdminGoogleConfig(
+    val source: String,
+    val enabled: Boolean,
+    @SerialName("client_id") val clientId: String? = null,
+    @SerialName("has_secret") val hasSecret: Boolean = false,
+    val reason: String? = null,
+    @SerialName("gmail_callback_url") val gmailCallbackUrl: String? = null,
+    @SerialName("calendar_callback_url") val calendarCallbackUrl: String? = null,
 )
 
 /** El resultat de convidar algú: l'usuari creat i l'enllaç, que només es veu un cop. */

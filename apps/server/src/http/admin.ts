@@ -18,6 +18,11 @@ import {
   wipeInstance,
 } from '../services/admin.js';
 import { exportAll } from '../services/export.js';
+import {
+  deleteAdminGoogleConfig,
+  getAdminGoogleConfig,
+  putAdminGoogleConfig,
+} from '../services/google-config.js';
 import { PolicyError } from '../policy/errors.js';
 import { setupPrincipal } from '../services/setup.js';
 import { body, handle, str } from './handle.js';
@@ -30,6 +35,34 @@ import { body, handle, str } from './handle.js';
 export function registerAdminRoutes(app: FastifyInstance, secret: () => string): void {
   const db = (): NonNullable<FastifyInstance['connection']> => app.connection!;
   const baseUrl = (): string => app.config.baseUrl ?? `http://localhost:${String(app.config.port)}`;
+
+  app.get('/api/v1/admin/oauth/google', async (request, reply) =>
+    handle(app, request, reply, (principal) =>
+      getAdminGoogleConfig(db().db, principal, secret(), app.config),
+    ),
+  );
+
+  app.put('/api/v1/admin/oauth/google', async (request, reply) =>
+    handle(app, request, reply, (principal) =>
+      auditedTransaction(
+        db().db,
+        principal,
+        (ctx) => putAdminGoogleConfig(ctx, principal, secret(), app.config, body(request)),
+        { engine: db().engine },
+      ),
+    ),
+  );
+
+  app.delete('/api/v1/admin/oauth/google', async (request, reply) =>
+    handle(app, request, reply, (principal) =>
+      auditedTransaction(
+        db().db,
+        principal,
+        (ctx) => deleteAdminGoogleConfig(ctx, principal, secret(), app.config),
+        { engine: db().engine },
+      ),
+    ),
+  );
 
   app.get('/api/v1/admin/users', async (request, reply) =>
     handle(app, request, reply, async (principal) => listUsers(db().db, principal)),

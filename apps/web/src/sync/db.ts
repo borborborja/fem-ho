@@ -30,7 +30,8 @@ export type OutboxStatus = 'pending' | 'sending' | 'failed' | 'conflict';
 export interface OutboxRow {
   /** És l'`op_id` que veurà el servidor: la clau d'idempotència (docs/06 §4). */
   id: string;
-  entity_type: SyncedEntity | 'pomodoro' | 'calendar_suggestions' | 'user_settings';
+  entity_type:
+    SyncedEntity | 'pomodoro' | 'calendar_suggestions' | 'user_settings' | 'google_calendar_event';
   entity_id: string;
   op: OutboxOp;
   payload: Record<string, unknown>;
