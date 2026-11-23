@@ -199,8 +199,8 @@ La defensa real no és tècnica: és que l'usuari pugui veure el que ha passat i
 
 **Tasques amb IA** configura un enviament puntual quan la persona prem el botó de
 la tasca. L'ajust té una clau per usuari i àmbit. Cada execució porta l'UUID de
-la tasca, el de la petició i la connexió escollida. L'acció es pot fer en
-qualsevol columna. L'estat de la tasca, el mode IA, les reserves i les preguntes
+la tasca, el de la petició i la connexió escollida. El botó es mostra a les
+tasques obertes. L'estat de la tasca, el mode IA, les reserves i les preguntes
 pendents es mantenen amb la semàntica de la delegació descrita més amunt.
 
 L'API de sessió permet consultar els ajustos, copiar el context i demanar un

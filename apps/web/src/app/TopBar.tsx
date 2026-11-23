@@ -226,6 +226,10 @@ export function TopBar({
         style={{
           width: 38,
           height: 38,
+          // El padding del navegador empeny la foto fora del cercle de 38 px.
+          padding: 0,
+          display: 'grid',
+          placeItems: 'center',
           borderRadius: '50%',
           border: '1px solid var(--card-border)',
           background: 'var(--tag-bg)',

@@ -45,6 +45,31 @@ async function fixture(page: Page, suffix: string) {
   return { headers, scopeId, taskId, otherTaskId };
 }
 
+test('amaga el botó IA a Fet i el recupera en reobrir la tasca', async ({ page }, testInfo) => {
+  const { headers, scopeId, taskId } = await fixture(
+    page,
+    `done-${testInfo.repeatEachIndex}-${testInfo.retry}`,
+  );
+  await expect(
+    await page.request.put(`/api/v1/ai/task-settings/${scopeId}`, {
+      headers,
+      data: { enabled: true, method: 'copy' },
+    }),
+  ).toBeOK();
+  await page.goto('/');
+
+  const card = page.getByTestId(`task-${taskId}`);
+  const action = card.getByTestId('task-ai-action');
+  await expect(action).toBeVisible();
+  await card.getByTestId('card-advance').click();
+  await card.getByTestId('card-toggle-done').click();
+  await expect(page.getByTestId('column-done').getByTestId(`task-${taskId}`)).toBeVisible();
+  await expect(action).toHaveCount(0);
+
+  await card.getByTestId('card-toggle-done').click();
+  await expect(action).toBeVisible();
+});
+
 test('activa un àmbit, copia el context i ofereix text seleccionable si falla el portapapers', async ({
   page,
 }, testInfo) => {
@@ -250,4 +275,12 @@ test('clic dret copia encara que falti la connexió i el clic principal envia no
     'https://claude.ai/code/session_ai_test',
   );
   expect(outcomes).toHaveLength(2);
+
+  await modal.getByTestId('task-status-done').click();
+  await expect(modal.getByTestId('task-status-done')).toHaveAttribute('aria-pressed', 'true');
+  await expect(modalAction).toHaveCount(0);
+  await expect(modal.getByRole('link', { name: 'Obre la sessió' })).toHaveAttribute(
+    'href',
+    'https://claude.ai/code/session_ai_test',
+  );
 });
