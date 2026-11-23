@@ -13,9 +13,11 @@ Configura el proxy perquè cap ruta de retorn OAuth escrigui els paràmetres de 
 
 ## Comptes i àmbits
 
-A **Ajustos → Calendaris**, prem **Connecta amb Google**. Tria el compte al navegador i confirma l'adreça quan tornis a Fem-ho. A Android, torna a l'app quan acabis al navegador. Pots repetir el procés amb més comptes i triar els calendaris més endavant.
+Al web i a Android, obre **Ajustos → Calendaris** i ves a **Fonts de dades** de l'àmbit propi on vols veure el calendari. Tria **Google Calendar** al selector de fonts, al costat de CalDAV, iCal i RSS. El formulari mostra els comptes que ja has connectat.
 
-Tria un compte, un dels seus calendaris i els àmbits de destinació. Pots vincular-lo a diversos àmbits que tinguis en propietat. Cada vinculació té els seus controls de visibilitat i de bústia. En un àmbit compartit, només tu el veus fins que el comparteixis expressament. Les cites privades de Google queden reservades a qui ha autoritzat la connexió.
+Prem **Connecta amb Google** per connectar el primer compte o **Connecta un compte nou** per afegir-ne un altre. Tria el compte al navegador i confirma l'adreça al mateix formulari en tornar a Fem-ho. A Android, torna a l'app quan acabis al navegador. També pots connectar comptes, reconnectar-los o desconnectar-los des del bloc **Google Calendar** de la pestanya **Calendaris**.
+
+Tria un compte i un dels seus calendaris. L'àmbit des d'on has obert el formulari ja està seleccionat. Marca altres àmbits propis si també hi vols afegir el calendari i prem **Vincula el calendari**. Cada vinculació apareix a les **Fonts de dades** del seu àmbit i té els seus controls de visibilitat i de bústia. En un àmbit compartit, només tu el veus fins que el comparteixis expressament. Les cites privades de Google queden reservades a qui ha autoritzat la connexió.
 
 Una vinculació admet edició si el compte de Google hi té accés d'escriptura i has activat l'opció en vincular-la. Qui l'ha autoritzada pot crear cites puntuals i editar o esborrar una ocurrència d'una sèrie. Fem-ho demana confirmació abans d'enviar un canvi que avisi els convidats.
 
@@ -29,4 +31,4 @@ Desconnectar un compte atura els refrescos i conserva els calendaris vinculats. 
 
 ## Prova del desplegament
 
-Amb un compte Google de proves, vincula un calendari a dos àmbits. Crea una cita de tot el dia, modifica-la a Google i comprova que apareix a tots dos àmbits. Mou una ocurrència d'una sèrie des de Fem-ho i comprova que només canvia aquella cita. Repeteix el recorregut a Android i comprova la represa després de perdre la connexió.
+Amb un compte Google de proves, afegeix un calendari des del selector de fonts d'un àmbit i marca un segon àmbit. Comprova que el calendari apareix a les fonts de tots dos. Crea una cita de tot el dia, modifica-la a Google i comprova que apareix a tots dos àmbits. Mou una ocurrència d'una sèrie des de Fem-ho i comprova que només canvia aquella cita. Repeteix el recorregut a Android i comprova la represa després de perdre la connexió.

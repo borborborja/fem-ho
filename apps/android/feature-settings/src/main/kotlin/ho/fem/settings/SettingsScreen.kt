@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
@@ -26,6 +28,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -366,6 +369,9 @@ fun SettingsScreen(
     onUpdateCalendar: (String, String?, String?, String?, String?, Int?, Boolean?) -> Unit = { _, _, _, _, _, _, _ -> },
     onDeleteCalendar: (String) -> Unit = {},
     googleCalendarContent: @Composable () -> Unit = {},
+    googleCalendarAvailable: (ho.fem.model.Scope) -> Boolean = { false },
+    googleCalendarPendingScopeId: String? = null,
+    googleCalendarSource: @Composable (ho.fem.model.Scope) -> Unit = {},
     googleCalendarSharing: @Composable (ho.fem.model.Calendar, ho.fem.model.Scope) -> Unit = { _, _ -> },
     googleCalendarCanManage: (ho.fem.model.Scope) -> Boolean = { false },
     onCreateMailAccount: (String, String, String, String, String) -> Unit = { _, _, _, _, _ -> },
@@ -411,7 +417,10 @@ fun SettingsScreen(
     aiTasksContent: @Composable () -> Unit = {},
     notificationsContent: @Composable () -> Unit = {},
 ) {
-    var selectedTab by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("general") }
+    var selectedTab by rememberSaveable { mutableStateOf("general") }
+    LaunchedEffect(googleCalendarPendingScopeId) {
+        if (googleCalendarPendingScopeId != null) selectedTab = "calendars"
+    }
 
     Column(
         modifier = modifier
@@ -540,6 +549,9 @@ fun SettingsScreen(
                     calendars = calendars,
                     serverUrl = serverUrl,
                     googleCalendarContent = googleCalendarContent,
+                    googleCalendarAvailable = googleCalendarAvailable,
+                    googleCalendarPendingScopeId = googleCalendarPendingScopeId,
+                    googleCalendarSource = googleCalendarSource,
                     googleCalendarSharing = googleCalendarSharing,
                     googleCalendarCanManage = googleCalendarCanManage,
                     onCreateCalendar = onCreateCalendar,
@@ -1220,6 +1232,9 @@ private fun CalendarsTab(
     calendars: List<ho.fem.model.Calendar>,
     serverUrl: String,
     googleCalendarContent: @Composable () -> Unit,
+    googleCalendarAvailable: (ho.fem.model.Scope) -> Boolean,
+    googleCalendarPendingScopeId: String?,
+    googleCalendarSource: @Composable (ho.fem.model.Scope) -> Unit,
     googleCalendarSharing: @Composable (ho.fem.model.Calendar, ho.fem.model.Scope) -> Unit,
     googleCalendarCanManage: (ho.fem.model.Scope) -> Boolean,
     onCreateCalendar: (String, String, String, String?, String?, String?, String?, Boolean?) -> Unit,
@@ -1290,11 +1305,25 @@ private fun CalendarsTab(
                     }
                 }
 
-                var newSourceKind by remember(scope.id) { mutableStateOf("ical") }
+                var newSourceKind by rememberSaveable(scope.id) { mutableStateOf("ical") }
                 var newSourceName by remember(scope.id) { mutableStateOf("") }
                 var newSourceUrl by remember(scope.id) { mutableStateOf("") }
                 var newSourceUsername by remember(scope.id) { mutableStateOf("") }
                 var newSourcePassword by remember(scope.id) { mutableStateOf("") }
+                val googleAvailable = googleCalendarAvailable(scope)
+                val resumeGoogle = googleAvailable && googleCalendarPendingScopeId == scope.id
+                val sourceForm = remember(scope.id) { BringIntoViewRequester() }
+                val kind = when {
+                    resumeGoogle -> "google"
+                    newSourceKind == "google" && !googleAvailable -> "ical"
+                    else -> newSourceKind
+                }
+                LaunchedEffect(resumeGoogle) {
+                    if (resumeGoogle) {
+                        newSourceKind = "google"
+                        sourceForm.bringIntoView()
+                    }
+                }
 
                 Text(
                     text = labels.sourcesTitle,
@@ -1303,61 +1332,28 @@ private fun CalendarsTab(
                     fontWeight = FontWeight.Medium,
                 )
                 Chips(
-                    options = listOf(
-                        "caldav" to labels.sourcesKindCaldav,
-                        "ical" to labels.sourcesKindIcal,
-                        "rss" to labels.sourcesKindRss,
-                    ),
-                    value = newSourceKind,
+                    options = buildList {
+                        add("caldav" to labels.sourcesKindCaldav)
+                        add("ical" to labels.sourcesKindIcal)
+                        add("rss" to labels.sourcesKindRss)
+                        if (googleAvailable) add("google" to labels.sourcesKindGoogle)
+                    },
+                    value = kind,
                     onChange = { newSourceKind = it },
-                    tag = "source-kind",
+                    tag = "source-kind-${scope.id}",
+                    enabled = !resumeGoogle,
                 )
-                androidx.compose.foundation.text.BasicTextField(
-                    value = newSourceName,
-                    onValueChange = { newSourceName = it },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(FemhoShape.pill))
-                        .background(Femho.colors.ghostBg)
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                    decorationBox = { innerTextField ->
-                        Box(modifier = Modifier.padding(vertical = 2.dp)) {
-                            if (newSourceName.isEmpty()) {
-                                Text(
-                                    text = labels.sourcesName,
-                                    color = Femho.colors.inkFaint,
-                                    fontSize = FemhoText.body,
-                                )
-                            }
-                            innerTextField()
-                        }
-                    },
-                )
-                androidx.compose.foundation.text.BasicTextField(
-                    value = newSourceUrl,
-                    onValueChange = { newSourceUrl = it },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(FemhoShape.pill))
-                        .background(Femho.colors.ghostBg)
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                    decorationBox = { innerTextField ->
-                        Box(modifier = Modifier.padding(vertical = 2.dp)) {
-                            if (newSourceUrl.isEmpty()) {
-                                Text(
-                                    text = labels.sourcesUrl,
-                                    color = Femho.colors.inkFaint,
-                                    fontSize = FemhoText.body,
-                                )
-                            }
-                            innerTextField()
-                        }
-                    },
-                )
-                if (newSourceKind == "caldav") {
+                if (kind == "google") {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().bringIntoViewRequester(sourceForm),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        googleCalendarSource(scope)
+                    }
+                } else {
                     androidx.compose.foundation.text.BasicTextField(
-                        value = newSourceUsername,
-                        onValueChange = { newSourceUsername = it },
+                        value = newSourceName,
+                        onValueChange = { newSourceName = it },
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(FemhoShape.pill))
@@ -1365,9 +1361,9 @@ private fun CalendarsTab(
                             .padding(horizontal = 12.dp, vertical = 8.dp),
                         decorationBox = { innerTextField ->
                             Box(modifier = Modifier.padding(vertical = 2.dp)) {
-                                if (newSourceUsername.isEmpty()) {
+                                if (newSourceName.isEmpty()) {
                                     Text(
-                                        text = labels.sourcesUsername,
+                                        text = labels.sourcesName,
                                         color = Femho.colors.inkFaint,
                                         fontSize = FemhoText.body,
                                     )
@@ -1377,8 +1373,8 @@ private fun CalendarsTab(
                         },
                     )
                     androidx.compose.foundation.text.BasicTextField(
-                        value = newSourcePassword,
-                        onValueChange = { newSourcePassword = it },
+                        value = newSourceUrl,
+                        onValueChange = { newSourceUrl = it },
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(FemhoShape.pill))
@@ -1386,9 +1382,9 @@ private fun CalendarsTab(
                             .padding(horizontal = 12.dp, vertical = 8.dp),
                         decorationBox = { innerTextField ->
                             Box(modifier = Modifier.padding(vertical = 2.dp)) {
-                                if (newSourcePassword.isEmpty()) {
+                                if (newSourceUrl.isEmpty()) {
                                     Text(
-                                        text = labels.sourcesPassword,
+                                        text = labels.sourcesUrl,
                                         color = Femho.colors.inkFaint,
                                         fontSize = FemhoText.body,
                                     )
@@ -1396,35 +1392,79 @@ private fun CalendarsTab(
                                 innerTextField()
                             }
                         },
+                    )
+                    if (kind == "caldav") {
+                        androidx.compose.foundation.text.BasicTextField(
+                            value = newSourceUsername,
+                            onValueChange = { newSourceUsername = it },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(FemhoShape.pill))
+                                .background(Femho.colors.ghostBg)
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            decorationBox = { innerTextField ->
+                                Box(modifier = Modifier.padding(vertical = 2.dp)) {
+                                    if (newSourceUsername.isEmpty()) {
+                                        Text(
+                                            text = labels.sourcesUsername,
+                                            color = Femho.colors.inkFaint,
+                                            fontSize = FemhoText.body,
+                                        )
+                                    }
+                                    innerTextField()
+                                }
+                            },
+                        )
+                        androidx.compose.foundation.text.BasicTextField(
+                            value = newSourcePassword,
+                            onValueChange = { newSourcePassword = it },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(FemhoShape.pill))
+                                .background(Femho.colors.ghostBg)
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            decorationBox = { innerTextField ->
+                                Box(modifier = Modifier.padding(vertical = 2.dp)) {
+                                    if (newSourcePassword.isEmpty()) {
+                                        Text(
+                                            text = labels.sourcesPassword,
+                                            color = Femho.colors.inkFaint,
+                                            fontSize = FemhoText.body,
+                                        )
+                                    }
+                                    innerTextField()
+                                }
+                            },
+                        )
+                    }
+                    Text(
+                        text = labels.sourcesAdd,
+                        color = Femho.colors.ink,
+                        fontSize = FemhoText.body,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier
+                            .clickable {
+                                if (newSourceUrl.isNotBlank()) {
+                                    onCreateCalendar(
+                                        scope.id,
+                                        newSourceName.trim().ifEmpty { newSourceUrl.trim() },
+                                        "subscription",
+                                        kind,
+                                        newSourceUrl.trim(),
+                                        if (kind == "caldav" && newSourceUsername.isNotBlank()) newSourceUsername.trim() else null,
+                                        if (kind == "caldav" && newSourcePassword.isNotBlank()) newSourcePassword.trim() else null,
+                                        null,
+                                    )
+                                    newSourceName = ""
+                                    newSourceUrl = ""
+                                    newSourceUsername = ""
+                                    newSourcePassword = ""
+                                }
+                            }
+                            .heightIn(min = FemhoSize.touch)
+                            .padding(vertical = 8.dp),
                     )
                 }
-                Text(
-                    text = labels.sourcesAdd,
-                    color = Femho.colors.ink,
-                    fontSize = FemhoText.body,
-                    fontWeight = FontWeight.Medium,
-                    modifier = Modifier
-                        .clickable {
-                            if (newSourceUrl.isNotBlank()) {
-                                onCreateCalendar(
-                                    scope.id,
-                                    newSourceName.trim().ifEmpty { newSourceUrl.trim() },
-                                    "subscription",
-                                    newSourceKind,
-                                    newSourceUrl.trim(),
-                                    if (newSourceKind == "caldav" && newSourceUsername.isNotBlank()) newSourceUsername.trim() else null,
-                                    if (newSourceKind == "caldav" && newSourcePassword.isNotBlank()) newSourcePassword.trim() else null,
-                                    null,
-                                )
-                                newSourceName = ""
-                                newSourceUrl = ""
-                                newSourceUsername = ""
-                                newSourcePassword = ""
-                            }
-                        }
-                        .heightIn(min = FemhoSize.touch)
-                        .padding(vertical = 8.dp),
-                )
 
                 if (shared.isNotEmpty()) {
                     Text(

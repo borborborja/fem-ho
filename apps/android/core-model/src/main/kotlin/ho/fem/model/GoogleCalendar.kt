@@ -18,6 +18,7 @@ data class GoogleCalendarAttempt(
     val id: String,
     val status: String,
     val email: String? = null,
+    @SerialName("account_id") val accountId: String? = null,
     @SerialName("error_code") val errorCode: String? = null,
     @SerialName("authorization_url") val authorizationUrl: String? = null,
 )
