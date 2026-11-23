@@ -7,6 +7,20 @@ Data de l'última verificació completa: **2026-11-19**.
 
 ---
 
+## Google Calendar al selector de fonts · 0.30.1
+
+Quan la instància té Google activat, el selector **Fonts de dades** de cada
+àmbit propi ofereix Google Calendar al costat de CalDAV, iCal i RSS. Al web i
+a Android s'hi pot fer servir un compte connectat o autoritzar-ne un altre.
+L'àmbit del formulari queda seleccionat i es poden afegir altres destinacions.
+El reintent conserva les vinculacions que encara estan pendents.
+
+Chromium i l'APK de publicació amb R8 a Android 14 han verificat el retorn al
+mateix àmbit després d'OAuth, les vinculacions en més d'un àmbit i les altes
+parcials. A les proves es va simular Google. El canvi no requereix migracions.
+
+---
+
 ## Gmail API i Google Calendar · 0.30.0
 
 **Ajustos → Admin → Integració amb Google** permet desar el client OAuth. Una
