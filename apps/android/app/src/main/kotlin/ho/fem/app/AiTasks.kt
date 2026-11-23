@@ -37,6 +37,7 @@ import ho.fem.model.AiExecution
 import ho.fem.model.AiTaskMethod
 import ho.fem.model.Scope
 import ho.fem.model.Task
+import ho.fem.model.TaskStatus
 import ho.fem.settings.AiTaskSettingsLabels
 import ho.fem.settings.AiTaskSettingsPanel
 import ho.fem.tasks.CardAiAction
@@ -214,13 +215,15 @@ internal fun TaskAiActions(model: AppViewModel, task: Task, formatTime: (String)
             awaitingRetry = false
         }
     }
-    if (!setting.enabled && latest == null) return
-    val canSend = setting.enabled && setting.method != AiTaskMethod.COPY && setting.ready && setting.canDispatch &&
+    val showActions = setting.enabled && task.status != TaskStatus.DONE
+    val showLoadError = setting.enabled && loadFailed
+    if (!showActions && latest == null && !showLoadError) return
+    val canSend = showActions && setting.method != AiTaskMethod.COPY && setting.ready && setting.canDispatch &&
         task.id !in busy && latest?.pending != true && !awaitingRetry
     val actionColors = ButtonDefaults.buttonColors(containerColor = Femho.colors.plouBlue, contentColor = Femho.onBrand)
     val textActionColors = ButtonDefaults.textButtonColors(contentColor = Femho.colors.ink)
     Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        if (setting.enabled) {
+        if (showActions) {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (setting.method == AiTaskMethod.COPY) {
                     Button(onClick = { copy(task.id) }, colors = actionColors, modifier = Modifier.testTag("task-ai-copy")) {
@@ -296,8 +299,8 @@ internal fun TaskAiActions(model: AppViewModel, task: Task, formatTime: (String)
                 }
             }
         }
-        if (sendFailed) TaskAiNotice(stringResource(R.string.ai_tasks_senderror), error = true)
-        if (loadFailed && setting.enabled) {
+        if (showActions && sendFailed) TaskAiNotice(stringResource(R.string.ai_tasks_senderror), error = true)
+        if (showLoadError) {
             TaskAiNotice(stringResource(R.string.ai_tasks_loaderror), error = true)
             TextButton(onClick = { revision++ }, colors = textActionColors) { Text(stringResource(R.string.nav_retry)) }
         }

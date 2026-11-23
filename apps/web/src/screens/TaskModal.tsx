@@ -479,7 +479,7 @@ export function TaskModal({
                 {creating ? t('task.new') : t('task.edit')}
               </div>
               <McpSourceBadge activity={data?.mcp_activity} />
-              {data === undefined ? null : (
+              {data === undefined || data.status === 'done' ? null : (
                 <TaskAiAction
                   taskId={data.id}
                   scopeId={data.scope_id}

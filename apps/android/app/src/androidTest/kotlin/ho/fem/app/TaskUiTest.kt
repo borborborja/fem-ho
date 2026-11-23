@@ -557,13 +557,19 @@ class TaskUiTest {
     fun taskActionsCopyContextOnlyForEnabledScopes() {
         val enabledTask = Task(id = "work-task", scopeId = "work", title = "Revisar pressupost", position = "a0")
         val disabledTask = Task(id = "personal-task", scopeId = "personal", title = "Preparar motxilla", position = "a1")
+        val doneTask = enabledTask.copy(
+            id = "done-task",
+            title = "Enviar pressupost",
+            status = TaskStatus.DONE,
+            completedAt = today.atStartOfDay(profileZone).toInstant().toString(),
+        )
         val copied = mutableListOf<String>()
         val primary = mutableListOf<String>()
         val moved = mutableListOf<Pair<String, TaskStatus>>()
         compose.setContent {
             FemhoTheme {
                 BoardScreen(
-                    tasks = listOf(enabledTask, disabledTask),
+                    tasks = listOf(enabledTask, disabledTask, doneTask),
                     doneDay = boardDay,
                     labels = boardLabels,
                     onOpen = {},
@@ -606,6 +612,10 @@ class TaskUiTest {
             assertEquals(listOf(enabledTask.id), primary)
             assertEquals(listOf(enabledTask.id to TaskStatus.TODO), moved)
         }
+        compose.onNodeWithTag("board-column-done").performClick()
+        compose.onNodeWithTag("board-task-${doneTask.id}").assertIsDisplayed()
+        val doneCard = hasAnyAncestor(hasTestTag("board-task-${doneTask.id}"))
+        compose.onNode(hasTestTag("board-task-ai") and doneCard, useUnmergedTree = true).assertDoesNotExist()
     }
 
     @Test

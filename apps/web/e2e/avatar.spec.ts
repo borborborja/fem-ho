@@ -1,12 +1,11 @@
 /**
  * L'avatar, al navegador.
  *
- * La suite corre **amb Gravatar apagat**, que és el valor per defecte i el cas de la
- * immensa majoria d'instàncies. El que es comprova, doncs, és el que ha de passar llavors:
- * **les inicials són el cas normal i no el pla B**, i la pantalla d'Ajustos diu clarament
- * què costaria encendre-ho.
+ * La suite corre amb Gravatar apagat. La prova de la foto intercepta la ruta de
+ * l'avatar per poder comprovar-ne la posició sense dependre de Gravatar.
  */
 
+import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
 import { enter } from './entrar.js';
 
@@ -49,4 +48,33 @@ test('i Ajustos diu què costaria encendre-ho, no només que existeix', async ({
   await expect(page.locator('[data-testid="settings-gravatar"]')).toBeVisible();
   // L'avís ha de parlar del hash, que és el punt que la gent no sap.
   await expect(page.getByText(/hash/iu).first()).toBeVisible();
+});
+
+test('la foto de perfil queda centrada dins del botó a mòbil i a escriptori', async ({ page }) => {
+  await page.route('**/api/v1/users/*/avatar', (route) =>
+    route.fulfill({
+      path: fileURLToPath(new URL('../public/icons/icon-192.png', import.meta.url)),
+    }),
+  );
+  await enter(page);
+
+  const photo = page.getByTestId('topbar-profile').locator('img');
+  for (const width of [390, 1440]) {
+    await page.setViewportSize({ width, height: 844 });
+    await expect(photo).toBeVisible();
+    await expect
+      .poll(() => photo.evaluate((element: HTMLImageElement) => element.naturalWidth))
+      .toBeGreaterThan(0);
+    const insets = await photo.evaluate((element) => {
+      const photoBox = element.getBoundingClientRect();
+      const buttonBox = element.closest('button')!.getBoundingClientRect();
+      return [
+        photoBox.left - buttonBox.left,
+        buttonBox.right - photoBox.right,
+        photoBox.top - buttonBox.top,
+        buttonBox.bottom - photoBox.bottom,
+      ].map((inset) => Math.round(inset));
+    });
+    expect(insets).toEqual([1, 1, 1, 1]);
+  }
 });

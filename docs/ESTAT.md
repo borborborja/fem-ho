@@ -7,6 +7,18 @@ Data de l'última verificació completa: **2026-11-19**.
 
 ---
 
+## Foto de perfil i botó IA a Fet · 0.30.2
+
+La foto de perfil queda centrada dins del botó de la capçalera web. A web i
+Android, el botó **IA** s'amaga a la targeta i a la fitxa quan la tasca està
+feta. L'historial d'execucions continua accessible.
+
+Chromium ha verificat l'avatar a 390 i 1.440 píxels i el retorn del botó en
+reobrir una tasca. La prova instrumentada d'Android 14 ha comprovat l'absència
+del botó a la targeta feta. Aquesta versió no requereix migracions.
+
+---
+
 ## Google Calendar al selector de fonts · 0.30.1
 
 Quan la instància té Google activat, el selector **Fonts de dades** de cada

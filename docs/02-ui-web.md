@@ -82,7 +82,7 @@ cronometratge. Definicions, filtres, permisos i exportació a [reporting.md](rep
 
 **7. Espaiador flexible.**
 
-**8. Botó de perfil** — cercle de 38px amb les inicials, `var(--tag-bg)`. Menú amb nom i correu, "Ajustos" i "Tancar sessió" (aquest en `var(--danger-text)`).
+**8. Botó de perfil** — cercle de 38px amb la foto centrada o les inicials sobre `var(--tag-bg)`. Menú amb nom i correu, "Ajustos" i "Tancar sessió" (aquest en `var(--danger-text)`).
 
 Només un menú obert alhora: obrir-ne un tanca els altres. Es tanquen amb `Escape` i amb clic fora.
 
@@ -127,9 +127,10 @@ amb el ratolí o el focus del teclat. Comparteixen la fila de les llistes o la
 de metadades i deixen tota l'amplada del cos per al títol. La icona discreta
 d'origen MCP obre el detall de la procedència.
 
-Amb Tasques amb IA activat per a l'àmbit, **IA** apareix al peu de la barra
-dreta. El clic dret, la pulsació llarga tàctil i **Maj+F10** amb el botó
-enfocat copien el context. La fitxa manté l'acció de còpia al seu menú.
+A les tasques obertes d'un àmbit amb Tasques amb IA activat, **IA** apareix al
+peu de la barra dreta. El clic dret, la pulsació llarga tàctil i **Maj+F10** amb
+el botó enfocat copien el context. La fitxa de la tasca oberta ofereix la còpia
+al menú d'IA.
 
 **Afegir des de la targeta**: un sol camp. `#Llista element` posa l'ítem a aquella llista; sense sigil, és una subtasca. Mateix sigil que l'afegida ràpida.
 

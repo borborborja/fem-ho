@@ -187,7 +187,7 @@ export function BoardCard({
         }
         // Desactivar l'acció durant l'arrossegament conserva l'alçada de la barra.
         railAction={
-          aiActionEnabled ? (
+          task.status !== 'done' && aiActionEnabled ? (
             <TaskAiAction taskId={task.id} scopeId={task.scope_id} compact disabled={dragging} />
           ) : undefined
         }

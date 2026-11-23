@@ -325,7 +325,7 @@ fun BoardScreen(
                             val mcp = task.mcpActivity
                             Box(Modifier.testTag("board-task-${task.id}")) {
                                 var actionsOpen by remember { mutableStateOf(false) }
-                                val ai = aiAction(task)
+                                val ai = if (task.status == TaskStatus.DONE) null else aiAction(task)
                                 TaskCard(
                                     title = task.title,
                                     time = task.dueTime,
