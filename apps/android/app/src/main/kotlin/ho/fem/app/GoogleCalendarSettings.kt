@@ -22,6 +22,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -42,51 +43,82 @@ import ho.fem.model.Scope
 import ho.fem.model.ScopeKind
 import ho.fem.network.FemhoApi
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import java.util.UUID
 
+internal data class GoogleCalendarAuthorization(val id: String, val scopeId: String?)
+
+internal data class GoogleCalendarConnection(
+    val enabled: Boolean,
+    val accounts: List<GoogleCalendarAccount>,
+    val accountsLoaded: Boolean,
+    val accountsFailed: Boolean,
+    val pending: GoogleCalendarAuthorization?,
+    val attempt: GoogleCalendarAttempt?,
+    val confirmedScopeId: String?,
+    val confirmedAccountId: String?,
+    val busy: Boolean,
+    val error: Int?,
+    val reloadAccounts: () -> Unit,
+    val start: (accountId: String?, scopeId: String?) -> Unit,
+    val confirm: () -> Unit,
+    val cancel: () -> Unit,
+    val disconnect: (GoogleCalendarAccount) -> Unit,
+)
+
 @Composable
-internal fun GoogleCalendarSettings(model: AppViewModel, scopes: List<Scope>) {
-    val profile by model.profile.collectAsStateWithLifecycle()
+internal fun rememberGoogleCalendarConnection(model: AppViewModel, userId: String?): GoogleCalendarConnection {
     val context = LocalContext.current
     val coroutine = rememberCoroutineScope()
-    var enabled by remember { mutableStateOf(false) }
-    var pending by remember(profile?.id) { mutableStateOf(model.pendingGoogleCalendar()) }
+    var enabled by remember(userId) { mutableStateOf(false) }
+    var pending by remember(userId) { mutableStateOf(model.pendingGoogleCalendar()) }
     var attempt by remember(pending) { mutableStateOf<GoogleCalendarAttempt?>(null) }
-    var accounts by remember { mutableStateOf(emptyList<GoogleCalendarAccount>()) }
-    var selectedAccount by remember { mutableStateOf<String?>(null) }
-    var reload by remember { mutableIntStateOf(0) }
-    var busy by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<Int?>(null) }
+    var accounts by remember(userId) { mutableStateOf(emptyList<GoogleCalendarAccount>()) }
+    var accountsLoaded by remember(userId) { mutableStateOf(false) }
+    var accountsFailed by remember(userId) { mutableStateOf(false) }
+    var confirmedScopeId by rememberSaveable(userId) { mutableStateOf<String?>(null) }
+    var confirmedAccountId by rememberSaveable(userId) { mutableStateOf<String?>(null) }
+    var reload by remember(userId) { mutableIntStateOf(0) }
+    var busy by remember(userId) { mutableStateOf(false) }
+    var error by remember(userId) { mutableStateOf<Int?>(null) }
 
-    fun finishAttempt() {
+    fun finish(authorization: GoogleCalendarAuthorization, accountId: String? = null) {
+        if (accountId != null) {
+            confirmedScopeId = authorization.scopeId
+            confirmedAccountId = accountId
+        }
         model.savePendingGoogleCalendar(null)
         pending = null
         reload += 1
         model.loadCalendars()
     }
 
-    LaunchedEffect(profile?.id, reload) {
-        if (profile == null) return@LaunchedEffect
+    LaunchedEffect(userId, reload) {
+        if (userId == null || reload == 0) return@LaunchedEffect
+        accountsFailed = false
         try {
-            enabled = model.googleCalendarApi().googleCalendarAvailability().enabled
-            accounts = model.googleCalendarApi().googleCalendarAccounts()
+            val api = model.googleCalendarApi()
+            enabled = api.googleCalendarAvailability().enabled
+            accounts = api.googleCalendarAccounts()
+            accountsLoaded = true
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (cause: Exception) {
-            if ((cause as? FemhoApi.ApiException)?.status != 404) error = R.string.settings_googlecalendar_error
+            accountsFailed = enabled || (cause as? FemhoApi.ApiException)?.status != 404
         }
     }
 
     LaunchedEffect(pending) {
-        val id = pending ?: return@LaunchedEffect
+        val authorization = pending ?: return@LaunchedEffect
         while (true) {
             try {
-                val next = model.googleCalendarApi().googleCalendarAttempt(id)
+                val next = model.googleCalendarApi().googleCalendarAttempt(authorization.id)
                 attempt = next
                 error = null
-                if (next.status == "completed") finishAttempt()
+                if (next.status == "completed") finish(authorization, next.accountId)
                 if (next.status !in listOf("pending", "exchanging")) break
                 delay(2000)
             } catch (cancelled: CancellationException) {
@@ -102,8 +134,6 @@ internal fun GoogleCalendarSettings(model: AppViewModel, scopes: List<Scope>) {
         }
     }
 
-    if (!enabled && pending == null && accounts.isEmpty()) return
-
     fun work(action: suspend () -> Unit) {
         if (busy) return
         busy = true
@@ -113,7 +143,7 @@ internal fun GoogleCalendarSettings(model: AppViewModel, scopes: List<Scope>) {
                 action()
             } catch (cancelled: CancellationException) {
                 throw cancelled
-            } catch (cause: Exception) {
+            } catch (_: Exception) {
                 error = R.string.settings_googlecalendar_error
             } finally {
                 busy = false
@@ -121,97 +151,195 @@ internal fun GoogleCalendarSettings(model: AppViewModel, scopes: List<Scope>) {
         }
     }
 
-    fun start(accountId: String?) = work {
+    fun start(accountId: String?, scopeId: String?) = work {
         val next = model.googleCalendarApi().startGoogleCalendar(accountId)
         val uri = Uri.parse(checkNotNull(next.authorizationUrl))
         check(uri.scheme == "https" && uri.host == "accounts.google.com")
-        model.savePendingGoogleCalendar(next.id)
-        pending = next.id
+        val authorization = GoogleCalendarAuthorization(next.id, scopeId)
+        model.savePendingGoogleCalendar(authorization)
+        pending = authorization
         context.startActivity(Intent(Intent.ACTION_VIEW, uri))
     }
 
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.testTag("google-calendar-settings")) {
-        Text(stringResource(R.string.settings_googlecalendar_title), color = Femho.colors.ink, fontSize = FemhoText.columnTitle, fontWeight = FontWeight.ExtraBold)
-        error?.let { Text(stringResource(it), color = Femho.colors.dangerText) }
-        val pendingId = pending
-        if (pendingId != null) {
-            val next = attempt
-            when (next?.status) {
-                "ready" -> {
-                    Text(stringResource(R.string.settings_googlecalendar_confirmaccount).replace("{email}", next.email.orEmpty()), color = Femho.colors.ink)
-                    Button(enabled = !busy, onClick = {
-                        work {
-                            selectedAccount = model.googleCalendarApi().confirmGoogleCalendar(pendingId).id
-                            finishAttempt()
-                        }
-                    }, modifier = Modifier.testTag("google-calendar-confirm")) {
-                        Text(stringResource(R.string.settings_mail_oauth_confirm))
-                    }
+    return GoogleCalendarConnection(
+        enabled = enabled,
+        accounts = accounts,
+        accountsLoaded = accountsLoaded,
+        accountsFailed = accountsFailed,
+        pending = pending,
+        attempt = attempt,
+        confirmedScopeId = confirmedScopeId,
+        confirmedAccountId = confirmedAccountId,
+        busy = busy,
+        error = error,
+        reloadAccounts = { reload += 1 },
+        start = ::start,
+        confirm = {
+            pending?.let { authorization ->
+                work {
+                    val account = model.googleCalendarApi().confirmGoogleCalendar(authorization.id)
+                    accounts = accounts.filterNot { it.id == account.id } + account
+                    finish(authorization, account.id)
                 }
-                "cancelled" -> Text(stringResource(R.string.settings_mail_oauth_error_cancelled), color = Femho.colors.dangerText)
-                "expired" -> Text(stringResource(R.string.settings_mail_oauth_error_expired), color = Femho.colors.dangerText)
-                "failed" -> Text(stringResource(R.string.settings_googlecalendar_error), color = Femho.colors.dangerText)
-                else -> Text(stringResource(R.string.settings_mail_oauth_pending), color = Femho.colors.inkSoft)
             }
-            TextButton(enabled = !busy, onClick = {
+        },
+        cancel = {
+            pending?.let { authorization ->
                 work {
                     try {
-                        model.googleCalendarApi().cancelGoogleCalendar(pendingId)
+                        model.googleCalendarApi().cancelGoogleCalendar(authorization.id)
                     } catch (cause: FemhoApi.ApiException) {
                         if (cause.status != 404) throw cause
                     } finally {
-                        finishAttempt()
+                        currentCoroutineContext().ensureActive()
+                        finish(authorization)
                     }
                 }
-            }) { Text(stringResource(R.string.nav_cancel)) }
+            }
+        },
+        disconnect = { account ->
+            work {
+                model.googleCalendarApi().disconnectGoogleCalendar(account.id)
+                reload += 1
+                model.loadCalendars()
+            }
+        },
+    )
+}
+
+@Composable
+internal fun GoogleCalendarAccounts(connection: GoogleCalendarConnection, showAuthorization: Boolean) {
+    // La configuració d'OAuth pot haver canviat a Admin des de l'última visita a la pestanya.
+    LaunchedEffect(Unit) { connection.reloadAccounts() }
+    if (!connection.enabled && connection.pending == null && connection.accounts.isEmpty() &&
+        !connection.accountsFailed && connection.error == null
+    ) return
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.testTag("google-calendar-settings")) {
+        Text(
+            stringResource(R.string.settings_googlecalendar_title),
+            color = Femho.colors.ink,
+            fontSize = FemhoText.columnTitle,
+            fontWeight = FontWeight.ExtraBold,
+        )
+        if (showAuthorization && connection.pending != null) {
+            GoogleCalendarAuthorize(connection)
             return@Column
         }
-
-        if (enabled) {
-            Button(enabled = !busy, onClick = { start(null) }, modifier = Modifier.testTag("google-calendar-connect")) {
-                Text(stringResource(R.string.settings_mail_oauth_connect))
-            }
+        if (connection.accountsFailed) GoogleCalendarAccountsError(connection)
+        if (showAuthorization) connection.error?.let { Text(stringResource(it), color = Femho.colors.dangerText) }
+        val canStart = !connection.busy && connection.pending == null
+        if (connection.enabled) {
+            Button(
+                enabled = canStart,
+                onClick = { connection.start(null, null) },
+                modifier = Modifier.testTag("google-calendar-connect"),
+            ) { Text(stringResource(R.string.settings_mail_oauth_connect)) }
         }
-        accounts.forEach { account ->
+        connection.accounts.forEach { account ->
             Text(account.email, color = Femho.colors.ink, fontWeight = FontWeight.SemiBold)
             Text(stringResource(when (account.oauthStatus) {
                 "connected" -> R.string.settings_mail_oauth_connected
                 "reconnect_required" -> R.string.settings_mail_oauth_reconnect_required
                 else -> R.string.settings_mail_oauth_disconnected
             }), color = Femho.colors.inkSoft)
-            if (enabled) {
-                TextButton(enabled = !busy, onClick = { start(account.id) }) {
+            if (connection.enabled) {
+                TextButton(enabled = canStart, onClick = { connection.start(account.id, null) }) {
                     Text(stringResource(R.string.settings_mail_oauth_reconnect))
                 }
             }
             if (account.oauthStatus != "disconnected") {
-                TextButton(enabled = !busy, onClick = {
-                    work {
-                        model.googleCalendarApi().disconnectGoogleCalendar(account.id)
-                        reload += 1
-                        model.loadCalendars()
-                    }
-                }) { Text(stringResource(R.string.settings_mail_oauth_disconnect)) }
+                TextButton(enabled = canStart, onClick = { connection.disconnect(account) }) {
+                    Text(stringResource(R.string.settings_mail_oauth_disconnect))
+                }
             }
-        }
-        val connected = accounts.filter { it.oauthStatus == "connected" }
-        val account = connected.find { it.id == selectedAccount } ?: connected.firstOrNull()
-        val ownerId = profile?.id
-        val destinations = scopes.filter { it.ownerId == ownerId }
-        if (enabled && account != null && destinations.isNotEmpty()) {
-            GoogleCalendarPicker(R.string.settings_googlecalendar_account, account.email, connected, { it.email }) {
-                selectedAccount = it.id
-            }
-            GoogleCalendarLinker(model, account.id, destinations)
         }
     }
 }
 
 @Composable
-private fun GoogleCalendarLinker(model: AppViewModel, accountId: String, scopes: List<Scope>) {
+private fun GoogleCalendarAccountsError(connection: GoogleCalendarConnection) {
+    Text(stringResource(R.string.settings_googlecalendar_error), color = Femho.colors.dangerText)
+    TextButton(onClick = connection.reloadAccounts) { Text(stringResource(R.string.nav_retry)) }
+}
+
+@Composable
+private fun GoogleCalendarAuthorize(connection: GoogleCalendarConnection) {
+    connection.error?.let { Text(stringResource(it), color = Femho.colors.dangerText) }
+    val attempt = connection.attempt
+    when (attempt?.status) {
+        "ready" -> {
+            Text(
+                stringResource(R.string.settings_googlecalendar_confirmaccount).replace("{email}", attempt.email.orEmpty()),
+                color = Femho.colors.ink,
+            )
+            Button(
+                enabled = !connection.busy,
+                onClick = connection.confirm,
+                modifier = Modifier.testTag("google-calendar-confirm"),
+            ) { Text(stringResource(R.string.settings_mail_oauth_confirm)) }
+        }
+        "cancelled" -> Text(stringResource(R.string.settings_mail_oauth_error_cancelled), color = Femho.colors.dangerText)
+        "expired" -> Text(stringResource(R.string.settings_mail_oauth_error_expired), color = Femho.colors.dangerText)
+        "failed" -> Text(stringResource(R.string.settings_googlecalendar_error), color = Femho.colors.dangerText)
+        else -> if (connection.error == null) {
+            Text(stringResource(R.string.settings_mail_oauth_pending), color = Femho.colors.inkSoft)
+        }
+    }
+    TextButton(enabled = !connection.busy, onClick = connection.cancel) {
+        Text(stringResource(R.string.nav_cancel))
+    }
+}
+
+@Composable
+internal fun GoogleCalendarSourceForm(
+    model: AppViewModel,
+    connection: GoogleCalendarConnection,
+    scope: Scope,
+    ownedScopes: List<Scope>,
+) {
+    if (connection.pending?.scopeId == scope.id) {
+        GoogleCalendarAuthorize(connection)
+        return
+    }
+    if (connection.accountsFailed) GoogleCalendarAccountsError(connection)
+    if (!connection.accountsLoaded && connection.accounts.isEmpty()) {
+        if (!connection.accountsFailed) Text(stringResource(R.string.state_loading), color = Femho.colors.inkSoft)
+        return
+    }
+    val preferredAccount = connection.confirmedAccountId.takeIf { connection.confirmedScopeId == scope.id }
+    var selectedAccount by rememberSaveable(scope.id, preferredAccount) { mutableStateOf(preferredAccount) }
+    val connected = connection.accounts.filter { it.oauthStatus == "connected" }
+    val account = connected.find { it.id == selectedAccount } ?: connected.firstOrNull()
+    if (account != null) {
+        GoogleCalendarPicker(R.string.settings_googlecalendar_account, account.email, connected, { it.email }) {
+            selectedAccount = it.id
+        }
+        GoogleCalendarLinker(model, account.id, scope, ownedScopes.filter { it.id != scope.id })
+    }
+    if (connection.enabled) {
+        val canStart = !connection.busy && connection.pending == null
+        val oldAccount = connection.accounts.singleOrNull()?.takeIf { account == null }
+        if (oldAccount != null) {
+            TextButton(enabled = canStart, onClick = { connection.start(oldAccount.id, scope.id) }) {
+                Text(stringResource(R.string.settings_mail_oauth_reconnect))
+            }
+        }
+        TextButton(
+            enabled = canStart,
+            onClick = { connection.start(null, scope.id) },
+            modifier = Modifier.testTag("google-calendar-connect-${scope.id}"),
+        ) {
+            Text(stringResource(if (account == null) R.string.settings_mail_oauth_connect else R.string.settings_mail_oauth_new))
+        }
+    }
+}
+
+@Composable
+private fun GoogleCalendarLinker(model: AppViewModel, accountId: String, scope: Scope, extraScopes: List<Scope>) {
     var calendars by remember(accountId) { mutableStateOf<List<GoogleCalendarChoice>?>(null) }
     var selected by remember(accountId) { mutableStateOf<GoogleCalendarChoice?>(null) }
-    var selectedScopes by remember(accountId) { mutableStateOf(emptySet<String>()) }
+    var selectedScopes by remember(accountId) { mutableStateOf(setOf(scope.id)) }
     var writable by remember(accountId) { mutableStateOf(false) }
     var loading by remember(accountId) { mutableStateOf(true) }
     var reload by remember(accountId) { mutableIntStateOf(0) }
@@ -235,7 +363,9 @@ private fun GoogleCalendarLinker(model: AppViewModel, accountId: String, scopes:
         }
     }
 
-    if (failed) Text(stringResource(R.string.settings_googlecalendar_error), color = Femho.colors.dangerText)
+    if (failed && calendars == null) {
+        Text(stringResource(R.string.settings_googlecalendar_error), color = Femho.colors.dangerText)
+    }
     TextButton(enabled = !loading, onClick = { reload += 1 }) {
         Text(stringResource(R.string.settings_googlecalendar_reload))
     }
@@ -251,6 +381,10 @@ private fun GoogleCalendarLinker(model: AppViewModel, accountId: String, scopes:
         { it.name },
         enabled = !loading,
     ) {
+        if (selected?.id != it.id) {
+            selectedScopes = setOf(scope.id)
+            failed = false
+        }
         selected = it
         writable = it.writable
     }
@@ -260,16 +394,20 @@ private fun GoogleCalendarLinker(model: AppViewModel, accountId: String, scopes:
     } else {
         Text(stringResource(R.string.settings_googlecalendar_readonly), color = Femho.colors.inkSoft)
     }
-    Text(stringResource(R.string.settings_googlecalendar_scopes), color = Femho.colors.ink, fontWeight = FontWeight.SemiBold)
-    scopes.forEach { scope ->
-        GoogleCalendarCheckbox(scope.name, scope.id in selectedScopes, !loading) { checked ->
-            selectedScopes = if (checked) selectedScopes + scope.id else selectedScopes - scope.id
+    if (extraScopes.isNotEmpty()) {
+        Text(stringResource(R.string.settings_googlecalendar_scopes), color = Femho.colors.ink, fontWeight = FontWeight.SemiBold)
+        GoogleCalendarCheckbox(scope.name, checked = scope.id in selectedScopes, enabled = false) {}
+        extraScopes.forEach { destination ->
+            GoogleCalendarCheckbox(destination.name, destination.id in selectedScopes, !loading) { checked ->
+                selectedScopes = if (checked) selectedScopes + destination.id else selectedScopes - destination.id
+            }
         }
     }
-    val destinations = scopes.map { it.id }.filter { it in selectedScopes }
+    val destinations = (listOf(scope.id) + extraScopes.map { it.id }).filter { it in selectedScopes }
+    if (failed) Text(stringResource(R.string.settings_googlecalendar_error), color = Femho.colors.dangerText)
     Button(
         enabled = !loading && destinations.isNotEmpty(),
-        modifier = Modifier.testTag("google-calendar-link"),
+        modifier = Modifier.testTag("google-calendar-link-${scope.id}"),
         onClick = {
             loading = true
             failed = false
@@ -277,8 +415,19 @@ private fun GoogleCalendarLinker(model: AppViewModel, accountId: String, scopes:
                 try {
                     val api = model.googleCalendarApi()
                     for (id in destinations) {
-                        api.linkGoogleCalendar(UUID.randomUUID().toString(), accountId, calendar.id, id, writable && calendar.writable)
-                        selectedScopes = selectedScopes - id
+                        try {
+                            api.linkGoogleCalendar(UUID.randomUUID().toString(), accountId, calendar.id, id, writable && calendar.writable)
+                            selectedScopes = selectedScopes - id
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (_: Exception) {
+                            // Un error en un àmbit no ha d'impedir que els altres quedin vinculats.
+                            failed = true
+                        }
+                    }
+                    if (!failed) {
+                        selected = null
+                        selectedScopes = setOf(scope.id)
                     }
                 } catch (cancelled: CancellationException) {
                     throw cancelled

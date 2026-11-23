@@ -53,7 +53,11 @@ import type {
 } from '../app/types.js';
 import { ErrorBanner } from './BoardScreen.js';
 import { GoogleMailPanel } from './GoogleMailPanel.js';
-import { GoogleCalendarPanel } from './GoogleCalendarPanel.js';
+import {
+  GoogleCalendarPanel,
+  GoogleCalendarSource,
+  useGoogleCalendarSettings,
+} from './GoogleCalendarPanel.js';
 import { ExternalAccessPanel, AgentTokenEditor } from './ExternalAccessPanel.js';
 import { TaskAiSettingsPanel } from './TaskAiSettingsPanel.js';
 import { NotificationSettingsPanel } from './NotificationSettingsPanel.js';
@@ -1669,11 +1673,16 @@ function SharedCalendarRow({
 function CalendarsTab() {
   const { profile, scopes } = useSessionData();
   const calendars = useApi<Calendar[]>('/api/v1/calendars');
+  const google = useGoogleCalendarSettings();
+  const ownedScopes = scopes.filter((scope) => scope.owner_id === profile.id);
+  const canResumeInScope =
+    (google.enabled || google.loadingAvailability) &&
+    ownedScopes.some((scope) => scope.id === google.resumedScopeId);
   const base = window.location.origin;
 
   return (
     <>
-      <GoogleCalendarPanel onLinked={calendars.reload} />
+      <GoogleCalendarPanel google={google} showAuthorization={!canResumeInScope} />
       {scopes.map((scope) => {
         const own = (calendars.data ?? []).filter((calendar) => calendar.scope_id === scope.id);
         return (
@@ -1696,6 +1705,8 @@ function CalendarsTab() {
               scope={scope}
               calendars={calendars}
               owned={scope.owner_id === profile.id}
+              google={google}
+              ownedScopes={ownedScopes}
             />
 
             {/*
@@ -1737,12 +1748,6 @@ function CalendarsTab() {
 }
 
 /**
- * Les fonts de dades d'un àmbit: CalDAV, iCal o RSS.
- *
- * `docs/07` §9 ja preveu un CalDAV o un `.ics` com a origen; el disseny validat hi
- * afegeix l'RSS. Els tres s'afegeixen igual i es veuen al calendari, on cadascú els pot
- * apagar sense treure'ls a ningú.
- *
  * **La contrasenya no es torna a ensenyar mai.** El camp es queda buit en carregar i
  * enviar-lo buit vol dir "no la toquis": desar el nom d'una font no ha de perdre'n les
  * credencials, i tornar-la a pintar la posaria al DOM de qualsevol pestanya oberta.
@@ -1751,23 +1756,32 @@ function SourcesForScope({
   scope,
   calendars,
   owned,
+  google,
+  ownedScopes,
 }: {
   scope: Scope;
   calendars: ReturnType<typeof useApi<Calendar[]>>;
   owned: boolean;
+  google: ReturnType<typeof useGoogleCalendarSettings>;
+  ownedScopes: Scope[];
 }) {
-  const [kind, setKind] = useState<'caldav' | 'ical' | 'rss'>('ical');
+  const [method, setMethod] = useState<'caldav' | 'ical' | 'rss' | 'google'>(() =>
+    google.resumedScopeId === scope.id ? 'google' : 'ical',
+  );
   const [name, setName] = useState('');
   const [url, setUrl] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const canAddGoogle = owned && google.enabled;
+  const kind = method === 'google' && !canAddGoogle ? 'ical' : method;
 
   const sources = (calendars.data ?? []).filter(
     (calendar) => calendar.scope_id === scope.id && calendar.origin === 'subscription',
   );
 
   const add = useMutation(async () => {
+    if (kind === 'google') return;
     if (url.trim() === '') {
       setError(t('settings.sources.urlRequired'));
       return;
@@ -1887,57 +1901,74 @@ function SourcesForScope({
           { key: 'caldav' as const, label: t('settings.sources.kind.caldav') },
           { key: 'ical' as const, label: t('settings.sources.kind.ical') },
           { key: 'rss' as const, label: t('settings.sources.kind.rss') },
+          ...(canAddGoogle
+            ? [{ key: 'google' as const, label: t('settings.googleCalendar.title') }]
+            : []),
         ]}
-        onChange={setKind}
+        disabled={
+          kind === 'google' && google.attemptId !== null && google.resumedScopeId === scope.id
+        }
+        onChange={setMethod}
       />
-      <input
-        className="plou-input"
-        data-testid={`source-name-${scope.id}`}
-        placeholder={t('settings.sources.name')}
-        value={name}
-        onChange={(event) => setName(event.target.value)}
-      />
-      <input
-        className="plou-input"
-        data-testid={`source-url-${scope.id}`}
-        placeholder={t('settings.sources.url')}
-        value={url}
-        onChange={(event) => setUrl(event.target.value)}
-      />
-      {/* Usuari i contrasenya només tenen sentit amb CalDAV: un `.ics` publicat i un RSS
-          es baixen sense credencials. */}
-      {kind === 'caldav' ? (
-        <div style={{ display: 'flex', gap: 8 }}>
+      {kind === 'google' ? (
+        <GoogleCalendarSource
+          scope={scope}
+          google={google}
+          ownedScopes={ownedScopes}
+          onLinked={calendars.reload}
+        />
+      ) : (
+        <>
           <input
             className="plou-input"
-            data-testid={`source-user-${scope.id}`}
-            placeholder={t('settings.sources.username')}
-            value={username}
-            onChange={(event) => setUsername(event.target.value)}
+            data-testid={`source-name-${scope.id}`}
+            placeholder={t('settings.sources.name')}
+            value={name}
+            onChange={(event) => setName(event.target.value)}
           />
           <input
             className="plou-input"
-            type="password"
-            data-testid={`source-pass-${scope.id}`}
-            placeholder={t('settings.sources.password')}
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
+            data-testid={`source-url-${scope.id}`}
+            placeholder={t('settings.sources.url')}
+            value={url}
+            onChange={(event) => setUrl(event.target.value)}
           />
-        </div>
-      ) : null}
-      {error === null ? null : (
-        <span style={{ fontSize: 11, color: 'var(--danger-text)' }}>{error}</span>
+          {/* Usuari i contrasenya només tenen sentit amb CalDAV: un `.ics` publicat i un RSS
+              es baixen sense credencials. */}
+          {kind === 'caldav' ? (
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                className="plou-input"
+                data-testid={`source-user-${scope.id}`}
+                placeholder={t('settings.sources.username')}
+                value={username}
+                onChange={(event) => setUsername(event.target.value)}
+              />
+              <input
+                className="plou-input"
+                type="password"
+                data-testid={`source-pass-${scope.id}`}
+                placeholder={t('settings.sources.password')}
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+              />
+            </div>
+          ) : null}
+          {error === null ? null : (
+            <span style={{ fontSize: 11, color: 'var(--danger-text)' }}>{error}</span>
+          )}
+          <button
+            type="button"
+            className="plou-btn plou-btn-primary"
+            data-testid={`source-add-${scope.id}`}
+            disabled={add.busy}
+            onClick={() => void add.run()}
+            style={{ justifySelf: 'start' }}
+          >
+            {t('settings.sources.add')}
+          </button>
+        </>
       )}
-      <button
-        type="button"
-        className="plou-btn plou-btn-primary"
-        data-testid={`source-add-${scope.id}`}
-        disabled={add.busy}
-        onClick={() => void add.run()}
-        style={{ justifySelf: 'start' }}
-      >
-        {t('settings.sources.add')}
-      </button>
     </div>
   );
 }

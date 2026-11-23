@@ -34,6 +34,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.Saver
@@ -262,7 +263,13 @@ private fun Root(model: AppViewModel, pending: MutableState<Intent?>) {
     var wasSignedIn by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(session) {
         when {
-            session is AppViewModel.Session.Ready -> wasSignedIn = true
+            session is AppViewModel.Session.Ready -> {
+                // El navegador pot haver deixat l'app sense procés mentre s'autoritzava el compte.
+                if (!wasSignedIn && pending.value == null && route == Screen.BOARD.name &&
+                    model.pendingGoogleCalendar()?.scopeId != null
+                ) go(Screen.SETTINGS)
+                wasSignedIn = true
+            }
             session is AppViewModel.Session.Checking -> Unit
             wasSignedIn -> {
                 wasSignedIn = false
@@ -290,7 +297,9 @@ private fun Root(model: AppViewModel, pending: MutableState<Intent?>) {
         val notificationAccount = intent.getStringExtra(Route.EXTRA_NOTIFICATION_ACCOUNT)
         val calendarTarget = Route.calendarSuggestionOf(intent)
         if ((notificationAccount != null || calendarTarget != null) && session is AppViewModel.Session.Checking) return@LaunchedEffect
-        val destination = Route.screenOf(intent)
+        val destination = if (intent.action == Intent.ACTION_MAIN && session is AppViewModel.Session.Ready &&
+            model.pendingGoogleCalendar()?.scopeId != null
+        ) Screen.SETTINGS else Route.screenOf(intent)
         route = if (destination == Screen.BOARD) destination.name else "${Screen.BOARD.name}/${destination.name}"
         requestedStatus = Route.statusOf(intent)
         requestedCalendarSuggestion = null
@@ -2439,6 +2448,10 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
 
     val display by model.display.collectAsStateWithLifecycle()
     val profile by model.profile.collectAsStateWithLifecycle()
+    val userId = profile?.id ?: model.activeUserId()
+    val googleCalendar = key(model.googleCalendarSessionKey()) {
+        rememberGoogleCalendarConnection(model, userId)
+    }
     val gravatarEnabled by model.gravatarEnabled.collectAsStateWithLifecycle()
     val scopes by model.scopes.collectAsStateWithLifecycle()
     val projects by model.projects.collectAsStateWithLifecycle()
@@ -2800,9 +2813,17 @@ private fun SettingsHost(model: AppViewModel, serverUrl: String, onBack: () -> U
         onCreateCalendar = model::createCalendar,
         onUpdateCalendar = model::updateCalendar,
         onDeleteCalendar = model::deleteCalendar,
-        googleCalendarContent = { GoogleCalendarSettings(model, scopes) },
+        googleCalendarContent = {
+            val hasTarget = googleCalendar.enabled && scopes.any { it.id == googleCalendar.pending?.scopeId && it.ownerId == userId }
+            GoogleCalendarAccounts(googleCalendar, showAuthorization = !hasTarget)
+        },
+        googleCalendarAvailable = { scope -> googleCalendar.enabled && scope.ownerId == userId },
+        googleCalendarPendingScopeId = googleCalendar.pending?.scopeId,
+        googleCalendarSource = { scope ->
+            GoogleCalendarSourceForm(model, googleCalendar, scope, scopes.filter { it.ownerId == userId })
+        },
         googleCalendarSharing = { calendar, scope -> GoogleCalendarSharing(model, calendar, scope) },
-        googleCalendarCanManage = { scope -> scope.ownerId == (profile?.id ?: model.activeUserId()) },
+        googleCalendarCanManage = { scope -> scope.ownerId == userId },
         onCreateMailAccount = model::createMailAccount,
         onUpdateMailAccount = model::updateMailAccount,
         onDeleteMailAccount = model::deleteMailAccount,

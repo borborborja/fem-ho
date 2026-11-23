@@ -1806,15 +1806,20 @@ class AppViewModel(private val container: Container) : ViewModel() {
 
     fun activeUserId(): String? = activeAccount?.identity?.userId
 
-    fun pendingGoogleCalendar(): String? = activeAccount?.let { account ->
-        container.appContext.getSharedPreferences("google_calendar_oauth", android.content.Context.MODE_PRIVATE)
-            .getString(account.identity.key, null)
+    internal fun googleCalendarSessionKey(): String? = activeAccount?.identity?.key
+
+    internal fun pendingGoogleCalendar(): GoogleCalendarAuthorization? = activeAccount?.let { account ->
+        val prefs = container.appContext.getSharedPreferences("google_calendar_oauth", android.content.Context.MODE_PRIVATE)
+        val key = account.identity.key
+        prefs.getString(key, null)?.let { GoogleCalendarAuthorization(it, prefs.getString("$key:scope", null)) }
     }
 
-    fun savePendingGoogleCalendar(id: String?) {
+    internal fun savePendingGoogleCalendar(authorization: GoogleCalendarAuthorization?) {
         val account = activeAccount ?: return
+        val key = account.identity.key
+        // El retorn al navegador només necessita reprendre l'intent i l'àmbit on va començar.
         container.appContext.getSharedPreferences("google_calendar_oauth", android.content.Context.MODE_PRIVATE)
-            .edit().putString(account.identity.key, id).apply()
+            .edit().putString(key, authorization?.id).putString("$key:scope", authorization?.scopeId).apply()
     }
 
     fun queueGoogleCalendarChange(
